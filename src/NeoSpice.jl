@@ -16,6 +16,15 @@ export j1900, j1950, j2000, j2100, jyear, tyear, spd, b1900, b1950, clight
 export halfpi, twopi, rpd, dpr
 export sct2e, sce2c, sce2t, sce2s, scs2e, scencd, scdecd, sctiks, scfmt, scpart, sctype
 export ckgp, ckgpav, ckcov, ckobj, ckmeta
+export DAFHandle, dafopr, dafopw, dafonw, dafcls, dafhsf, dafrfr, getfat
+export dafbfs, dafbbs, daffna, daffpa, dafgs, dafgn, dafps, dafus, dafgda, dafgsr
+export dafbna, dafada, dafena, dafws, dafrs, dafrn, dafac, dafec, dafdc
+export spkopn, spkopa, spkcls, spkpds, spkw01, spkw02, spkw03, spkw05, spkw08, spkw09
+export spkw12, spkw13, spkw15, spkw17, spkw18, spkw19, spkw20, spkw21
+export ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
+export spkobj, spkobj!, spkcov, spkcov!, kinfo, kdata, tkvrsn
+export Window, card, wncard, wninsd!, wnvald!, wnunid, wnintd, wndifd, wncomd
+export wnelmd, wnincd, wnfetd, wnsumd
 
 include("types.jl")
 include("taylor.jl")        # Taylor{N,T} truncated series, `primal`
@@ -38,6 +47,12 @@ include("frame_api.jl")     # pxform, sxform, pxder
 include("pool_api.jl")      # gdpool, gcpool, gipool, bodvrd, bodn2c, ...
 include("time_api.jl")      # context forms of the time calls, timdef
 include("ck_api.jl")        # ckgp, ckgpav, ckcov, ckobj, ckmeta; CSPICE state rotation
+include("windows.jl")       # Window, wninsd!, wnunid, wnintd, wndifd, wncomd, ...
+include("daf_access.jl")    # DAFHandle, dafopr, dafbfs, daffna, dafgs, dafgda, dafec, getfat
+include("daf_write.jl")     # dafonw, dafopw, dafbna, dafada, dafena, dafac, dafdc
+include("spk_write.jl")     # spkopn, spkopa, spkcls, spkw01 ... spkw21
+include("ck_write.jl")      # ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
+include("kernel_info.jl")   # spkobj, spkcov, ktotal(kind), kdata, kinfo, tkvrsn
 include("precompile.jl")    # precompile directives for the common signatures
 
 end # module
