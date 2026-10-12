@@ -232,7 +232,12 @@ group("geom_fov: getfov, getfvn, fovtrg, fovray", Kernels.FULL_SET_FILES...) do
         @test c_kind(() -> g_fovray(S, z, "J2000", "NONE", "EARTH", et)) !== nothing
         @test neo_kind(() -> fovray(ctx, S, z, "J2000", "NONE", "EARTH", et)) == :unknownframe
         F = "FOV_FRAME" => "GEO_CAM"
-        for bnd in ([1.0, 0.0, 9.0, 2.0, 0.0, 18.0, 0.0, 1.0, 9.0],                    # two parallel vectors
+        # A star with three convex and three concave corners, 165 degrees across: no side
+        # of the polygon is a side of its convex hull, so the hull search takes pairs of
+        # corners that are not neighbours.
+        dir(x, y) = [sind(x) * cosd(y), sind(y), cosd(x) * cosd(y)]
+        star = vcat(dir(-85, 0), dir(-2.5, 3), dir(80, 12), dir(75, 0), dir(80, -12), dir(-2.5, -3))
+        for bnd in (star, [1.0, 0.0, 9.0, 2.0, 0.0, 18.0, 0.0, 1.0, 9.0],              # two parallel vectors
                 [1.0, 0.0, 0.1, -1.0, 0.0, 0.1, 0.0, 1.0, -0.1, 0.0, -1.0, -0.1],          # not in one half space
                 [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0, 0.0, 0.0, -1.0, 0.0],            # in a plane
                 [1.0, 0.0, 0.02, 0.0, 1.0, 0.02, -1.0, 0.0, 0.02, 0.0, -1.0, 0.02])        # wide, but valid
@@ -240,7 +245,11 @@ group("geom_fov: getfov, getfvn, fovtrg, fovray", Kernels.FULL_SET_FILES...) do
             kc = c_kind(() -> g_fovray(S, z, "GEO_CAM", "NONE", "EARTH", et))
             kn = neo_kind(() -> fovray(ctx, S, z, "GEO_CAM", "NONE", "EARTH", et))
             @test kc == kn
-            kc === nothing && @test fovray(ctx, S, z, "GEO_CAM", "NONE", "EARTH", et) == g_fovray(S, z, "GEO_CAM", "NONE", "EARTH", et)
+            if kc === nothing
+                for d in (z, [0.5, 0.0, 1.0], [-0.9, 0.0, 0.3], [0.6, 0.15, 0.7], [0.0, 0.03, 1.0], [0.0, 0.08, 1.0])
+                    @test fovray(ctx, S, d, "GEO_CAM", "NONE", "EARTH", et) == g_fovray(S, d, "GEO_CAM", "NONE", "EARTH", et)
+                end
+            end
             kc2 = c_kind(() -> g_fovtrg(S, "MOON", "ELLIPSOID", "IAU_MOON", "LT", "EARTH", et))
             kn2 = neo_kind(() -> fovtrg(ctx, S, "MOON", "ELLIPSOID", "IAU_MOON", "LT", "EARTH", et))
             @test kc2 == kn2
