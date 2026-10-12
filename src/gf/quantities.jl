@@ -355,8 +355,8 @@ A source has the methods
 
 `_gf_vecexist` is the window of `cnfine` on which the vector exists (`cnfine` itself
 for a vector that always exists). `GFPositionVector` is the source `POSITION`; the
-sources `SUB-OBSERVER POINT` and `SURFACE INTERCEPT POINT` are added with `gfsubc` and
-`gfsntc` (`gf/stubs.jl`).
+sources `SUB-OBSERVER POINT` and `SURFACE INTERCEPT POINT` are `GFSubObserverVector` and
+`GFInterceptVector` (`gf/surface.jl`).
 """
 abstract type GFVector end
 
@@ -409,6 +409,25 @@ unknown frame, the error of `spkez` in CSPICE.
 _gf_frame(ks::KernelSet, ref::NameOrID) = frame_id(ks, ref)
 
 """
+    _gf_sysidx(crdsys, crdnam) -> (sys, idx)
+
+Code of the coordinate system `crdsys` and place of the coordinate `crdnam` among its
+three coordinates, in any case (`zzgfcoin`). Throws `SpiceError(:notsupported)` for
+another system or coordinate. Postcondition: `1 <= sys <= 7` and `1 <= idx <= 3`.
+"""
+function _gf_sysidx(crdsys::AbstractString, crdnam::AbstractString)
+    csys = _gf_squeeze(crdsys)
+    sys = something(findfirst(==(csys), _GF_SYSNMS), 0)
+    sys == 0 && throw(SpiceError(:notsupported,
+        "The coordinate system $crdsys is not supported."))
+    crd = _gf_compress(crdnam)
+    idx = something(findfirst(==(crd), _GF_CRDNMS[sys]), 0)
+    idx == 0 && throw(SpiceError(:notsupported, "The coordinate name $crdnam belonging " *
+        "to the coordinate system $crdsys is not recognized."))
+    return sys, idx
+end
+
+"""
     GFCoordinate(vec, ks, crdsys, crdnam)
 
 Contract (the part of `zzgfcoin` after the checks of the vector): `crdsys` is one of the
@@ -420,14 +439,8 @@ center of the frame of the vector has three positive radii in the kernel pool
 """
 function GFCoordinate(vec::GFVector, ks::KernelSet, crdsys::AbstractString,
         crdnam::AbstractString)
-    csys = _gf_squeeze(crdsys)
-    sys = something(findfirst(==(csys), _GF_SYSNMS), 0)
-    sys == 0 && throw(SpiceError(:notsupported,
-        "The coordinate system $crdsys is not supported."))
-    crd = _gf_compress(crdnam)
-    idx = something(findfirst(==(crd), _GF_CRDNMS[sys]), 0)
-    idx == 0 && throw(SpiceError(:notsupported, "The coordinate name $crdnam belonging " *
-        "to the coordinate system $crdsys is not recognized."))
+    sys, idx = _gf_sysidx(crdsys, crdnam)
+    csys = _GF_SYSNMS[sys]
     re = 0.0
     f = 0.0
     sense = 0

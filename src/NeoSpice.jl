@@ -58,7 +58,7 @@ export subpnt, subslr, sincpt, srfrec, ilumin, illumg, illumf, phaseq, occult
 export limbpt, termpt, tangpt, fovtrg, fovray, getfov, getfvn
 export spkcpo, spkcpt, spkcvo, spkcvt, azlcpo, azlrec, recazl, dazldr, drdazl
 export gfdist, gfsep, gfposc, gfrr, gfpa, gfuds, gfudb, gfevnt, gfstol, gfrefn, uddc, uddf
-export gfsubc, gfsntc, gfilum, gfoclt, gftfov, gfrfov
+export gfsubc, gfsntc, gfilum, gfoclt, gftfov, gfrfov, gfocce, gffove
 export EphemerisTable, ephemeris_table, table_position, table_state, table_jet, table_span
 export EKColumnAttr, EKSegmentSummary, EKTable
 export ekopr, ekcls, eknseg, ekssum, ekrcec, ekrced, ekrcei
@@ -128,7 +128,10 @@ include("gf/solver.jl")      # geometry finder: zzgfsolv, zzgfrelx, gfrefn, uddc
 include("gf/quantities.jl")  # distance, separation, range rate, phase angle, coordinates
 include("gf/longitude.jl")   # zzgfcslv, zzgflong: longitude and right-ascension searches
 include("gf/api.jl")         # gfdist, gfsep, gfposc, gfrr, gfpa, gfuds, gfudb, gfevnt, gfstol
-include("gf/stubs.jl")       # gfsubc, gfsntc, gfilum, gfoclt, gftfov, gfrfov (not yet available)
+include("gf/surface.jl")     # gfsubc, gfsntc: sub-observer point and surface intercept
+include("gf/illumination.jl")  # gfilum: illumination angles at a surface point
+include("gf/occultation.jl") # gfoclt, gfocce: occultations and transits
+include("gf/fov.jl")         # gftfov, gfrfov, gffove: visibility in a field of view
 include("table.jl")         # EphemerisTable, ephemeris_table, table_position, table_state, table_jet
 include("ek/file.jl")       # EK pages, trees, segment and column descriptors
 include("ek/columns.jl")    # EK column entries of classes 1 to 9

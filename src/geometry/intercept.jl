@@ -122,6 +122,10 @@ function _geo_sfxcor(ks::KernelSet, sh::_GeoShape, et, corr::Aberration, obscde:
         prevet = primal(trgepc)
         i += 1
     end
+    # The loop can end, by convergence, after a pass that found no intercept and used
+    # the point of the ray nearest to the target: the ray misses the target (CSPICE
+    # returns the flag of the last pass).
+    found || return none
     udir = _vhat(xform * j2geom)
     return true, spoint, trgepc, _norm3(spoint - obspos) * udir
 end

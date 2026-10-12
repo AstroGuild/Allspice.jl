@@ -96,6 +96,57 @@ gfposc(target, frame, abcorr, obsrvr, crdsys, coord, relate, refval, adjust, ste
             NINTVLS, cn, res)
     end
 
+gfsubc(target, fixref, method, abcorr, obsrvr, crdsys, coord, relate, refval, adjust, step,
+    cnfine) = search(cnfine) do cn, res
+    ccall(Libdl.dlsym(HANDLE, :gfsubc_c), Cvoid,
+        (Cstring, Cstring, Cstring, Cstring, Cstring, Cstring, Cstring, Cstring, SpiceDouble,
+            SpiceDouble, SpiceDouble, SpiceInt, Ref{Cell{SpiceDouble}}, Ref{Cell{SpiceDouble}}),
+        target, fixref, method, abcorr, obsrvr, crdsys, coord, relate, refval, adjust, step,
+        NINTVLS, cn, res)
+end
+
+gfsntc(target, fixref, method, abcorr, obsrvr, dref, dvec, crdsys, coord, relate, refval,
+    adjust, step, cnfine) = search(cnfine) do cn, res
+    ccall(Libdl.dlsym(HANDLE, :gfsntc_c), Cvoid,
+        (Cstring, Cstring, Cstring, Cstring, Cstring, Cstring, Ptr{SpiceDouble}, Cstring,
+            Cstring, Cstring, SpiceDouble, SpiceDouble, SpiceDouble, SpiceInt,
+            Ref{Cell{SpiceDouble}}, Ref{Cell{SpiceDouble}}),
+        target, fixref, method, abcorr, obsrvr, dref, collect(Float64, dvec), crdsys, coord,
+        relate, refval, adjust, step, NINTVLS, cn, res)
+end
+
+gfilum(method, angtyp, target, illmn, fixref, abcorr, obsrvr, spoint, relate, refval, adjust,
+    step, cnfine) = search(cnfine) do cn, res
+    ccall(Libdl.dlsym(HANDLE, :gfilum_c), Cvoid,
+        (Cstring, Cstring, Cstring, Cstring, Cstring, Cstring, Cstring, Ptr{SpiceDouble},
+            Cstring, SpiceDouble, SpiceDouble, SpiceDouble, SpiceInt, Ref{Cell{SpiceDouble}},
+            Ref{Cell{SpiceDouble}}),
+        method, angtyp, target, illmn, fixref, abcorr, obsrvr, collect(Float64, spoint),
+        relate, refval, adjust, step, NINTVLS, cn, res)
+end
+
+gfoclt(occtyp, front, fshape, fframe, back, bshape, bframe, abcorr, obsrvr, step, cnfine) =
+    search(cnfine) do cn, res
+        ccall(Libdl.dlsym(HANDLE, :gfoclt_c), Cvoid,
+            (Cstring, Cstring, Cstring, Cstring, Cstring, Cstring, Cstring, Cstring, Cstring,
+                SpiceDouble, Ref{Cell{SpiceDouble}}, Ref{Cell{SpiceDouble}}),
+            occtyp, front, fshape, fframe, back, bshape, bframe, abcorr, obsrvr, step, cn, res)
+    end
+
+gftfov(inst, target, tshape, tframe, abcorr, obsrvr, step, cnfine) = search(cnfine) do cn, res
+    ccall(Libdl.dlsym(HANDLE, :gftfov_c), Cvoid,
+        (Cstring, Cstring, Cstring, Cstring, Cstring, Cstring, SpiceDouble,
+            Ref{Cell{SpiceDouble}}, Ref{Cell{SpiceDouble}}),
+        inst, target, tshape, tframe, abcorr, obsrvr, step, cn, res)
+end
+
+gfrfov(inst, raydir, rframe, abcorr, obsrvr, step, cnfine) = search(cnfine) do cn, res
+    ccall(Libdl.dlsym(HANDLE, :gfrfov_c), Cvoid,
+        (Cstring, Ptr{SpiceDouble}, Cstring, Cstring, Cstring, SpiceDouble,
+            Ref{Cell{SpiceDouble}}, Ref{Cell{SpiceDouble}}),
+        inst, collect(Float64, raydir), rframe, abcorr, obsrvr, step, cn, res)
+end
+
 # The user functions of the two calls below. A C callback cannot be a closure on every
 # platform, so the Julia functions are kept in global references for the time of a call.
 const UDFUNS = Ref{Any}(nothing)
@@ -254,6 +305,20 @@ const GF_RELATIONS = ("<", "=", ">", "LOCMIN", "LOCMAX", "ABSMIN", "ABSMAX")
 "The seven relations and the two absolute extrema with a positive adjust value (flag true)."
 const GF_VARIANTS = ((("<", false), ("=", false), (">", false), ("LOCMIN", false),
     ("LOCMAX", false), ("ABSMIN", false), ("ABSMAX", false), ("ABSMIN", true), ("ABSMAX", true)))
+
+"The coordinate systems of `gfposc` and their coordinates."
+const GF_SYSTEMS = (("RECTANGULAR", ("X", "Y", "Z")),
+    ("LATITUDINAL", ("RADIUS", "LONGITUDE", "LATITUDE")),
+    ("RA/DEC", ("RANGE", "RIGHT ASCENSION", "DECLINATION")),
+    ("SPHERICAL", ("RADIUS", "COLATITUDE", "LONGITUDE")),
+    ("CYLINDRICAL", ("RADIUS", "LONGITUDE", "Z")),
+    ("GEODETIC", ("LONGITUDE", "LATITUDE", "ALTITUDE")),
+    ("PLANETOGRAPHIC", ("LONGITUDE", "LATITUDE", "ALTITUDE")))
+
+"The angular coordinates with a branch cut."
+const GF_ANGULAR = (("LATITUDINAL", "LONGITUDE"), ("RA/DEC", "RIGHT ASCENSION"),
+    ("SPHERICAL", "LONGITUDE"), ("CYLINDRICAL", "LONGITUDE"), ("GEODETIC", "LONGITUDE"),
+    ("PLANETOGRAPHIC", "LONGITUDE"))
 
 "The nine aberration corrections of `spkezr`."
 const GF_ABCORRS = ("NONE", "LT", "LT+S", "CN", "CN+S", "XLT", "XLT+S", "XCN", "XCN+S")

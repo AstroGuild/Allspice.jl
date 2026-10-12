@@ -291,12 +291,6 @@ group("gf quantities: distance, range rate, separation, phase angle", Kernels.FU
             "VECTOR DEFINITION", "METHOD", "DVEC", "DREF"]
         cvals(vd) = ["MOON", "EARTH", "NONE", "LATITUDINAL", "LATITUDE", "IAU_EARTH", vd, " ", " ", " "]
         @test throws_kind(() -> ev("COORDINATE", cnames, cvals("VELOCITY")), :notsupported)
-        # stage 2 of the port
-        @test throws_kind(() -> ev("COORDINATE", cnames, cvals("SUB-OBSERVER POINT")), :unsupported)
-        @test throws_kind(() -> ev("COORDINATE", cnames, cvals("SURFACE INTERCEPT POINT")), :unsupported)
-        @test throws_kind(() -> ev("ILLUMINATION ANGLE", ["TARGET", "ILLUM", "OBSERVER", "ABCORR",
-                "REFERENCE FRAME", "ANGTYP", "METHOD", "SPOINT"], ["MOON", "SUN", "EARTH", "NONE",
-                "IAU_MOON", "PHASE", "ELLIPSOID", " "]), :unsupported)
     end
 
     @testset "errors, with the kinds of CSPICE" begin

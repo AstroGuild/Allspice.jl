@@ -1,5 +1,7 @@
 # Geometry finder, public interface: `gfdist`, `gfsep`, `gfposc`, `gfrr`, `gfpa`, `gfuds`,
-# `gfudb`, `gfevnt` and `gfstol`, as the calls of CSPICE N0067 with these differences:
+# `gfudb`, `gfevnt` and `gfstol`, as the calls of CSPICE N0067 with these differences
+# (the searches that need surface, occultation or field-of-view geometry are in
+# `surface.jl`, `illumination.jl`, `occultation.jl` and `fov.jl`, with the same rules):
 #
 # - The result is a new `Window`; there is no result cell, no workspace and no interval
 #   count (`nintvls`), because a `Window` has no size limit.
@@ -326,6 +328,13 @@ gfudb(udfunb::F, step::Real, cnfine::Window; kw...) where {F} =
 
 # --- gfevnt ------------------------------------------------------------------------------
 
+"The first three numeric parameters of `gfevnt`, the vector `name` (`SpiceError(:invalidcount)` if there are fewer)."
+function _gf_qdpars(qdpars::AbstractVector{<:Real}, name::String)
+    length(qdpars) >= 3 || throw(SpiceError(:invalidcount, "The parameter $name needs " *
+        "3 numeric values in QDPARS; $(length(qdpars)) were supplied."))
+    return Vec3{Float64}(qdpars[begin], qdpars[begin+1], qdpars[begin+2])
+end
+
 "Names of the quantities of `gfevnt` and, for each, the parameters that must be supplied."
 const _GF_QPARS = (
     "ANGULAR SEPARATION" => ("TARGET1", "FRAME1", "SHAPE1", "TARGET2", "FRAME2", "SHAPE2",
@@ -350,27 +359,31 @@ quantity `gquant` satisfies the relation `op` with the reference value `refval`.
 - `udrefn`: the refinement function `(t1, t2, s1, s2) -> t`, which gives an epoch in the
   bracket [`t1`, `t2`] whose ends have the states `s1` and `s2`; `gfrefn` is the
   bisection of CSPICE.
-- `gquant`: `"DISTANCE"`, `"ANGULAR SEPARATION"`, `"COORDINATE"`, `"RANGE RATE"` or
-  `"PHASE ANGLE"`, in any case.
+- `gquant`: `"DISTANCE"`, `"ANGULAR SEPARATION"`, `"COORDINATE"`, `"RANGE RATE"`,
+  `"PHASE ANGLE"` or `"ILLUMINATION ANGLE"`, in any case.
 - `qpnams`, `qcpars`: names of the parameters of the quantity and their character
   values, in the same order. The names are those of CSPICE: `TARGET`, `OBSERVER`,
   `ABCORR` (distance, range rate); with `ILLUM` (phase angle); `TARGET1`, `FRAME1`,
   `SHAPE1`, `TARGET2`, `FRAME2`, `SHAPE2`, `OBSERVER`, `ABCORR` (angular separation);
   `TARGET`, `OBSERVER`, `ABCORR`, `COORDINATE SYSTEM`, `COORDINATE`, `REFERENCE FRAME`,
-  `VECTOR DEFINITION`, `METHOD`, `DVEC`, `DREF` (coordinate).
-- `qdpars`, `qipars`, `qlpars`: numeric, integer and logical parameter values. Only
-  `qdpars` is used, for `DVEC`; the others are in the list for the order of CSPICE.
+  `VECTOR DEFINITION`, `METHOD`, `DVEC`, `DREF` (coordinate; the vector definition is
+  `POSITION`, `SUB-OBSERVER POINT` or `SURFACE INTERCEPT POINT`); `TARGET`, `ILLUM`,
+  `OBSERVER`, `ABCORR`, `REFERENCE FRAME`, `ANGTYP`, `METHOD`, `SPOINT` (illumination
+  angle).
+- `qdpars`, `qipars`, `qlpars`: numeric, integer and logical parameter values. Only the
+  first three values of `qdpars` are used, for the vector `DVEC` of a surface intercept
+  or `SPOINT` of an illumination angle; the others are in the list for the order of
+  CSPICE.
 - `tol`: convergence tolerance in seconds, an argument here as in CSPICE.
 
 The keywords are those of `gfdist`.
 
 Contract: as `gfdist`, with the refinement of the caller in the place of the bisection.
 Errors: `:notrecognized` (quantity or relation), `:invalidcount` (more than 10
-parameters), `:missingvalue` (a parameter of the quantity is not supplied),
-`:notsupported` (vector definition). The quantity `ILLUMINATION ANGLE` and the vector
-definitions `SUB-OBSERVER POINT` and `SURFACE INTERCEPT POINT` throw
-`SpiceError(:unsupported)` until the geometry calls that they need are in the package
-(`gf/stubs.jl`).
+parameters, or fewer than 3 numeric values where a vector is needed), `:missingvalue`
+(a parameter of the quantity is not supplied), `:notsupported` (vector definition),
+and the errors of the search of the quantity ([`gfsubc`](@ref), [`gfsntc`](@ref),
+[`gfilum`](@ref) for the surface quantities).
 """
 function gfevnt(ks::KernelSet, udstep, udrefn, gquant::AbstractString,
         qpnams::AbstractVector{<:AbstractString}, qcpars::AbstractVector{<:AbstractString},
@@ -408,18 +421,29 @@ function gfevnt(ks::KernelSet, udstep, udrefn, gquant::AbstractString,
             par("SHAPE2"), par("FRAME2"), par("ABCORR"), par("OBSERVER"))
         return _gf_search(q, op, refval, adjust, cnfine, run)
     elseif quant == "COORDINATE"
-        vecdef = _gf_compress(par("VECTOR DEFINITION"))
-        if vecdef == "SUB-OBSERVER POINT" || vecdef == "SURFACE INTERCEPT POINT"
-            _gf_stub("gfevnt with the vector definition $vecdef",
-                vecdef == "SUB-OBSERVER POINT" ? "subpnt" : "sincpt")
+        rawdef = qcpars[findfirst(==("VECTOR DEFINITION"), pnames)]
+        vecdef = _gf_compress(rawdef)
+        if vecdef == "POSITION"
+            q = _gf_position_coordinate(ks, par("TARGET"), par("REFERENCE FRAME"),
+                par("ABCORR"), par("OBSERVER"), par("COORDINATE SYSTEM"), par("COORDINATE"))
+            return _gf_search(q, op, refval, adjust, cnfine, run)
         end
-        vecdef == "POSITION" || throw(SpiceError(:notsupported,
+        intercept = vecdef == "SURFACE INTERCEPT POINT"
+        (intercept || vecdef == "SUB-OBSERVER POINT") || throw(SpiceError(:notsupported,
             "The vector definition $vecdef is not supported."))
-        q = _gf_position_coordinate(ks, par("TARGET"), par("REFERENCE FRAME"),
-            par("ABCORR"), par("OBSERVER"), par("COORDINATE SYSTEM"), par("COORDINATE"))
+        # CSPICE compares the definition as the caller wrote it with the upper-case name
+        # before it checks the center of the frame, so another spelling skips that check
+        # (the geometry call then makes it at the first evaluation); this is kept.
+        chkctr = rstrip(rawdef, ' ') == vecdef
+        dvec = intercept ? _gf_qdpars(qdpars, "DVEC") : _GF_ZERO3
+        q = _gf_surface_coordinate(ks, intercept, chkctr, par("TARGET"),
+            par("REFERENCE FRAME"), par("METHOD"), par("ABCORR"), par("OBSERVER"),
+            par("DREF"), dvec, par("COORDINATE SYSTEM"), par("COORDINATE"))
         return _gf_search(q, op, refval, adjust, cnfine, run)
     end
-    _gf_stub("gfevnt with the quantity ILLUMINATION ANGLE", "ilumin")
+    q = GFIllumination(ks, par("METHOD"), par("ANGTYP"), par("TARGET"), par("ILLUM"),
+        par("REFERENCE FRAME"), par("ABCORR"), par("OBSERVER"), _gf_qdpars(qdpars, "SPOINT"))
+    return _gf_search(q, op, refval, adjust, cnfine, run)
 end
 gfevnt(ctx::SpiceContext, udstep, udrefn, gquant::AbstractString,
     qpnams::AbstractVector{<:AbstractString}, qcpars::AbstractVector{<:AbstractString},

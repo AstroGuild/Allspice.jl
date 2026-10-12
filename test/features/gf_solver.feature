@@ -60,7 +60,3 @@ Feature: Geometry finder, solver core
       | a relation that is not known          | notrecognized  |
       | a negative adjust value               | valueoutofrange |
       | an adjust value with the relation "=" | invalidvalue   |
-
-  Scenario: A search that needs the geometry of a surface or of a field of view
-    When "gfsubc", "gfsntc", "gfilum", "gfoclt", "gftfov" or "gfrfov" is called
-    Then it throws a SpiceError of kind "unsupported"

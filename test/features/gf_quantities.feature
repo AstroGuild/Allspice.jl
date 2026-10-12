@@ -44,7 +44,6 @@ Feature: Geometry finder, quantities from the ephemeris
     Given the quantity name, the parameter names and the parameter values of "gfevnt"
     When "gfevnt" searches with a step function and a refinement function
     Then the result is equal to the result of the specific call for that quantity
-    And a quantity that needs surface or field of view geometry throws a SpiceError of kind "unsupported"
 
   Scenario: Search time
     Given a search of ten years with a step of one day
