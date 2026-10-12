@@ -86,3 +86,38 @@ let
         precompile(gfrfov, (head..., S, V, S, S, S, F, W))
     end
 end
+
+# EK: open, read, query and the record writers.
+let
+    S, I, H = String, Int, DASHandle
+    precompile(open_ek, (S,))
+    precompile(ekopr, (S,))
+    precompile(eknseg, (H,))
+    precompile(ekssum, (H, I))
+    for f in (ekrcec, ekrced, ekrcei)
+        precompile(f, (H, I, I, S))
+    end
+    for head in ((SpiceContext,), (KernelSet, TimeDefaults))
+        precompile(ekfind, (head..., S))
+        precompile(ekpsel, (head..., S))
+    end
+    for f in (ekgc, ekgd, ekgi)
+        precompile(f, (EKResult, I, I))
+        precompile(f, (EKResult, I, I, I))
+    end
+    precompile(eknelt, (EKResult, I, I))
+    precompile(ekopn, (S, S, I))
+    precompile(ekopw, (S,))
+    precompile(ekbseg, (H, S, Vector{S}, Vector{S}))
+    precompile(ekappr, (H, I))
+    precompile(ekinsr, (H, I, I))
+    precompile(ekdelr, (H, I, I))
+    precompile(ekifld, (H, S, I, Vector{S}, Vector{S}))
+    precompile(ekffld, (H, I, EKFastLoad))
+    for (f, T) in ((ekacec, S), (ekaced, Float64), (ekacei, I), (ekucec, S), (ekuced, Float64), (ekucei, I))
+        precompile(f, (H, I, I, S, Vector{T}, Bool))
+    end
+    for (f, T) in ((ekaclc, S), (ekacld, Float64), (ekacli, I))
+        precompile(f, (H, I, S, Vector{T}, Vector{I}, Vector{Bool}, EKFastLoad))
+    end
+end
