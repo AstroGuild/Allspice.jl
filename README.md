@@ -6,7 +6,7 @@ The port adds two capabilities that CSPICE does not have. The first is analytica
 
 ## Status
 
-The project is in the design stage and contains no code yet. The design documents are in `docs/superpowers/specs/`.
+The package is a prototype. It loads SPK kernels of types 2 and 3, binary PCK kernels of type 2 and text kernels (leap seconds, PCK, frame kernels and meta-kernels), and it answers `spkezr`, `spkpos`, `spkgeo`, `pxform` and `sxform` without aberration correction in inertial, body-fixed and fixed-offset frames. The calls `spkder` and `pxder` return time derivatives of any order. The test suite compares every result with CSPICE through SPICE.jl, and `CONTRACT.md` records the internal interfaces.
 
 ## Relation to NAIF
 

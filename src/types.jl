@@ -151,7 +151,9 @@ end
     KernelSet
 
 Immutable snapshot of everything loaded. Built by `build_kernelset` from the load
-list; never modified afterwards.
+list; never modified afterwards. Declared `mutable` with `const` fields only so that
+it lives behind one pointer: the atomic reference in `SpiceContext` is then one word,
+and readers on many threads do not contend.
 
 - `loaded`: the load list, in load order.
 - `daf`: data arrays of the DAF files; `Segment.file` indexes this vector.
@@ -168,19 +170,19 @@ list; never modified afterwards.
 - `bodyrot`: text-PCK orientation constants by body ID.
 - `lsk`: leap-second data, or `nothing` if no leap-second kernel is loaded.
 """
-struct KernelSet
-    loaded::Vector{Loaded}
-    daf::Vector{Vector{Float64}}
-    spk::Dict{Int32,Vector{Segment}}
-    pck::Dict{Int32,Vector{Segment}}
-    pool::Dict{String,PoolValue}
-    name2code::Dict{String,Int32}
-    code2name::Dict{Int32,String}
-    frames::Dict{Int32,FrameDef}
-    framename2id::Dict{String,Int32}
-    tk::Dict{Int32,TKFrame}
-    bodyrot::Dict{Int32,BodyRot}
-    lsk::Union{Nothing,LeapSeconds}
+mutable struct KernelSet
+    const loaded::Vector{Loaded}
+    const daf::Vector{Vector{Float64}}
+    const spk::Dict{Int32,Vector{Segment}}
+    const pck::Dict{Int32,Vector{Segment}}
+    const pool::Dict{String,PoolValue}
+    const name2code::Dict{String,Int32}
+    const code2name::Dict{Int32,String}
+    const frames::Dict{Int32,FrameDef}
+    const framename2id::Dict{String,Int32}
+    const tk::Dict{Int32,TKFrame}
+    const bodyrot::Dict{Int32,BodyRot}
+    const lsk::Union{Nothing,LeapSeconds}
 end
 
 """
