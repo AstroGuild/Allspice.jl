@@ -13,20 +13,6 @@
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
 
-"The coordinate systems of `gfposc` and their coordinates."
-const GF_SYSTEMS = (("RECTANGULAR", ("X", "Y", "Z")),
-    ("LATITUDINAL", ("RADIUS", "LONGITUDE", "LATITUDE")),
-    ("RA/DEC", ("RANGE", "RIGHT ASCENSION", "DECLINATION")),
-    ("SPHERICAL", ("RADIUS", "COLATITUDE", "LONGITUDE")),
-    ("CYLINDRICAL", ("RADIUS", "LONGITUDE", "Z")),
-    ("GEODETIC", ("LONGITUDE", "LATITUDE", "ALTITUDE")),
-    ("PLANETOGRAPHIC", ("LONGITUDE", "LATITUDE", "ALTITUDE")))
-
-"The angular coordinates with a branch cut."
-const GF_ANGULAR = (("LATITUDINAL", "LONGITUDE"), ("RA/DEC", "RIGHT ASCENSION"),
-    ("SPHERICAL", "LONGITUDE"), ("CYLINDRICAL", "LONGITUDE"), ("GEODETIC", "LONGITUDE"),
-    ("PLANETOGRAPHIC", "LONGITUDE"))
-
 """
     gf_inequality_holds(q, w, cn, rel, refval; n=150, margin=5.0) -> Bool
 

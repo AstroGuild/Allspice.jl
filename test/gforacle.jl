@@ -306,6 +306,20 @@ const GF_RELATIONS = ("<", "=", ">", "LOCMIN", "LOCMAX", "ABSMIN", "ABSMAX")
 const GF_VARIANTS = ((("<", false), ("=", false), (">", false), ("LOCMIN", false),
     ("LOCMAX", false), ("ABSMIN", false), ("ABSMAX", false), ("ABSMIN", true), ("ABSMAX", true)))
 
+"The coordinate systems of `gfposc` and their coordinates."
+const GF_SYSTEMS = (("RECTANGULAR", ("X", "Y", "Z")),
+    ("LATITUDINAL", ("RADIUS", "LONGITUDE", "LATITUDE")),
+    ("RA/DEC", ("RANGE", "RIGHT ASCENSION", "DECLINATION")),
+    ("SPHERICAL", ("RADIUS", "COLATITUDE", "LONGITUDE")),
+    ("CYLINDRICAL", ("RADIUS", "LONGITUDE", "Z")),
+    ("GEODETIC", ("LONGITUDE", "LATITUDE", "ALTITUDE")),
+    ("PLANETOGRAPHIC", ("LONGITUDE", "LATITUDE", "ALTITUDE")))
+
+"The angular coordinates with a branch cut."
+const GF_ANGULAR = (("LATITUDINAL", "LONGITUDE"), ("RA/DEC", "RIGHT ASCENSION"),
+    ("SPHERICAL", "LONGITUDE"), ("CYLINDRICAL", "LONGITUDE"), ("GEODETIC", "LONGITUDE"),
+    ("PLANETOGRAPHIC", "LONGITUDE"))
+
 "The nine aberration corrections of `spkezr`."
 const GF_ABCORRS = ("NONE", "LT", "LT+S", "CN", "CN+S", "XLT", "XLT+S", "XCN", "XCN+S")
 
