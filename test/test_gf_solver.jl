@@ -1,5 +1,5 @@
-# Geometry finder, solver core: `gfuds`, `gfudb`, `gfrefn`, `uddf`, `uddc`, `gfstol`, the
-# callbacks and the stubs. No kernel is needed. The user functions are the same Julia
+# Geometry finder, solver core: `gfuds`, `gfudb`, `gfrefn`, `uddf`, `uddc`, `gfstol` and
+# the callbacks. No kernel is needed. The user functions are the same Julia
 # functions for NeoSpice and for CSPICE, so the two searches evaluate the same numbers
 # and every end point must be equal bit for bit: this group tests the step-and-bracket
 # logic, the bisection, the confinement end points, the adjust value and the absolute
@@ -252,12 +252,6 @@ group("gf solver: user-defined functions, tolerance, callbacks") do
         @test isempty(NeoSpice._gf_wnexpd(Window(), 0.5, 0.5))
         inner = Window([1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 7.0, 7.0])
         @test collect(NeoSpice._gf_wsts(inner, Window([1.0, 3.0, 5.0, 8.0]))) == [2.0, 2.0, 7.0, 7.0]
-    end
-
-    @testset "stage 2 searches are stubs" begin
-        for f in (gfsubc, gfsntc, gfilum, gfoclt, gftfov, gfrfov)
-            @test throws_kind(() -> f("MOON", "IAU_MOON", 1.0, Window()), :unsupported)
-        end
     end
 
     gf_report("ud")
