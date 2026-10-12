@@ -189,13 +189,13 @@ function _tai_to_day(l::LeapSeconds, tai::Float64)
     end
     p = max(p, 1)
     q, secs = _rmaind(tai - _taitab(l, p), _SPD)
-    return _cint(q) + _daytab(l, p), secs
+    return _wrap32(_cint(q) + _daytab(l, p)), secs
 end
 
 "Contract: returns the TAI seconds past J2000 of `secs` seconds into UTC day `daynum`."
 function _day_to_tai(l::LeapSeconds, daynum::Int, secs::Float64)::Float64
     p = max(1, _last_day(l, daynum))
-    return _taitab(l, p) + (secs + Float64(daynum - _daytab(l, p)) * _SPD)
+    return _taitab(l, p) + (secs + Float64(_wrap32(daynum - _daytab(l, p))) * _SPD)
 end
 
 # ---------------------------------------------------------------------------------
@@ -238,6 +238,9 @@ dpr() = 180.0 / Float64(pi)
 "Contract: returns `x` cut to an integer as the C cast `(integer) x` does on x86: toward zero, and the smallest 32-bit integer when `x` is NaN or out of range."
 @inline _cint(x::Float64)::Int =
     (x > -2147483649.0 && x < 2147483648.0) ? Int(trunc(Int32, x)) : Int(typemin(Int32))
+
+"Contract: returns `n` reduced to the range of a 32-bit integer, as integer arithmetic of the C code does."
+@inline _wrap32(n::Int)::Int = Int(n % Int32)
 
 "Contract: returns the integer nearest to `x`, a tie away from zero, as f2c `i_dnnt`."
 @inline _nint(x::Float64)::Int = _cint(x >= 0.0 ? floor(x + 0.5) : -floor(0.5 - x))
@@ -536,7 +539,7 @@ function _ttrans(l::LeapSeconds, pfrom::Int, pto::Int, tv::TVec)::TVec
         end
     elseif pfrom == _TT_FORMAL
         dp2000, secs = _rmaind(tv[1] + _HALFD, _SPD)
-        daynum = _cint(dp2000) + _DN2000
+        daynum = _wrap32(_cint(dp2000) + _DN2000)
     elseif pfrom == _TT_JDUTC
         daydp, secs = _rmaind((tv[1] - _JD1101) * _SPD, _SPD)
         daynum = _cint(daydp)
@@ -544,7 +547,7 @@ function _ttrans(l::LeapSeconds, pfrom::Int, pto::Int, tv::TVec)::TVec
         daynum = _cint(tv[1])
         secs = tv[2]
     elseif pfrom == _TT_DP2000
-        daynum = _cint(tv[1]) + _DN2000
+        daynum = _wrap32(_cint(tv[1]) + _DN2000)
         secs = tv[2]
     elseif pfrom == _TT_YWD || pfrom == _TT_YWDF
         week = _cint(tv[2]) - 1
@@ -571,7 +574,7 @@ function _ttrans(l::LeapSeconds, pfrom::Int, pto::Int, tv::TVec)::TVec
     end
     if _tt_formal(pfrom)
         daydp, secs = _rmaind(secs, _SPD)
-        daynum += _cint(daydp)
+        daynum = _wrap32(daynum + _cint(daydp))
     end
     # A formal input that goes to a formal output keeps its seconds; every other pair
     # moves seconds outside [0, 86399] to the day that holds the instant.
@@ -603,13 +606,13 @@ function _ttrans(l::LeapSeconds, pfrom::Int, pto::Int, tv::TVec)::TVec
     elseif pto == _TT_YDDF
         return (Float64(year), Float64(dofyr) + secs / _SPD, tv[3], tv[4], tv[5], tv[6], tv[7])
     elseif pto == _TT_FORMAL
-        return Base.setindex(tv, Float64(daynum - _DN2000) * _SPD - _HALFD + secs, 1)
+        return Base.setindex(tv, Float64(_wrap32(daynum - _DN2000)) * _SPD - _HALFD + secs, 1)
     elseif pto == _TT_JDUTC
         return Base.setindex(tv, _JD1101 + Float64(daynum) + secs / _SPD, 1)
     elseif pto == _TT_DAYSEC
         return (Float64(daynum), secs, tv[3], tv[4], tv[5], tv[6], tv[7])
     elseif pto == _TT_DP2000
-        return (Float64(daynum - _DN2000), secs, tv[3], tv[4], tv[5], tv[6], tv[7])
+        return (Float64(_wrap32(daynum - _DN2000)), secs, tv[3], tv[4], tv[5], tv[6], tv[7])
     elseif pto == _TT_YWD || pto == _TT_YWDF
         wday = mod(daynum - _SUNDAY, 7)
         week = div(dofyr - 1, 7) + 1

@@ -583,6 +583,11 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         r = compare_outcomes("str2et, malformed strings", TS_MALFORMED, SPICE.str2et, s -> str2et(ctx, s))
         @test r.mixed == 0 && r.unequal == 0
         @test r.rejected >= length(TS_MALFORMED) - 6
+        # A Julian date whose day number is outside the 32-bit integers: the day
+        # arithmetic of CSPICE wraps, and the result has the sign of the wrapped number.
+        r = compare_outcomes("str2et, Julian date above the integer range",
+            ["238409829538 Jd", "238409829538.5 JD", "JD 5373484.5"], SPICE.str2et, s -> str2et(ctx, s))
+        @test r.both == 3 && r.unequal == 0
         # The message says what is wrong with the string.
         msg(s) = try str2et(ctx, s); "" catch e; e.msg end
         @test occursin("<", msg("2000 Jan 1 12:00:00 XYZ")) && occursin("unrecognizable", msg("2000 Jann 1"))
