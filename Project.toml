@@ -1,0 +1,25 @@
+name = "NeoSpice"
+uuid = "1c6edf61-da3a-4136-b24a-0cb478996395"
+version = "0.1.0"
+authors = ["Alex Pascarella <alex.pascarella@ellissoide.com>"]
+
+[workspace]
+projects = ["test", "bench"]
+
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Mmap = "a63ad114-7e13-5084-954f-fe012c677804"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
+[weakdeps]
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+
+[extensions]
+NeoSpiceForwardDiffExt = "ForwardDiff"
+
+[compat]
+ForwardDiff = "0.10, 1"
+LinearAlgebra = "1"
+Mmap = "1"
+StaticArrays = "1.9"
+julia = "1.12"

@@ -1,0 +1,4 @@
+/Manifest*.toml
+/test/data/
+/bench/results/
+*.cov

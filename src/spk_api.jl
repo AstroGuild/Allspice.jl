@@ -1,0 +1,233 @@
+# Ephemeris interface: geometric states from the SPK segments of a `KernelSet`, with
+# time derivatives of any order.
+
+"Speed of light in km/s, the value of `clight_c`."
+const CLIGHT = 299792.458
+
+"Largest number of bodies on one chain from a body toward the solar system barycenter."
+const MAXCHAIN = 10
+
+"""
+    rotate_jet(Rjet::NTuple{M}, rjet::NTuple{M}) -> NTuple{M}
+
+Return the jet of the product `R(t) * r(t)` from the jets of `R` and `r` (ordinary
+derivatives, orders 0 to M-1), by the Leibniz rule.
+"""
+@inline function rotate_jet(Rjet::NTuple{M,Any}, rjet::NTuple{M,Any}) where {M}
+    return ntuple(Val(M)) do i
+        k = i - 1
+        acc = Rjet[1] * rjet[i]
+        for j in 1:k
+            acc += binomial(k, j) * (Rjet[j+1] * rjet[i-j])
+        end
+        acc
+    end
+end
+
+"""
+    frame_jet(ks, from::Int32, to::Int32, et, ::Val{N}) -> NTuple{N+1,Mat3}
+
+Return the rotation matrix from frame `from` to frame `to` at `et` and its time
+derivatives to order N, for any epoch number type (`rotation_jet` of `rotations.jl`
+takes a plain epoch only, so a dual-number epoch goes through `frame_rotation`).
+"""
+@inline frame_jet(ks::KernelSet, from::Int32, to::Int32, et::Float64, v::Val) =
+    rotation_jet(ks, from, to, et, v)
+@inline frame_jet(ks::KernelSet, from::Int32, to::Int32, et::Float64, v::Val{0}) =
+    rotation_jet(ks, from, to, et, v)
+@inline frame_jet(ks::KernelSet, from::Int32, to::Int32, et::Real, ::Val{0}) =
+    (frame_rotation(ks, from, to, et),)
+@inline function frame_jet(ks::KernelSet, from::Int32, to::Int32, et::Real, v::Val{N}) where {N}
+    d = map(derivatives, frame_rotation(ks, from, to, taylor_var(et, v)))
+    return ntuple(k -> map(x -> x[k], d), Val(N + 1))
+end
+
+"""
+    segment_jet(ks, seg::Segment, et, ::Val{N}) -> NTuple{N+1,Vec3}
+
+Return the jet of `seg.target` relative to `seg.center` at `et` in J2000; a segment in
+another frame is rotated with the rotation jet of that frame.
+"""
+@inline function segment_jet(ks::KernelSet, seg::Segment, et::T, ::Val{N}) where {T<:Real,N}
+    jet = spk_eval(ks.daf[seg.file], seg, et, Val(N))
+    seg.frame == Int32(1) && return jet
+    return rotate_jet(frame_jet(ks, seg.frame, Int32(1), et, Val(N)), jet)
+end
+
+"Index of `body` in the first `n` entries of `chain`, or 0."
+@inline function chain_index(chain::NTuple{MAXCHAIN,Int32}, n::Int, body::Int32)
+    for k in 1:n
+        chain[k] == body && return k
+    end
+    return 0
+end
+
+"Text that lists the SPK coverage intervals of `body` in `ks` (ET seconds)."
+function coverage_text(ks::KernelSet, body::Integer)
+    segs = get(ks.spk, Int32(body), nothing)
+    segs === nothing && return "no SPK segment is loaded for this body"
+    parts = ["[$(s.t0), $(s.t1)] (center $(s.center))" for s in Iterators.take(segs, 8)]
+    more = length(segs) > 8 ? " and $(length(segs) - 8) more" : ""
+    return "available coverage: " * join(parts, ", ") * more
+end
+
+"Throw the error for two chains that do not meet; `tend` and `oend` are the last bodies."
+@noinline function throw_no_connection(ks::KernelSet, targ, obs, t::Float64, tend, oend)
+    for body in (oend, tend)
+        if body != 0 && haskey(ks.spk, Int32(body))
+            throw(SpiceError(:nocoverage, "no SPK segment covers body $body at ET $t s " *
+                "(needed for target $targ relative to observer $obs); " *
+                coverage_text(ks, body)))
+        end
+    end
+    throw(SpiceError(:nopath, "no chain of SPK segments connects target $targ and " *
+        "observer $obs at ET $t s: the target chain ends at body $tend and the " *
+        "observer chain ends at body $oend"))
+end
+
+"Throw the error for a chain that is longer than `MAXCHAIN`."
+@noinline throw_chain_depth(targ, obs, t::Float64) = throw(SpiceError(:nopath,
+    "the SPK chain between target $targ and observer $obs at ET $t s is longer than " *
+    "$MAXCHAIN bodies"))
+
+"""
+    spk_jet(ks, targ::Int32, et, ref::Int32, obs::Int32, ::Val{N}) -> NTuple{N+1,Vec3}
+
+Return the geometric position of `targ` relative to `obs` in frame `ref` at `et` and
+its time derivatives to order N (no aberration correction). The function does not
+allocate. Throws `SpiceError(:nocoverage)` or `SpiceError(:nopath)`.
+"""
+function spk_jet(ks::KernelSet, targ::Int32, et::T, ref::Int32, obs::Int32,
+        ::Val{N}) where {T<:Real,N}
+    t = primal(et)
+    # Pass 1: bodies and segment indices of the target chain, without evaluation.
+    tbody = ntuple(_ -> Int32(0), Val(MAXCHAIN))
+    tseg = ntuple(_ -> 0, Val(MAXCHAIN))
+    tbody = Base.setindex(tbody, targ, 1)
+    nt = 1
+    body = targ
+    while body != 0
+        segs = get(ks.spk, body, nothing)
+        segs === nothing && break
+        i = find_segment(segs, t)
+        i == 0 && break
+        nt == MAXCHAIN && throw_chain_depth(targ, obs, t)
+        tseg = Base.setindex(tseg, i, nt)
+        body = segs[i].center
+        nt += 1
+        tbody = Base.setindex(tbody, body, nt)
+    end
+    # Pass 2: walk the observer chain until it meets the target chain.
+    ojet = ntuple(_ -> zero(Vec3{T}), Val(N + 1))
+    body = obs
+    depth = 0
+    common = chain_index(tbody, nt, body)
+    while common == 0
+        segs = get(ks.spk, body, nothing)
+        segs === nothing && throw_no_connection(ks, targ, obs, t, tbody[nt], body)
+        i = find_segment(segs, t)
+        i == 0 && throw_no_connection(ks, targ, obs, t, tbody[nt], body)
+        depth += 1
+        depth > MAXCHAIN && throw_chain_depth(targ, obs, t)
+        seg = segs[i]
+        ojet = map(+, ojet, segment_jet(ks, seg, et, Val(N)))
+        body = seg.center
+        common = chain_index(tbody, nt, body)
+    end
+    # Pass 3: target chain up to the common body.
+    tjet = ntuple(_ -> zero(Vec3{T}), Val(N + 1))
+    for k in 1:common-1
+        seg = ks.spk[tbody[k]][tseg[k]]
+        tjet = map(+, tjet, segment_jet(ks, seg, et, Val(N)))
+    end
+    jet = map(-, tjet, ojet)
+    ref == Int32(1) && return jet
+    return rotate_jet(frame_jet(ks, Int32(1), ref, et, Val(N)), jet)
+end
+
+"Throw `SpiceError(:unsupported)` unless `abcorr` is `NONE` (case and blanks ignored)."
+@inline function check_abcorr(abcorr::AbstractString)
+    abcorr == "NONE" && return nothing
+    uppercase(filter(!isspace, abcorr)) == "NONE" || throw(SpiceError(:unsupported,
+        "aberration correction \"$abcorr\" is not available; only \"NONE\" is"))
+    return nothing
+end
+
+"Return `et` as a floating-point epoch; throws `SpiceError(:badarg)` if it is not finite."
+@inline function check_epoch(et::Real)
+    isfinite(primal(et)) || throw(SpiceError(:badarg, "the epoch is not finite"))
+    return float(et)
+end
+
+"A body or a frame given by name or by integer ID."
+const NameOrID = Union{AbstractString,Integer}
+
+"""
+    spkder(targ, et, ref, obs, Val(N)) -> NTuple{N+1,SVector{3}}
+
+Return the geometric position of `targ` relative to `obs` in frame `ref` at ET `et`
+(km) and its time derivatives to order N. Forms: on a `KernelSet`, on a `SpiceContext`,
+and on the default context. `targ`, `obs`, `ref` are names or integer IDs.
+"""
+function spkder(ks::KernelSet, targ::NameOrID, et::Real, ref::NameOrID, obs::NameOrID,
+        ::Val{N}) where {N}
+    N isa Int && N >= 0 || throw(SpiceError(:badarg, "spkder: the order must be an integer >= 0"))
+    return spk_jet(ks, body_code(ks, targ), check_epoch(et), frame_id(ks, ref),
+        body_code(ks, obs), Val(N))
+end
+spkder(ctx::SpiceContext, targ::NameOrID, et::Real, ref::NameOrID, obs::NameOrID, v::Val) =
+    spkder(kernelset(ctx), targ, et, ref, obs, v)
+spkder(targ::NameOrID, et::Real, ref::NameOrID, obs::NameOrID, v::Val) =
+    spkder(default_context(), targ, et, ref, obs, v)
+
+"""
+    spkgeo(targ::Integer, et, ref, obs::Integer) -> (SVector{6}, lt)
+
+Return the geometric state (km, km/s) of body `targ` relative to body `obs` in frame
+`ref` at ET `et`, and the one-way light time `|r|/c` in seconds, as `spkgeo_c`.
+"""
+function spkgeo(ks::KernelSet, targ::Integer, et::Real, ref::NameOrID, obs::Integer)
+    r, v = spk_jet(ks, Int32(targ), check_epoch(et), frame_id(ks, ref), Int32(obs), Val(1))
+    return vcat(r, v), norm(r) / CLIGHT
+end
+spkgeo(ctx::SpiceContext, targ::Integer, et::Real, ref::NameOrID, obs::Integer) =
+    spkgeo(kernelset(ctx), targ, et, ref, obs)
+spkgeo(targ::Integer, et::Real, ref::NameOrID, obs::Integer) =
+    spkgeo(default_context(), targ, et, ref, obs)
+
+"""
+    spkezr(targ, et, ref, abcorr, obs) -> (SVector{6}, lt)
+
+Return the state (km, km/s) of `targ` relative to `obs` in frame `ref` at ET `et` and
+the one-way light time in seconds, as `spkezr_c`. Only `abcorr = "NONE"` is available;
+another value throws `SpiceError(:unsupported)`.
+"""
+function spkezr(ks::KernelSet, targ::NameOrID, et::Real, ref::NameOrID,
+        abcorr::AbstractString, obs::NameOrID)
+    check_abcorr(abcorr)
+    r, v = spk_jet(ks, body_code(ks, targ), check_epoch(et), frame_id(ks, ref),
+        body_code(ks, obs), Val(1))
+    return vcat(r, v), norm(r) / CLIGHT
+end
+spkezr(ctx::SpiceContext, targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString,
+    obs::NameOrID) = spkezr(kernelset(ctx), targ, et, ref, abcorr, obs)
+spkezr(targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString, obs::NameOrID) =
+    spkezr(default_context(), targ, et, ref, abcorr, obs)
+
+"""
+    spkpos(targ, et, ref, abcorr, obs) -> (SVector{3}, lt)
+
+Return the position (km) of `targ` relative to `obs` in frame `ref` at ET `et` and the
+one-way light time in seconds, as `spkpos_c`. Only `abcorr = "NONE"` is available.
+"""
+function spkpos(ks::KernelSet, targ::NameOrID, et::Real, ref::NameOrID,
+        abcorr::AbstractString, obs::NameOrID)
+    check_abcorr(abcorr)
+    (r,) = spk_jet(ks, body_code(ks, targ), check_epoch(et), frame_id(ks, ref),
+        body_code(ks, obs), Val(0))
+    return r, norm(r) / CLIGHT
+end
+spkpos(ctx::SpiceContext, targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString,
+    obs::NameOrID) = spkpos(kernelset(ctx), targ, et, ref, abcorr, obs)
+spkpos(targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString, obs::NameOrID) =
+    spkpos(default_context(), targ, et, ref, abcorr, obs)
