@@ -22,7 +22,7 @@ ill_alloc_g(ks, et, c, sp) = @allocated illumg(ks, "ELLIPSOID", 301, 399, et, 10
 ill_alloc_f(ks, et, c, sp) = @allocated illumf(ks, "ELLIPSOID", 301, 10, et, 10020, c, 399, sp)
 ill_alloc_ph(ks, et, c) = @allocated phaseq(ks, et, 301, 10, 399, c)
 
-group("geom_illum: ilumin, illumg, illumf, phaseq", Kernels.FULL_SET_FILES...) do
+@gf_light group("geom_illum: ilumin, illumg, illumf, phaseq", Kernels.FULL_SET_FILES...) do
     ctx = geo_setup(; dsk=true)
     ks = NeoSpice.kernelset(ctx)
     rng = MersenneTwister(SEED + 102)
@@ -193,7 +193,7 @@ group("geom_illum: ilumin, illumg, illumf, phaseq", Kernels.FULL_SET_FILES...) d
         h = 20.0
         sp = srfrec(ks, 301, 0.3, 0.2)
         spe = srfrec(ks, 399, -1.0, 0.5)
-        for et in record_safe_epochs(rng, 24), cor in ("NONE", "LT", "LT+S", "CN", "CN+S")
+        for et in record_safe_epochs(rng, nsample(6, 24)), cor in ("NONE", "LT", "LT+S", "CN", "CN+S")
             fs = Pair{String,Function}[
                 "ilumin angles" => t -> SVector(ilumin(ks, "ELLIPSOID", 301, t, 10020, cor, 399, sp)[3:5]...),
                 "ilumin srfvec" => t -> ilumin(ks, "ELLIPSOID", 399, t, 10013, cor, 301, spe)[2],

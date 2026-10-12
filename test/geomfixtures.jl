@@ -7,6 +7,7 @@
 # gives the kind of that error.
 
 isdefined(@__MODULE__, :DSKLIB) || include("dskfixtures.jl")
+isdefined(@__MODULE__, :GFO) || include("gforacle.jl")     # for `@gf_light`
 
 const GEOLIB = SPICE.libcspice
 const GV = Vector{Float64}

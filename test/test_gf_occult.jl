@@ -14,6 +14,14 @@
 # a state that is true or false, so the brackets differ only if the state differs at a
 # sample, which is possible only within rounding of a contact.
 #
+# Default run and exhaustive run (`NEOSPICE_TEST_FULL=1`). A search of CSPICE over the
+# years that hold an eclipse by chance takes 0.04 s for each year, so the default run
+# searches some days about an eclipse of a list of dates (`GFOC_SOLAR`, `GFOC_LUNAR`,
+# `GFOC_VENUS`; the window has one interval or two), each transit with one correction,
+# and one case in three of the synthetic ellipsoids; it does not make the table of
+# search times. The exhaustive run searches random spans of 2 to 12 years, every
+# transit with every correction and every synthetic case.
+#
 # Behaviour specification: test/features/gf_occult.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
@@ -22,8 +30,15 @@ isdefined(@__MODULE__, :GEOLIB) || include("geomfixtures.jl")
 "The corrections of `gfoclt` that have an effect (stellar aberration is not used)."
 const GFOC_CORRS = ("NONE", "LT", "CN", "XLT", "XCN")
 const GFOC_TYPES = ("ANY", "PARTIAL", "FULL", "ANNULAR")
+# Dates (UTC day of the start) of events of 1990 to 2035, from a search with `gfoclt`.
+"The center of the Moon is in front of the disk of the Sun as seen from the center of the Earth."
+const GFOC_SOLAR = ("1991 JAN 15", "2002 JUN 10", "2009 JUL 22")
+"The Earth hides the Sun as seen from the center of the Moon (total eclipses of the Moon)."
+const GFOC_LUNAR = ("2000 JAN 21", "2007 MAR 03", "2011 DEC 10", "2015 SEP 28", "2019 JAN 21")
+"Venus is behind the Sun as seen from the Earth."
+const GFOC_VENUS = ("2000 JUN 10", "2008 JUN 08", "2016 JUN 05")
 
-group("gf occult: gfoclt, gfocce", Kernels.FULL_SET_FILES...) do
+@gf_light group("gf occult: gfoclt, gfocce", Kernels.FULL_SET_FILES...) do
     paths = [geo_kernels(; dsk=true)..., geo_occult_kernels()...]
     oracle_load(paths)
     ctx = neo_context(paths)
@@ -35,6 +50,18 @@ group("gf occult: gfoclt, gfocce", Kernels.FULL_SET_FILES...) do
     E = "ELLIPSOID"
     P = "POINT"
     found = Dict{String,Int}()
+    """
+    Confinement window of the default run: some days about the event `k` (modulo the
+    length) of `dates`, which starts in the UTC day of its date. An even `k` gives two
+    intervals; the event is in the last one.
+    """
+    function near_event(dates, k, before, after)
+        tm = SPICE.str2et(dates[mod1(k, length(dates))])
+        a, b = tm - before * (1 + rand(rng)) * day, tm + day + after * (1 + rand(rng)) * day
+        w = isodd(k) ? Window([a, b]) : Window([a - 4 * day, a - 2 * day, a, b])
+        @assert wnelmd(w, tm) && wnelmd(w, tm + day)
+        return w
+    end
     "Compare one search with CSPICE; `a` holds the arguments before the window."
     function check(label, a, cn; atol=2.0e-6)
         w = gfoclt(ctx, a..., cn)
@@ -47,6 +74,14 @@ group("gf occult: gfoclt, gfocce", Kernels.FULL_SET_FILES...) do
         return w
     end
 
+    """
+    Step of a search for an eclipse. The exhaustive run takes one of `steps` (hours): an
+    eclipse of the Sun that is shorter than the step is found only if a sample is in it,
+    and the years of the search hold some that are. The default run searches about one
+    event, so its step is 20 or 30 minutes, shorter than each event of the lists.
+    """
+    pick_step(steps) = FULL ? rand(rng, steps) : rand(rng, (1200.0, 1800.0))
+
     @testset "eclipses: the Sun, the Earth and the Moon" begin
         # (label, front, front frame, back, back frame, observer, steps)
         cases = (("Moon in front of the Sun, from the Earth", "MOON", "IAU_MOON", "SUN", "IAU_SUN", "EARTH",
@@ -55,21 +90,26 @@ group("gf occult: gfoclt, gfocce", Kernels.FULL_SET_FILES...) do
                 (hour, 2 * hour)),
             ("Earth in front of the Moon, from the Sun", "EARTH", "IAU_EARTH", "MOON", "IAU_MOON", "SUN",
                 (hour, 2 * hour)))
+        k = 0
         for (label, f, ff, b, bf, obs, steps) in cases, typ in GFOC_TYPES, corr in GFOC_CORRS
+            k += 1
             t0 = -3.0e8 + 8.0e8 * rand(rng)
-            cn = rand(rng) < 0.7 ? Window([t0, t0 + 2 * year]) : gf_random_window(rng, 4, t0, t0 + 3 * year)
-            check(label * ", " * typ, (typ, f, E, ff, b, E, bf, corr, obs, rand(rng, steps)), cn)
+            cn = !FULL ? near_event(obs == "EARTH" ? GFOC_SOLAR : GFOC_LUNAR, k, 2, 2) :
+                 rand(rng) < 0.7 ? Window([t0, t0 + 2 * year]) : gf_random_window(rng, 4, t0, t0 + 3 * year)
+            check(label * ", " * typ, (typ, f, E, ff, b, E, bf, corr, obs, pick_step(steps)), cn)
         end
         # points: the type is ANY
-        for corr in GFOC_CORRS
+        for (k, corr) in enumerate(GFOC_CORRS)
             t0 = -3.0e8 + 4.0e8 * rand(rng)
-            cn = Window([t0, t0 + 12 * year])
+            # (the Sun as a point is behind the Moon in the last two events only)
+            cn = FULL ? Window([t0, t0 + 12 * year]) : near_event(GFOC_SOLAR[2:3], k, 2, 2)
             check("Moon in front of the Sun as a point", ("ANY", "MOON", E, "IAU_MOON", "SUN", P, " ", corr,
-                    "EARTH", 3 * hour), cn)
+                    "EARTH", pick_step((3 * hour,))), cn)
             check("Moon as a point in front of the Sun", ("ANY", "MOON", P, " ", "SUN", E, "IAU_SUN", corr,
-                    "EARTH", 3 * hour), cn)
+                    "EARTH", pick_step((3 * hour,))), cn)
+            FULL || (cn = near_event(GFOC_LUNAR, k, 2, 2))
             check("Earth in front of the Moon as a point", ("any", "earth", "ellipsoid", "iau_earth", "moon",
-                    "point", "", corr, "sun", 2 * hour), cn)
+                    "point", "", corr, "sun", pick_step((2 * hour,))), cn)
         end
         measured(@sprintf("  gfoclt eclipses: intervals found: %s", join(["$k: $v" for (k, v) in
             sort!(collect(found); by=first)], "; ")))
@@ -84,9 +124,13 @@ group("gf occult: gfoclt, gfocce", Kernels.FULL_SET_FILES...) do
         transits = (("MERCURY", "IAU_MERCURY", "2003 MAY 07"), ("MERCURY", "IAU_MERCURY", "2006 NOV 08"),
             ("MERCURY", "IAU_MERCURY", "2016 MAY 09"), ("MERCURY", "IAU_MERCURY", "2019 NOV 11"),
             ("VENUS", "IAU_VENUS", "2004 JUN 08"), ("VENUS", "IAU_VENUS", "2012 JUN 06"))
-        for (planet, pf, date) in transits, corr in GFOC_CORRS
+        nt = 0
+        for (it, (planet, pf, date)) in enumerate(transits), (ic, corr) in enumerate(GFOC_CORRS)
+            # the default run: each transit once, each correction once at least, 4 days
+            FULL || ic == mod1(it, length(GFOC_CORRS)) || continue
+            nt += 1
             tm = SPICE.str2et(date)
-            cn = Window([tm - 4 * day, tm + 4 * day])
+            cn = Window([tm - nsample(2, 4) * day, tm + nsample(2, 4) * day])
             for typ in GFOC_TYPES
                 # the partial phases last some minutes
                 step = typ == "PARTIAL" ? 60.0 : hour
@@ -95,15 +139,16 @@ group("gf occult: gfoclt, gfocce", Kernels.FULL_SET_FILES...) do
             check("transit, planet as a point", ("ANY", planet, P, " ", "SUN", E, "IAU_SUN", corr, "EARTH",
                     hour), cn)
         end
-        @test found["transit, ANY"] == 30 && found["transit, ANNULAR"] == 30
+        @test nt == nsample(6, 30)
+        @test found["transit, ANY"] == nt && found["transit, ANNULAR"] == nt
         measured(@sprintf("  gfoclt transits: intervals found: %s", join(["$k: $v" for (k, v) in
             sort!(collect(found); by=first)], "; ")))
-        @test found["transit, PARTIAL"] == 60 && found["transit, FULL"] == 0
-        @test found["transit, planet as a point"] == 30
+        @test found["transit, PARTIAL"] == 2 * nt && found["transit, FULL"] == 0
+        @test found["transit, planet as a point"] == nt
         # Venus behind the Sun: about once in 8 years
-        for corr in GFOC_CORRS
+        for (k, corr) in enumerate(GFOC_CORRS)
             t0 = SPICE.str2et("2000 JAN 01") + 3.0e7 * rand(rng)
-            cn = Window([t0, t0 + 10 * year])
+            cn = FULL ? Window([t0, t0 + 10 * year]) : near_event(GFOC_VENUS, k, 5, 5)
             check("Venus behind the Sun, FULL", ("FULL", "SUN", E, "IAU_SUN", "VENUS", E, "IAU_VENUS", corr,
                     "EARTH", 6 * hour), cn)
             check("Venus as a point behind the Sun", ("ANY", "SUN", E, "IAU_SUN", "VENUS", P, " ", corr,
@@ -116,10 +161,12 @@ group("gf occult: gfoclt, gfocce", Kernels.FULL_SET_FILES...) do
         empty!(found)
         T = GEO_OCC_SPAN - 100.0
         cn = Window([-T, T])
+        i = 0
         for radb in ([80.0, 60.0, 50.0], [8.0, 6.0, 5.0], [25.0, 22.0, 12.0])
             both_pdpool(ctx, "BODY-5002_RADII", radb)
             for typ in GFOC_TYPES, corr in GFOC_CORRS, (f, ff, b, bf) in (("GEO_A", "GEO_A_FIXED", "GEO_B",
                     "GEO_B_FIXED"), ("GEO_B", "GEO_B_FIXED", "GEO_A", "GEO_A_FIXED"))
+                gf_pick(i += 1, 3) || continue
                 front = f == "GEO_A" ? "A in front" : "B in front"
                 w = check("synthetic, $front, $typ", (typ, f, E, ff, b, E, bf, corr, "GEO_OBS", 20.0), cn)
                 # B is behind A as seen from GEO_OBS: no event with B in front
@@ -161,7 +208,7 @@ group("gf occult: gfoclt, gfocce", Kernels.FULL_SET_FILES...) do
         base = gfoclt(ctx, a..., 3 * hour, cn)
         @test wncard(base) >= 4
         @test gfocce(ctx, a..., 1.0e-6, 3 * hour, gfrefn, cn) == base
-        @test gfocce(ks, a..., 1.0e-6, et -> 3 * hour, gfrefn, cn) == base
+        @test gfocce(ks, a..., 1.0e-6, GFConstStep(3 * hour), gfrefn, cn) == base
         @test gfocce(ctx, a..., 1.0e-6, 3 * hour, gfrefn, cn; threads=true) == base
         # another refinement gives the same contacts within the tolerance
         quarter(t1, t2, s1, s2) = t1 + 0.25 * (t2 - t1)
@@ -172,11 +219,11 @@ group("gf occult: gfoclt, gfocce", Kernels.FULL_SET_FILES...) do
         @test length(loose) == length(base) && 1.0e-6 < maximum(abs.(collect(loose) .- collect(base))) <= 0.2
         @test gfoclt(ctx, a..., 3 * hour, cn; tol=1.0e-1) == loose
         @test throws_kind(() -> gfocce(ctx, a..., 0.0, 3 * hour, gfrefn, cn), :invalidtolerance)
-        @test throws_kind(() -> gfocce(ctx, a..., 1.0e-6, et -> 0.0, gfrefn, cn), :invalidstep)
+        @test throws_kind(() -> gfocce(ctx, a..., 1.0e-6, GFConstStep(0.0), gfrefn, cn), :invalidstep)
         log = String[]
-        gfocce(ctx, a..., 1.0e-6, 3 * hour, gfrefn, cn; report=(e, x...) -> e === :init && push!(log, x[2]))
+        gfocce(ctx, a..., 1.0e-6, 3 * hour, gfrefn, cn; report=GFLog(log), bail=GFStop(false))
         @test log == ["Occultation/transit search "]
-        @test_throws InterruptException gfocce(ctx, a..., 1.0e-6, 3 * hour, gfrefn, cn; bail=() -> true)
+        @test_throws InterruptException gfocce(ctx, a..., 1.0e-6, 3 * hour, gfrefn, cn; report=GFLog(String[]), bail=GFStop(true))
     end
 
     @testset "forms and threads" begin
@@ -249,7 +296,7 @@ group("gf occult: gfoclt, gfocce", Kernels.FULL_SET_FILES...) do
             () -> GFO.gfoclt(with(2 => "GEO_STAR", 4 => "J2000")..., c))
     end
 
-    @testset "search time against CSPICE (reported, not asserted)" begin
+    FULL && @testset "search time against CSPICE (reported, not asserted)" begin
         t0 = SPICE.str2et("2020 JAN 01")
         cases2 = (
             ("gfoclt Moon in front of the Sun, ANY, 12 years, LT", 12 * year,

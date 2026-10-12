@@ -7,6 +7,10 @@
 # agree within 2e-6 s (twice the tolerance); the largest difference is reported for
 # each quantity and family of relations.
 #
+# The default run compares one case in ten of each product of options (`gf_pick`) and
+# does not make the table of search times; the exhaustive run (`NEOSPICE_TEST_FULL=1`)
+# compares every case and makes the table.
+#
 # An event can be ill conditioned, and then the two libraries cannot agree to the
 # tolerance, because their states differ by rounding. The epoch of an extremum is the
 # root of the test "is decreasing", and CSPICE computes that test from numerical
@@ -37,7 +41,7 @@ function gf_confinement(rng::AbstractRNG, n::Integer, span::Real)
     return gf_random_window(rng, n, t0, t0 + span)
 end
 
-group("gf quantities: distance, range rate, separation, phase angle", Kernels.FULL_SET_FILES...) do
+@gf_light group("gf quantities: distance, range rate, separation, phase angle", Kernels.FULL_SET_FILES...) do
     oracle_load(Kernels.full_set())
     ctx = neo_context(Kernels.full_set())
     ks = NeoSpice.kernelset(ctx)
@@ -52,7 +56,9 @@ group("gf quantities: distance, range rate, separation, phase angle", Kernels.FU
         ("EARTH", "MOON", (2 * GF_DAY,), 90 * GF_DAY))
 
     @testset "gfdist against CSPICE" begin
+        i = 0
         for (targ, obs, steps, span) in pairs, abcorr in GF_ABCORRS, (rel, wadj) in GF_VARIANTS
+            gf_pick(i += 1, 10) || continue
             cn = gf_confinement(rng, rand(rng, (1, 1, 3)), span)
             step = rand(rng, steps)
             q = NeoSpice.GFDistance(ks, targ, abcorr, obs)
@@ -70,7 +76,9 @@ group("gf quantities: distance, range rate, separation, phase angle", Kernels.FU
     end
 
     @testset "gfrr against CSPICE" begin
+        i = 0
         for (targ, obs, steps, span) in pairs, abcorr in GF_ABCORRS, (rel, wadj) in GF_VARIANTS
+            gf_pick(i += 1, 10) || continue
             cn = gf_confinement(rng, rand(rng, (1, 1, 3)), span)
             step = rand(rng, steps)
             q = NeoSpice.GFRangeRate(ks, targ, abcorr, obs)
@@ -89,9 +97,11 @@ group("gf quantities: distance, range rate, separation, phase angle", Kernels.FU
             ("VENUS BARYCENTER", "POINT", "NULL", "SUN", "SPHERE", "IAU_SUN", "EARTH", (10 * GF_DAY,), 900 * GF_DAY),
             ("MARS BARYCENTER", "POINT", "NULL", "JUPITER BARYCENTER", "POINT", "NULL", "EARTH", (10 * GF_DAY,), 1500 * GF_DAY),
             ("EARTH", "SPHERE", "IAU_EARTH", "MOON", "SPHERE", "IAU_MOON", "SUN", (2 * GF_DAY,), 120 * GF_DAY))
+        i = 0
         for (t1, s1, f1, t2, s2, f2, obs, steps, span) in triples, abcorr in GF_ABCORRS,
             (rel, wadj) in GF_VARIANTS
 
+            gf_pick(i += 1, 10) || continue
             cn = gf_confinement(rng, rand(rng, (1, 1, 3)), span)
             step = rand(rng, steps)
             q = NeoSpice.GFSeparation(ks, t1, s1, f1, t2, s2, f2, abcorr, obs)
@@ -109,9 +119,11 @@ group("gf quantities: distance, range rate, separation, phase angle", Kernels.FU
             ("VENUS BARYCENTER", "SUN", "EARTH", (10 * GF_DAY,), 900 * GF_DAY),
             ("MARS BARYCENTER", "SUN", "EARTH", (10 * GF_DAY, 30 * GF_DAY), 1500 * GF_DAY),
             ("EARTH", "SUN", "MOON", (2 * GF_DAY,), 120 * GF_DAY))
+        i = 0
         for (targ, illum, obs, steps, span) in triples, abcorr in ("NONE", "LT", "LT+S", "CN", "CN+S"),
             (rel, wadj) in GF_VARIANTS, trial in 1:2
 
+            gf_pick(i += 1, 11) || continue
             cn = gf_confinement(rng, rand(rng, (1, 1, 3)), span)
             step = rand(rng, steps)
             q = NeoSpice.GFPhase(ks, targ, illum, abcorr, obs)
@@ -156,6 +168,7 @@ group("gf quantities: distance, range rate, separation, phase angle", Kernels.FU
     @testset "events on the end points of the confinement window" begin
         t0 = et("2022 FEB 01")
         full = Window([t0, t0 + 200 * GF_DAY])
+        i = 0
         for abcorr in ("NONE", "CN+S")
             qrr = NeoSpice.GFRangeRate(ks, "MOON", abcorr, "EARTH")
             r = gfdist(ctx, "MOON", abcorr, "EARTH", "=", 3.85e5, 0.0, GF_DAY, full)
@@ -170,6 +183,7 @@ group("gf quantities: distance, range rate, separation, phase angle", Kernels.FU
             for cn in windows, rel in GF_RELATIONS
                 adjust = rel in ("ABSMIN", "ABSMAX") ? 1000.0 : 0.0
                 for adj in unique((0.0, adjust))
+                    gf_pick(i += 1, 4) || continue
                     w = gfdist(ctx, "MOON", abcorr, "EARTH", rel, 3.85e5, adj, GF_DAY, cn)
                     ref = GFO.gfdist("MOON", abcorr, "EARTH", rel, 3.85e5, adj, GF_DAY, collect(cn))
                     @test gf_compare("gfdist end points, " * gf_family(rel, adj), w, ref)
@@ -264,10 +278,10 @@ group("gf quantities: distance, range rate, separation, phase angle", Kernels.FU
         @test gfevnt(ctx, GF_DAY, gfrefn, "DISTANCE", tpar..., nod, noi, nol, "=", 3.9e5, 1.0e-3,
             0.0, cn) == gfdist(ctx, "MOON", "LT+S", "EARTH", "=", 3.9e5, 0.0, GF_DAY, cn; tol=1.0e-3)
         # a step function and another refinement give the same roots within the tolerance
-        varstep = gfevnt(ctx, t -> GF_DAY, gfrefn, "DISTANCE", tpar..., nod, noi, nol, "=", 3.9e5,
+        varstep = gfevnt(ctx, GFConstStep(GF_DAY), gfrefn, "DISTANCE", tpar..., nod, noi, nol, "=", 3.9e5,
             1.0e-6, 0.0, cn)
         @test varstep == base
-        third = gfevnt(ctx, t -> 0.7 * GF_DAY, (t1, t2, s1, s2) -> t1 + (t2 - t1) / 3, "DISTANCE",
+        third = gfevnt(ctx, GFConstStep(0.7 * GF_DAY), (t1, t2, s1, s2) -> t1 + (t2 - t1) / 3, "DISTANCE",
             tpar..., nod, noi, nol, "=", 3.9e5, 1.0e-6, 0.0, cn)
         @test length(third) == length(base) && maximum(abs.(collect(third) .- collect(base))) < 2.0e-6
         # the forms on a snapshot and on the default context
@@ -283,7 +297,7 @@ group("gf quantities: distance, range rate, separation, phase angle", Kernels.FU
         @test throws_kind(() -> ev("DISTANCE", fill("X", 11), fill("Y", 11)), :invalidcount)
         @test throws_kind(() -> gfevnt(ctx, 0.0, gfrefn, "DISTANCE", tpar..., nod, noi, nol, "=",
             1.0, 1.0e-6, 0.0, cn), :invalidstep)
-        @test throws_kind(() -> gfevnt(ctx, t -> -1.0, gfrefn, "DISTANCE", tpar..., nod, noi, nol,
+        @test throws_kind(() -> gfevnt(ctx, GFConstStep(-1.0), gfrefn, "DISTANCE", tpar..., nod, noi, nol,
             "=", 1.0, 1.0e-6, 0.0, cn), :invalidstep)
         @test throws_kind(() -> gfevnt(ctx, GF_DAY, gfrefn, "DISTANCE", tpar..., nod, noi, nol, "=",
             1.0, 0.0, 0.0, cn), :invalidtolerance)
@@ -345,7 +359,7 @@ group("gf quantities: distance, range rate, separation, phase angle", Kernels.FU
         @test GFO.kind(() -> GFO.gfdist("PHOBOS", "NONE", "EARTH", "=", 1.0, 0.0, GF_DAY, c)) !== :none
     end
 
-    @testset "search time against CSPICE (reported, not asserted)" begin
+    FULL && @testset "search time against CSPICE (reported, not asserted)" begin
         cn = Window([et("2020 JAN 01"), et("2030 JAN 01")])
         c = collect(cn)
         cases = (

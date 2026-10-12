@@ -9,17 +9,21 @@
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
 
-group("gf solver: user-defined functions, tolerance, callbacks") do
+# Scalar functions with their analytical derivatives.
+gfv_f1(t) = sin(t)
+gfv_d1(t) = cos(t)
+gfv_f2(t) = sin(t) + 0.3 * sin(2.7 * t + 0.4)
+gfv_d2(t) = cos(t) + 0.81 * cos(2.7 * t + 0.4)
+gfv_f3(t) = 1.0e-3 * (t - 3.0) * (t - 11.0) * (t - 17.5) + 0.05 * t
+gfv_d3(t) = 1.0e-3 * ((t - 11.0) * (t - 17.5) + (t - 3.0) * (t - 17.5) + (t - 3.0) * (t - 11.0)) + 0.05
+
+@gf_light group("gf solver: user-defined functions, tolerance, callbacks") do
     rng = MersenneTwister(SEED + 6100)
     relations = ("<", "=", ">", "LOCMIN", "LOCMAX", "ABSMIN", "ABSMAX")
 
-    # Scalar functions with their analytical derivatives.
-    f1(t) = sin(t)
-    d1(t) = cos(t)
-    f2(t) = sin(t) + 0.3 * sin(2.7 * t + 0.4)
-    d2(t) = cos(t) + 0.81 * cos(2.7 * t + 0.4)
-    f3(t) = 1.0e-3 * (t - 3.0) * (t - 11.0) * (t - 17.5) + 0.05 * t
-    d3(t) = 1.0e-3 * ((t - 11.0) * (t - 17.5) + (t - 3.0) * (t - 17.5) + (t - 3.0) * (t - 11.0)) + 0.05
+    # The scalar functions behind one type (`GFScalar`), with their analytical derivatives.
+    f1, f2, f3 = GFScalar(gfv_f1), GFScalar(gfv_f2), GFScalar(gfv_f3)
+    d1, d2, d3 = gfv_d1, gfv_d2, gfv_d3
     funcs = ((f1, d1, "sin"), (f2, d2, "two sines"), (f3, d3, "cubic"))
 
     @testset "gfrefn, uddf, uddc" begin
@@ -47,7 +51,7 @@ group("gf solver: user-defined functions, tolerance, callbacks") do
                                               minimum(vals) : 0.0
             adjust = (rel in ("ABSMIN", "ABSMAX") && isodd(trial)) ?
                      0.2 * rand(rng) * (maximum(vals) - minimum(vals)) : 0.0
-            qdec = t -> d(t) < 0
+            qdec = gf_decreasing(d)
             w = gfuds(f, qdec, rel, refval, adjust, step, cn)
             ref = GFO.gfuds(f, qdec, rel, refval, adjust, step, collect(cn))
             @test collect(w) == ref
@@ -61,7 +65,7 @@ group("gf solver: user-defined functions, tolerance, callbacks") do
     @testset "gfuds: numerical test \"is decreasing\" (uddc)" begin
         for (f, _, name) in funcs, rel in relations
             cn = Window([1.0, 22.0])
-            qdec = t -> uddc(f, t, 1.0e-3)
+            qdec = GFState(t -> uddc(f, t, 1.0e-3))
             refval = rel in ("<", "=", ">") ? 0.2 : 0.0
             w = gfuds(f, qdec, rel, refval, 0.0, 0.25, cn)
             @test collect(w) == GFO.gfuds(f, qdec, rel, refval, 0.0, 0.25, collect(cn))
@@ -71,7 +75,7 @@ group("gf solver: user-defined functions, tolerance, callbacks") do
     @testset "gfuds: events on the end points of the confinement window" begin
         # sin has roots at 0 and at pi (the double nearest to pi gives a small positive
         # sine) and extrema at pi/2 and 3 pi/2.
-        qdec = t -> d1(t) < 0
+        qdec = gf_decreasing(d1)
         for cn in (Window([0.0, pi]), Window([0.0, 2pi]), Window([pi / 2, 3pi / 2]),
                 Window([pi / 2, pi / 2]), Window([0.0, pi / 2, pi, 3pi / 2]),
                 Window([pi, 2pi, 2pi, 3pi])), rel in relations
@@ -90,7 +94,7 @@ group("gf solver: user-defined functions, tolerance, callbacks") do
     end
 
     @testset "gfuds: searches with no result" begin
-        qdec = t -> d1(t) < 0
+        qdec = gf_decreasing(d1)
         cn = Window([0.0, 20.0])
         for (rel, refval) in (("=", 2.0), ("<", -2.0), (">", 2.0), ("=", -1.5))
             w = gfuds(f1, qdec, rel, refval, 0.0, 0.3, cn)
@@ -99,7 +103,7 @@ group("gf solver: user-defined functions, tolerance, callbacks") do
         end
         # A monotone function has no local extremum inside the window.
         for rel in ("LOCMIN", "LOCMAX")
-            w = gfuds(t -> 2.0 * t, t -> false, rel, 0.0, 0.0, 0.5, cn)
+            w = gfuds(GFScalar(t -> 2.0 * t), GFState(t -> false), rel, 0.0, 0.0, 0.5, cn)
             @test isempty(w)
             @test isempty(GFO.gfuds(t -> 2.0 * t, t -> false, rel, 0.0, 0.0, 0.5, collect(cn)))
         end
@@ -112,22 +116,22 @@ group("gf solver: user-defined functions, tolerance, callbacks") do
             cn = gf_random_window(rng, rand(rng, (1, 2, 5)), -10.0, 30.0)
             step = rand(rng, (0.05, 0.3, 0.9))
             c = 0.6 * (2 * rand(rng) - 1)
-            b = t -> f2(t) > c
+            b = GFState(t -> f2(t) > c)
             w = gfudb(b, step, cn)
             ref = GFO.gfudb(b, step, collect(cn))
             @test collect(w) == ref
             gf_compare("udb state", w, ref; atol=0.0)
         end
-        @test collect(gfudb(t -> true, 1.0, Window([0.0, 3.0, 5.0, 5.0]))) == [0.0, 3.0, 5.0, 5.0]
-        @test isempty(gfudb(t -> false, 1.0, Window([0.0, 3.0])))
-        @test isempty(gfudb(t -> true, 1.0, Window()))
+        @test collect(gfudb(GFState(t -> true), 1.0, Window([0.0, 3.0, 5.0, 5.0]))) == [0.0, 3.0, 5.0, 5.0]
+        @test isempty(gfudb(GFState(t -> false), 1.0, Window([0.0, 3.0])))
+        @test isempty(gfudb(GFState(t -> true), 1.0, Window()))
     end
 
     @testset "gfstol: default of a context, keyword, CSPICE" begin
         ctx = SpiceContext()
         other = SpiceContext()
         @test gfstol(ctx) == 1.0e-6
-        qdec = t -> d2(t) < 0
+        qdec = gf_decreasing(d2)
         cn = Window([0.0, 25.0])
         base = gfuds(ctx, f2, qdec, "=", 0.1, 0.0, 0.2, cn)
         try
@@ -144,7 +148,7 @@ group("gf solver: user-defined functions, tolerance, callbacks") do
                     tol=tol)) == ref
                 @test gfuds(other, f2, qdec, "=", 0.1, 0.0, 0.2, cn) == base
                 refb = GFO.gfudb(t -> f2(t) > 0.1, 0.2, collect(cn))
-                @test collect(gfudb(ctx, t -> f2(t) > 0.1, 0.2, cn)) == refb
+                @test collect(gfudb(ctx, GFState(t -> f2(t) > 0.1), 0.2, cn)) == refb
             end
             kclear(ctx)
             @test gfstol(ctx) == 1.0e-9                # `kclear` keeps it, as in CSPICE
@@ -173,7 +177,7 @@ group("gf solver: user-defined functions, tolerance, callbacks") do
     end
 
     @testset "errors, with the kinds of CSPICE" begin
-        qdec = t -> d1(t) < 0
+        qdec = gf_decreasing(d1)
         cn = Window([0.0, 10.0])
         cases = (
             (:invalidstep, ("=", 0.0, 0.0, 0.0)),
@@ -188,10 +192,10 @@ group("gf solver: user-defined functions, tolerance, callbacks") do
             @test throws_kind(() -> gfuds(f1, qdec, rel, refval, adjust, step, cn), kind)
             @test GFO.kind(() -> GFO.gfuds(f1, qdec, rel, refval, adjust, step, collect(cn))) === kind
         end
-        @test throws_kind(() -> gfudb(t -> true, 0.0, cn), :invalidstep)
+        @test throws_kind(() -> gfudb(GFState(t -> true), 0.0, cn), :invalidstep)
         @test GFO.kind(() -> GFO.gfudb(t -> true, 0.0, collect(cn))) === :invalidstep
         @test throws_kind(() -> gfuds(f1, qdec, "=", 0.0, 0.0, 0.3, cn; tol=0.0), :invalidtolerance)
-        @test throws_kind(() -> gfudb(t -> true, 0.3, cn; tol=-1.0), :invalidtolerance)
+        @test throws_kind(() -> gfudb(GFState(t -> true), 0.3, cn; tol=-1.0), :invalidtolerance)
         # relations are read without regard to case and outer blanks
         @test gfuds(f1, qdec, " locmax ", 0.0, 0.0, 0.3, cn) == gfuds(f1, qdec, "LOCMAX", 0.0, 0.0, 0.3, cn)
         @test collect(gfuds(f1, qdec, " = ", 0.0, 0.0, 0.3, cn)) ==
@@ -203,7 +207,7 @@ group("gf solver: user-defined functions, tolerance, callbacks") do
     end
 
     @testset "progress report and interrupt callbacks" begin
-        qdec = t -> d1(t) < 0
+        qdec = gf_decreasing(d1)
         cn = Window([0.0, 10.0, 12.0, 20.0])
         events = Any[]
         rep = (ev, args...) -> push!(events, (ev, args...))
@@ -218,7 +222,7 @@ group("gf solver: user-defined functions, tolerance, callbacks") do
         gfuds(f1, qdec, "LOCMAX", 0.0, 0.0, 0.3, cn; report=rep)
         @test count(==(:init), first.(events)) == 1    # one pass
         empty!(events)
-        gfudb(t -> f1(t) > 0, 0.3, cn; report=rep)
+        gfudb(GFState(t -> f1(t) > 0), 0.3, cn; report=rep)
         @test events[1][1:3] == (:init, cn, "User defined boolean event search ")
         # interrupt: the search stops at once
         calls = Ref(0)
@@ -229,7 +233,7 @@ group("gf solver: user-defined functions, tolerance, callbacks") do
     end
 
     @testset "threads keyword: the same window" begin
-        qdec = t -> d2(t) < 0
+        qdec = gf_decreasing(d2)
         for rel in relations, nint in (1, 3, 9)
             cn = gf_random_window(rng, nint, 0.0, 60.0)
             refval = rel in ("<", "=", ">") ? 0.2 : 0.0
@@ -238,7 +242,7 @@ group("gf solver: user-defined functions, tolerance, callbacks") do
                   gfuds(f2, qdec, rel, refval, adjust, 0.2, cn)
         end
         cn = gf_random_window(rng, 12, 0.0, 60.0)
-        @test gfudb(t -> f2(t) > 0.1, 0.2, cn; threads=true) == gfudb(t -> f2(t) > 0.1, 0.2, cn)
+        @test gfudb(GFState(t -> f2(t) > 0.1), 0.2, cn; threads=true) == gfudb(GFState(t -> f2(t) > 0.1), 0.2, cn)
     end
 
     @testset "window helpers of the solver" begin

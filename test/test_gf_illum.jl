@@ -14,6 +14,10 @@
 # almost stationary is accepted with a larger difference, up to 1 s, if the angle has
 # the same value at the two epochs within 1e-12 rad.
 #
+# The default run compares one case in four of the product of options (`gf_pick`) and
+# does not make the table of search times; the exhaustive run (`NEOSPICE_TEST_FULL=1`)
+# compares every case and makes the table.
+#
 # Behaviour specification: test/features/gf_illum.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
@@ -24,7 +28,7 @@ const GFI_CORRS = ("NONE", "LT", "LT+S", "CN", "CN+S")
 "The angles of `gfilum`."
 const GFI_ANGLES = ("PHASE", "INCIDENCE", "EMISSION")
 
-group("gf illum: gfilum", Kernels.FULL_SET_FILES...) do
+@gf_light group("gf illum: gfilum", Kernels.FULL_SET_FILES...) do
     ctx = geo_setup()
     ks = NeoSpice.kernelset(ctx)
     rng = MersenneTwister(SEED + 6600)
@@ -43,9 +47,11 @@ group("gf illum: gfilum", Kernels.FULL_SET_FILES...) do
             ("EARTH", "IAU_EARTH", "SUN", "MOON", (2 * hour, 3 * hour), 5 * day),
             ("EARTH", "IAU_EARTH", "MOON", "SUN", (3 * hour,), 4 * day))
         n = 0
+        i = 0
         for (targ, fix, src, obs, steps, span) in cases, _ in 1:2, ang in GFI_ANGLES,
             (rel, wadj) in GF_VARIANTS
 
+            gf_pick(i += 1, 4) || continue
             corr = rand(rng, GFI_CORRS)
             step = rand(rng, steps)
             sp = surface_point(targ)
@@ -62,7 +68,7 @@ group("gf illum: gfilum", Kernels.FULL_SET_FILES...) do
             @test all(t -> wnelmd(cn, t), w)
             n += 1
         end
-        @test n == 3 * 2 * 3 * 9
+        @test n == gf_npick(3 * 2 * 3 * 9, 4)
     end
 
     @testset "the value is the angle of illumg, and a root is a root" begin
@@ -134,9 +140,9 @@ group("gf illum: gfilum", Kernels.FULL_SET_FILES...) do
         @test gfilum(ctx, a..., cn) == loose
         gfstol(ctx, 1.0e-6)
         log = String[]
-        gfilum(ctx, a..., cn; report=(e, x...) -> e === :init && push!(log, x[2]))
+        gfilum(ctx, a..., cn; report=GFLog(log), bail=GFStop(false))
         @test log == ["Illumination angle pass 1 of 2", "Illumination angle pass 2 of 2"]
-        @test_throws InterruptException gfilum(ctx, a..., cn; bail=() -> true)
+        @test_throws InterruptException gfilum(ctx, a..., cn; report=GFLog(String[]), bail=GFStop(true))
         # many tasks, one context
         serial = [gfilum(ctx, "ELLIPSOID", ang, "MOON", "SUN", "IAU_MOON", corr, "EARTH", sp, "=", 1.0,
             0.0, day, cn) for ang in GFI_ANGLES, corr in GFI_CORRS]
@@ -191,7 +197,7 @@ group("gf illum: gfilum", Kernels.FULL_SET_FILES...) do
         @test throws_kind(() -> gfilum(ctx, with(8, [1.0, 2.0])..., cn), :badarg)
     end
 
-    @testset "search time against CSPICE (reported, not asserted)" begin
+    FULL && @testset "search time against CSPICE (reported, not asserted)" begin
         t0 = SPICE.str2et("2020 JAN 01")
         sp = g_srfrec(301, 0.3, 0.2)
         spe = g_srfrec(399, -1.2, 0.6)

@@ -11,6 +11,11 @@
 #
 # CSPICE is not used here, because it keeps one process-wide state.
 #
+# The default run has 35 searches (each of the five calls with each of the seven
+# relations once), each made twice on many tasks and once on each of three tasks during
+# the loads and unloads; the exhaustive run (`NEOSPICE_TEST_FULL=1`) has 70 searches,
+# four times on many tasks and three times on each task but one of the process.
+#
 # Behaviour specification: test/features/gf_threads.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
@@ -62,11 +67,15 @@ function gf_thread_jobs(rng::AbstractRNG, n::Integer)
     return jobs
 end
 
-group("gf threads: parallel searches, threads keyword, load and unload") do
+"User function of the searches with `gfuds` and `gfudb`, and its derivative."
+gft_f(t) = sin(t) + 0.3 * sin(2.7 * t + 0.4)
+gft_d(t) = cos(t) + 0.81 * cos(2.7 * t + 0.4)
+
+@gf_light group("gf threads: parallel searches, threads keyword, load and unload") do
     rng = MersenneTwister(SEED + 6400)
     ctx = neo_context(Kernels.full_set())
     day = 86400.0
-    jobs = gf_thread_jobs(rng, 70)
+    jobs = gf_thread_jobs(rng, nsample(35, 70))
     serial = [collect(j.run(ctx)) for j in jobs]
 
     @testset "the searches are not trivial" begin
@@ -90,22 +99,22 @@ group("gf threads: parallel searches, threads keyword, load and unload") do
                 threads=true)
             @test collect(a) == collect(b)
         end
-        f(t) = sin(t) + 0.3 * sin(2.7 * t + 0.4)
-        d(t) = cos(t) + 0.81 * cos(2.7 * t + 0.4) < 0
+        f = GFScalar(gft_f)
+        d = gf_decreasing(gft_d)
+        above = GFState(t -> gft_f(t) > 0.2)
         cn = gf_random_window(rng, 16, 0.0, 200.0)
         for rel in ("<", "=", ">", "LOCMIN", "LOCMAX", "ABSMIN", "ABSMAX")
             @test collect(gfuds(f, d, rel, 0.2, 0.0, 0.1, cn)) ==
                   collect(gfuds(f, d, rel, 0.2, 0.0, 0.1, cn; threads=true))
         end
-        @test collect(gfudb(t -> f(t) > 0.2, 0.1, cn)) ==
-              collect(gfudb(t -> f(t) > 0.2, 0.1, cn; threads=true))
+        @test collect(gfudb(above, 0.1, cn)) == collect(gfudb(above, 0.1, cn; threads=true))
     end
 
     if Threads.nthreads() < 2
         skip_notice("gf threads", "Threads.nthreads() == 1")
     else
         @testset "the same searches on many tasks" begin
-            out = Vector{Vector{Float64}}(undef, 4 * length(jobs))
+            out = Vector{Vector{Float64}}(undef, nsample(2, 4) * length(jobs))
             Threads.@threads for k in eachindex(out)
                 out[k] = collect(jobs[mod1(k, length(jobs))].run(ctx))
             end
@@ -145,8 +154,10 @@ group("gf threads: parallel searches, threads keyword, load and unload") do
                 end
                 cycles
             end
+            nrep = nsample(1, 3)
+            nreaders = FULL ? max(2, Threads.nthreads() - 1) : clamp(Threads.nthreads() - 1, 2, 3)
             readers = [Threads.@spawn begin
-                for rep in 1:3, k in eachindex(jobs)
+                for rep in 1:nrep, k in eachindex(jobs)
                     ok = try
                         collect(jobs[k].run(shared)) == serial[k]
                     catch
@@ -155,7 +166,7 @@ group("gf threads: parallel searches, threads keyword, load and unload") do
                     ok || Threads.atomic_add!(bad, 1)
                     Threads.atomic_add!(total, 1)
                 end
-            end for _ in 1:max(2, Threads.nthreads() - 1)]
+            end for _ in 1:nreaders]
             foreach(wait, readers)
             stop[] = true
             cycles = fetch(writer)
@@ -163,7 +174,7 @@ group("gf threads: parallel searches, threads keyword, load and unload") do
                      "$cycles load/unload cycles; $(bad[]) differ from the serial search")
             @test bad[] == 0
             @test cycles > 0
-            @test total[] == 3 * length(jobs) * length(readers)
+            @test total[] == nrep * length(jobs) * length(readers)
             @test [collect(j.run(shared)) for j in jobs] == serial
         end
     end

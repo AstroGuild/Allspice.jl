@@ -224,6 +224,64 @@ end
 
 end # module GFO
 
+# ---------------------------------------------------------------------------------------
+# Run time of the groups: light evaluation of a test body, and the cases of the default run
+# ---------------------------------------------------------------------------------------
+
+"""
+Module in which `@gf_light` evaluates the body of a group. Its compiler options ask for
+the interpreter, so Julia does not infer and optimize a test body of some hundred lines
+that runs once. Measured on the fifteen geometry groups: the compilation of the bodies
+takes about 40 percent of the compilation time of the groups. The code of NeoSpice, the
+calls into CSPICE and the functions that the test files define at top level belong to
+other modules and are compiled as usual; allocation and inference checks are therefore
+not changed.
+"""
+module GFLight
+Base.Experimental.@compiler_options compile=min optimize=0 infer=false
+using Test, Random, LinearAlgebra, Printf, StaticArrays, NeoSpice
+end
+
+"""
+    gf_light_eval(ex)
+
+Evaluate the expression `ex` in `GFLight`, after every global name of the test module
+is imported there. Postcondition: each name that is defined in the test module is
+defined in `GFLight`.
+"""
+function gf_light_eval(ex)
+    host = parentmodule(GFLight)
+    for n in names(host; all=true, imported=true)
+        (startswith(String(n), '#') || n in (:Base, :Core, :eval, :include, :GFLight, nameof(host))) && continue
+        (isdefined(host, n) && !isdefined(GFLight, n)) || continue
+        Core.eval(GFLight, Expr(:import, Expr(:(:), Expr(:., fullname(host)...), Expr(:., n))))
+    end
+    # (the imports are visible in the newest world only)
+    @assert all(n -> Base.invokelatest(isdefined, GFLight, n), (:group, :SEED, :FULL))
+    return Core.eval(GFLight, ex)
+end
+
+"Evaluate the expression (a call of `group` with its body) with the interpreter; see `GFLight`."
+macro gf_light(ex)
+    return :(gf_light_eval($(QuoteNode(ex))))
+end
+
+"""
+    gf_pick(i, stride) -> Bool
+
+True if case `i` (counted from 1) of a loop over a product of options belongs to this
+run: every case in the exhaustive run (`NEOSPICE_TEST_FULL=1`), each `stride`-th case
+in the default run. A stride without a common factor with the sizes of the inner loops
+spreads the cases of the default run over all the options. Requires `stride >= 1`.
+"""
+function gf_pick(i::Integer, stride::Integer)
+    @assert i >= 1 && stride >= 1
+    return FULL || i % stride == 0
+end
+
+"Number of cases `1:n` that `gf_pick` selects with `stride`."
+gf_npick(n::Integer, stride::Integer) = FULL ? Int(n) : n ÷ stride
+
 "Largest end-point difference in seconds between NeoSpice and CSPICE, by label."
 const GF_MAXDIFF = Dict{String,Float64}()
 "Number of searches compared, by label."
@@ -338,6 +396,58 @@ function gf_reference(rng::AbstractRNG, q, cn::Window, rel::AbstractString, with
     refval = rel in ("<", "=", ">") ? lo + (hi - lo) * rand(rng) : 0.0
     adjust = withadjust ? (0.1 + 0.2 * rand(rng)) * (maximum(vals) - minimum(vals)) : 0.0
     return refval, adjust
+end
+
+# User functions and callbacks of the tests behind fixed types. NeoSpice compiles a search
+# anew for each type of the user function, of the step function and of each callback
+# (0.2 s to 1.2 s for each), and an anonymous function has a type of its own. With the
+# types below the tests compile each search once; the values are those of the wrapped
+# function, so the results are not changed.
+
+"A scalar user function of `gfuds` and `uddf`; `f(et)` gives a `Float64`."
+struct GFScalar <: Function
+    f::Any
+end
+(g::GFScalar)(et) = g.f(et)::Float64
+
+"A user function with a true or false value: `udqdec` of `gfuds`, `udfunb` of `gfudb`."
+struct GFState <: Function
+    f::Any
+end
+(g::GFState)(et) = g.f(et)::Bool
+
+"`GFState` that is true where the derivative `d` is negative (the test \"is decreasing\")."
+gf_decreasing(d) = GFState(et -> d(et) < 0)
+
+"A step function with the constant value `step`."
+struct GFConstStep <: Function
+    step::Float64
+end
+(s::GFConstStep)(et) = s.step
+
+"Interrupt callback: the search stops at the first call if `stop` is true."
+struct GFStop <: Function
+    stop::Bool
+end
+(s::GFStop)() = s.stop
+
+"Report callback that keeps the message of the start of each pass in `log`."
+struct GFLog <: Function
+    log::Vector{String}
+end
+(l::GFLog)(event, args...) = (event === :init && push!(l.log, args[2]); nothing)
+
+"""
+    gf_reference_skip(rng, rel, withadjust)
+
+Draw the random numbers that `gf_reference` draws, without an evaluation of the
+quantity. A loop calls it for a case that the default run skips, so that the cases of
+the default run are cases of the exhaustive run (same seed, same random numbers).
+"""
+function gf_reference_skip(rng::AbstractRNG, rel::AbstractString, withadjust::Bool)
+    rel in ("<", "=", ">") && rand(rng)
+    withadjust && rand(rng)
+    return nothing
 end
 
 "Kind of the `SpiceError` that `f()` throws, or `:none`."

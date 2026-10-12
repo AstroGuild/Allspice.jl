@@ -9,6 +9,10 @@
 # also checked against the value of the coordinate at random epochs, which does not
 # depend on CSPICE.
 #
+# The default run compares one case in ten of the product of options and one case in
+# thirteen at the branch cut (`gf_pick`), and does not make the table of search times;
+# the exhaustive run (`NEOSPICE_TEST_FULL=1`) compares every case and makes the table.
+#
 # Behaviour specification: test/features/gf_coordinates.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
@@ -35,7 +39,7 @@ function gf_inequality_holds(rng::AbstractRNG, q, w::Window, cn::Window, rel::Ab
     return ok
 end
 
-group("gf coordinates: gfposc, longitude and right ascension", Kernels.FULL_SET_FILES...) do
+@gf_light group("gf coordinates: gfposc, longitude and right ascension", Kernels.FULL_SET_FILES...) do
     oracle_load(Kernels.full_set())
     ctx = neo_context(Kernels.full_set())
     ks = NeoSpice.kernelset(ctx)
@@ -71,9 +75,15 @@ group("gf coordinates: gfposc, longitude and right ascension", Kernels.FULL_SET_
 
     @testset "every system, coordinate and relation against CSPICE" begin
         nerr = 0
+        i = 0
         for (targ, obs, frame, abcorrs, steps, span, hasradii) in cases,
             (sys, crds) in GF_SYSTEMS, crd in crds, (rel, wadj) in GF_VARIANTS
 
+            i += 1
+            # (in every run: the error cases, and each relation on the longitude that is
+            # positive west, which has a branch of its own for each relation)
+            gf_pick(i, 10) || (!hasradii && sys in ("GEODETIC", "PLANETOGRAPHIC")) ||
+                (frame == "IAU_MARS" && sys == "PLANETOGRAPHIC" && crd == "LONGITUDE") || continue
             abcorr = rand(rng, abcorrs)
             step = rand(rng, steps)
             cn = confinement(span)
@@ -108,6 +118,7 @@ group("gf coordinates: gfposc, longitude and right ascension", Kernels.FULL_SET_
     @testset "longitude and right ascension at and next to the branch cut" begin
         refs = (0.0, Float64(pi), -Float64(pi), pi / 2, -pi / 2, 3pi / 2, 2pi, pi - 1.0e-3,
             -pi + 1.0e-3, 1.0e-3, 2pi - 1.0e-3, 4.0, -2.0, 7.0)
+        i = 0
         for (targ, obs, frame, abcorrs, steps, span, hasradii) in cases, (sys, crd) in GF_ANGULAR
             (!hasradii && sys in ("GEODETIC", "PLANETOGRAPHIC")) && continue
             abcorr = first(abcorrs)
@@ -116,6 +127,7 @@ group("gf coordinates: gfposc, longitude and right ascension", Kernels.FULL_SET_
             cn = Window([t0, t0 + span])
             q = NeoSpice._gf_position_coordinate(ks, targ, frame, abcorr, obs, sys, crd)
             for refval in refs, rel in ("<", "=", ">")
+                gf_pick(i += 1, 13) || continue
                 w = gfposc(ctx, targ, frame, abcorr, obs, sys, crd, rel, refval, 0.0, step, cn)
                 ref = GFO.gfposc(targ, frame, abcorr, obs, sys, crd, rel, refval, 0.0, step, collect(cn))
                 ok = gf_compare("gfposc branch cut " * gf_family(rel, 0.0), w, ref)
@@ -130,6 +142,7 @@ group("gf coordinates: gfposc, longitude and right ascension", Kernels.FULL_SET_
             end
             for (rel, adjust) in (("LOCMIN", 0.0), ("LOCMAX", 0.0), ("ABSMIN", 0.0), ("ABSMAX", 0.0),
                 ("ABSMIN", 0.3), ("ABSMAX", 0.3), ("ABSMIN", 4.0), ("ABSMAX", 4.0))
+                gf_pick(i += 1, 13) || continue
                 w = gfposc(ctx, targ, frame, abcorr, obs, sys, crd, rel, 0.0, adjust, step, cn)
                 ref = GFO.gfposc(targ, frame, abcorr, obs, sys, crd, rel, 0.0, adjust, step, collect(cn))
                 ok = gf_compare("gfposc branch cut " * gf_family(rel, adjust), w, ref)
@@ -214,7 +227,7 @@ group("gf coordinates: gfposc, longitude and right ascension", Kernels.FULL_SET_
             1.0, 0.0, day, Window()))
     end
 
-    @testset "search time against CSPICE (reported, not asserted)" begin
+    FULL && @testset "search time against CSPICE (reported, not asserted)" begin
         t0 = SPICE.str2et("2020 JAN 01")
         cn = Window([t0, t0 + 3650 * day])
         c = collect(cn)

@@ -32,6 +32,18 @@
 # the coordinate has the same value at the two epochs within 1e-12 of its scale (the
 # rounding noise of a coordinate of a surface point is about 1e-13 of its scale).
 #
+# Default run and exhaustive run (`NEOSPICE_TEST_FULL=1`). A search of CSPICE on a surface
+# point is slow (0.2 s for 60 days of the ray near the limb), so the default run compares
+# one case in sixteen (sub-observer point) or in twelve (ray that follows the target) of
+# the product of options (`gf_pick`), searches the ray near the limb to the end of the
+# first gap of its existence window only, for each relation once, and does not make the table of
+# search times. The exhaustive run compares every case on the whole windows. A case
+# that the default run skips draws its random numbers all the same, so each case of the
+# default run is a case of the exhaustive run (the ray near the limb on the first part
+# of its window). The two libraries do not agree to the tolerances for every random
+# case: the exhaustive run fails for 2 of 3 other seeds (one end point each). The cases
+# of the default seed agree.
+#
 # Behaviour specification: test/features/gf_surface.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
@@ -119,7 +131,7 @@ an altitude, or the distance from the center of the Moon (whose radii are equal)
 gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
     (target == "MOON" && sys != "CYLINDRICAL" && crd in ("RADIUS", "RANGE"))
 
-group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
+@gf_light group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
     paths = [geo_kernels()..., gfs_track_kernel()]
     oracle_load(paths)
     ctx = neo_context(paths)
@@ -145,6 +157,7 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
             ("EARTH", "IAU_EARTH", "SUN", (3 * hour,), 3 * day))
         n = 0
         nconst = 0
+        i = 0
         for (targ, fix, obs, steps, span) in cases, (sys, crds) in GF_SYSTEMS, crd in crds,
             (rel, wadj) in GF_VARIANTS
 
@@ -152,6 +165,7 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
             meth = rand(rng, methods)
             step = rand(rng, steps)
             cn = confinement(span)
+            gf_pick(i += 1, 16) || (gf_reference_skip(rng, rel, wadj); continue)
             q = subq(targ, fix, meth, corr, obs, sys, crd)
             refval, adjust = gf_reference(rng, q, cn, rel, wadj)
             w = gfsubc(ctx, targ, fix, meth, corr, obs, sys, crd, rel, refval, adjust, step, cn)
@@ -169,7 +183,8 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
             @test ok
             n += 1
         end
-        @test n + nconst == 3 * 21 * 9 && nconst == (2 * 3 + 3) * 9
+        @test n + nconst == gf_npick(3 * 21 * 9, 16) && n > 0
+        @test FULL ? nconst == (2 * 3 + 3) * 9 : nconst > 0
         measured(@sprintf("  gfsubc: %d searches compared, %d on a constant coordinate not compared", n, nconst))
     end
 
@@ -195,11 +210,13 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
         # The intercept exists on the whole window; every system and coordinate.
         n = 0
         nconst = 0
+        i = 0
         for (sys, crds) in GF_SYSTEMS, crd in crds, (rel, wadj) in GF_VARIANTS
             corr = rand(rng, GF_ABCORRS)
             dvec = [1.0, 0.012 * (rand(rng) - 0.5), 0.012 * (rand(rng) - 0.5)]
             step = rand(rng, (2 * hour, 3 * hour))
             t0 = start_epoch()
+            gf_pick(i += 1, 12) || (gf_reference_skip(rng, rel, wadj); continue)
             cn = Window([t0, t0 + 3 * day])
             q = sntq("EARTH", "IAU_EARTH", corr, "MOON", "GF_TRACK", dvec, sys, crd)
             exist = NeoSpice._gf_vecexist(q.vec, cn, NeoSpice._gf_run(step, 1.0e-6))
@@ -223,7 +240,8 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
             @test ok
             n += 1
         end
-        @test n + nconst == 21 * 9 && nconst == 2 * 9
+        @test n + nconst == gf_npick(21 * 9, 12) && n > 0
+        @test FULL ? nconst == 2 * 9 : nconst > 0
     end
 
     @testset "gfsntc: a ray that meets the target for a part of each month" begin
@@ -234,10 +252,15 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
         # convergence tolerance: the tolerance of an end point is 2e-5 s here.
         dvec = [1.0, 0.0166, 0.0]
         nexist = 0
+        i = 0
+        nrel = Set{Tuple{String,Bool}}()
         for (sys, crd) in (("LATITUDINAL", "LATITUDE"), ("RECTANGULAR", "Z"), ("RECTANGULAR", "X"),
                 ("GEODETIC", "LONGITUDE")), (rel, wadj) in GF_VARIANTS
+            # (4 coordinates and 9 relations: one case in four has each relation once)
             corr = rand(rng, GF_ABCORRS)
             t0 = start_epoch()
+            gf_pick(i += 1, 4) || (gf_reference_skip(rng, rel, wadj); continue)
+            push!(nrel, (rel, wadj))
             cn = Window([t0, t0 + 60 * day])
             step = 3 * hour
             q = sntq("EARTH", "IAU_EARTH", corr, "MOON", "GF_TRACK", dvec, sys, crd)
@@ -245,6 +268,14 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
             @test wncard(exist) >= 2
             nexist = max(nexist, wncard(exist))
             refval, adjust = gfs_reference(rng, q, exist, rel, wadj)
+            if !FULL
+                # the default run: the window to 2.5 days after the first gap of the
+                # existence window, which holds a part of two intervals (the samples of
+                # the search are those of the whole window)
+                cn = Window([t0, exist[3] + 2.5 * day])
+                exist = NeoSpice._gf_vecexist(q.vec, cn, NeoSpice._gf_run(step, 1.0e-6))
+                @test wncard(exist) == 2
+            end
             w = gfsntc(ctx, "EARTH", "IAU_EARTH", "ELLIPSOID", corr, "MOON", "GF_TRACK", dvec, sys,
                 crd, rel, refval, adjust, step, cn)
             ref = GFO.gfsntc("EARTH", "IAU_EARTH", "ELLIPSOID", corr, "MOON", "GF_TRACK", dvec, sys,
@@ -255,15 +286,18 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
             @test ok
             @test all(t -> wnelmd(exist, t), w)
         end
+        @test length(nrel) == length(GF_VARIANTS)
         measured(@sprintf("  gfsntc grazing ray: largest number of intervals of the existence window %d", nexist))
     end
 
     @testset "gfsntc: a ray fixed in J2000 that the target crosses" begin
         n = 0
+        i = 0
         for (sys, crds) in GF_SYSTEMS, crd in crds, rel in ("<", "=", "LOCMAX", "ABSMIN")
             gfs_constant("MOON", sys, crd) && continue
             corr = rand(rng, GF_ABCORRS)
             t0 = start_epoch()
+            gf_pick(i += 1, 2) || (gf_reference_skip(rng, rel, false); continue)
             # the direction of the Moon at t0, as the search will see it
             dvec = collect(spkpos(ctx, "MOON", t0, "J2000", corr, "EARTH")[1])
             cn = Window([t0 - 6 * hour, t0 + 6 * hour])
@@ -282,19 +316,22 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
             @test ok
             n += 1
         end
-        @test n == (21 - 5) * 4
+        @test n == gf_npick((21 - 5) * 4, 2)
     end
 
     @testset "gfsntc: the existence window, the nine corrections" begin
         # A coordinate that is less than the reference value wherever the intercept
         # exists: the result is the existence window, contracted as in CSPICE.
         worst = 0.0
+        # (the default run: each ray once for each correction, 30 days of the ray near the
+        # limb, which hold a part of one interval at least)
         for corr in GF_ABCORRS, k in 1:4
             t0 = start_epoch()
+            k <= nsample(2, 4) || continue
             if isodd(k)
                 a = ("EARTH", "IAU_EARTH", "Ellipsoid", corr, "MOON", "GF_TRACK", [1.0, 0.0166, 0.0],
                     "RECTANGULAR", "X", "<", 1.0e9, 0.0, 3 * hour)
-                cn = Window([t0, t0 + 60 * day])
+                cn = Window([t0, t0 + nsample(30, 60) * day])
             else
                 dvec = collect(spkpos(ctx, "MOON", t0, "J2000", corr, "EARTH")[1])
                 a = ("MOON", "IAU_MOON", "Ellipsoid", corr, "EARTH", "J2000", dvec, "RECTANGULAR", "X",
@@ -380,10 +417,10 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
         @test isempty(gfsntc(ctx, b..., Window()))
         # the callbacks: the existence pass is reported, and the search can be stopped
         log = String[]
-        gfsntc(ctx, b..., long; report=(e, x...) -> e === :init && push!(log, x[2]))
+        gfsntc(ctx, b..., long; report=GFLog(log), bail=GFStop(false))
         @test log[1] == "Intercept existence pass 1 of 1" && length(log) >= 2
-        @test_throws InterruptException gfsntc(ctx, b..., cn; bail=() -> true)
-        @test_throws InterruptException gfsubc(ctx, a..., cn; bail=() -> true)
+        @test_throws InterruptException gfsntc(ctx, b..., cn; report=GFLog(String[]), bail=GFStop(true))
+        @test_throws InterruptException gfsubc(ctx, a..., cn; report=GFLog(String[]), bail=GFStop(true))
     end
 
     @testset "errors, with the kinds of CSPICE" begin
@@ -467,7 +504,7 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
         @test isempty(gfsntc(ctx, swith(7, [-1.0, 0.0, 0.0])..., cn))
     end
 
-    @testset "search time against CSPICE (reported, not asserted)" begin
+    FULL && @testset "search time against CSPICE (reported, not asserted)" begin
         t0 = SPICE.str2et("2020 JAN 01")
         cases2 = (
             ("gfsubc sub-Moon latitude on the Earth, 1 year, '=', LT+S", 365 * day,

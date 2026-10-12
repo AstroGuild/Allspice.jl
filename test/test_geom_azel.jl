@@ -21,7 +21,7 @@ az_alloc_azl(v) = @allocated recazl(v, false, true)
 az_alloc_dr(a, b, c) = @allocated dazldr(a, b, c, false, true)
 az_alloc_rd(a, b, c) = @allocated drdazl(a, b, c, true, false)
 
-group("geom_azel: azlrec, recazl, dazldr, drdazl, azlcpo", Kernels.FULL_SET_FILES...) do
+@gf_light group("geom_azel: azlrec, recazl, dazldr, drdazl, azlcpo", Kernels.FULL_SET_FILES...) do
     ctx = geo_setup()
     ks = NeoSpice.kernelset(ctx)
     rng = MersenneTwister(SEED + 104)
@@ -155,7 +155,7 @@ group("geom_azel: azlrec, recazl, dazldr, drdazl, azlcpo", Kernels.FULL_SET_FILE
     @testset "azlcpo: epoch as a dual number" begin
         st = GeoStats()
         p = SVector(6378.0 * cos(0.5), 0.0, 6378.0 * sin(0.5))
-        for et in record_safe_epochs(rng, 24), cor in GEO_CORRS
+        for et in record_safe_epochs(rng, nsample(6, 24)), cor in GEO_CORRS
             f = t -> azlcpo(ks, "ELLIPSOID", 301, t, cor, true, true, p, 399, 10013)[1]
             d = f(ForwardDiff.Dual(et, 1.0))
             v = f(et)

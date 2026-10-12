@@ -11,6 +11,10 @@
 # 2012-05-20, the Venus transit of 2012-06-06, the lunar eclipse of 2019-01-21 seen from
 # the Moon), and synthetic bodies with triaxial shapes, whose ephemerides the tests
 # write with the SPK writers of types 8, 9 and 13 (see `geo_occult_kernels`).
+#
+# The default run has a third to a fifth of the epochs of each scan (21,500 cases and not 72,600);
+# the exhaustive run (`NEOSPICE_TEST_FULL=1`) has all. The scans are not random, and
+# the default run sees the same codes as the exhaustive run (the test requires it).
 
 isdefined(@__MODULE__, :GEOLIB) || include("geomfixtures.jl")
 
@@ -40,7 +44,7 @@ occ_alloc_ee(ks, et, c) = @allocated occult(ks, 301, "ELLIPSOID", 10020, 10, "EL
 occ_alloc_pe(ks, et, c) = @allocated occult(ks, 301, "POINT", " ", 10, "ELLIPSOID", 10010, c, 399, et)
 occ_alloc_ep(ks, et, c) = @allocated occult(ks, 301, "ELLIPSOID", 10020, 10, "POINT", " ", c, 399, et)
 
-group("geom_occult: occult", Kernels.FULL_SET_FILES...) do
+@gf_light group("geom_occult: occult", Kernels.FULL_SET_FILES...) do
     spk, tk = geo_occult_kernels()
     paths = [geo_kernels(; dsk=true)..., spk, tk]
     oracle_load(paths)
@@ -57,6 +61,7 @@ group("geom_occult: occult", Kernels.FULL_SET_FILES...) do
             ("EARTH", "MOON", "SUN", "2019-01-21T05:12:00", 8 * 3600.0))
         nbad = 0
         ncase = 0
+        nscan = nsample(50, 150)
         for cor in GEO_CORRS, (a, b, obs, utc, span) in events
             et0 = SPICE.str2et(utc)
             fa = "IAU_" * a
@@ -65,10 +70,10 @@ group("geom_occult: occult", Kernels.FULL_SET_FILES...) do
                 (x, sx, fx, y, sy, fy) in ((a, sa, fa, b, sb, fb), (b, sb, fb, a, sa, fa))
 
                 bad, contact, codes = occ_scan(ctx, x, sx, sx == "POINT" ? " " : fx, y, sy, sy == "POINT" ? " " : fy,
-                    cor, obs, et0, span, 150)
+                    cor, obs, et0, span, nscan)
                 nbad += bad
                 ncontact += contact
-                ncase += 151
+                ncase += nscan + 1
                 union!(seen, codes)
             end
         end
@@ -80,26 +85,27 @@ group("geom_occult: occult", Kernels.FULL_SET_FILES...) do
         nbad = 0
         ncase = 0
         codes_syn = Set{Int}()
+        nscan, npoint = nsample(50, 250), nsample(25, 100)
         # Radii of the back body: larger than the front body (annular), smaller (total),
         # and of the same size (partial only).
         for radb in ([200.0, 150.0, 120.0], [9.0, 7.0, 5.0], [50.0, 40.0, 25.0], [80.0, 60.0, 50.0])
             both_pdpool(ctx, "BODY-5002_RADII", radb)
             for cor in GEO_CORRS
                 for (x, fx, y, fy) in (("GEO_A", "GEO_A_FIXED", "GEO_B", "GEO_B_FIXED"), ("GEO_B", "GEO_B_FIXED", "GEO_A", "GEO_A_FIXED"))
-                    bad, contact, codes = occ_scan(ctx, x, "ELLIPSOID", fx, y, "ELLIPSOID", fy, cor, "GEO_OBS", 0.0, 2 * GEO_OCC_SPAN * 0.98, 250)
+                    bad, contact, codes = occ_scan(ctx, x, "ELLIPSOID", fx, y, "ELLIPSOID", fy, cor, "GEO_OBS", 0.0, 2 * GEO_OCC_SPAN * 0.98, nscan)
                     nbad += bad
                     ncontact += contact
-                    ncase += 251
+                    ncase += nscan + 1
                     union!(codes_syn, codes)
                 end
-                bad, contact, codes = occ_scan(ctx, "GEO_A", "POINT", " ", "GEO_B", "ELLIPSOID", "GEO_B_FIXED", cor, "GEO_OBS", 0.0, 2 * GEO_OCC_SPAN * 0.98, 100)
+                bad, contact, codes = occ_scan(ctx, "GEO_A", "POINT", " ", "GEO_B", "ELLIPSOID", "GEO_B_FIXED", cor, "GEO_OBS", 0.0, 2 * GEO_OCC_SPAN * 0.98, npoint)
                 nbad += bad
                 ncontact += contact
-                ncase += 101
-                bad, contact, codes = occ_scan(ctx, "GEO_B", "POINT", " ", "GEO_A", "ELLIPSOID", "GEO_A_FIXED", cor, "GEO_OBS", 0.0, 2 * GEO_OCC_SPAN * 0.98, 100)
+                ncase += npoint + 1
+                bad, contact, codes = occ_scan(ctx, "GEO_B", "POINT", " ", "GEO_A", "ELLIPSOID", "GEO_A_FIXED", cor, "GEO_OBS", 0.0, 2 * GEO_OCC_SPAN * 0.98, npoint)
                 nbad += bad
                 ncontact += contact
-                ncase += 101
+                ncase += npoint + 1
             end
         end
         both_pdpool(ctx, "BODY-5002_RADII", [80.0, 60.0, 50.0])
@@ -116,12 +122,13 @@ group("geom_occult: occult", Kernels.FULL_SET_FILES...) do
         nbad = 0
         ncase = 0
         codes_dsk = Set{Int}()
+        nscan = nsample(40, 120)
         for cor in GEO_CORRS, m in ("DSK/UNPRIORITIZED", "DSK/UNPRIORITIZED/SURFACES = 2", "dsk/unprioritized/surfaces = 1")
             for (x, sx, fx, y, sy, fy) in (("MOON", m, "IAU_MOON", "GEO_STAR", "POINT", " "), ("GEO_STAR", "point", " ", "MOON", m, "IAU_MOON"))
-                bad, contact, codes = occ_scan(ctx, x, sx, fx, y, sy, fy, cor, "GEO_OBS2", 0.0, 2 * GEO_OCC_SPAN * 0.98, 120)
+                bad, contact, codes = occ_scan(ctx, x, sx, fx, y, sy, fy, cor, "GEO_OBS2", 0.0, 2 * GEO_OCC_SPAN * 0.98, nscan)
                 nbad += bad
                 ncontact += contact
-                ncase += 121
+                ncase += nscan + 1
                 union!(codes_dsk, codes)
             end
         end

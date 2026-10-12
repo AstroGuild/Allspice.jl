@@ -30,7 +30,7 @@ co_alloc_cpt(ks, et, c, p) = @allocated spkcpt(ks, p, 399, 10013, et, 1, "TARGET
 co_alloc_cvo(ks, et, c, s) = @allocated spkcvo(ks, 301, et, 10020, "CENTER", c, s, 1.0e8, 399, 10013)
 co_alloc_cvt(ks, et, c, s) = @allocated spkcvt(ks, s, 1.0e8, 399, 1, et, 10013, "OBSERVER", c, 301)
 
-group("geom_constobs: spkcpo, spkcpt, spkcvo, spkcvt", Kernels.FULL_SET_FILES...) do
+@gf_light group("geom_constobs: spkcpo, spkcpt, spkcvo, spkcvt", Kernels.FULL_SET_FILES...) do
     ctx = geo_setup()
     ks = NeoSpice.kernelset(ctx)
     rng = MersenneTwister(SEED + 103)
@@ -138,7 +138,7 @@ group("geom_constobs: spkcpo, spkcpt, spkcvo, spkcvt", Kernels.FULL_SET_FILES...
         h = 20.0
         p = SVector(6378.0 * cos(0.5), 0.0, 6378.0 * sin(0.5))
         s = SVector(p..., 0.0, 0.01, 0.0)
-        for et in record_safe_epochs(rng, 24), cor in GEO_CORRS, loc in CO_LOCI
+        for et in record_safe_epochs(rng, nsample(6, 24)), cor in GEO_CORRS, loc in CO_LOCI
             fs = Pair{String,Function}[
                 "spkcpo" => t -> spkcpo(ks, 301, t, 10013, loc, cor, p, 399, 10013)[1],
                 "spkcpt" => t -> spkcpt(ks, p, 399, 10013, t, 1, loc, cor, 301)[1],
