@@ -54,6 +54,9 @@ export bodfnd, bodvcd, boddef
 export pdpool, pcpool, pipool, dvpool, expool, dtpool, gnpool, szpool, lmpool, clpool
 export stpool, ldpool, swpool, cvpool, poolversion
 export et2lst, lspcn
+export subpnt, subslr, sincpt, srfrec, ilumin, illumg, illumf, phaseq, occult
+export limbpt, termpt, tangpt, fovtrg, fovray, getfov, getfvn
+export spkcpo, spkcpt, spkcvo, spkcvt, azlcpo, azlrec, recazl, dazldr, drdazl
 
 include("dyntypes.jl")      # DynFrame, SwitchFrame, PoolWatch (fields of the types below)
 include("dsk_types.jl")     # DLADescr, DSKDescr, DSKSegment, DSKFile, DSKTolerances
@@ -103,6 +106,12 @@ include("math/coordinates.jl")  # reclat, recgeo, recpgr, ..., Jacobians, xfmsta
 include("math/conics.jl")       # stmp03, prop2b, conics, oscelt, oscltx
 include("frame_info.jl")    # frinfo, cidfrm, cnmfrm, ccifrm, tkfram, tipbod, tisbod, pckfrm, pckcov, bodfnd, bodvcd
 include("lst.jl")           # et2lst, lspcn
+include("geometry/methods.jl")       # method strings, corrections, bodies, frames, radii, shapes
+include("geometry/constobs.jl")      # spkcpo, spkcpt, spkcvo, spkcvt
+include("geometry/subpoints.jl")     # subpnt, subslr
+include("geometry/intercept.jl")     # sincpt, srfrec
+include("geometry/illumination.jl")  # ilumin, illumg, illumf, phaseq
+include("geometry/azel.jl")          # azlrec, recazl, dazldr, drdazl, azlcpo
 include("precompile.jl")    # precompile directives for the common signatures
 
 end # module
