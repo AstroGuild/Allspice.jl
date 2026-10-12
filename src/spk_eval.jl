@@ -32,53 +32,71 @@ Address of the first double (MID) of the record of `seg` that covers `primal(et)
     return addr
 end
 
-"Tuple `s .+ c .* t`; `s` and `t` have the same length."
-@inline _axpy(s::NTuple{M,T}, c::Float64, t::NTuple{M,T}) where {M,T} = map((a, b) -> a + c * b, s, t)
+"""
+    _clenshaw_step(c, s2::T, b1::NTuple{M,T}, b2::NTuple{M,T}) -> NTuple{M,T}
+
+One step of the Clenshaw recurrence with derivatives: from `b1 = b_{k+1}` and
+`b2 = b_{k+2}` (each with derivatives of orders 0 to M-1 with respect to `s`) return
+`b_k` for the coefficient `c`, where `s2 = 2s`:
+`b_k^(m) = 2m b_{k+1}^(m-1) + 2s b_{k+1}^(m) - b_{k+2}^(m)`, plus `c` for `m = 0`.
+Orders 0 and 1 use the operation order of `chbint_` of CSPICE.
+"""
+@inline _clenshaw_step(c::Float64, s2::T, b1::NTuple{M,T}, b2::NTuple{M,T}) where {M,T} =
+    ntuple(m -> m == 1 ? c + (s2 * b1[1] - b2[1]) :
+        (2 * (m - 1)) * b1[m-1] + b1[m] * s2 - b2[m], Val(M))
 
 """
-    _cheb3(data, a, ncoef, tau::T, scale, ::Val{N}) -> NTuple{N+1,Vec3{T}}
+    _clenshaw_end(c0, s::T, b1::NTuple{M,T}, b2::NTuple{M,T}) -> NTuple{M,T}
+
+Value and derivatives (orders 0 to M-1 with respect to `s`) of the Chebyshev series
+from the last two Clenshaw terms `b1 = b_1` and `b2 = b_2` and the coefficient `c0`:
+`f^(m) = m b_1^(m-1) + s b_1^(m) - b_2^(m)`, plus `c0` for `m = 0`.
+"""
+@inline _clenshaw_end(c0::Float64, s::T, b1::NTuple{M,T}, b2::NTuple{M,T}) where {M,T} =
+    ntuple(m -> m == 1 ? c0 + (s * b1[1] - b2[1]) :
+        (m - 1) * b1[m-1] + s * b1[m] - b2[m], Val(M))
+
+"""
+    _cheb3(data, a, ncoef, s::T, radius, ::Val{N}) -> NTuple{N+1,Vec3{T}}
 
 Sum of the three Chebyshev series whose coefficients are `data[a:a+ncoef-1]`,
-`data[a+ncoef:a+2ncoef-1]` and `data[a+2ncoef:a+3ncoef-1]` at `tau`, with derivatives
-to order N; derivative `m` is multiplied by `scale^m` (`scale = d tau / d t`).
+`data[a+ncoef:a+2ncoef-1]` and `data[a+2ncoef:a+3ncoef-1]` at `s`, with derivatives
+to order N; derivative `m` is divided `m` times by `radius` (`d s / d t = 1 / radius`).
 
 Requires `ncoef >= 1` and `a + 3ncoef - 1 <= length(data)` (not checked). One pass
-over the coefficients with the recurrence
-`T_k^(m) = 2 m T_{k-1}^(m-1) + 2 tau T_{k-1}^(m) - T_{k-2}^(m)`.
+over the coefficients, highest first, with the Clenshaw recurrence. For a plain epoch
+the value and the first derivative come from the same floating-point operations as in
+`chbval_` and `chbint_` of CSPICE, so they are equal to the last bit; this matters for
+an angle of many turns, where a difference of one unit in the last place is large
+relative to the reduced angle.
 """
-@inline function _cheb3(data::Vector{Float64}, a::Int, ncoef::Int, tau::T, scale::Float64,
+@inline function _cheb3(data::Vector{Float64}, a::Int, ncoef::Int, s::T, radius::Float64,
         ::Val{N}) where {T,N}
     M = Val(N + 1)
-    o = one(T)
-    z = zero(T)
-    tau2 = 2 * tau
-    p2 = ntuple(m -> m == 1 ? o : z, M)                      # T_0 and derivatives
-    @inbounds cx, cy, cz = data[a], data[a+ncoef], data[a+2*ncoef]
-    sx = _axpy(map(zero, p2), cx, p2)
-    sy = _axpy(map(zero, p2), cy, p2)
-    sz = _axpy(map(zero, p2), cz, p2)
-    if ncoef > 1
-        p1 = ntuple(m -> m == 1 ? tau : m == 2 ? o : z, M)   # T_1 and derivatives
-        @inbounds cx, cy, cz = data[a+1], data[a+ncoef+1], data[a+2*ncoef+1]
-        sx = _axpy(sx, cx, p1)
-        sy = _axpy(sy, cy, p1)
-        sz = _axpy(sz, cz, p1)
-        # invariant: p1 = T_{k-1}, p2 = T_{k-2} with derivatives to order N, and the
-        # sums hold the terms 0 .. k-1
-        for k in 2:ncoef-1
-            q1, q2 = p1, p2
-            p = ntuple(m -> m == 1 ? tau2 * q1[1] - q2[1] :
-                (2 * (m - 1)) * q1[m-1] + tau2 * q1[m] - q2[m], M)
-            @inbounds cx, cy, cz = data[a+k], data[a+ncoef+k], data[a+2*ncoef+k]
-            sx = _axpy(sx, cx, p)
-            sy = _axpy(sy, cy, p)
-            sz = _axpy(sz, cz, p)
-            p2 = p1
-            p1 = p
-        end
+    z = ntuple(_ -> zero(T), M)
+    s2 = s * 2
+    x1, x2 = z, z
+    y1, y2 = z, z
+    z1, z2 = z, z
+    # invariant: (x1, x2), (y1, y2), (z1, z2) are the Clenshaw terms b_{k+1}, b_{k+2}
+    # of the three series, with derivatives to order N
+    for k in ncoef-1:-1:1
+        @inbounds cx, cy, cz = data[a+k], data[a+ncoef+k], data[a+2*ncoef+k]
+        x1, x2 = _clenshaw_step(cx, s2, x1, x2), x1
+        y1, y2 = _clenshaw_step(cy, s2, y1, y2), y1
+        z1, z2 = _clenshaw_step(cz, s2, z1, z2), z1
     end
-    fx, fy, fz = sx, sy, sz
-    return ntuple(m -> Vec3{T}(fx[m], fy[m], fz[m]) * scale^(m - 1), M)
+    @inbounds cx, cy, cz = data[a], data[a+ncoef], data[a+2*ncoef]
+    fx = _clenshaw_end(cx, s, x1, x2)
+    fy = _clenshaw_end(cy, s, y1, y2)
+    fz = _clenshaw_end(cz, s, z1, z2)
+    return ntuple(M) do m
+        v = Vec3{T}(fx[m], fy[m], fz[m])
+        for _ in 2:m      # invariant: `v` has been divided by `radius` once per pass
+            v = v / radius
+        end
+        v
+    end
 end
 
 "Jet of order N of the first three coefficient sets (`nsets` sets in a record) of the record of `seg` at `et`; `skip` sets are passed over first."
@@ -87,8 +105,8 @@ end
     addr = _cheb_record(data, seg, et)
     ncoef = (Int(seg.rsize) - 2) ÷ nsets
     @inbounds mid, radius = data[addr], data[addr+1]
-    tau = (et - mid) / radius
-    return _cheb3(data, addr + 2 + skip * ncoef, ncoef, tau, 1 / radius, v)
+    s = (et - mid) / radius
+    return _cheb3(data, addr + 2 + skip * ncoef, ncoef, s, radius, v)
 end
 
 @inline _spk3(data, seg, et, ::Val{0}) = _cheb_eval(data, seg, et, 6, 0, Val(0))
