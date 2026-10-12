@@ -13,9 +13,10 @@ const _TK_MAXSTR = 80       # MAXCHR: longest string value
 """
     kernel_arch(path) -> Symbol
 
-Contract: `path` names a readable file; returns `:SPK` or `:PCK` for a binary DAF of
-that type (ID word `DAF/SPK`, `DAF/PCK`, or the old `NAIF/DAF` with summary format
-ND = 2 and NI = 6 or 5) and `:TEXT` for everything that is not a DAF or DAS file.
+Contract: `path` names a readable file; returns `:SPK`, `:PCK` or `:CK` for a binary
+DAF of that type (ID word `DAF/SPK`, `DAF/PCK`, `DAF/CK`, or the old `NAIF/DAF` with
+summary format ND = 2 and NI = 6 or 5; with NI = 6 the first segment decides between
+SPK and CK, as `open_daf` does) and `:TEXT` for everything that is not a DAF or DAS file.
 Throws `SpiceError(:nofile)` for a missing file and `SpiceError(:unsupported)` for
 another binary kernel type.
 """
@@ -28,13 +29,14 @@ function kernel_arch(path::AbstractString)::Symbol
         typ = strip(idword[5:end])
         typ == "SPK" && return :SPK
         typ == "PCK" && return :PCK
+        typ == "CK" && return :CK
         throw(SpiceError(:unsupported, "DAF kernel type '$typ' of '$path' is not supported"))
     elseif idword == "NAIF/DAF"
         n >= 16 || throw(SpiceError(:badfile, "DAF file '$path' is truncated"))
         nd = reinterpret(Int32, head[9:12])[1]
         ni = reinterpret(Int32, head[13:16])[1]
         for (d, i) in ((nd, ni), (bswap(nd), bswap(ni)))
-            d == 2 && i == 6 && return :SPK
+            d == 2 && i == 6 && return open_daf(path).kind
             d == 2 && i == 5 && return :PCK
         end
         throw(SpiceError(:unsupported,

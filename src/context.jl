@@ -17,13 +17,15 @@ empty_kernelset() = build_kernelset(Loaded[])
 
 Build the snapshot for the load list `loaded` (load order). The function does not read
 any file: it uses the `DAF` and `TextKernel` objects of the entries. Segment `file`
-numbers index `daf`; `spk` and `pck` are in CSPICE priority order (later file first,
-and inside one file later segment first); the pool holds all assignments in load order.
+numbers index `daf`; `spk`, `pck` and `ck` are in CSPICE priority order (later file
+first, and inside one file later segment first); the pool holds all assignments in load
+order. The spacecraft clocks and the CK meta data are built from the pool.
 """
 function build_kernelset(loaded::Vector{Loaded})
     daf = Vector{Float64}[]
     spk = Dict{Int32,Vector{Segment}}()
     pck = Dict{Int32,Vector{Segment}}()
+    ck = Dict{Int32,Vector{CKSegment}}()
     pool = Dict{String,PoolValue}()
     filenumber = zeros(Int, length(loaded))
     for (i, entry) in enumerate(loaded)
@@ -41,6 +43,13 @@ function build_kernelset(loaded::Vector{Loaded})
     for i in length(loaded):-1:1
         content = loaded[i].content
         content isa DAF || continue
+        if content.kind === :CK
+            for j in length(content.cksegments):-1:1
+                seg = withfile(content.cksegments[j], filenumber[i])
+                push!(get!(() -> CKSegment[], ck, seg.inst), seg)
+            end
+            continue
+        end
         table = content.kind === :PCK ? pck : spk
         for j in length(content.segments):-1:1
             seg = withfile(content.segments[j], filenumber[i])
@@ -53,7 +62,7 @@ function build_kernelset(loaded::Vector{Loaded})
     bodyrot = build_bodyrot(pool)
     lsk = build_lsk(pool)
     return KernelSet(copy(loaded), daf, spk, pck, pool, name2code, code2name, frames,
-        framename2id, tk, bodyrot, lsk)
+        framename2id, tk, bodyrot, lsk, ck, build_sclk(pool), build_ckmeta(pool))
 end
 
 """
@@ -89,7 +98,7 @@ file does not exist.
 function read_kernel(path::AbstractString)
     isfile(path) || throw(SpiceError(:nofile, "kernel file not found: $path"))
     arch = kernel_arch(path)
-    return (arch === :SPK || arch === :PCK) ? open_daf(path) : parse_text_kernel(path)
+    return (arch === :SPK || arch === :PCK || arch === :CK) ? open_daf(path) : parse_text_kernel(path)
 end
 
 """

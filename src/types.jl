@@ -40,19 +40,50 @@ withfile(s::Segment, file::Integer) = Segment(s.target, s.center, s.frame, s.dty
     s.t1, Int32(file), s.baddr, s.eaddr, s.init, s.intlen, s.rsize, s.nrec)
 
 """
+    CKSegment
+
+Plain-bits descriptor of one segment of a CK (orientation) kernel: the orientation of
+the structure `inst` relative to the frame `frame`, as data type `dtype`, for the
+encoded spacecraft clock times `t0 <= sclk <= t1` (ticks). `avflag` tells whether the
+segment holds angular velocity. `baddr:eaddr` and `file` have the meaning that they
+have in `Segment`.
+"""
+struct CKSegment
+    inst::Int32
+    frame::Int32
+    dtype::Int32
+    avflag::Bool
+    t0::Float64
+    t1::Float64
+    file::Int32
+    baddr::Int
+    eaddr::Int
+end
+
+"Copy of `s` that belongs to file number `file` of a `KernelSet`."
+withfile(s::CKSegment, file::Integer) = CKSegment(s.inst, s.frame, s.dtype, s.avflag,
+    s.t0, s.t1, Int32(file), s.baddr, s.eaddr)
+
+"""
     DAF
 
 One opened binary DAF kernel. `data[a]` is the double at DAF address `a` (the whole
 file viewed as doubles, memory-mapped when the byte order is native and converted
-into an owned array when it is not). `kind` is `:SPK` or `:PCK`. `segments` are in
-file order, so a later segment has priority over an earlier one.
+into an owned array when it is not). `kind` is `:SPK`, `:PCK` or `:CK`. `segments`
+(SPK and PCK) and `cksegments` (CK) are in file order, so a later segment has priority
+over an earlier one; the vector that does not fit `kind` is empty.
 """
 struct DAF
     path::String
     kind::Symbol
     data::Vector{Float64}
     segments::Vector{Segment}
+    cksegments::Vector{CKSegment}
 end
+
+"`DAF(path, kind, data, segments)`: a DAF without CK segments."
+DAF(path, kind, data, segments::Vector{Segment}) =
+    DAF(path, kind, data, segments, CKSegment[])
 
 "Value of a kernel-pool variable: numeric or character, always a vector."
 const PoolValue = Union{Vector{Float64},Vector{String}}
@@ -152,6 +183,37 @@ struct LeapSeconds
 end
 
 """
+    SclkType1
+
+Data of one type 1 spacecraft clock (`SCLK01_*` and `SCLK_PARTITION_*` variables of
+clock `id`), as `sc01` of CSPICE uses them; built once by `build_sclk` and never
+modified.
+
+- `coef`: the coefficient records, flattened: encoded SCLK (ticks), parallel time
+  (seconds past J2000 in the time system `timsys`), rate (seconds per most
+  significant count), for each record.
+- `pstart`, `pstop`: partition start and stop times, in ticks, as stored.
+- `moduli`, `offsets`: modulus and offset of each of the `nfield` clock fields.
+- `delim`: code of the output delimiter, 1 to 5 for `.`, `:`, `-`, `,` and blank.
+- `timsys`: parallel time system, 1 for TDB and 2 for TDT.
+- `tikmsc`: ticks in one count of the most significant field.
+- `mxtick`: largest encoded SCLK, the rounded sum of the partition lengths.
+"""
+struct SclkType1
+    id::Int32
+    coef::Vector{Float64}
+    pstart::Vector{Float64}
+    pstop::Vector{Float64}
+    moduli::Vector{Float64}
+    offsets::Vector{Float64}
+    nfield::Int32
+    delim::Int32
+    timsys::Int32
+    tikmsc::Float64
+    mxtick::Float64
+end
+
+"""
     KernelSet
 
 Immutable snapshot of everything loaded. Built by `build_kernelset` from the load
@@ -173,6 +235,10 @@ and readers on many threads do not contend.
 - `tk`: fixed-offset frames by frame ID.
 - `bodyrot`: text-PCK orientation constants by body ID.
 - `lsk`: leap-second data, or `nothing` if no leap-second kernel is loaded.
+- `ck`: CK segments by instrument ID, in the priority order of `spk`.
+- `sclk`: type 1 spacecraft clocks by clock ID (the spacecraft ID, a negative number).
+- `ckmeta`: the pair (`CK_<id>_SCLK`, `CK_<id>_SPK`) for each CK ID that has one of
+  these variables in the pool; a missing one of the two holds the default of `ckmeta`.
 """
 mutable struct KernelSet
     const loaded::Vector{Loaded}
@@ -187,6 +253,9 @@ mutable struct KernelSet
     const tk::Dict{Int32,TKFrame}
     const bodyrot::Dict{Int32,BodyRot}
     const lsk::Union{Nothing,LeapSeconds}
+    const ck::Dict{Int32,Vector{CKSegment}}
+    const sclk::Dict{Int32,SclkType1}
+    const ckmeta::Dict{Int32,NTuple{2,Int32}}
 end
 
 """
