@@ -231,12 +231,21 @@ end
     return normok && inside(_m_det(_m_rows(u1, u2, u3)), dtol)
 end
 
-"Unit state of `dvhat`: the unit position and its derivative."
-@inline function _m_dvhat(s::SVector{6})
+"""
+Unit state of `dvhat`: the unit position and its derivative. With `recip` the
+perpendicular part of the velocity is scaled by a product with a reciprocal, as the
+C function `dvhat_c` does (through `vperp_c`). Without it the scaling is a division,
+as in the f2c routine `dvhat_` (through `vperp_`), which is the routine that `ducrss_`,
+`dvsep_`, `zztwovxf_` and `surfpv_` call. The two forms differ by rounding, and the
+reciprocal of a velocity below about 5.6e-309 is infinite, so only the division keeps
+such a velocity finite. Postcondition: a zero position gives the zero position and the
+velocity as it is.
+"""
+@inline function _m_dvhat(s::SVector{6}, recip::Bool=true)
     p, v = _m_pv(s)
     u, len = _m_unorm(p)
     primal(len) == 0.0 && return _m_state(u, v + zero(u))
-    return _m_state(u, (1.0 / len) * _m_perp(v, u, true))
+    return _m_state(u, (1.0 / len) * _m_perp(v, u, recip))
 end
 
 "Cross product of the positions of two states and its derivative, as `dvcrss_c`."
@@ -252,7 +261,7 @@ end
     f2 = _m_maxabs(_m_pv(s2)[1])
     a = f1 > 0.0 ? (1.0 / f1) * s1 : s1
     b = f2 > 0.0 ? (1.0 / f2) * s2 : s2
-    return _m_dvhat(_m_dvcrss(a, b))
+    return _m_dvhat(_m_dvcrss(a, b), false)
 end
 
 """
@@ -715,7 +724,7 @@ function twovxf(axdef::AbstractVector, indexa::Integer, plndef::AbstractVector, 
     p = _m_v6(plndef)
     i1 = Int(indexa)
     i2 = i1 % 3 + 1
-    s1 = _m_dvhat(a) + zero(p)
+    s1 = _m_dvhat(a, false) + zero(p)
     if indexp == i2
         s3 = _m_ducrss(a, p)
         s2 = _m_ducrss(s3, a)
@@ -784,7 +793,9 @@ dvcrss(s1::AbstractVector, s2::AbstractVector) = _m_dvcrss(_m_v6(s1), _m_v6(s2))
 
 Return the unit vector along the cross product of the positions of two states and its
 time derivative, as `ducrss_c`. Each state is scaled by the largest position component
-first. Postcondition: parallel positions give a zero unit vector.
+first. Postcondition: parallel positions give a zero unit vector. If a scaled velocity
+or a product of the scaled states is not finite, the derivative part is NaN; CSPICE
+returns numbers without meaning there, because its `max` macro drops a NaN operand.
 """
 ducrss(s1::AbstractVector, s2::AbstractVector) = _m_ducrss(_m_v6(s1), _m_v6(s2))
 
@@ -809,8 +820,8 @@ Return the time derivative of the angle between the positions of two states, as
 `SpiceError(:numericoverflow)` if the quotient is above the largest number.
 """
 function dvsep(s1::AbstractVector, s2::AbstractVector)
-    u1, d1 = _m_pv(_m_dvhat(_m_v6(s1)))
-    u2, d2 = _m_pv(_m_dvhat(_m_v6(s2)))
+    u1, d1 = _m_pv(_m_dvhat(_m_v6(s1), false))
+    u2, d2 = _m_pv(_m_dvhat(_m_v6(s2), false))
     pcross = _m_cross(u1, u2)
     numr = _m_dot(u1, d2) + _m_dot(d1, u2)
     _m_iszero(pcross) && return zero(numr)

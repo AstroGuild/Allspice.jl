@@ -50,6 +50,12 @@ const CK_CASES = [
 "Time tags of the segments of `case` in ticks of its clock."
 ck_tags(case) = case.sc == CKFix.SC_TDT ? [3000.0 * (10 + i) for i in 1:80] : CKFix.ticks_tdb()
 
+"Instruments of the type 5 segments of the fixture."
+const CK5_INSTS = (-77050, -77051, -77052, -77053)
+
+"Clock value strictly inside the first interpolation interval of the type 5 segments."
+const CK5_RESET_TICK = CKFix.ticks_tdb()[2] + 1.0
+
 """
     oracle_ck_reset(inst)
 
@@ -57,6 +63,17 @@ Clear the state that CSPICE keeps for the instrument `inst` between CK queries: 
 search far outside the coverage replaces the saved segment of `ckbsr`, and a query in a
 gap of the type 6 segment with tolerance zero makes `ckr06` forget its saved
 mini-segment. Postcondition: both queries found nothing.
+
+For a type 5 segment a query inside the first interpolation interval follows (it finds
+pointing), because `ckr05_` keeps the interval of the last request and keeps it wrong
+in one case. A request in a gap that is nearer to the next interval is moved to the
+start of that interval (ckr05.c, lines 1187 and 1188: `start = nstart`,
+`nstart = nnstrt`), and the routine then saves `nnstrt` as the start after the next
+one (line 1300), which is now equal to the saved next start. If the next request
+reuses the saved interval (line 1017) and lies in the following gap, nearer to its end,
+the window of epochs is empty (line 1257) and CSPICE finds no pointing, although the
+same request finds pointing after any other request. A request inside the first
+interval saves three correct starts.
 """
 function oracle_ck_reset(inst::Integer)
     r = SPICE.ckgp(inst, 1e11, 0.0, "J2000")
@@ -64,6 +81,9 @@ function oracle_ck_reset(inst::Integer)
     if inst == -77006
         r = SPICE.ckgp(inst, CKFix.ticks_tdb()[125], 0.0, "J2000")
         @assert r === nothing
+    elseif inst in CK5_INSTS
+        r = SPICE.ckgp(inst, CK5_RESET_TICK, 0.0, "J2000")
+        @assert r !== nothing
     end
     return nothing
 end
@@ -224,6 +244,25 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
             end
             @test ok
         end
+        # Fixed case of the saved interval of `ckr05_` (see `oracle_ck_reset`): two
+        # requests in the gaps before two successive intervals, each nearer to the start
+        # of the interval. CSPICE finds no pointing for the second one after the first
+        # one, and finds it after a reset; NeoSpice keeps no state and finds it.
+        tk = CKFix.ticks_tdb()
+        ia, ib = CKFix.START_INDEX[end-1], CKFix.START_INDEX[end]
+        ta = tk[ia] - 0.25 * (tk[ia] - tk[ia-1])
+        tb = tk[ib] - 0.25 * (tk[ib] - tk[ib-1])
+        wide = 4.0 * (tk[2] - tk[1])
+        for inst in CK5_INSTS
+            oracle_ck_reset(inst)
+            @test SPICE.ckgp(inst, ta, wide, "J2000") !== nothing
+            @test SPICE.ckgp(inst, tb, wide, "J2000") === nothing      # the CSPICE defect
+            oracle_ck_reset(inst)
+            r = SPICE.ckgp(inst, tb, wide, "J2000")
+            cmat, clkout, found = ckgp(ctx, inst, tb, wide, "J2000")
+            @test r !== nothing && found && clkout == r[2] == tk[ib]
+            @test maximum(abs.(cmat .- r[1])) <= CK_TOL_CMAT
+        end
         @test throws_kind(() -> ckgp(ctx, -77003, 1e6, -1.0, "J2000"), :valueoutofrange)
         @test throws_kind(() -> ckgpav(ctx, -77003, 1e6, -1.0, "J2000"), :valueoutofrange)
         @test throws_kind(() -> ckgp(ctx, -77003, 1e6, 0.0, "NO_SUCH_FRAME"), :unknownframe)
@@ -272,10 +311,12 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
             agree_avail = true
             structure_ok = true
             navail = 0
+            navail_off = 0      # rotations that exist at a tick that is not a time tag
             nticks = nsample(100, 300)
             for _ in 1:nticks
                 t = ck_random_tick(rng, case, tags)
                 0 <= t || continue
+                ontag = t in tags
                 et = sct2e(ctx, case.sc, t)
                 for other in others
                     other == case.frame && continue
@@ -285,6 +326,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
                     agree_avail &= (R === nothing) == (Rc === nothing)
                     if R !== nothing && Rc !== nothing
                         navail += 1
+                        navail_off += !ontag
                         append!(dpx, abs.(R .- Rc))
                         Rb = pxform(ctx, case.frame, other, et)
                         structure_ok &= maximum(abs.(Rb .- R')) <= 1e-14
@@ -319,7 +361,10 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
             @test structure_ok
             if case.dtype == 1
                 # Tolerance zero: a type 1 frame exists at the pointing instances only.
-                @test navail <= nticks
+                # `navail` counts each tick once for each of the other frames, and one
+                # tick in five is a time tag, so there is no fixed bound on `navail`;
+                # the property is that no rotation exists away from a time tag.
+                @test navail_off == 0
                 continue
             end
             @test navail > nticks

@@ -525,7 +525,7 @@ function surfpv(stvrtx::AbstractVector, stdir::AbstractVector, a::Real, b::Real,
     v, dv = _m_pv(sv)
     found, x = _m_surfpt(v, _m_pv(sd)[1], a, b, c)
     found || return nothing
-    u, du = _m_pv(_m_dvhat(sd))
+    u, du = _m_pv(_m_dvhat(sd, false))
     n = _m_surfnm(a, b, c, x)
     vmx = v - x
     t1 = v[1] / a
@@ -575,7 +575,9 @@ function nvp2pl(normal::AbstractVector, point::AbstractVector)
     n = _m_v3(normal)
     _m_iszero(n) && throw(SpiceError(:zerovector, "the normal of a plane must not be zero"))
     u = _m_hat(n)
-    return _m_plane(u + zero(_m_v3(point)), _m_dot(_m_v3(point), u))
+    # The zero (which gives the number type of `point` to the normal) is subtracted, not
+    # added, because `-0.0 + 0.0` is `0.0`: a zero component keeps its sign, as in CSPICE.
+    return _m_plane(u - zero(_m_v3(point)), _m_dot(_m_v3(point), u))
 end
 
 """
@@ -589,7 +591,7 @@ function psv2pl(point::AbstractVector, span1::AbstractVector, span2::AbstractVec
     n = _m_ucrss(_m_v3(span1), _m_v3(span2))
     _m_iszero(n) && throw(SpiceError(:degeneratecase, "the spanning vectors are parallel"))
     p = _m_v3(point)
-    return _m_plane(n + zero(p), _m_dot(n, p))
+    return _m_plane(n - zero(p), _m_dot(n, p))      # subtracted: see `nvp2pl`
 end
 
 """
@@ -900,7 +902,9 @@ function inelpl(ellips::SpiceEllipse, plane::SpicePlane)
     # the plane relative to the center of the ellipse
     point = inpcon * normal - center
     u = _m_hat(normal)
-    trans = _m_plane(u + none, _m_dot(point, u))
+    # The zero is subtracted, not added: `-0.0 + 0.0` is `0.0`, and the sign of a zero
+    # component of the normal decides between the angles pi and -pi below.
+    trans = _m_plane(u - none, _m_dot(point, u))
     n, constant = trans.normal, trans.constant
     v1 = _m_dot(smajor, n)
     v2 = _m_dot(sminor, n)

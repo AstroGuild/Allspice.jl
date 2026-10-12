@@ -119,7 +119,9 @@ const DF_TOL = Dict(
     "DT_SWITCH_NEST" => (5e-14, 5e-9, 5e-14, 5e-10),
     "DT_PRODUCT" => (5e-14, 5e-9, 5e-14, 5e-10),
     # A velocity that is given in a dynamic frame: CSPICE differentiates a quantity
-    # that already holds a numerical derivative.
+    # that already holds a numerical derivative. Measured (2026-10-12): the residual of
+    # a cubic fit of the `pxform` elements over 20 s is 1.1e-11 in both engines (7e-16
+    # for `DT_GSE`), and the two engines differ by up to 8e-12, which is that noise.
     "DT_TWOVEC_IN_DYN" => (5e-10, 5e-4, 5e-10, 5e-4),
 )
 
@@ -227,7 +229,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
     end
 
     @apart @testset "other corrections, spkpos, and frame to frame" begin
-        d = Float64[]; dv = Float64[]; dq = Float64[]; dx = Float64[]
+        d = Float64[]; dv = Float64[]; dq = Float64[]; dx = Float64[]; dxl = Float64[]
         names = first.(DynFix.FRAMES)
         for ab in ("LT", "CN", "CN+S", "XLT", "XLT+S", "XCN", "XCN+S"), name in names
             name == "DT_TWOVEC_IN_DYN" && continue
@@ -244,17 +246,25 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
         for _ in 1:400
             a, b = rand(rng, names), rand(rng, names)
             et = (2 * rand(rng) - 1) * 2.9e8
-            push!(dx, maximum(abs.(pxform(ctx, a, b, et) .- SPICE.pxform(a, b, et))))
+            # `DT_TWOVEC_IN_DYN` has a rounding noise of about 1e-11 in both engines
+            # (see `DF_TOL`), and about 8 percent of the pairs have it on one side, so
+            # these pairs are a sample of their own with the limit of that frame.
+            noisy = (a == "DT_TWOVEC_IN_DYN") != (b == "DT_TWOVEC_IN_DYN")
+            push!(noisy ? dxl : dx, maximum(abs.(pxform(ctx, a, b, et) .- SPICE.pxform(a, b, et))))
         end
         s1 = report_quantiles("spkezr, 7 other corrections: position, relative", d)
         s2 = report_quantiles("spkezr, 7 other corrections: velocity, relative", dv)
         s3 = report_quantiles("spkpos, 7 other corrections: position, relative", dq)
         s4 = report_quantiles("pxform between two dynamic or switch frames", dx)
+        s5 = report_quantiles("pxform between DT_TWOVEC_IN_DYN and another frame", dxl)
         @test s1.max <= 5e-13
         @test s2.max <= 5e-7
         @test s3.max <= 5e-13
-        @test s4.max <= 5e-10
-        @test s4.q99 <= 5e-13
+        # The limit of a pair is the sum of the `pxform` limits of its two frames:
+        # 5e-14 for each frame without the noise (measured 1.6e-14 on 18000 pairs).
+        @test s4.max <= 2 * DF_DEFAULT_TOL[1]
+        @test s5.max <= DF_TOL["DT_TWOVEC_IN_DYN"][1] + DF_DEFAULT_TOL[1]
+        @test length(dx) > 300 && length(dxl) > 5
     end
 
     @apart @testset "pxder against finite differences and sxform" begin
@@ -291,7 +301,15 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
                     @test iszero(sx)
                     @test !iszero(dR)
                 else
-                    es = max(es, df_rel(sx, dR, 1e-13))
+                    # The floor is 1e-12 rad/s. The derivative of a true-of-date frame
+                    # passes near zero where the rate of the nutation cancels the rate
+                    # of the precession (measured: 1e-13 rad/s against 1e-11 typical),
+                    # and the difference between `sxform` and `pxder` does not: it is the
+                    # change of the nutation coefficients that the rates of `zzwahr_`
+                    # omit (measured on 4000 epochs: at most 2.6e-17 rad/s for
+                    # `DT_ETE_OF_DATE` and `DT_SWITCH_ALL`). A quotient by the derivative
+                    # has no bound there; with the floor it is at most 2.6e-5.
+                    es = max(es, df_rel(sx, dR, 1e-12))
                 end
             end
             frozen && continue

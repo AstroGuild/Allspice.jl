@@ -19,6 +19,61 @@ isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 import ForwardDiff
 isdefined(@__MODULE__, :CS) || include("mathoracle.jl")
 
+"""
+    dvsep_overflows(s1, s2) -> Bool
+
+True if `dvsep_c` must not be called for the states `s1` and `s2`. The f2c routine
+`dvsep_` divides a numerator (the sum of two dot products of the unit positions and
+their derivatives) by the norm of the cross product of the unit positions. If the
+numerator is infinite, `zzdiv_` signals `SPICE(NUMERICOVERFLOW)` and formats the
+numerator for the message with `errdp_` (zzdiv.c, line 406). `dpstr_` cannot format an
+infinite number: it converts the logarithm of the number to an integer and uses the
+result as a subscript of the table `ipower` (dpstr.c, lines 368 to 397), and the
+subscript check of f2c then stops the whole process. Contract: the function makes the
+same CSPICE calls as `dvsep_` before the quotient (`dvhat_c`, `vcrss_c`, `vdot_c`), which
+signal no error, and it does not call NeoSpice.
+"""
+function dvsep_overflows(s1, s2)
+    u1, u2 = CS.dvhat(s1), CS.dvhat(s2)
+    iszero(CS.vcrss(u1[1:3], u2[1:3])) && return false    # `dvsep_` returns 0 before the quotient
+    return isinf(CS.vdot(u1[1:3], u2[4:6]) + CS.vdot(u1[4:6], u2[1:3]))
+end
+
+"""
+    ducrss_overflows(s1, s2) -> Bool
+
+True if the derivative part of `ducrss_c` is not defined for the states `s1` and `s2`:
+`ducrss_` divides each state by its largest position component and takes the cross
+product and its derivative with `dvcrss_`, and that intermediate result has an element
+that is not finite (a velocity above about 1e8 with the position 1e-300 becomes
+infinite, and infinity times zero is NaN). CSPICE then returns numbers without meaning:
+the macro `max` of f2c (f2c.h, line 392) drops a NaN operand, so `vperp_` (vperp.c, lines
+178 and 182) can take a NaN velocity for a zero velocity. NeoSpice returns NaN.
+Contract: the function repeats the scaling of `ducrss_` and calls `dvcrss_c` only.
+"""
+function ducrss_overflows(s1, s2)
+    function scaled(s)
+        f = maximum(abs, s[1:3])
+        return f > 0.0 ? (1.0 / f) .* collect(Float64, s) : collect(Float64, s)
+    end
+    return !all(isfinite, CS.dvcrss(scaled(s1), scaled(s2)))
+end
+
+"""
+    twovxf_overflows(axdef, indexa, plndef, indexp) -> Bool
+
+True if one of the two calls of `ducrss_` in `zztwovxf_` has an intermediate result that
+is not finite (see `ducrss_overflows`). Axis numbers that are not valid give `false`:
+`twovxf_c` signals an error for them before any arithmetic.
+"""
+function twovxf_overflows(axdef, indexa, plndef, indexp)
+    (indexa in 1:3 && indexp in 1:3 && indexa != indexp) || return false
+    if indexp == indexa % 3 + 1
+        return ducrss_overflows(axdef, plndef) || ducrss_overflows(CS.ducrss(axdef, plndef), axdef)
+    end
+    return ducrss_overflows(plndef, axdef) || ducrss_overflows(axdef, CS.ducrss(plndef, axdef))
+end
+
 group("12. math: vectors and matrices") do
     rng = MersenneTwister(SEED + 12)
     n = 400
@@ -79,6 +134,7 @@ group("12. math: vectors and matrices") do
     end
 
     @apart @testset "three-dimensional matrices" begin
+        nskip = 0
         for _ in 1:n
             m1, m2 = rm3(), rm3()
             a = rvec(rng)
@@ -113,8 +169,19 @@ group("12. math: vectors and matrices") do
             versus!(t, :twovec, () -> twovec(p, ia, q2, ip), () -> CS.twovec(p, ia, q2, ip))
             s1, s2 = rstate(rng), rand(rng) < 0.1 ? 2.0 * vcat(p, rvec(rng)) : rstate(rng)
             s1 = rand(rng) < 0.5 ? vcat(p, s1[4:6]) : s1
-            versus!(t, :twovxf, () -> twovxf(s1, ia, s2, ip), () -> CS.twovxf(s1, ia, s2, ip))
+            # Not compared where an intermediate result of CSPICE is not finite.
+            if twovxf_overflows(s1, ia, s2, ip)
+                nskip += 1
+            else
+                versus!(t, :twovxf, () -> twovxf(s1, ia, s2, ip), () -> CS.twovxf(s1, ia, s2, ip))
+            end
         end
+        measured("  twovxf: $nskip of $n inputs not compared (intermediate result of CSPICE not finite)")
+        # Fixed case of the operation order: `zztwovxf_` calls the f2c routines `dvhat_`
+        # and `ducrss_`, which scale by a division.
+        sa = [-2.9, 8.2, -11.9, 2.1, -12.4, -6.1]
+        sb = [-11.6, -0.3, 8.3, 7.8, 12.3, -15.7]
+        @test twovxf(sa, 1, sb, 2) == CS.twovxf(sa, 1, sb, 2)
         versus!(t, :ident, () -> ident(), () -> CS.ident())
         @test invert(zeros(3, 3)) == zeros(3, 3)
         @test throws_kind(() -> invort(zeros(3, 3)), :zerolengthcolumn)
@@ -128,6 +195,8 @@ group("12. math: vectors and matrices") do
     end
 
     @apart @testset "derivatives of vector functions of a state" begin
+        nguard = 0
+        nskip = 0
         for _ in 1:n
             s1, s2 = rstate(rng), rstate(rng)
             if rand(rng) < 0.1          # parallel positions
@@ -136,12 +205,51 @@ group("12. math: vectors and matrices") do
             versus!(t, :dvhat, () -> dvhat(s1), () -> CS.dvhat(s1))
             versus!(t, :dvdot, () -> dvdot(s1, s2), () -> CS.dvdot(s1, s2))
             versus!(t, :dvcrss, () -> dvcrss(s1, s2), () -> CS.dvcrss(s1, s2))
-            versus!(t, :ducrss, () -> ducrss(s1, s2), () -> CS.ducrss(s1, s2))
+            # Where an intermediate result of CSPICE is not finite, the derivative part
+            # has no meaning and the unit vector only is compared.
+            last = ducrss_overflows(s1, s2) ? 3 : 6
+            nskip += last == 3
+            versus!(t, :ducrss, () -> collect(ducrss(s1, s2))[1:last], () -> collect(CS.ducrss(s1, s2))[1:last])
             versus!(t, :dvnorm, () -> dvnorm(s1), () -> CS.dvnorm(s1))
-            # `dvsep_` divides by the sine of the angle: positions of like magnitude
-            # keep the quotient inside the range of the CSPICE overflow test
-            versus!(t, :dvsep, () -> dvsep(s1, s2), () -> CS.dvsep(s1, s2))
+            # A velocity of 1e300 with a small position gives an infinite numerator in
+            # `dvsep_`. CSPICE then stops the process (see `dvsep_overflows`), so the
+            # oracle is not called and the expected result is the error that `zzdiv_`
+            # signals for this input.
+            guard = dvsep_overflows(s1, s2)
+            nguard += guard
+            versus!(t, :dvsep, () -> dvsep(s1, s2), () -> guard ? throw(CS.CError(:numericoverflow)) : CS.dvsep(s1, s2))
         end
+        measured("  dvsep: $nguard of $n inputs not given to dvsep_c (infinite numerator, CSPICE stops the process)")
+        measured("  ducrss: derivative of $nskip of $n inputs not compared (intermediate result of CSPICE not finite)")
+        # Fixed cases of the operation order: `ducrss_` and `dvsep_` call the f2c routine
+        # `dvhat_`, which scales by a division, and not `dvhat_c`, which multiplies by a
+        # reciprocal. The reciprocal of a velocity below 5.6e-309 is infinite (first
+        # case); the two orders differ by rounding (second and third case), and a
+        # position of 1e-300 makes that difference as large as the result (fourth case).
+        sden1 = [-6.354774078047717e-7, 8.943378680402032e-6, 1.6011695882103261e-6, 0.0, 0.0, 0.0]
+        sden2 = [1e300, 1e300, 1e300, -2.572684309046176e-10, -4.428686661044401e-10, -2.7522373404770423e-10]
+        sa = [-2.9, 8.2, -11.9, 2.1, -12.4, -6.1]
+        sb = [-11.6, -0.3, 8.3, 7.8, 12.3, -15.7]
+        sc = [10.3, 1.3, -6.5, 8.4, -21.3, 10.2]
+        sd = [13.7, 4.7, -6.6, -7.4, 11.8, -4.1]
+        sbig = [2.353009784756466e-6, 8.590299545730118e-6, -4.739435602996215e-6, 3.9803597213088137e8,
+            2.7987192714291748e7, -3.951825994570644e8]
+        stiny = [1e-300, 0.0, 0.0, 1.0, 0.0, 0.0]
+        @test all(isfinite, ducrss(sden1, sden2))
+        @test all(p -> !ducrss_overflows(p...) && ducrss(p...) == CS.ducrss(p...), ((sden1, sden2), (sa, sb), (sbig, stiny)))
+        @test dvsep(sc, sd) == CS.dvsep(sc, sd)
+        # Fixed case of the guard: the scaled velocity of the first state is infinite.
+        sover = [1e-300, 0.0, 0.0, 6.340909641677687e7, -6.894680105462036e7, 7.179757811367899e8]
+        sunit = [0.0, 0.0, -1.0, 1e-300, 0.0, 0.0]
+        @test ducrss_overflows(sover, sunit) && twovxf_overflows(sover, 2, sunit, 1) &&
+              ducrss(sover, sunit)[1:3] == CS.ducrss(sover, sunit)[1:3] &&
+              all(isnan, ducrss(sover, sunit)[4:6]) && all(iszero, CS.ducrss(sover, sunit)[4:6])
+        # Fixed case of the guard: the derivative of the unit position is infinite.
+        sinf = [1e-300, 0.0, 0.0, 0.0, 1e300, 0.0]
+        sfin = [0.0, 1.0, 0.0, 0.0, 0.0, 0.0]
+        @test dvsep_overflows(sinf, sfin) && dvsep_overflows(sfin, sinf) &&
+              !dvsep_overflows([1.0, 0, 0, 0, 1, 0], [2.0, 0, 0, 0, 0, 1])
+        @test all(p -> throws_kind(() -> dvsep(p...), :numericoverflow), ((sinf, sfin), (sfin, sinf)))
         @test dvhat([0.0, 0, 0, 1, 2, 3]) == [0.0, 0, 0, 1, 2, 3]
         @test dvnorm([0.0, 0, 0, 1, 2, 3]) == 0.0
         @test dvsep([1.0, 0, 0, 0, 1, 0], [2.0, 0, 0, 0, 0, 1]) == 0.0
@@ -214,11 +322,11 @@ group("12. math: vectors and matrices") do
     end
 
     @apart @testset "differences against CSPICE" begin
-        # 0 where the arithmetic is the one of the `_c` function; a few units of rounding
-        # where a library function (sine, arcsine) or the f2c operation order enters.
+        # 0 where the arithmetic is the one of the CSPICE function; a few units of
+        # rounding where a library function (sine, arcsine) enters.
         e = 4 * eps()
         report!(t, "vectors"; tol=0.0, tols=Dict(:vsep => e, :vrotv => e, :rotate => e, :rotmat => e,
-            :rotvec => e, :twovxf => 1e-13, :ducrss => 1e-13, :dvsep => 1e-12, :vsepg => e))
+            :rotvec => e, :vsepg => e))
     end
 
     @apart @testset "number types: ForwardDiff and Taylor" begin
