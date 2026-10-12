@@ -532,8 +532,10 @@ group("9. SPK data types against CSPICE") do
             for et in smooth_epochs(rng, c, 8)
                 jet = spkder(ctx, c.body, et, 1, EARTH, Val(3))
                 state, _ = spkgeo(ctx, c.body, et, 1, EARTH)
-                @test jet[1] == state[SOneTo(3)]
-                @test jet[2] == state[SVector(4, 5, 6)]
+                # Equal to the last bit in a normal run; with coverage instrumentation the
+                # compiler arranges the sums differently, so one rounding is allowed.
+                @test jet[1] ≈ state[SOneTo(3)] rtol = 4eps()
+                @test jet[2] ≈ state[SVector(4, 5, 6)] rtol = 4eps()
                 @test spkder(ctx, c.body, et, 1, EARTH, Val(2))[3] ≈ jet[3] rtol = 1e-12
                 # The dual path gives the same plain values.
                 dstate = spkgeo(ctx, c.body, ForwardDiff.Dual(et, 1.0), 1, EARTH)[1]
