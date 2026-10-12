@@ -120,8 +120,8 @@ Orientation constants of every body that has numeric `BODY<id>_PM`, `_POLE_RA` a
 `_POLE_DEC` in `pool`, read as `tisbod_` reads them: the nutation-precession angles,
 the reference frame and the reference epoch come from the barycenter of the body
 system (`_bodbry`), the amplitudes from the body itself. `nut_prec_angles` is the
-stored vector; its layout (`BODY<sys>_MAX_PHASE_DEGREE + 1` coefficients per angle,
-default 2) is read from the pool at evaluation time.
+stored vector; its layout is `phase_degree + 1` coefficients per angle, with
+`phase_degree` from `BODY<sys>_MAX_PHASE_DEGREE` (default 1).
 """
 function build_bodyrot(pool::AbstractDict)
     out = Dict{Int32,BodyRot}()
@@ -144,30 +144,33 @@ function build_bodyrot(pool::AbstractDict)
             _pool_numbers_or_empty(pool, "BODY$(id)_NUT_PREC_DEC"),
             _pool_numbers_or_empty(pool, "BODY$(id)_NUT_PREC_PM"),
             _pool_numbers_or_empty(pool, "BODY$(sys)_NUT_PREC_ANGLES"),
-            round(Int32, ref), epoch)
+            round(Int32, ref), epoch, _phase_degree(pool, sys))
     end
     return out
 end
 
-# Keys of the phase-degree variable of the nine planetary systems, built once so that
-# the lookup in the evaluation path does not build a string.
-const _MAX_PHASE_KEYS = ntuple(i -> "BODY$(i)_MAX_PHASE_DEGREE", 9)
+"""
+    _phase_degree(pool, sys) -> Int32
+
+Value of `BODY<sys>_MAX_PHASE_DEGREE` rounded as CSPICE rounds it, or 1 if the variable
+is absent. The value is not checked here; `_phase_ncoef` checks it at evaluation.
+"""
+function _phase_degree(pool::AbstractDict, sys::Integer)
+    v = _pool_numbers(pool, "BODY$(sys)_MAX_PHASE_DEGREE")
+    (v === nothing || isempty(v)) && return Int32(1)
+    return round(Int32, clamp(v[1], -1e9, 1e9), RoundNearestTiesAway)
+end
 
 """
-    _phase_ncoef(pool, body) -> Int
+    _phase_ncoef(br, body) -> Int
 
-Number of polynomial coefficients per nutation-precession angle of the system of
-`body`: `BODY<sys>_MAX_PHASE_DEGREE + 1` if that variable exists (degree in 1:3, else
-`SpiceError(:degreeoutofrange)`), otherwise 2.
+Number of polynomial coefficients per nutation-precession angle: `br.phase_degree + 1`.
+Throws `SpiceError(:degreeoutofrange)` unless the degree is in 1:3.
 """
-function _phase_ncoef(pool::Dict{String,PoolValue}, body::Integer)
-    sys = _bodbry(body)
-    key = 1 <= sys <= 9 ? _MAX_PHASE_KEYS[sys] : "BODY$(sys)_MAX_PHASE_DEGREE"
-    v = get(pool, key, nothing)
-    (v isa Vector{Float64} && !isempty(v)) || return 2
-    deg = round(Int, v[1], RoundNearestTiesAway)
-    1 <= deg <= 3 || throw(SpiceError(:degreeoutofrange,
-        "maximum phase angle degree for body $sys must be in the range 1:3 but was $deg"))
+@inline function _phase_ncoef(br::BodyRot, body::Integer)
+    deg = Int(br.phase_degree)
+    1 <= deg <= 3 || throw(SpiceError(:degreeoutofrange, "maximum phase angle degree " *
+        "for body $(_bodbry(body)) must be in the range 1:3 but was $deg"))
     return deg + 1
 end
 
@@ -183,7 +186,7 @@ end
 end
 
 """
-    _text_pck_rotation(pool, br, body, et::T) -> Mat3{T}
+    _text_pck_rotation(br, body, et::T) -> Mat3{T}
 
 Matrix from J2000 to the body-fixed frame of `body` from the text-PCK constants `br`,
 as `tisbod_` of CSPICE computes it (same order of operations): RA, DEC and W
@@ -191,8 +194,7 @@ polynomials, trigonometric terms, `eul2m(W, pi/2 - DEC, pi/2 + RA, 3, 1, 3)`, th
 rotation from J2000 to the reference frame of the constants. Throws
 `SpiceError(:insufficientangles)` if an amplitude vector is longer than the angle list.
 """
-function _text_pck_rotation(pool::Dict{String,PoolValue}, br::BodyRot, body::Integer,
-    et::T) where {T<:Real}
+function _text_pck_rotation(br::BodyRot, body::Integer, et::T) where {T<:Real}
     epoch = et - _SEC_PER_DAY * (br.jed_epoch - _J2000_JED)
     td = epoch / _SEC_PER_DAY
     tc = epoch / _SEC_PER_CENTURY
@@ -204,7 +206,7 @@ function _text_pck_rotation(pool::Dict{String,PoolValue}, br::BodyRot, body::Int
     na, nd, nw = length(ac), length(dc), length(wc)
     nterm = max(na, nd, nw)
     if nterm > 0
-        nco = _phase_ncoef(pool, body)
+        nco = _phase_ncoef(br, body)
         nphase = length(th) ÷ nco
         nterm <= nphase || throw(SpiceError(:insufficientangles,
             "insufficient number of nutation/precession angles for body $body: " *
@@ -280,7 +282,7 @@ function _body_rotation(ks::KernelSet, classid::Int32, et::T) where {T<:Real}
         "PCK data required to compute the orientation of the body-fixed frame with " *
         "class ID $classid at ET $(primal(et)) were not found (no binary PCK segment " *
         "covers the epoch and no text PCK constants are loaded)"))
-    return _text_pck_rotation(ks.pool, br, classid, et)::Mat3{T}
+    return _text_pck_rotation(br, classid, et)::Mat3{T}
 end
 
 # --- fixed-offset (TK) frames ---------------------------------------------------------

@@ -119,6 +119,9 @@ vectors are the trigonometric amplitudes and `nut_prec_angles` holds the (offset
 rate per century) pairs of the body system, flattened as stored. `ref` is the
 inertial reference frame (`BODY<id>_CONSTS_REF_FRAME`, default 1 = J2000) and
 `jed_epoch` the reference epoch (`BODY<id>_CONSTS_JED_EPOCH`, default 2451545.0).
+`phase_degree` is the polynomial degree of the nutation-precession angles of the body
+system (`BODY<sys>_MAX_PHASE_DEGREE`, default 1), stored as given: the evaluation
+rejects a value outside 1:3.
 """
 struct BodyRot
     pole_ra::Vector{Float64}
@@ -130,6 +133,7 @@ struct BodyRot
     nut_prec_angles::Vector{Float64}
     ref::Int32
     jed_epoch::Float64
+    phase_degree::Int32
 end
 
 """
@@ -165,7 +169,7 @@ and readers on many threads do not contend.
   `NAIF_BODY_CODE`); keys of `name2code` are normalized with `normalize_name`. The
   built-in table is consulted after these.
 - `frames`, `framename2id`: frames defined in the pool; the built-in table is
-  consulted after these. Keys of `framename2id` are normalized.
+  consulted before these, as in CSPICE. Keys of `framename2id` are normalized.
 - `tk`: fixed-offset frames by frame ID.
 - `bodyrot`: text-PCK orientation constants by body ID.
 - `lsk`: leap-second data, or `nothing` if no leap-second kernel is loaded.

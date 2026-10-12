@@ -337,17 +337,17 @@ end
 """
     frame_def(ks, id) -> FrameDef
 
-Contract: definition of frame `id`: a pool-defined frame first, then a built-in
-frame, then the rule of `frinfo` that an ID in 13000..13999 is a class 2 Earth frame
+Contract: definition of frame `id`: a built-in frame first, then a pool-defined
+frame (the order of `frinfo`, so a kernel cannot redefine a built-in frame), then the rule of `frinfo` that an ID in 13000..13999 is a class 2 Earth frame
 with class ID `id - 10000`. Throws `SpiceError(:unknownframe)` otherwise. Reads
 `ks.frames` only.
 """
 function frame_def(ks::KernelSet, id::Integer)::FrameDef
     if typemin(Int32) <= id <= typemax(Int32)
         i = Int32(id)
-        f = get(ks.frames, i, nothing)
-        f === nothing || return f
         f = get(BUILTIN_FRAMES, i, nothing)
+        f === nothing || return f
+        f = get(ks.frames, i, nothing)
         f === nothing || return f
         13000 <= i < 14000 && return FrameDef(i, "", 2, i - Int32(10000), 399)
     end
@@ -358,14 +358,14 @@ end
     frame_id(ks, name) -> Int32
 
 Contract: ID of the frame `name` (case and outer blanks do not matter): a
-pool-defined frame first, then a built-in frame. Throws `SpiceError(:unknownframe)`
+built-in frame first, then a pool-defined frame (the order of `namfrm`). Throws `SpiceError(:unknownframe)`
 otherwise. An integer argument is returned as `Int32`. Reads `ks.framename2id` only.
 """
 function frame_id(ks::KernelSet, name::AbstractString)::Int32
     nn = normalize_name(name)
-    id = get(ks.framename2id, nn, nothing)
-    id === nothing || return id
     id = get(BUILTIN_FRAMENAME2ID, nn, nothing)
+    id === nothing || return id
+    id = get(ks.framename2id, nn, nothing)
     id === nothing || return id
     throw(SpiceError(:unknownframe, "the frame name '$name' is not known"))
 end
@@ -374,14 +374,14 @@ frame_id(::KernelSet, id::Integer) = Int32(id)
 """
     frame_name(ks, id) -> Union{String,Nothing}
 
-Contract: name of the frame `id`: a pool-defined frame first, then a built-in frame,
+Contract: name of the frame `id`: a built-in frame first, then a pool-defined frame,
 or `nothing` if the ID has no name. Reads `ks.frames` only.
 """
 function frame_name(ks::KernelSet, id::Integer)::Union{String,Nothing}
     typemin(Int32) <= id <= typemax(Int32) || return nothing
     i = Int32(id)
-    f = get(ks.frames, i, nothing)
-    f === nothing || return f.name
     f = get(BUILTIN_FRAMES, i, nothing)
+    f === nothing || return f.name
+    f = get(ks.frames, i, nothing)
     return f === nothing ? nothing : f.name
 end

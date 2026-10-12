@@ -74,8 +74,8 @@ Conventions that hold everywhere:
 
 - `build_frames(pool) -> (frames::Dict{Int32,FrameDef}, framename2id)` from the
   `FRAME_<name>`, `FRAME_<id>_NAME/_CLASS/_CLASS_ID/_CENTER` variables.
-- `frame_def(ks, id::Integer) -> FrameDef` (pool first, then built-in inertial frames
-  of `chgirf.c` and built-in non-inertial frames of `zzfdat.c`); throws
+- `frame_def(ks, id::Integer) -> FrameDef` (built-in inertial frames of `chgirf.c` and
+  built-in non-inertial frames of `zzfdat.c` first, then the pool, as `frinfo` does); throws
   `SpiceError(:unknownframe, ...)`.
 - `frame_id(ks, name::AbstractString) -> Int32`; `frame_id(ks, id::Integer)`.
 - `frame_name(ks, id) -> Union{String,Nothing}`.
