@@ -361,14 +361,7 @@ function getfat(path::AbstractString)
     return arch, kind
 end
 
-"`(ok, n)` such that `size == psize*n + (n-1)÷dsize + offset` has the solution `n`, as `zzsizeok`."
-function _daf_sizeok(size::Int, psize::Int, dsize::Int, offset::Int)
-    pd1 = psize * dsize + 1
-    q, a = fldmod(size, pd1)
-    offset * psize > a && return false, 0
-    a % psize == 0 || return false, 0
-    return true, dsize * q + a ÷ psize
-end
+# `_daf_sizeok` is in `daf.jl`.
 
 "Type `\"SPK\"`, `\"CK\"` or `\"?\"` of an old DAF without a type in its ID word, as `zzckspk`."
 function _daf_ckspk(h::DAFHandle)
