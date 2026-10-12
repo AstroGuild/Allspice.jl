@@ -1,4 +1,4 @@
-# Reader of the DAF container (binary SPK and binary PCK kernels).
+# Reader of the DAF container (binary SPK, binary PCK and CK kernels).
 #
 # A DAF file is a sequence of 1024-byte records. Record 1 is the file record. Summary
 # records form a doubly linked list that starts at record FWARD; each holds three
@@ -66,21 +66,70 @@ function _daf_directory(data::Vector{Float64}, path::AbstractString, kind::Symbo
 end
 
 """
+    _daf_sizeok(size, psize, dsize, offset) -> (ok::Bool, n::Int)
+
+Solve `size = psize*n + (n - offset) ÷ dsize` for `n`, as `zzsizeok_` of CSPICE: the
+number of packets of `psize` doubles with one directory value for each `dsize` packets
+that fill `size` doubles exactly. `ok` is false if there is no such `n`.
+"""
+function _daf_sizeok(size::Int, psize::Int, dsize::Int, offset::Int)
+    (size > 0 && dsize > 0 && psize > 0) || return false, 0
+    q, a = divrem(size, psize * dsize + 1)
+    offset * psize > a && return false, 0
+    a % psize == 0 || return false, 0
+    return true, dsize * q + a ÷ psize
+end
+
+"""
+    _daf_ckspk(data, ic, nwords) -> Symbol
+
+`:SPK` or `:CK` for an old `NAIF/DAF` file with summary format ND = 2, NI = 6, decided
+from the integer part `ic` of its first summary as `zzckspk_` of CSPICE does: the
+fourth integer is the data type of an SPK segment (never 0) and the angular-velocity
+flag of a CK segment (0 or 1), the second is the centre of an SPK segment (0 is a valid
+centre, but not a valid frame of a CK segment), and for the case that stays open the
+size of the segment decides between SPK type 1 and CK. Requires `length(ic) == 6`.
+"""
+function _daf_ckspk(data::Vector{Float64}, ic::NTuple{6,Int32}, nwords::Int)
+    angvel, dtype = ic[4], ic[3]
+    angvel == 0 && return :CK
+    angvel > 1 && return :SPK
+    ic[2] == 0 && return :SPK
+    first, last = Int(ic[5]), Int(ic[6])
+    (1 <= first <= last <= nwords) || return :SPK
+    size = last - first + 1
+    spkok, nspk = _daf_sizeok(size - 1, 72, 100, 0)
+    spkok || return :CK
+    data[last] == nspk || return :CK
+    dtype == 2 || return :SPK
+    ck2ok, nck2 = _daf_sizeok(size, 10, 100, 1)
+    ck2ok || return :SPK
+    if nck2 < 201
+        return data[first+(nspk-1)*71] > data[last-nspk] ? :SPK : :CK
+    end
+    from = last - (nck2 - 1) ÷ 100
+    return data[from] > data[from+1] ? :CK : :SPK
+end
+
+"""
     open_daf(path::AbstractString) -> DAF
 
-Open the binary SPK or binary PCK kernel at `path` and return its data array and its
-segment descriptors in file order.
+Open the binary SPK, binary PCK or CK kernel at `path` and return its data array and
+its segment descriptors in file order.
 
 Contract: `path` names a readable DAF file. In the result `data[a]` is the double at
 DAF address `a` (memory-mapped for a file of native byte order, an owned byte-swapped
-copy otherwise), `kind` is `:SPK` or `:PCK`, and every segment has finite epochs and
-`1 <= baddr <= eaddr <= length(data)`. For SPK types 2, 3, 20 and PCK type 2 the
+copy otherwise), `kind` is `:SPK`, `:PCK` or `:CK`, and every segment has finite epochs
+and `1 <= baddr <= eaddr <= length(data)`. A CK file has its descriptors in
+`cksegments` (instrument, reference frame, data type, angular-velocity flag, and the
+encoded SCLK start and stop as `t0`, `t1`) and an empty `segments`. For SPK types 2, 3, 20 and PCK type 2 the
 fields `init`, `intlen`, `rsize`, `nrec` hold the last four doubles of the segment and
 `rsize`, `nrec` agree with the segment length. Throws `SpiceError` with kind
 `:nofile` or `:baddaf` if the file does not meet these conditions.
 
-The ID words `DAF/SPK` and `DAF/PCK` are accepted, and also the old `NAIF/DAF` (as in
-`de405.bsp`), for which the kind follows from NI (6 is SPK, 5 is PCK).
+The ID words `DAF/SPK`, `DAF/PCK` and `DAF/CK` are accepted, and also the old
+`NAIF/DAF` (as in `de405.bsp`), for which the kind follows from NI (5 is PCK; 6 is SPK
+or CK, and `_daf_ckspk` decides from the first segment).
 """
 function open_daf(path::AbstractString)
     isfile(path) || throw(SpiceError(:nofile, "no such file: $path"))
@@ -95,8 +144,8 @@ function open_daf(path::AbstractString)
 
         # --- file record ---------------------------------------------------------
         idword = rstrip(String(raw[1:8]))
-        idword in ("DAF/SPK", "DAF/PCK", "NAIF/DAF") || throw(SpiceError(:baddaf,
-            "ID word $(repr(idword)) is not DAF/SPK, DAF/PCK or NAIF/DAF in $path"))
+        idword in ("DAF/SPK", "DAF/PCK", "DAF/CK", "NAIF/DAF") || throw(SpiceError(:baddaf,
+            "ID word $(repr(idword)) is not DAF/SPK, DAF/PCK, DAF/CK or NAIF/DAF in $path"))
         bfmt = rstrip(String(raw[89:96]))
         little = if bfmt == "LTL-IEEE"
             true
@@ -114,8 +163,8 @@ function open_daf(path::AbstractString)
         ni = Int(_daf_i32(raw, 12, little))
         fward = Int(_daf_i32(raw, 76, little))
         kind = idword == "DAF/SPK" ? :SPK : idword == "DAF/PCK" ? :PCK :
-               ni == 6 ? :SPK : ni == 5 ? :PCK : :UNKNOWN
-        want_ni = kind === :SPK ? 6 : 5
+               idword == "DAF/CK" ? :CK : ni == 6 ? :SPK : ni == 5 ? :PCK : :UNKNOWN
+        want_ni = kind === :PCK ? 5 : 6
         (kind !== :UNKNOWN && nd == 2 && ni == want_ni) || throw(SpiceError(:baddaf,
             "ND = $nd, NI = $ni do not fit ID word $(repr(idword)) in $path"))
         1 < fward <= nrecords || throw(SpiceError(:baddaf,
@@ -136,6 +185,7 @@ function open_daf(path::AbstractString)
         ss = nd + (ni + 1) ÷ 2                   # doubles in one summary
         maxsum = (_DAF_RECWORDS - 3) ÷ ss
         segments = Segment[]
+        cksegments = CKSegment[]
         rec = fward
         visited = 0
         while rec != 0
@@ -156,6 +206,18 @@ function open_daf(path::AbstractString)
                 (isfinite(t0) && isfinite(t1)) || throw(SpiceError(:baddaf,
                     "segment $(length(segments) + 1) has non-finite epochs in $path"))
                 ic = ntuple(j -> _daf_i32(raw, off + 16 + 4 * (j - 1), little), 6)
+                if idword == "NAIF/DAF" && ni == 6 && visited == 1 && i == 1
+                    kind = _daf_ckspk(data, ic, nwords)
+                end
+                if kind === :CK
+                    b, e = Int(ic[5]), Int(ic[6])
+                    (1 <= b <= e <= nwords) || throw(SpiceError(:baddaf,
+                        "CK segment $(length(cksegments) + 1) has addresses $b:$e " *
+                        "outside the file ($nwords doubles): $path"))
+                    push!(cksegments, CKSegment(ic[1], ic[2], ic[3], ic[4] == 1, t0, t1,
+                        Int32(0), b, e))
+                    continue
+                end
                 target, center, frame, dtype, b, e = if kind === :SPK
                     ic[1], ic[2], ic[3], ic[4], Int(ic[5]), Int(ic[6])
                 else
@@ -174,6 +236,6 @@ function open_daf(path::AbstractString)
             end
             rec = next
         end
-        DAF(String(path), kind, data, segments)
+        DAF(String(path), kind, data, segments, cksegments)
     end
 end

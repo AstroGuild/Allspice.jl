@@ -17,7 +17,7 @@
 include("helpers.jl")
 
 const GROUPS = ["states", "rotations", "derivatives", "identities", "pool", "management",
-    "threads", "quality"]
+    "threads", "quality", "sclk", "ck"]
 
 selected = isempty(ARGS) ? GROUPS : ARGS
 unknown = setdiff(selected, GROUPS)
