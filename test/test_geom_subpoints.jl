@@ -35,7 +35,7 @@ sub_alloc_slr(ks, m, et, c) = @allocated subslr(ks, m, 301, et, 10020, c, 399)
 sub_alloc_int(ks, et, c, dv) = @allocated sincpt(ks, "ELLIPSOID", 301, et, 10020, c, 399, 1, dv)
 sub_alloc_rec(ks) = @allocated srfrec(ks, 301, 0.1, 0.2)
 
-group("geom_subpoints: subpnt, subslr, sincpt, srfrec", Kernels.FULL_SET_FILES...) do
+@gf_light group("geom_subpoints: subpnt, subslr, sincpt, srfrec", Kernels.FULL_SET_FILES...) do
     ctx = geo_setup(; dsk=true)
     ks = NeoSpice.kernelset(ctx)
     rng = MersenneTwister(SEED + 101)
@@ -283,7 +283,7 @@ group("geom_subpoints: subpnt, subslr, sincpt, srfrec", Kernels.FULL_SET_FILES..
         ks = NeoSpice.kernelset(ctx)
         st = GeoStats()
         h = 20.0
-        for et in record_safe_epochs(rng, 24)
+        for et in record_safe_epochs(rng, nsample(6, 24))
             for cor in ("NONE", "LT", "LT+S", "CN+S", "XCN+S")
                 dv = SVector{3,Float64}(spkpos(ctx, 301, et, 1, cor, 399)[1]) + SVector(300.0, -200.0, 100.0)
                 fs = Pair{String,Function}[

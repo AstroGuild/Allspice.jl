@@ -17,12 +17,30 @@
 # ellipse in a plane normal to the ray. One unit in the last place of the ray direction
 # changes the result of `npedln_c` itself by 1e-10 of the radius (measured in the test),
 # and the two libraries give the same output for the same input.
+#
+# The default run has 20 random cases on the DSK surface of two parts; the exhaustive
+# run (`NEOSPICE_TEST_FULL=1`) has 40. The other samples are the same in the two runs.
 
 isdefined(@__MODULE__, :GEOLIB) || include("geomfixtures.jl")
 
 # Measured: 2e-15 (points on ellipsoids), 3e-16 (vectors), 0 (epochs); 2e-9 for tangent
 # points on DSK data; tangpt 4e-11 (tangent point and surface point), 1e-15 (range).
 const LT_TOL = (point=5e-13, vec=5e-13, epoch=1e-7, dsk=2e-7, tang=2e-8)
+
+"""
+    lt_same_tangpt(c, a, rtol) -> Bool
+
+True if every component of the two results of `tangpt` agrees within `rtol` of the size
+of its output (the norm of a vector, the absolute value of a number; the epoch within
+`rtol` seconds for each second of its absolute value).
+"""
+function lt_same_tangpt(c, a, rtol::Float64)
+    @assert length(c) == length(a) == 6 && rtol > 0
+    return all(1:6) do i
+        scale = max(norm(a[i]), floatmin())
+        all(abs.(collect(c[i]) .- collect(a[i])) .<= rtol * scale)
+    end
+end
 
 lt_alloc_tang(ks, et, c, loc, dv) = @allocated tangpt(ks, "ELLIPSOID", 301, et, 10020, c, loc, 399, 1, dv)
 
@@ -37,7 +55,7 @@ function lt_compare!(st, name, a, b)
     return true
 end
 
-group("geom_limbterm: limbpt, termpt, tangpt", Kernels.FULL_SET_FILES...) do
+@gf_light group("geom_limbterm: limbpt, termpt, tangpt", Kernels.FULL_SET_FILES...) do
     paths = [geo_kernels(; dsk=true)..., geo_parts_dsk()]
     oracle_load(paths)
     ctx = neo_context(paths)
@@ -135,7 +153,8 @@ group("geom_limbterm: limbpt, termpt, tangpt", Kernels.FULL_SET_FILES...) do
         nmulti = 0
         most = 0
         m3 = "/DSK/UNPRIORITIZED/SURFACES = 3"
-        for k in 1:40
+        nparts = nsample(20, 40)
+        for k in 1:nparts
             o = rand(rng, ["EARTH", "SUN", "VENUS"])
             cor = rand(rng, GEO_CORRS)
             et = geo_epoch(rng)
@@ -160,7 +179,7 @@ group("geom_limbterm: limbpt, termpt, tangpt", Kernels.FULL_SET_FILES...) do
         greport("DSK, two parts", st)
         measured("  DSK, two parts: half planes with more than one point: $nmulti (at most $most points); cases with unequal point counts: $ncount")
         @test ncount == 0
-        @test nmulti > 10 && most == 3
+        @test nmulti > nparts ÷ 4 && most == 3
         @test gget(st, "limbpt points") < LT_TOL.dsk
         @test gget(st, "termpt points") < LT_TOL.dsk
         # More points than `maxn`: NeoSpice throws, where `limbpt_c` writes past the arrays.
@@ -204,7 +223,11 @@ group("geom_limbterm: limbpt, termpt, tangpt", Kernels.FULL_SET_FILES...) do
             gput!(st, "srfvec", grel(a[6], b[6]))
             if k % 10 == 0
                 c = tangpt(ctx, "ellipsoid", GEO_IDS[t], et, namfrm(ctx, fix), Aberration(cor), loc, GEO_IDS[o], namfrm(ctx, dref), SVector{3}(dv))
-                @test c == a
+                # The form with a `Vector` and the form with an `SVector` take the ray
+                # through code that the compiler can arrange in two ways (it does so
+                # with code coverage), so the results can differ by rounding: each
+                # output agrees within 1e-12 of its size.
+                @test lt_same_tangpt(c, a, 1e-12)
             end
             # The conditioning of `npedln_c`: one unit in the last place of the direction.
             if cor == "NONE" && dref == "J2000"

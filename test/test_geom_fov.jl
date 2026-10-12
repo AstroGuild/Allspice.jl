@@ -11,6 +11,9 @@
 # field of view.
 #
 # The outputs of `fovtrg` and `fovray` are flags, so the comparison is exact.
+#
+# The default run has 500 random cases of `fovtrg` and `fovray`; the exhaustive run
+# (`NEOSPICE_TEST_FULL=1`) has 2000.
 
 isdefined(@__MODULE__, :GEOLIB) || include("geomfixtures.jl")
 
@@ -42,7 +45,7 @@ function fov_same(ctx, room=100)
     return ok, nothing
 end
 
-group("geom_fov: getfov, getfvn, fovtrg, fovray", Kernels.FULL_SET_FILES...) do
+@gf_light group("geom_fov: getfov, getfvn, fovtrg, fovray", Kernels.FULL_SET_FILES...) do
     ctx = geo_setup()
     rng = MersenneTwister(SEED + 107)
     allinst = [GEO_INSTRUMENTS..., "GEO_WIDE", "GEO_FLAT"]
@@ -141,7 +144,8 @@ group("geom_fov: getfov, getfvn, fovtrg, fovray", Kernels.FULL_SET_FILES...) do
         nray = 0
         nrayvis = 0
         nwide = 0
-        for k in 1:2000
+        ncases = nsample(500, 2000)
+        for k in 1:ncases
             inst = rand(rng, allinst)
             et = geo_epoch(rng)
             t = rand(rng, ["SUN", "MOON", "VENUS", "MERCURY"])
@@ -182,7 +186,7 @@ group("geom_fov: getfov, getfvn, fovtrg, fovray", Kernels.FULL_SET_FILES...) do
         @test nbad == 0
         @test 0.2 * ntrg < ntrgvis < 0.8 * ntrg
         @test 0.2 * nray < nrayvis < 0.8 * nray
-        @test nwide > 100
+        @test nwide > ncases ÷ 20
     end
 
     @testset "error conditions, kinds of CSPICE" begin

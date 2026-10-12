@@ -14,12 +14,18 @@
 # a state that is true or false, so the brackets differ only if the state differs at a
 # sample, which is possible only within rounding of an entry or of an exit.
 #
+# Default run and exhaustive run (`NEOSPICE_TEST_FULL=1`). The default run compares one
+# case in three to five of each product of options (`gf_pick`), on 3 days and not 7 for
+# the Sun and on 2 days and not 5 for the ray that crosses the camera once a day, and
+# does not make the table of search times. The least numbers of intervals that the
+# test requires are in proportion to the number of searches and to the span.
+#
 # Behaviour specification: test/features/gf_fov.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
 isdefined(@__MODULE__, :GEOLIB) || include("geomfixtures.jl")
 
-group("gf fov: gftfov, gfrfov, gffove", Kernels.FULL_SET_FILES...) do
+@gf_light group("gf fov: gftfov, gfrfov, gffove", Kernels.FULL_SET_FILES...) do
     ctx = geo_setup()
     ks = NeoSpice.kernelset(ctx)
     rng = MersenneTwister(SEED + 6800)
@@ -49,8 +55,11 @@ group("gf fov: gftfov, gfrfov, gffove", Kernels.FULL_SET_FILES...) do
     @testset "gftfov: the Moon in a camera fixed in J2000" begin
         camera_base!("J2000")
         n = 0
+        i = 0
         for inst in GEO_INSTRUMENTS, corr in GEO_CORRS, (tshape, tframe) in (("ELLIPSOID", "IAU_MOON"),
                 ("POINT", " "))
+            # (an odd stride takes the two shapes in turn)
+            gf_pick(i += 1, 3) || continue
             t0 = start_epoch()
             dir = spkpos(ctx, "MOON", t0, "J2000", corr, "EARTH")[1]
             point_camera!(ctx, near(dir, 0.012), 2pi * rand(rng))
@@ -63,46 +72,68 @@ group("gf fov: gftfov, gfrfov, gffove", Kernels.FULL_SET_FILES...) do
             @test all(t -> wnelmd(cn, t), w)
             n += 1
         end
-        @test n == 7 * 9 * 2
-        @test all(found[k] >= 40 for k in keys(found))
+        @test n == gf_npick(7 * 9 * 2, 3)
+        # two searches in three find the Moon
+        @test length(found) == 2 && all(found[k] >= (40 * n) ÷ 126 for k in keys(found))
     end
 
     @testset "gftfov: the Sun in a camera fixed to the Earth" begin
         camera_base!("IAU_EARTH")
+        i = 0
+        n = 0
+        half = FULL ? 3.5 * day : 1.5 * day
+        n2 = Dict("ELLIPSOID" => 0, "POINT" => 0)
         for inst in GEO_INSTRUMENTS, corr in GEO_CORRS, (tshape, tframe) in (("ELLIPSOID", "IAU_SUN"),
                 ("POINT", " "))
+            gf_pick(i += 1, 5) || continue
+            n += 1
+            n2[tshape] += 1
             t0 = start_epoch()
             dir = spkpos(ctx, "SUN", t0, "IAU_EARTH", corr, "EARTH")[1]
             point_camera!(ctx, near(dir, 0.01), 2pi * rand(rng))
-            cn = Window([t0 - 3.5 * day, t0 + 3.5 * day])
+            cn = Window([t0 - half, t0 + half])
             ok, w = check("gftfov Sun, Earth-fixed camera, " * lowercase(tshape),
                 () -> gftfov(ctx, inst, "SUN", tshape, tframe, corr, "EARTH", 120.0, cn),
                 () -> GFO.gftfov(inst, "SUN", tshape, tframe, corr, "EARTH", 120.0, collect(cn)))
             ok || @info "gftfov case" inst corr tshape t0 cn
         end
-        @test found["gftfov Sun, Earth-fixed camera, ellipsoid"] >= 3 * 63
-        @test found["gftfov Sun, Earth-fixed camera, point"] >= 2 * 63
+        # the Sun crosses the camera once a day: 3 times at least in 7 days for the
+        # ellipsoid (2 for the point), once at least in 3 days
+        @test n == gf_npick(126, 5) && min(n2["ELLIPSOID"], n2["POINT"]) >= n ÷ 2
+        @test found["gftfov Sun, Earth-fixed camera, ellipsoid"] >= (FULL ? 3 : 1) * n2["ELLIPSOID"]
+        @test found["gftfov Sun, Earth-fixed camera, point"] >= (FULL ? 2 : 1) * n2["POINT"]
     end
 
     @testset "gfrfov: a ray fixed in J2000, a camera fixed to the Earth" begin
         camera_base!("IAU_EARTH")
+        i = 0
+        n = 0
+        half = FULL ? 2.5 * day : day
         for inst in GEO_INSTRUMENTS, corr in ("NONE", "S", "XS"), _ in 1:3
+            gf_pick(i += 1, 4) || continue
+            n += 1
             t0 = start_epoch()
             ray = near([1.0, 0.0, 0.0], pi) .* (0.5 + 3.0 * rand(rng))
             dir = pxform(ctx, "J2000", "IAU_EARTH", t0) * ray
             point_camera!(ctx, near(dir, 0.01), 2pi * rand(rng))
-            cn = Window([t0 - 2.5 * day, t0 + 2.5 * day])
+            cn = Window([t0 - half, t0 + half])
             ok, w = check("gfrfov J2000 ray, Earth-fixed camera",
                 () -> gfrfov(ctx, inst, ray, "J2000", corr, "EARTH", 60.0, cn),
                 () -> GFO.gfrfov(inst, ray, "J2000", corr, "EARTH", 60.0, collect(cn)))
             ok || @info "gfrfov case" inst corr ray t0
         end
-        @test found["gfrfov J2000 ray, Earth-fixed camera"] >= 3 * 63
+        # the ray crosses the camera once a sidereal day
+        @test n == gf_npick(63, 4)
+        @test found["gfrfov J2000 ray, Earth-fixed camera"] >= (FULL ? 3 : 1) * n
     end
 
     @testset "gfrfov: a ray fixed to the Earth, a camera fixed in J2000" begin
         camera_base!("J2000")
+        i = 0
+        n = 0
         for inst in GEO_INSTRUMENTS, corr in ("NONE", "S", "XS"), _ in 1:2
+            gf_pick(i += 1, 4) || continue
+            n += 1
             t0 = start_epoch()
             ray = near([0.0, 1.0, 0.0], 1.0)
             dir = pxform(ctx, "IAU_EARTH", "J2000", t0) * ray
@@ -115,7 +146,8 @@ group("gf fov: gftfov, gfrfov, gffove", Kernels.FULL_SET_FILES...) do
             ok || @info "gfrfov case" inst corr ray t0 cn
             @test all(t -> wnelmd(cn, t), w)
         end
-        @test found["gfrfov Earth-fixed ray, J2000 camera"] >= 42
+        @test n == gf_npick(42, 4)
+        @test found["gfrfov Earth-fixed ray, J2000 camera"] >= n
         measured(@sprintf("  gf fov: intervals found: %s", join(["$k: $v" for (k, v) in
             sort!(collect(found); by=first)], "; ")))
     end
@@ -140,7 +172,7 @@ group("gf fov: gftfov, gfrfov, gffove", Kernels.FULL_SET_FILES...) do
         @test gffove(ctx, "GEO_RECT", "ELLIPSOID", [0.0, 0.0, 0.0], "SUN", "IAU_SUN", "LT+S", "EARTH", 1.0e-6,
             120.0, gfrefn, cn) == base
         @test gffove(ks2, "GEO_RECT", "ELLIPSOID", [0.0, 0.0, 0.0], "SUN", "IAU_SUN", "LT+S", "EARTH", 1.0e-6,
-            et -> 120.0, gfrefn, cn; threads=true) == base
+            GFConstStep(120.0), gfrefn, cn; threads=true) == base
         quarter(t1, t2, s1, s2) = t1 + 0.25 * (t2 - t1)
         other = gffove(ctx, "GEO_RECT", "ELLIPSOID", [0.0, 0.0, 0.0], "SUN", "IAU_SUN", "LT+S", "EARTH",
             1.0e-6, 120.0, quarter, cn)
@@ -158,10 +190,10 @@ group("gf fov: gftfov, gfrfov, gffove", Kernels.FULL_SET_FILES...) do
         @test gfrfov(ctx, "GEO_RECT", ray, "J2000", "S", "EARTH", 60.0, cn; threads=true) == rbase
         @test gffove(ctx, "GEO_RECT", "RAY", ray, " ", "J2000", "S", "EARTH", 1.0e-6, 60.0, gfrefn, cn) == rbase
         log = String[]
-        gftfov(ctx, a..., 120.0, cn; report=(e, x...) -> e === :init && push!(log, x[2]))
+        gftfov(ctx, a..., 120.0, cn; report=GFLog(log))
         @test log == ["Target visibility search "]
         @test_throws InterruptException gfrfov(ctx, "GEO_RECT", ray, "J2000", "S", "EARTH", 60.0, cn;
-            bail=() -> true)
+            bail=GFStop(true))
         serial = [gftfov(ctx, inst, "SUN", "ELLIPSOID", "IAU_SUN", corr, "EARTH", 120.0, cn)
                   for inst in GEO_INSTRUMENTS, corr in ("NONE", "LT+S", "XCN")]
         tasks = [Threads.@spawn gftfov(ctx, inst, "SUN", "ELLIPSOID", "IAU_SUN", corr, "EARTH", 120.0, cn)
@@ -227,7 +259,7 @@ group("gf fov: gftfov, gfrfov, gffove", Kernels.FULL_SET_FILES...) do
                 600.0, gfrefn, cn), :invalidtolerance)
     end
 
-    @testset "search time against CSPICE (reported, not asserted)" begin
+    FULL && @testset "search time against CSPICE (reported, not asserted)" begin
         camera_base!("IAU_EARTH")
         t0 = SPICE.str2et("2020 JAN 01")
         dir = spkpos(ctx, "SUN", t0 + 15 * day, "IAU_EARTH", "LT+S", "EARTH")[1]
