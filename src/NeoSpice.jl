@@ -33,6 +33,13 @@ export vaddg, vsubg, vsclg, vminug, vequg, vdotg, vnormg, vhatg, unormg, vdistg,
 export vprojg, vlcomg, vzerog, vtmvg, mxvg, mtxvg, mxmg, mtxmg, mxmtg, xposeg
 export eul2m, m2eul, eul2xf, xf2eul, axisar, raxisa, m2q, q2m, qxq, qdq2av, rav2xf, xf2rav
 export sharpr
+export SpicePlane, SpiceEllipse, nearpt, dnearp, surfpt, surfnm, surfpv, npedln, npelpt, nplnpt
+export edlimb, edterm, inedpl, inelpl, inrypl, cgv2el, el2cgv, saelgv, nvc2pl, nvp2pl, psv2pl
+export pl2nvc, pl2nvp, pl2psv, pjelpl, ednmpt, edpnt, vprjp, vprjpi
+export reclat, latrec, recrad, radrec, recsph, sphrec, reccyl, cylrec, cyllat, latcyl, cylsph
+export sphcyl, sphlat, latsph, recgeo, georec, recpgr, pgrrec, xfmsta, convrt
+export drdlat, dlatdr, drdsph, dsphdr, drdcyl, dcyldr, drdgeo, dgeodr, drdpgr, dpgrdr
+export conics, oscelt, oscltx, prop2b, stmp03
 
 include("types.jl")
 include("taylor.jl")        # Taylor{N,T} truncated series, `primal`
@@ -63,6 +70,9 @@ include("ck_write.jl")      # ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
 include("kernel_info.jl")   # spkobj, spkcov, ktotal(kind), kdata, kinfo, tkvrsn
 include("math/vectors.jl")      # vadd ... vsep, mxv, mxm, invert, rotate, twovec, dvhat, g forms
 include("math/rotations.jl")    # eul2m, m2eul, m2q, q2m, qxq, axisar, raxisa, rav2xf, xf2eul
+include("math/ellipsoid.jl")    # SpicePlane, SpiceEllipse, nearpt, surfpt, edlimb, inedpl, npedln
+include("math/coordinates.jl")  # reclat, recgeo, recpgr, ..., Jacobians, xfmsta, convrt
+include("math/conics.jl")       # stmp03, prop2b, conics, oscelt, oscltx
 include("precompile.jl")    # precompile directives for the common signatures
 
 end # module

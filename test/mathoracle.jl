@@ -244,6 +244,53 @@ function xposeg(a)
     return unrowg(o, size(a, 2), size(a, 1))
 end
 
+# coordinates
+for n in (:reclat, :recrad, :recsph, :reccyl)
+    c(n, V, :v3, :od, :od, :od)
+end
+for n in (:latrec, :radrec, :sphrec, :cylrec)
+    c(n, V, :d, :d, :d, :o3)
+end
+for n in (:cyllat, :latcyl, :cylsph, :sphcyl, :sphlat, :latsph)
+    c(n, V, :d, :d, :d, :od, :od, :od)
+end
+c(:recgeo, V, :v3, :d, :d, :od, :od, :od); c(:georec, V, :d, :d, :d, :d, :d, :o3)
+c(:recpgr, V, :s, :v3, :d, :d, :od, :od, :od); c(:pgrrec, V, :s, :d, :d, :d, :d, :d, :o3)
+for n in (:drdlat, :dlatdr, :drdsph, :dsphdr, :drdcyl, :dcyldr)
+    c(n, V, :d, :d, :d, :om3)
+end
+c(:drdgeo, V, :d, :d, :d, :d, :d, :om3); c(:dgeodr, V, :d, :d, :d, :d, :d, :om3)
+c(:drdpgr, V, :s, :d, :d, :d, :d, :d, :om3); c(:dpgrdr, V, :s, :d, :d, :d, :d, :d, :om3)
+c(:xfmsta, V, :v6, :s, :s, :s, :o6); c(:convrt, V, :d, :s, :s, :od)
+# ellipsoids, planes, ellipses
+c(:nearpt, V, :v3, :d, :d, :d, :o3, :od); c(:dnearp, V, :v6, :d, :d, :d, :o6, :o2, :ob)
+c(:surfpt, V, :v3, :v3, :d, :d, :d, :o3, :ob); c(:surfnm, V, :d, :d, :d, :v3, :o3)
+c(:surfpv, V, :v6, :v6, :d, :d, :d, :o6, :ob); c(:npedln, V, :d, :d, :d, :v3, :v3, :o3, :od)
+c(:npelpt, V, :v3, :el, :o3, :od); c(:nplnpt, V, :v3, :v3, :v3, :o3, :od)
+c(:edlimb, V, :d, :d, :d, :v3, :oel); c(:inedpl, V, :d, :d, :d, :pl, :oel, :ob)
+c(:inelpl, V, :el, :pl, :oi, :o3, :o3); c(:inrypl, V, :v3, :v3, :pl, :oi, :o3)
+c(:cgv2el, V, :v3, :v3, :v3, :oel); c(:el2cgv, V, :el, :o3, :o3, :o3); c(:saelgv, V, :v3, :v3, :o3, :o3)
+c(:nvc2pl, V, :v3, :d, :opl); c(:nvp2pl, V, :v3, :v3, :opl); c(:psv2pl, V, :v3, :v3, :v3, :opl)
+c(:pl2nvc, V, :pl, :o3, :od); c(:pl2nvp, V, :pl, :o3, :o3); c(:pl2psv, V, :pl, :o3, :o3, :o3)
+c(:pjelpl, V, :el, :pl, :oel); c(:ednmpt, V, :d, :d, :d, :v3, :o3); c(:edpnt, V, :v3, :d, :d, :d, :o3)
+c(:vprjp, V, :v3, :pl, :o3); c(:vprjpi, V, :v3, :pl, :pl, :o3, :ob)
+
+"`edterm_c`: the epoch, the observer position and the terminator points as rows."
+function edterm(trmtyp, source, target, et, fixref, abcorr, obsrvr, npts)
+    trgepc = Ref{Cdouble}(NaN)
+    obspos = fill(NaN, 3)
+    trmpts = fill(NaN, 3 * max(npts, 1))
+    ccall(Libdl.dlsym(HANDLE, :edterm_c), Cvoid, (Cstring, Cstring, Cstring, Cdouble, Cstring,
+            Cstring, Cstring, Cint, Ref{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
+        trmtyp, source, target, et, fixref, abcorr, obsrvr, npts, trgepc, obspos, trmpts)
+    check()
+    return trgepc[], SVector{3,Float64}(obspos), [SVector{3,Float64}(trmpts[3k-2:3k]) for k in 1:npts]
+end
+
+# conics
+c(:conics, V, :v8, :d, :o6); c(:oscelt, V, :v6, :d, :d, :o8); c(:oscltx, V, :v6, :d, :d, :o20)
+c(:prop2b, V, :d, :v6, :d, :o6); f(:stmp03, I, :rd, :od, :od, :od, :od)
+
 end # module CS
 
 # --- comparison helpers ----------------------------------------------------------------
@@ -251,8 +298,11 @@ end # module CS
 "All numbers of a result (number, Bool, array, tuple, `nothing`) as one `Float64` vector."
 flat(x::Real) = Float64[x]
 flat(::Nothing) = Float64[]
-flat(x::AbstractArray) = Float64[Float64(v) for v in vec(collect(x))]
+flat(x::AbstractArray{<:Real}) = Float64[Float64(v) for v in vec(collect(x))]
+flat(x::AbstractArray) = reduce(vcat, map(flat, x); init=Float64[])
 flat(x::Tuple) = reduce(vcat, map(flat, x); init=Float64[])
+flat(x::SpicePlane) = Float64[x.normal..., x.constant]
+flat(x::SpiceEllipse) = Float64[x.center..., x.semimajor..., x.semiminor...]
 
 """
     reldiff(a, b) -> Float64
