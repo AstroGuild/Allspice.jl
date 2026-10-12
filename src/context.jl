@@ -36,6 +36,7 @@ function build_kernelset(loaded::Vector{Loaded},
     ck = Dict{Int32,Vector{CKSegment}}()
     pool = Dict{String,PoolValue}()
     dskfiles = DSKFile[]
+    ekfiles = EKFile[]
     filenumber = zeros(Int, length(loaded))
     for (i, entry) in enumerate(loaded)
         content = entry.content
@@ -44,6 +45,8 @@ function build_kernelset(loaded::Vector{Loaded},
             filenumber[i] = length(daf)
         elseif content isa DSKFile
             push!(dskfiles, content)
+        elseif content isa EKFile
+            any(f -> f.path == content.path, ekfiles) || push!(ekfiles, content)
         elseif edited === nothing
             apply_assignments!(pool, content)
         end
@@ -78,7 +81,8 @@ function build_kernelset(loaded::Vector{Loaded},
     return _dyn_levels(KernelSet(copy(loaded), daf, spk, pck, pool, name2code, code2name, frames,
         framename2id, tk, bodyrot, lsk, ck, build_sclk(pool), build_ckmeta(pool),
         Dict{Int32,DynFrame}(), Dict{Int32,SwitchFrame}(), nothing, false,
-        Tuple{String,Int32}[], dskfiles, _dsk_segment_table(dskfiles)),
+        Tuple{String,Int32}[], dskfiles, _dsk_segment_table(dskfiles), ekfiles,
+        _ek_build_tables(ekfiles)),
         edited !== nothing, bodydefs)
 end
 
@@ -116,6 +120,7 @@ function read_kernel(path::AbstractString)
     isfile(path) || throw(SpiceError(:nofile, "kernel file not found: $path"))
     arch = kernel_arch(path)
     arch === :DSK && return open_dsk(path)
+    arch === :EK && return open_ek(path)
     return (arch === :SPK || arch === :PCK || arch === :CK) ? open_daf(path) : parse_text_kernel(path)
 end
 
@@ -145,7 +150,7 @@ end
 """
     furnsh(ctx::SpiceContext, path) -> Nothing
 
-Load the kernel at `path` (SPK, binary PCK, CK, DSK, text kernel or meta-kernel) into `ctx`.
+Load the kernel at `path` (SPK, binary PCK, CK, DSK, EK, text kernel or meta-kernel) into `ctx`.
 The new snapshot replaces the old one atomically; if the load fails, `ctx` is unchanged.
 A path that is already loaded gets a second entry, as in CSPICE. Direct edits of the
 kernel pool (`pdpool`, ...) stay; the assignments of a text kernel are applied on top.

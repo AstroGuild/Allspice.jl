@@ -119,13 +119,71 @@ end
 
 One loaded table of a `KernelSet`: its name (upper case), the names (upper case) and
 attributes of its columns, and its segments as (file number, segment number) pairs in
-load order, where the file number indexes `KernelSet.ekfiles`. In `attrs` the fields
-`indexd` and `nullok` are those of the first loaded segment, as in CSPICE; `cclass` is
-that of the first segment too. Never modified after it was built.
+load order, where the file number indexes `KernelSet.ekfiles`. All segments of a table
+have columns with the same names and attributes, as CSPICE requires at load time; the
+order of the columns is that of the first loaded segment, and `cols[k][i]` is the
+descriptor of column `i` of the table in segment `segs[k]`. Never modified after it was
+built.
 """
 struct EKTable
     name::String
     cnames::Vector{String}
     attrs::Vector{EKColumnAttr}
     segs::Vector{NTuple{2,Int32}}
+    cols::Vector{Vector{_EKColumn}}
+end
+
+"`EKTable(name, cnames, attrs, segs)`: a catalogue entry without column descriptors."
+EKTable(name, cnames, attrs, segs) = EKTable(name, cnames, attrs, segs, Vector{_EKColumn}[])
+
+"The public attributes of the column descriptor `c` (`ekssum`, `ekcii`)."
+_ek_attr(c::_EKColumn) = EKColumnAttr(Int(c.cclass), _EK_TYPE_SYMBOLS[c.dtype],
+    c.dtype == _EK_CHR ? Int(c.strlen) : 0, Int(c.size), c.ixtype != -1, c.nullok)
+
+"True if the descriptors `a` and `b` have the attributes that `eklef` compares."
+_ek_same_attributes(a::_EKColumn, b::_EKColumn) = a.cclass == b.cclass && a.dtype == b.dtype &&
+    a.strlen == b.strlen && a.size == b.size && (a.ixtype != -1) == (b.ixtype != -1) &&
+    a.nullok == b.nullok
+
+"""
+    _ek_build_tables(files) -> Vector{EKTable}
+
+The table catalogue of the loaded EK `files` (load order), as `eklef` builds it: tables
+in the order of their first segment, the segments of a table in load order, the columns
+of a table in the order of its first segment. Throws `SpiceError` as `eklef` if a
+segment does not fit a table that an earlier segment defined: `:ekcolnummismatch`
+(number of columns), `:ekmissingcolumn`, `:badattributes` (class, type, string length,
+size, index or null attribute of a column differs).
+"""
+function _ek_build_tables(files::Vector{EKFile})
+    tables = EKTable[]
+    for (fno, file) in enumerate(files), seg in file.segments
+        k = findfirst(t -> t.name == seg.table, tables)
+        if k === nothing
+            push!(tables, EKTable(seg.table, String[c.name for c in seg.columns],
+                EKColumnAttr[_ek_attr(c) for c in seg.columns],
+                NTuple{2,Int32}[(Int32(fno), seg.segno)], Vector{_EKColumn}[seg.columns]))
+            continue
+        end
+        t = tables[k]
+        length(seg.columns) == length(t.cnames) || throw(SpiceError(:ekcolnummismatch,
+            "The EK file $(file.path) could not be loaded; the number of columns " *
+            "($(length(seg.columns))) in segment $(seg.segno) does not match the number of " *
+            "columns ($(length(t.cnames))) in the parent table $(t.name)."))
+        cols = Vector{_EKColumn}(undef, length(t.cnames))
+        for (i, name) in enumerate(t.cnames)   # invariant: cols[1:i-1] match the table
+            j = findfirst(c -> c.name == name, seg.columns)
+            j === nothing && throw(SpiceError(:ekmissingcolumn, "The EK file $(file.path) " *
+                "could not be loaded; the column $name in already loaded table $(t.name) " *
+                "is not present in segment $(seg.segno) in the EK file."))
+            _ek_same_attributes(seg.columns[j], t.cols[1][i]) || throw(SpiceError(:badattributes,
+                "EK file $(file.path) contains a column whose attributes conflict with a " *
+                "loaded column.  The offending column name is $name; the column is in " *
+                "segment $(seg.segno) of the file."))
+            cols[i] = seg.columns[j]
+        end
+        push!(t.segs, (Int32(fno), seg.segno))
+        push!(t.cols, cols)
+    end
+    return tables
 end

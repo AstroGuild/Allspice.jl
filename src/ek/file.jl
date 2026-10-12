@@ -200,29 +200,35 @@ nodes do not hold the number of keys that the root states.
 function _ek_tree_values(ints::AbstractVector{Int32}, tree::Integer)
     n = _ek_trsz(ints, tree)
     out = Vector{Int32}(undef, n)
-    filled = _ek_tree_walk!(out, 0, ints, Int(tree), true, 0)
+    depth = Int(ints[_ek_ibase(tree)+_EK_TRDPTH])
+    filled = _ek_tree_walk!(out, 0, ints, Int(tree), true, depth)
     filled == n || throw(SpiceError(:bug,
         "the tree with root page $tree holds $filled keys, but its root states $n"))
     return out
 end
 
-"In-order walk of the node `node`: appends its values to `out` after position `pos`; returns the new position."
+"""
+In-order walk of the node `node`: appends its values to `out` after position `pos` and
+returns the new position. `below` is the number of tree levels from this node down (the
+depth of the tree for the root); a node of the last level is a leaf, and its child
+pointers are not read, because CSPICE can leave old values there.
+"""
 function _ek_tree_walk!(out::Vector{Int32}, pos::Int, ints::AbstractVector{Int32}, node::Int,
-        isroot::Bool, level::Int)
-    level > _EK_TRMXDP && throw(SpiceError(:bug, "the tree node chain is deeper than $_EK_TRMXDP"))
+        isroot::Bool, below::Int)
+    below > _EK_TRMXDP && throw(SpiceError(:bug, "the tree node chain is deeper than $_EK_TRMXDP"))
     base = _ek_ibase(node)
     nkeys = Int(ints[base+(isroot ? _EK_TRNKR : _EK_TRNKC)])
     kidbase = base + (isroot ? _EK_TRKIDR : _EK_TRKIDC)
     datbase = base + (isroot ? _EK_TRDATR : _EK_TRDATC)
     for i in 1:nkeys                     # invariant: `pos` values are in `out`, in key order
-        child = Int(ints[kidbase+i])
-        child > 0 && (pos = _ek_tree_walk!(out, pos, ints, child, false, level + 1))
+        child = below > 1 ? Int(ints[kidbase+i]) : 0
+        child > 0 && (pos = _ek_tree_walk!(out, pos, ints, child, false, below - 1))
         pos < length(out) || throw(SpiceError(:bug, "a tree holds more keys than its root states"))
         pos += 1
         out[pos] = ints[datbase+i]
     end
-    child = Int(ints[kidbase+nkeys+1])
-    child > 0 && (pos = _ek_tree_walk!(out, pos, ints, child, false, level + 1))
+    child = below > 1 ? Int(ints[kidbase+nkeys+1]) : 0
+    child > 0 && (pos = _ek_tree_walk!(out, pos, ints, child, false, below - 1))
     return pos
 end
 
@@ -308,10 +314,6 @@ function _ek_find_column(s, segdsc::AbstractVector{Int32}, column::AbstractStrin
         "Segment base = $mbase."))
 end
 
-"The public attributes of the column descriptor `c` (`ekssum`, `ekcii`)."
-_ek_attr(c::_EKColumn) = EKColumnAttr(Int(c.cclass), _EK_TYPE_SYMBOLS[c.dtype],
-    c.dtype == _EK_CHR ? Int(c.strlen) : 0, Int(c.size), c.ixtype != -1, c.nullok)
-
 """
     _ek_segment(s, segno) -> _EKSegment
 
@@ -350,4 +352,32 @@ function _ek_rplk(s, segdsc::AbstractVector{Int32}, recno::Integer)
     stype == 1 && return _ek_trdp(s.ints, segdsc[_EK_RTIDX], recno)
     stype == 2 || throw(SpiceError(:invalidtype, "The segment type $stype is not supported."))
     return Int(recno)
+end
+
+# ---------------------------------------------------------------------------------------
+# Loading: the EK part of a `KernelSet`
+# ---------------------------------------------------------------------------------------
+
+"""
+    open_ek(path) -> EKFile
+
+Open the EK file at `path` for `furnsh` and decode its segments, as the first part of
+`eklef`. Contract: `path` names a DAS file that holds a paged EK of architecture 8 with
+at least one segment, of either byte order. In the result the address spaces are
+memory-mapped where the file allows it. Throws `SpiceError` with the kinds of `dasopr`,
+`:wrongarchitecture`, `:invalidformat`, `:eknosegments`, and `:ekcolnummismatch` for a
+segment with two columns of the same name.
+"""
+function open_ek(path::AbstractString)
+    h = _das_load(path, "furnsh", false)
+    _ek_check(h, path, "furnsh")
+    nseg = _ek_nseg(h)
+    nseg < 1 && throw(SpiceError(:eknosegments, "The EK file $path contains no segments."))
+    segs = _EKSegment[_ek_segment(h, i) for i in 1:nseg]
+    for seg in segs
+        allunique(c.name for c in seg.columns) || throw(SpiceError(:ekcolnummismatch,
+            "The EK file $path could not be loaded; the segment $(seg.segno) contains " *
+            "duplicate column names in table $(seg.table)."))
+    end
+    return EKFile(String(path), :EK, h.chars, h.dps, h.ints, segs)
 end

@@ -134,7 +134,8 @@ function c_ekifld(h, table, nrows, cnames, decls)
     return segno[] + 1, rcptrs
 end
 function c_ekaclc(h, segno, column, vals, entszs, nlflgs, rcptrs)
-    len = c_vallen(vals)
+    # CSPICE signals INVALIDSIZE if the strings are shorter than the string length of the column.
+    len = max(c_vallen(vals), 101)
     wk = zeros(Cint, length(rcptrs))
     ccall((:ekaclc_c, EKLIB), Cvoid, (Cint, Cint, Cstring, Cint, Ptr{UInt8}, Ptr{Cint},
             Ptr{Cint}, Ptr{Cint}, Ptr{Cint}), h, segno - 1, column, len, c_strarray(vals, len),
@@ -401,4 +402,125 @@ function ek_entry_equal(col::EKColSpec, e, got)
         return all(String(rstrip(String(a), ' ')) == b for (a, b) in zip(e, vals))
     end
     return all(a == b for (a, b) in zip(e, vals))
+end
+
+# ---------------------------------------------------------------------------------------
+# Loaded EK data and queries in CSPICE (direct calls; rows, columns, elements from 1)
+# ---------------------------------------------------------------------------------------
+
+"The C string in `buf` (up to the first NUL)."
+c_string(buf::AbstractVector{UInt8}) = String(buf[1:something(findfirst(iszero, buf), length(buf) + 1)-1])
+
+c_ekntab() = (n = Ref{Cint}(0); ccall((:ekntab_c, EKLIB), Cvoid, (Ref{Cint},), n); c_check(); Int(n[]))
+function c_ektnam(n)
+    buf = zeros(UInt8, 65)
+    ccall((:ektnam_c, EKLIB), Cvoid, (Cint, Cint, Ptr{UInt8}), n - 1, 65, buf)
+    c_check()
+    return c_string(buf)
+end
+c_ekccnt(table) = (n = Ref{Cint}(0); ccall((:ekccnt_c, EKLIB), Cvoid, (Cstring, Ref{Cint}), table, n);
+    c_check(); Int(n[]))
+
+"`ekcii_c`: (column name, (cclass, dtype symbol, strlen, size, indexd, nullok))."
+function c_ekcii(table, cindex)
+    buf = zeros(UInt8, 33)
+    dsc = zeros(Cint, 6)
+    ccall((:ekcii_c, EKLIB), Cvoid, (Cstring, Cint, Cint, Ptr{UInt8}, Ptr{Cint}), table, cindex - 1, 33, buf, dsc)
+    c_check()
+    return c_string(buf), (Int(dsc[1]), (:CHR, :DP, :INT, :TIME)[dsc[2]+1], Int(dsc[3]), Int(dsc[4]),
+        dsc[5] != 0, dsc[6] != 0)
+end
+
+"`ekfind_c`: (nmrows, error, errmsg). The result stays in CSPICE for the fetch calls."
+function c_ekfind(query)
+    n = Ref{Cint}(0)
+    err = Ref{Cint}(0)
+    buf = zeros(UInt8, 1841)
+    ccall((:ekfind_c, EKLIB), Cvoid, (Cstring, Cint, Ref{Cint}, Ref{Cint}, Ptr{UInt8}), query, 1841, n, err, buf)
+    c_check()
+    return Int(n[]), err[] != 0, c_string(buf)
+end
+
+"`ekpsel_c` with positions from 1: the same named tuple as `ekpsel` of NeoSpice."
+function c_ekpsel(query)
+    n = Ref{Cint}(0)
+    err = Ref{Cint}(0)
+    xb = zeros(Cint, 50); xe = zeros(Cint, 50); xt = zeros(Cint, 50); xc = zeros(Cint, 50)
+    tabs = zeros(UInt8, 50 * 65); cols = zeros(UInt8, 50 * 33)
+    buf = zeros(UInt8, 1841)
+    ccall((:ekpsel_c, EKLIB), Cvoid, (Cstring, Cint, Cint, Cint, Ref{Cint}, Ptr{Cint}, Ptr{Cint}, Ptr{Cint},
+            Ptr{Cint}, Ptr{UInt8}, Ptr{UInt8}, Ref{Cint}, Ptr{UInt8}), query, 1841, 65, 33, n, xb, xe, xt, xc,
+        tabs, cols, err, buf)
+    c_check()
+    k = err[] != 0 ? 0 : Int(n[])
+    return (n=k, xbegs=Int.(xb[1:k]) .+ 1, xends=Int.(xe[1:k]) .+ 1,
+        xtypes=Symbol[(:CHR, :DP, :INT, :TIME)[xt[i]+1] for i in 1:k],
+        xclass=Symbol[(:COL, :FUNC, :EXPR)[xc[i]+1] for i in 1:k],
+        tabs=String[c_string(view(tabs, (i-1)*65+1:i*65)) for i in 1:k],
+        cols=String[c_string(view(cols, (i-1)*33+1:i*33)) for i in 1:k], error=err[] != 0, errmsg=c_string(buf))
+end
+
+c_eknelt(selidx, row) = (n = ccall((:eknelt_c, EKLIB), Cint, (Cint, Cint), selidx - 1, row - 1); c_check(); Int(n))
+
+const C_EKGC_BUF = zeros(UInt8, 2600)
+function c_ekgc(selidx, row, elment=1)
+    null = Ref{Cint}(0); found = Ref{Cint}(0)
+    ccall((:ekgc_c, EKLIB), Cvoid, (Cint, Cint, Cint, Cint, Ptr{UInt8}, Ref{Cint}, Ref{Cint}), selidx - 1,
+        row - 1, elment - 1, length(C_EKGC_BUF), C_EKGC_BUF, null, found)
+    c_check()
+    isnull = found[] != 0 && null[] != 0
+    return (found[] != 0 && !isnull) ? String(rstrip(c_string(C_EKGC_BUF), ' ')) : "", isnull, found[] != 0
+end
+function c_ekgd(selidx, row, elment=1)
+    v = Ref{Float64}(0.0); null = Ref{Cint}(0); found = Ref{Cint}(0)
+    ccall((:ekgd_c, EKLIB), Cvoid, (Cint, Cint, Cint, Ref{Float64}, Ref{Cint}, Ref{Cint}), selidx - 1, row - 1,
+        elment - 1, v, null, found)
+    c_check()
+    isnull = found[] != 0 && null[] != 0
+    return (found[] != 0 && !isnull) ? v[] : 0.0, isnull, found[] != 0
+end
+function c_ekgi(selidx, row, elment=1)
+    v = Ref{Cint}(0); null = Ref{Cint}(0); found = Ref{Cint}(0)
+    ccall((:ekgi_c, EKLIB), Cvoid, (Cint, Cint, Cint, Ref{Cint}, Ref{Cint}, Ref{Cint}), selidx - 1, row - 1,
+        elment - 1, v, null, found)
+    c_check()
+    isnull = found[] != 0 && null[] != 0
+    return (found[] != 0 && !isnull) ? Int(v[]) : 0, isnull, found[] != 0
+end
+
+"""
+All values of the query result that CSPICE holds after `c_ekfind`: `out[row][sel]` is
+`nothing` for a null entry, else the vector of the elements. `types` are the data types
+of the SELECT columns.
+"""
+function c_ek_result(nmrows::Int, types::Vector{Symbol})
+    out = Vector{Vector{Any}}(undef, nmrows)
+    for row in 1:nmrows
+        vals = Vector{Any}(undef, length(types))
+        for (sel, t) in enumerate(types)
+            get = t === :CHR ? c_ekgc : t === :INT ? c_ekgi : c_ekgd
+            n = c_eknelt(sel, row)
+            v, isnull, found = get(sel, row, 1)
+            vals[sel] = isnull ? nothing : Any[k == 1 ? v : get(sel, row, k)[1] for k in 1:n]
+        end
+        out[row] = vals
+    end
+    return out
+end
+
+"The same table of values for an `EKResult` of NeoSpice, read with `eknelt`, `ekgc`, `ekgd`, `ekgi`."
+function neo_ek_result(res)
+    types = res.seltype
+    out = Vector{Vector{Any}}(undef, res.nmrows)
+    for row in 1:res.nmrows
+        vals = Vector{Any}(undef, length(types))
+        for (sel, t) in enumerate(types)
+            get = t === :CHR ? ekgc : t === :INT ? ekgi : ekgd
+            n = eknelt(res, sel, row)
+            v, isnull, found = get(res, sel, row, 1)
+            vals[sel] = isnull ? nothing : Any[k == 1 ? v : get(res, sel, row, k)[1] for k in 1:n]
+        end
+        out[row] = vals
+    end
+    return out
 end

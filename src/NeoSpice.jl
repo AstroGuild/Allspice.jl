@@ -56,6 +56,7 @@ export stpool, ldpool, swpool, cvpool, poolversion
 export et2lst, lspcn
 export EKColumnAttr, EKSegmentSummary, EKTable
 export ekopr, ekcls, eknseg, ekssum, ekrcec, ekrced, ekrcei
+export EKResult, ekntab, ektnam, ekccnt, ekcii, ekpsel, ekfind, eknelt, ekgc, ekgd, ekgi, ekcolumn
 
 include("dyntypes.jl")      # DynFrame, SwitchFrame, PoolWatch (fields of the types below)
 include("dsk_types.jl")     # DLADescr, DSKDescr, DSKSegment, DSKFile, DSKTolerances
@@ -108,6 +109,8 @@ include("frame_info.jl")    # frinfo, cidfrm, cnmfrm, ccifrm, tkfram, tipbod, ti
 include("lst.jl")           # et2lst, lspcn
 include("ek/file.jl")       # EK pages, trees, segment and column descriptors
 include("ek/columns.jl")    # EK column entries of classes 1 to 9
+include("ek/query_parse.jl")  # EK query language: scan, parse, resolve names and times, check
+include("ek/query_run.jl")  # EK search: key selection, joins, union, ORDER BY
 include("ek/api.jl")        # ekopr, ekssum, ekrcec, ..., ekntab, ekfind, ekgc, ekgd, ekgi
 include("precompile.jl")    # precompile directives for the common signatures
 

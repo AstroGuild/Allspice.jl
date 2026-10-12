@@ -403,7 +403,7 @@ KernelSet(loaded, daf, spk, pck, pool, name2code, code2name, frames, framename2i
     bodyrot, lsk, ck, sclk, ckmeta) = KernelSet(loaded, daf, spk, pck, pool, name2code,
     code2name, frames, framename2id, tk, bodyrot, lsk, ck, sclk, ckmeta,
     Dict{Int32,DynFrame}(), Dict{Int32,SwitchFrame}(), nothing, false, Tuple{String,Int32}[],
-    DSKFile[], Dict{Int32,Vector{DSKSegment}}())
+    DSKFile[], Dict{Int32,Vector{DSKSegment}}(), EKFile[], EKTable[])
 
 """
     _dyn_levels(base, edited, bodydefs) -> KernelSet
@@ -429,7 +429,7 @@ function _dyn_levels(base::KernelSet, edited::Bool, bodydefs::Vector{Tuple{Strin
             base.name2code, base.code2name, base.frames, base.framename2id, base.tk,
             base.bodyrot, base.lsk, base.ck, base.sclk, base.ckmeta, dyn, sw,
             ks === nothing ? nothing : DynLevel{KernelSet}(ks), edited, bodydefs,
-            base.dskfiles, base.dsk)
+            base.dskfiles, base.dsk, base.ekfiles, base.ektables)
     end
     return ks::KernelSet
 end

@@ -110,7 +110,7 @@ the meta-kernel that caused the load, or `""` for a kernel loaded directly.
 struct Loaded
     path::String
     source::String
-    content::Union{DAF,TextKernel,DSKFile}
+    content::Union{DAF,TextKernel,DSKFile,EKFile}
 end
 
 """
@@ -249,6 +249,9 @@ and readers on many threads do not contend.
 - `dskfiles`: the loaded DSK files, in load order; `DSKSegment.file` indexes this vector.
 - `dsk`: DSK segments by centre body ID, in the search order of CSPICE (later file
   first, and inside a file later segment first).
+- `ekfiles`: the loaded EK files, in load order (a file that is loaded twice is here once).
+- `ektables`: the tables of the loaded EK files, in load order; `EKTable.segs` indexes
+  `ekfiles` (`ek/file.jl`).
 """
 mutable struct KernelSet
     const loaded::Vector{Loaded}
@@ -273,6 +276,8 @@ mutable struct KernelSet
     const bodydefs::Vector{Tuple{String,Int32}}
     const dskfiles::Vector{DSKFile}
     const dsk::Dict{Int32,Vector{DSKSegment}}
+    const ekfiles::Vector{EKFile}
+    const ektables::Vector{EKTable}
 end
 
 """

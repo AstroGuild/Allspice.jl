@@ -138,3 +138,210 @@ function ekrcei(h::DASHandle, segno::Integer, recno::Integer, column::AbstractSt
     col, recptr = _ek_locate(h, "ekrcei", segno, recno, column, (_EK_INT,))
     return _ek_entry_i(h, col, recptr)
 end
+
+# ---------------------------------------------------------------------------------------
+# The catalogue of loaded tables
+# ---------------------------------------------------------------------------------------
+
+"""
+    ekntab([ctx]) -> Int
+    ekntab(ks::KernelSet) -> Int
+
+Number of loaded EK tables, as `ekntab_c`. Postcondition: the result is 0 if no EK file
+is loaded.
+"""
+ekntab(ks::KernelSet) = length(ks.ektables)
+ekntab(ctx::SpiceContext) = ekntab(kernelset(ctx))
+ekntab() = ekntab(default_context())
+
+"""
+    ektnam([ctx,] n) -> String
+
+Name of loaded table number `n` (from 1; `ektnam_c` counts from 0), in the order in
+which the tables were loaded. Preconditions: an EK file is loaded
+(`SpiceError(:noloadedfiles)`) and `1 <= n <= ekntab()` (`:invalidindex`).
+"""
+function ektnam(ks::KernelSet, n::Integer)
+    isempty(ks.ektables) && throw(SpiceError(:noloadedfiles, "No E-kernels are currently loaded."))
+    (1 <= n <= length(ks.ektables)) || throw(SpiceError(:invalidindex,
+        "The index $n does not correspond to a loaded table."))
+    return ks.ektables[n].name
+end
+ektnam(ctx::SpiceContext, n::Integer) = ektnam(kernelset(ctx), n)
+ektnam(n::Integer) = ektnam(default_context(), n)
+
+"The loaded table `table` of `ks` (name without regard to case); `:tablenotloaded` if absent."
+function _ek_table(ks::KernelSet, table::AbstractString)
+    name = uppercase(strip(table, ' '))
+    k = findfirst(t -> t.name == name, ks.ektables)
+    k === nothing && throw(SpiceError(:tablenotloaded, "The table $table is not currently loaded."))
+    return ks.ektables[k]
+end
+
+"""
+    ekccnt([ctx,] table) -> Int
+
+Number of columns of the loaded table `table`, as `ekccnt_c`. Precondition: the table
+is loaded, else `SpiceError(:tablenotloaded)`.
+"""
+ekccnt(ks::KernelSet, table::AbstractString) = length(_ek_table(ks, table).cnames)
+ekccnt(ctx::SpiceContext, table::AbstractString) = ekccnt(kernelset(ctx), table)
+ekccnt(table::AbstractString) = ekccnt(default_context(), table)
+
+"""
+    ekcii([ctx,] table, cindex) -> (column::String, attdsc::EKColumnAttr)
+
+Name and attributes of column number `cindex` (from 1; `ekcii_c` counts from 0) of the
+loaded table `table`, as `ekcii_c`. Preconditions: the table is loaded
+(`SpiceError(:tablenotloaded)`) and `1 <= cindex <= ekccnt(table)` (`:invalidindex`).
+The string length of a column that does not have character type is 0 here; CSPICE
+gives the value that the file holds, which is 1.
+"""
+function ekcii(ks::KernelSet, table::AbstractString, cindex::Integer)
+    t = _ek_table(ks, table)
+    (1 <= cindex <= length(t.cnames)) || throw(SpiceError(:invalidindex, "Column indices for " *
+        "table $(t.name) range from 1 to $(length(t.cnames)); requested index was $cindex."))
+    return t.cnames[cindex], t.attrs[cindex]
+end
+ekcii(ctx::SpiceContext, table::AbstractString, cindex::Integer) = ekcii(kernelset(ctx), table, cindex)
+ekcii(table::AbstractString, cindex::Integer) = ekcii(default_context(), table, cindex)
+
+# ---------------------------------------------------------------------------------------
+# Queries
+# ---------------------------------------------------------------------------------------
+
+"""
+    ekpsel([ctx,] query) -> NamedTuple
+
+Analyse the SELECT clause of `query`, as `ekpsel_c`. Returns `(n, xbegs, xends, xtypes,
+xclass, tabs, cols, error, errmsg)`: the number of SELECT items, and for each item the
+first and last character of its expression in `query` (from 1; `ekpsel_c` counts from
+0), its data type (`:CHR`, `:DP`, `:INT`, `:TIME`), its class (`:COL`), and the names of
+its table and column. A query that is not valid gives `error == true`, the message in
+`errmsg`, and `n == 0`; the call does not throw for it.
+"""
+ekpsel(ks::KernelSet, td::TimeDefaults, query::AbstractString) =
+    _ek_psel(ks.ektables, ks, td, query)
+ekpsel(ctx::SpiceContext, query::AbstractString) =
+    ekpsel(kernelset(ctx), timedefaults(ctx), query)
+ekpsel(query::AbstractString) = ekpsel(default_context(), query)
+
+"""
+    ekfind([ctx,] query) -> (result::EKResult, error::Bool, errmsg::String)
+    ekfind(ks::KernelSet, td::TimeDefaults, query)
+
+Find the rows of the loaded EK tables that satisfy `query`, as `ekfind_c`. The rows are
+in an [`EKResult`](@ref); `result.nmrows` is the output `nmrows` of CSPICE, and
+[`eknelt`](@ref), [`ekgc`](@ref), [`ekgd`](@ref), [`ekgi`](@ref) read the result. A
+query that is not valid gives `error == true`, the message of CSPICE in `errmsg` and
+an empty result; the call does not throw for it. The call reads one snapshot of the
+loaded kernels and changes nothing, so many tasks can run queries at the same time,
+also while another task loads or unloads kernels. Postcondition: `error` is false or
+`result.nmrows == 0`.
+"""
+function ekfind(ks::KernelSet, td::TimeDefaults, query::AbstractString)
+    q, error, errmsg = _ek_encode_query(ks.ektables, ks, td, query)
+    error && return _ek_empty_result(), true, errmsg
+    return _ek_search(ks, q), false, ""
+end
+ekfind(ctx::SpiceContext, query::AbstractString) =
+    ekfind(kernelset(ctx), timedefaults(ctx), query)
+ekfind(query::AbstractString) = ekfind(default_context(), query)
+
+"Segment, column and record pointer of row `row` and SELECT column `selidx` of `res`."
+@inline function _ek_result_entry(res::EKResult, selidx::Integer, row::Integer)
+    (1 <= row <= res.nmrows) || throw(SpiceError(:invalidindex, "Row indices for query " *
+        "result range from 1 to $(res.nmrows); requested row index was $row."))
+    (1 <= selidx <= length(res.seltab)) || throw(SpiceError(:invalidindex,
+        "The SELECT column index $selidx is out of the valid range 1:$(length(res.seltab))"))
+    t = res.seltab[selidx]
+    qs = res.segs[res.rowseg[t, row]]
+    return qs.file, qs.cols[res.selcol[selidx]], Int(res.rowptr[t, row])
+end
+
+"""
+    eknelt(result, selidx, row) -> Int
+
+Number of elements of the entry in row `row` and SELECT column `selidx` of `result`
+(both from 1; `eknelt_c` counts from 0), as `eknelt_c`. A null entry has 1 element.
+Preconditions: `1 <= row <= result.nmrows` and `selidx` names a SELECT column, else
+`SpiceError(:invalidindex)`.
+"""
+function eknelt(res::EKResult, selidx::Integer, row::Integer)
+    f, col, recptr = _ek_result_entry(res, selidx, row)
+    return _ek_nelt(f, col, recptr)
+end
+
+"Checks of the fetch calls: positive element index and a column of one of the `types`."
+@inline function _ek_fetch_check(col::_EKColumn, elment::Integer, types)
+    elment >= 1 || throw(SpiceError(:invalidindex, "ELMENT must be positive but was $elment."))
+    col.dtype in types || throw(SpiceError(:invalidtype,
+        "Column $(col.name) has data type $(_EKQ_TYPSTR[col.dtype])."))
+    return nothing
+end
+
+"""
+    ekgc(result, selidx, row, elment=1) -> (cdata::String, null::Bool, found::Bool)
+
+Element `elment` of the character entry in row `row` and SELECT column `selidx` of
+`result` (all from 1; `ekgc_c` counts from 0), without trailing blanks, as `ekgc_c`.
+`null` tells that the entry is null (then `cdata` is empty), `found` that the entry
+has an element `elment`. Preconditions (each throws `SpiceError`): valid `row` and
+`selidx` and `elment >= 1` (`:invalidindex`); the column has character type
+(`:invalidtype`).
+"""
+function ekgc(res::EKResult, selidx::Integer, row::Integer, elment::Integer=1)
+    f, col, recptr = _ek_result_entry(res, selidx, row)
+    _ek_fetch_check(col, elment, (_EK_CHR,))
+    v, isnull, found = _ek_elt_c(f, col, recptr, elment)
+    return String(rstrip(v, ' ')), isnull, found
+end
+
+"""
+    ekgd(result, selidx, row, elment=1) -> (ddata::Float64, null::Bool, found::Bool)
+
+Element `elment` of the double precision or time entry in row `row` and SELECT column
+`selidx` of `result`, as `ekgd_c`; a time is in seconds past J2000 TDB. Results and
+preconditions as [`ekgc`](@ref).
+"""
+function ekgd(res::EKResult, selidx::Integer, row::Integer, elment::Integer=1)
+    f, col, recptr = _ek_result_entry(res, selidx, row)
+    _ek_fetch_check(col, elment, (_EK_DP, _EK_TIME))
+    return _ek_elt_d(f, col, recptr, elment)
+end
+
+"""
+    ekgi(result, selidx, row, elment=1) -> (idata::Int, null::Bool, found::Bool)
+
+Element `elment` of the integer entry in row `row` and SELECT column `selidx` of
+`result`, as `ekgi_c`. Results and preconditions as [`ekgc`](@ref).
+"""
+function ekgi(res::EKResult, selidx::Integer, row::Integer, elment::Integer=1)
+    f, col, recptr = _ek_result_entry(res, selidx, row)
+    _ek_fetch_check(col, elment, (_EK_INT,))
+    return _ek_elt_i(f, col, recptr, elment)
+end
+
+"""
+    ekcolumn(result, selidx) -> Vector
+
+All entries of the SELECT column `selidx` of `result`, one item for each row: `missing`
+for a null entry, the value for a scalar column, and the vector of the values for an
+array column. Strings are without trailing blanks. Not a CSPICE call: it replaces the
+loop over `eknelt` and the fetch call. Precondition: `selidx` names a SELECT column,
+else `SpiceError(:invalidindex)`.
+"""
+function ekcolumn(res::EKResult, selidx::Integer)
+    (1 <= selidx <= length(res.seltab)) || throw(SpiceError(:invalidindex,
+        "The SELECT column index $selidx is out of the valid range 1:$(length(res.seltab))"))
+    out = Vector{Any}(undef, res.nmrows)
+    for row in 1:res.nmrows              # invariant: out[1:row-1] is set
+        f, col, recptr = _ek_result_entry(res, selidx, row)
+        vals, isnull = col.dtype == _EK_CHR ? _ek_entry_c(f, col, recptr) :
+                       col.dtype == _EK_INT ? _ek_entry_i(f, col, recptr) :
+                       _ek_entry_d(f, col, recptr)
+        col.dtype == _EK_CHR && (vals = String[String(rstrip(v, ' ')) for v in vals])
+        out[row] = isnull ? missing : (col.cclass <= 3 || col.cclass >= 7) ? vals[1] : vals
+    end
+    return identity.(out)
+end
