@@ -7,9 +7,10 @@
 # agree within 2e-6 s (twice the tolerance); the largest difference is reported for
 # each quantity and family of relations.
 #
-# The extrema of two quantities have a wider limit, because the epoch of an extremum is
-# the root of the test "is decreasing", and CSPICE computes that test from numerical
-# derivatives whose rounding noise is large against the slope of the derivative:
+# An event can be ill conditioned, and then the two libraries cannot agree to the
+# tolerance, because their states differ by rounding. The epoch of an extremum is the
+# root of the test "is decreasing", and CSPICE computes that test from numerical
+# derivatives whose rounding noise can be large against the slope of the derivative:
 #
 # - range rate: the acceleration is a difference of two velocities two seconds apart, so
 #   the sign of the derivative of the range rate is noise in an interval of up to some
@@ -19,18 +20,15 @@
 #   velocities too.
 #
 # Inside that interval the bisection of CSPICE follows its own rounding and the one of
-# NeoSpice follows its own, so the two epochs agree to the width of the interval and not
-# to the tolerance. The value of the quantity at the two epochs is the same.
+# NeoSpice follows its own. For these two quantities an end point that differs by more
+# than 2e-6 s is accepted only if the quantity has the same value at the two epochs, to
+# the rounding of the states (`gf_compare` with `value`).
 #
 # Behaviour specification: test/features/gf_quantities.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
 
 const GF_DAY = 86400.0
-
-"Limit in seconds for the end points of an extremum search of a quantity with a noisy derivative."
-gf_limit(rel::AbstractString, adjust::Real, noisy::Float64) =
-    (rel in ("LOCMIN", "LOCMAX") || (rel in ("ABSMIN", "ABSMAX") && adjust == 0)) ? noisy : 2.0e-6
 
 "Random confinement window of `n` intervals in a span of `span` seconds that starts between 1990 and 2035."
 function gf_confinement(rng::AbstractRNG, n::Integer, span::Real)
@@ -79,7 +77,8 @@ group("gf quantities: distance, range rate, separation, phase angle", Kernels.FU
             refval, adjust = gf_reference(rng, q, cn, rel, wadj)
             w = gfrr(ctx, targ, abcorr, obs, rel, refval, adjust, step, cn)
             ref = GFO.gfrr(targ, abcorr, obs, rel, refval, adjust, step, collect(cn))
-            @test gf_compare("gfrr " * gf_family(rel, adjust), w, ref; atol=gf_limit(rel, adjust, 0.5))
+            @test gf_compare("gfrr " * gf_family(rel, adjust), w, ref;
+                value=t -> NeoSpice._gf_value(q, t), vtol=64 * eps(30.0))
         end
     end
 
@@ -100,7 +99,7 @@ group("gf quantities: distance, range rate, separation, phase angle", Kernels.FU
             w = gfsep(ctx, t1, s1, f1, t2, s2, f2, abcorr, obs, rel, refval, adjust, step, cn)
             ref = GFO.gfsep(t1, s1, f1, t2, s2, f2, abcorr, obs, rel, refval, adjust, step, collect(cn))
             @test gf_compare("gfsep " * gf_family(rel, adjust), w, ref;
-                atol=gf_limit(rel, adjust, 1.0e-4))
+                value=t -> NeoSpice._gf_value(q, t), vtol=64 * eps(Float64(pi)))
         end
     end
 
@@ -158,6 +157,7 @@ group("gf quantities: distance, range rate, separation, phase angle", Kernels.FU
         t0 = et("2022 FEB 01")
         full = Window([t0, t0 + 200 * GF_DAY])
         for abcorr in ("NONE", "CN+S")
+            qrr = NeoSpice.GFRangeRate(ks, "MOON", abcorr, "EARTH")
             r = gfdist(ctx, "MOON", abcorr, "EARTH", "=", 3.85e5, 0.0, GF_DAY, full)
             p = gfdist(ctx, "MOON", abcorr, "EARTH", "LOCMIN", 0.0, 0.0, GF_DAY, full)
             a = gfdist(ctx, "MOON", abcorr, "EARTH", "LOCMAX", 0.0, 0.0, GF_DAY, full)
@@ -176,7 +176,7 @@ group("gf quantities: distance, range rate, separation, phase angle", Kernels.FU
                     w = gfrr(ctx, "MOON", abcorr, "EARTH", rel, 0.0, adj / 1.0e5, GF_DAY, cn)
                     ref = GFO.gfrr("MOON", abcorr, "EARTH", rel, 0.0, adj / 1.0e5, GF_DAY, collect(cn))
                     @test gf_compare("gfrr end points, " * gf_family(rel, adj), w, ref;
-                        atol=gf_limit(rel, adj, 0.5))
+                        value=t -> NeoSpice._gf_value(qrr, t), vtol=64 * eps(30.0))
                 end
             end
         end

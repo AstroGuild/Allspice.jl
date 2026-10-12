@@ -179,22 +179,42 @@ const GF_MAXDIFF = Dict{String,Float64}()
 const GF_COUNT = Dict{String,Int}()
 
 """
-    gf_compare(label, neo::Window, ref::Vector{Float64}; atol=2.0e-6) -> Bool
+    gf_compare(label, neo::Window, ref::Vector{Float64}; atol=2.0e-6, value=nothing,
+               vtol=0.0, wide=1.0) -> Bool
 
 True if the two windows have the same number of end points and each end point of `neo`
-is within `atol` seconds of the one of CSPICE. Records the largest difference under
-`label`. Postcondition: `GF_COUNT[label]` is one more than before.
+agrees with the one of CSPICE. Two end points agree if they differ by no more than
+`atol` seconds. With a function `value(et)` they also agree if they differ by no more
+than `wide` seconds and the quantity has the same value at both, within `vtol`: this is
+the case of an ill-conditioned event (a root where the quantity is almost stationary,
+or an extremum whose derivative test is rounding noise in an interval), where the two
+libraries cannot agree better than the rounding of their states allows. Records the
+largest difference under `label`. Postcondition: `GF_COUNT[label]` is one more than
+before.
 """
-function gf_compare(label::AbstractString, neo::Window, ref::Vector{Float64}; atol::Float64=2.0e-6)
+function gf_compare(label::AbstractString, neo::Window, ref::Vector{Float64};
+        atol::Float64=2.0e-6, value=nothing, vtol::Float64=0.0, wide::Float64=1.0)
     GF_COUNT[label] = get(GF_COUNT, label, 0) + 1
     if length(neo) != length(ref)
         @info "window sizes differ" label neo = length(neo) cspice = length(ref)
         return false
     end
-    d = isempty(ref) ? 0.0 : maximum(abs.(collect(neo) .- ref))
-    GF_MAXDIFF[label] = max(get(GF_MAXDIFF, label, 0.0), d)
-    d <= atol || @info "end points differ" label d
-    return d <= atol
+    ok = true
+    for i in eachindex(ref)
+        d = abs(neo[i] - ref[i])
+        GF_MAXDIFF[label] = max(get(GF_MAXDIFF, label, 0.0), d)
+        d <= atol && continue
+        if value !== nothing && d <= wide
+            dv = abs(value(neo[i]) - value(ref[i]))
+            dv <= vtol && continue
+            @info "end points differ, and the values too" label d dv vtol
+        else
+            @info "end points differ" label d
+        end
+        ok = false
+    end
+    haskey(GF_MAXDIFF, label) || (GF_MAXDIFF[label] = 0.0)
+    return ok
 end
 
 "Print the recorded differences whose label starts with `prefix`."
