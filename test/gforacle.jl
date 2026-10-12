@@ -288,6 +288,27 @@ const GF_MAXDIFF = Dict{String,Float64}()
 const GF_COUNT = Dict{String,Int}()
 
 """
+    gf_noise(value, et) -> Float64
+
+Rounding noise of the quantity `value` at the epoch `et`: the largest change of the
+quantity over the 16 nearest epochs after `et`. These epochs span about 6e-8 s at 1e8 s
+from the reference epoch, so the real change of a geometric quantity is below the
+rounding of its inputs, and a root cannot be found more exactly than this noise divided
+by the rate of the quantity. Postcondition: the result is not negative.
+"""
+function gf_noise(value, et::Float64)
+    v0 = value(et)
+    noise = 0.0
+    t = et
+    for _ in 1:16
+        t = nextfloat(t)
+        noise = max(noise, abs(value(t) - v0))
+    end
+    @assert noise >= 0.0
+    return noise
+end
+
+"""
     gf_compare(label, neo::Window, ref::Vector{Float64}; atol=2.0e-6, value=nothing,
                vtol=0.0, wide=1.0) -> Bool
 
@@ -297,7 +318,11 @@ agrees with the one of CSPICE. Two end points agree if they differ by no more th
 than `wide` seconds and the quantity has the same value at both, within `vtol`: this is
 the case of an ill-conditioned event (a root where the quantity is almost stationary,
 or an extremum whose derivative test is rounding noise in an interval), where the two
-libraries cannot agree better than the rounding of their states allows. Records the
+libraries cannot agree better than the rounding of their states allows. The values
+also agree if they differ by no more than 4 times the rounding noise of the quantity
+at the end point (`gf_noise`), which is above `vtol` for a corrected quantity far from
+the reference epoch. For an absolute extremum give `wide=Inf`: each epoch at which the
+quantity has the extreme value to rounding is a correct answer. Records the
 largest difference under `label`. Postcondition: `GF_COUNT[label]` is one more than
 before.
 """
@@ -316,7 +341,9 @@ function gf_compare(label::AbstractString, neo::Window, ref::Vector{Float64};
         if value !== nothing && d <= wide
             dv = abs(value(neo[i]) - value(ref[i]))
             dv <= vtol && continue
-            @info "end points differ, and the values too" label d dv vtol
+            noise = gf_noise(value, neo[i])
+            dv <= 4 * noise && continue
+            @info "end points differ, and the values too" label d dv vtol noise
         else
             @info "end points differ" label d
         end

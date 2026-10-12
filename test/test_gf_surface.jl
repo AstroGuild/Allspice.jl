@@ -123,6 +123,14 @@ gfs_scale(q, w::Window) = maximum(abs(NeoSpice._gf_value(q, w[1] + x * (w[2] - w
 gfs_vtol(q, w::Window) = 1.0e-12 * max(1.0, gfs_scale(q, w))
 
 """
+Largest difference of two end points that `gf_compare` accepts when the values agree.
+A coordinate of a surface point can be flat to one rounding for seconds (the distance
+of the sub-solar point from the center of the Earth changes by 1e-12 km in 5 s), and
+then the epoch of its absolute extremum is any epoch with the extreme value.
+"""
+gfs_wide(rel, adjust) = gf_family(rel, adjust) == "absolute extremum" ? Inf : 1.0
+
+"""
     gfs_constant(target, sys, crd) -> Bool
 
 True if the coordinate of a point of the surface of `target` is constant to rounding:
@@ -178,7 +186,7 @@ gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
             angular = (sys, crd) in GF_ANGULAR
             label = (angular ? "gfsubc longitude/RA " : "gfsubc other ") * gf_family(rel, adjust)
             ok = gf_compare(label, w, ref; value=t -> NeoSpice._gf_value(q, t),
-                vtol=gfs_vtol(q, cn))
+                vtol=gfs_vtol(q, cn), wide=gfs_wide(rel, adjust))
             ok || @info "gfsubc case" targ fix obs meth corr sys crd rel refval adjust step cn
             @test ok
             n += 1
@@ -235,7 +243,7 @@ gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
             label = (angular ? "gfsntc tracking ray, longitude/RA " : "gfsntc tracking ray, other ") *
                     gf_family(rel, adjust)
             ok = gf_compare(label, w, ref; value=t -> NeoSpice._gf_value(q, t),
-                vtol=gfs_vtol(q, exist))
+                vtol=gfs_vtol(q, exist), wide=gfs_wide(rel, adjust))
             ok || @info "gfsntc case" corr dvec sys crd rel refval adjust step cn
             @test ok
             n += 1
