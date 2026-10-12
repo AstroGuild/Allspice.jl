@@ -11,9 +11,9 @@ const ROT_INERTIAL = ("J2000", "ECLIPJ2000", "B1950", "GALACTIC")
 
 # Inertial to inertial: constant matrices, a few roundings of difference at most.
 const ROT_TOL_INERTIAL = (q99=2e-15, max=5e-15)
-# With a body-fixed frame: see the note on TOL_BODYFIXED in test_states.jl; the angle W of
-# Jupiter reaches 8e5 rad at the ends of the sampled range (unit in the last place 1e-10).
-const ROT_TOL_BODYFIXED = (q99=1e-9, max=5e-9)
+# With a body-fixed frame: see the note on TOL_BODYFIXED in test_states.jl. Measured
+# maximum 3.3e-16.
+const ROT_TOL_BODYFIXED = (q99=5e-16, max=2e-15)
 # Largest angular rate among the frames, rad/s (Jupiter 1.76e-4, pairs can add).
 const RATE_SCALE = 4e-4
 const ORTHO_TOL = 1e-14
@@ -90,7 +90,7 @@ group("2. rotations against CSPICE", Kernels.TEXT_SET_FILES..., Kernels.MOON_BPC
             append!(dn, abs.(pxform(ctx, from, to, et) .- SPICE.pxform(from, to, et)))
         end
         n = report_quantiles("pxform, all pairs within 30 d of J2000", dn)
-        @test n.q99 <= 1e-12
-        @test n.max <= 1e-11
+        @test n.q99 <= 5e-16
+        @test n.max <= 2e-15
     end
 end

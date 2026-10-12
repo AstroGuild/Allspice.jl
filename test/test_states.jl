@@ -23,17 +23,17 @@ end
 # 1.9e-6 km in the first run is two such units, at a relative difference of 1.8e-15.
 const ULP_ALLOWANCE = 4
 
-# Inertial frame that is the frame of the segments: only the Chebyshev sums and the
-# chain sums differ in rounding.
-const TOL_J2000 = StateTol(3e-16, 8e-15, 1e-6, 1e-12)
+# Inertial frame that is the frame of the segments. The Chebyshev sums use the
+# operations of CSPICE, and on the development machine every state was equal to the
+# last bit (maximum difference 0 over 109,200 samples); the bound allows one rounding
+# for a CSPICE build with different floating-point contraction.
+const TOL_J2000 = StateTol(3e-16, 1e-15, 1e-6, 1e-12)
 # Constant rotation on top: one matrix product more.
-const TOL_INERTIAL = StateTol(1e-15, 8e-15, 1e-6, 1e-12)
-# Body-fixed frames. The prime-meridian angle W = W0 + rate * d reaches about 4e5 rad at
-# the ends of the de440s coverage (150 years from J2000), where one unit in the last
-# place of W is 6e-11 rad. A different but equally valid order of operations therefore
-# moves the result by about 1e-10 relative; the starting thresholds allow that, and the
-# measured values that are printed show how far they can be tightened.
-const TOL_BODYFIXED = StateTol(1e-10, 1e-9, 5e-1, 1e-4)
+const TOL_INERTIAL = StateTol(3e-16, 1e-15, 1e-6, 1e-12)
+# Body-fixed frames. The angle W uses the operations of CSPICE as well, so only the
+# matrix products differ in rounding. Measured: relative position 3.3e-16 at most,
+# relative velocity 9.0e-15 at most (q99 3.5e-15), velocity 2.9e-11 km/s at most.
+const TOL_BODYFIXED = StateTol(3e-16, 2e-14, 1e-6, 1e-9)
 
 "Lowest norm used as the divisor of a relative difference (km, km/s)."
 const POS_FLOOR = 1.0
