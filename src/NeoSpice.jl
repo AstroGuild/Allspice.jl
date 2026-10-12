@@ -54,6 +54,8 @@ export bodfnd, bodvcd, boddef
 export pdpool, pcpool, pipool, dvpool, expool, dtpool, gnpool, szpool, lmpool, clpool
 export stpool, ldpool, swpool, cvpool, poolversion
 export et2lst, lspcn
+export gfdist, gfsep, gfposc, gfrr, gfpa, gfuds, gfudb, gfevnt, gfstol, gfrefn, uddc, uddf
+export gfsubc, gfsntc, gfilum, gfoclt, gftfov, gfrfov
 
 include("dyntypes.jl")      # DynFrame, SwitchFrame, PoolWatch (fields of the types below)
 include("dsk_types.jl")     # DLADescr, DSKDescr, DSKSegment, DSKFile, DSKTolerances
@@ -103,6 +105,11 @@ include("math/coordinates.jl")  # reclat, recgeo, recpgr, ..., Jacobians, xfmsta
 include("math/conics.jl")       # stmp03, prop2b, conics, oscelt, oscltx
 include("frame_info.jl")    # frinfo, cidfrm, cnmfrm, ccifrm, tkfram, tipbod, tisbod, pckfrm, pckcov, bodfnd, bodvcd
 include("lst.jl")           # et2lst, lspcn
+include("gf/solver.jl")      # geometry finder: zzgfsolv, zzgfrelx, gfrefn, uddc, uddf
+include("gf/quantities.jl")  # distance, separation, range rate, phase angle, coordinates
+include("gf/longitude.jl")   # zzgfcslv, zzgflong: longitude and right-ascension searches
+include("gf/api.jl")         # gfdist, gfsep, gfposc, gfrr, gfpa, gfuds, gfudb, gfevnt, gfstol
+include("gf/stubs.jl")       # gfsubc, gfsntc, gfilum, gfoclt, gftfov, gfrfov (not yet available)
 include("precompile.jl")    # precompile directives for the common signatures
 
 end # module

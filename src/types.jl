@@ -301,7 +301,9 @@ snapshot; `furnsh`, `unload` and `kclear` build a new snapshot under `lock` and 
 the reference atomically. Readers never take the lock. `timedefs` holds the defaults
 of `timdef` in the same way: `timdef` replaces the snapshot under `lock`. `watch` is the
 watcher state of `swpool` and `cvpool` (`pool_write.jl`). `dsktols` holds the DSK
-tolerances of `dskgtl`/`dskstl` in the same way as `timedefs`.
+tolerances of `dskgtl`/`dskstl` in the same way as `timedefs`. `gftol` is the default
+convergence tolerance of the geometry finder in seconds (`gfstol`, `gf/api.jl`); a search
+reads it once at its start.
 """
 mutable struct SpiceContext
     @atomic ks::KernelSet
@@ -309,8 +311,9 @@ mutable struct SpiceContext
     @atomic timedefs::TimeDefaults
     const watch::PoolWatch
     @atomic dsktols::DSKTolerances
+    @atomic gftol::Float64
     SpiceContext(ks::KernelSet, lock::ReentrantLock) =
-        new(ks, lock, TimeDefaults(), PoolWatch(), DSKTolerances())
+        new(ks, lock, TimeDefaults(), PoolWatch(), DSKTolerances(), 1.0e-6)
 end
 
 "Error type of the package. `kind` is a short symbol such as `:nocoverage`."
