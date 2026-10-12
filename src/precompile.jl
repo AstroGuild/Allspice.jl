@@ -51,3 +51,38 @@ let
         precompile(frmnam, (head..., I))
     end
 end
+
+# Geometry calls and geometry finder searches with names as strings, for a context and
+# for a kernel set. A signature that does not exist gives `false` and no error.
+let
+    S, F, V, W = String, Float64, Vector{Float64}, Window
+    for head in ((SpiceContext,), (KernelSet,))
+        precompile(subpnt, (head..., S, S, F, S, S, S))
+        precompile(subslr, (head..., S, S, F, S, S, S))
+        precompile(sincpt, (head..., S, S, F, S, S, S, S, V))
+        precompile(ilumin, (head..., S, S, F, S, S, S, V))
+        precompile(illumg, (head..., S, S, S, F, S, S, S, V))
+        precompile(illumf, (head..., S, S, S, F, S, S, S, V))
+        precompile(phaseq, (head..., F, S, S, S, S))
+        precompile(occult, (head..., S, S, S, S, S, S, S, S, F))
+        precompile(limbpt, (head..., S, S, F, S, S, S, S, V, F, Int, F, F, Int))
+        precompile(termpt, (head..., S, S, S, F, S, S, S, S, V, F, Int, F, F, Int))
+        precompile(tangpt, (head..., S, S, F, S, S, S, S, S, V))
+        precompile(fovtrg, (head..., S, S, S, S, S, S, F))
+        precompile(fovray, (head..., S, V, S, S, S, F))
+        precompile(getfov, (head..., Int))
+        precompile(spkcpo, (head..., S, F, S, S, S, V, S, S))
+        precompile(spkcpt, (head..., V, S, S, F, S, S, S, S))
+        precompile(gfdist, (head..., S, S, S, S, F, F, F, W))
+        precompile(gfrr, (head..., S, S, S, S, F, F, F, W))
+        precompile(gfsep, (head..., S, S, S, S, S, S, S, S, S, F, F, F, W))
+        precompile(gfpa, (head..., S, S, S, S, S, F, F, F, W))
+        precompile(gfposc, (head..., S, S, S, S, S, S, S, F, F, F, W))
+        precompile(gfsubc, (head..., S, S, S, S, S, S, S, S, F, F, F, W))
+        precompile(gfsntc, (head..., S, S, S, S, S, S, V, S, S, S, F, F, F, W))
+        precompile(gfilum, (head..., S, S, S, S, S, S, S, V, S, F, F, F, W))
+        precompile(gfoclt, (head..., S, S, S, S, S, S, S, S, S, F, W))
+        precompile(gftfov, (head..., S, S, S, S, S, S, F, W))
+        precompile(gfrfov, (head..., S, V, S, S, S, F, W))
+    end
+end
