@@ -6,7 +6,22 @@ The port adds two capabilities that CSPICE does not have. The first is analytica
 
 ## Status
 
-The package is a prototype. It loads SPK kernels of types 2 and 3, binary PCK kernels of type 2 and text kernels (leap seconds, PCK, frame kernels and meta-kernels), and it answers `spkezr`, `spkpos`, `spkgeo`, `pxform` and `sxform` in inertial, body-fixed and fixed-offset frames, with the aberration corrections of CSPICE (`LT`, `LT+S`, `CN`, `CN+S` and the transmission forms). The calls `spkder` and `pxder` return time derivatives of any order. The test suite compares every result with CSPICE through SPICE.jl, and `CONTRACT.md` records the internal interfaces.
+The package is a prototype that covers the part of the toolkit which most trajectory work needs, and the table gives the state of each area. The test suite compares every result with CSPICE through SPICE.jl, on kernels from NAIF and on kernels that the tests write with the CSPICE writers; `CONTRACT.md` records the internal interfaces.
+
+| Area | Available | Not yet available |
+|---|---|---|
+| Kernel loading | SPK, CK, binary PCK, text kernels (leap seconds, PCK, frames, spacecraft clock), meta-kernels | DSK, EK, DAS files |
+| SPK data types | 1, 2, 3, 5, 8, 9, 12, 13, 14, 15, 17, 18, 19, 20, 21 | 10 (two-line elements) |
+| States | `spkezr`, `spkpos`, `spkgeo`, `spkssb`, `spkltc`, `spkaps`, `spkacs`, `spkapo`, with all aberration corrections of CSPICE | constant-position and constant-velocity observers (`spkcpo` and related calls) |
+| Frames | inertial, body-fixed (text and binary PCK), fixed-offset, CK-based; `pxform`, `sxform` | dynamic frames, switch frames |
+| Derivatives | `spkder` and `pxder` to any order; a `ForwardDiff.Dual` epoch in the public calls | |
+| Orientation and clocks | CK types 1 to 6, `ckgp`, `ckgpav`, `ckcov`, `ckobj`; spacecraft clock type 1 | |
+| Time | `str2et`, `utc2et`, `timout`, `et2utc`, `etcal`, `unitim`, `tparse`, `tpictr`, `timdef`, `deltet` | `et2lst`, `tsetyr` |
+| File access and writers | DAF read and write calls, SPK writers for 14 types, CK writers for 5 types, comment area, windows, `spkobj`, `spkcov`, `kinfo`, `kdata` | type 14 SPK writer |
+| Kernel pool | `gdpool`, `gcpool`, `gipool`, `bodvrd`, body and frame name calls | pool watchers, `pdpool` and the other calls that change the pool |
+| Geometry | | sub-points, illumination, occultation, the geometry finder, ellipsoid and plane calls |
+
+Three properties differ from CSPICE by design. All loaded data belong to a `SpiceContext`, whose readers take no lock, so that queries from many threads are safe while another thread loads or unloads kernels. A file that is open for access is an object that the caller owns (`h = dafopr(path)`), and the calls that use a hidden current file in CSPICE take that object as their first argument. An answer never depends on earlier calls, because the package keeps no buffers or saved search state between queries.
 
 ## Relation to NAIF
 
