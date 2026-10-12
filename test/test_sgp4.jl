@@ -41,6 +41,14 @@
 # body-fixed frame the velocity of a geosynchronous object is near zero, so a velocity
 # difference is divided by the inertial speed and not by the body-fixed speed.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
+
 import ForwardDiff
 
 const SGP4_RTOL = 1e-12
@@ -334,7 +342,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
     iau_earth = Int(namfrm(ctx0, "IAU_EARTH"))
 
     geophs = Float64[bodvrd(ctx0, 399, name)[1] for name in SGP4_GEOPHS_NAMES]
-    @testset "geophysical constants from a kernel" begin
+    @apart @testset "geophysical constants from a kernel" begin
         @test geophs == Float64[SPICE.bodvrd("EARTH", name)[1] for name in SGP4_GEOPHS_NAMES]
         # The text kernel reader of both engines gives J3 one unit in the last place
         # away from the Julia literal.
@@ -347,7 +355,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
     # Element sets of both engines.
     parsed = Dict{Int,Tuple{Float64,Vector{Float64}}}()
 
-    @testset "getelm against CSPICE" begin
+    @apart @testset "getelm against CSPICE" begin
         for t in SGP4_TLES
             pair = [t[2], t[3]]
             ep, el = getelm(ctx0, 1957, pair)
@@ -378,7 +386,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         @test SPICE.getelm(1957, wrong) == SPICE.getelm(1957, pair)
     end
 
-    @testset "getelm errors" begin
+    @apart @testset "getelm errors" begin
         l1, l2 = SGP4_TLES[1][2], SGP4_TLES[1][3]
         put(line, range, text) = line[1:first(range)-1] * text * line[last(range)+1:end]
         bad = [
@@ -418,7 +426,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
     errors_ev = Dict(c => 0 for c in SGP4_CLASSES)
     errors_seg = Dict(c => 0 for c in SGP4_CLASSES)
 
-    @testset "evsgp4 against CSPICE" begin
+    @apart @testset "evsgp4 against CSPICE" begin
         kinds = Set{Symbol}()
         for t in SGP4_TLES
             id, class = sgp4_id(t), t[1]
@@ -469,7 +477,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         @test sgp4_c_evsgp4(ep + 600.0, other, el) == sgp4_c_evsgp4(ep + 600.0, geophs, el)
     end
 
-    @testset "operation mode 2 (improved sidereal time) against CSPICE" begin
+    @apart @testset "operation mode 2 (improved sidereal time) against CSPICE" begin
         l = NeoSpice._lsk(NeoSpice.kernelset(ctx0))
         worst = 0.0
         for t in SGP4_TLES
@@ -519,7 +527,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
     ctx = neo_context(vcat(base, pc))
     ctxn = neo_context(vcat(base, pn))
 
-    @testset "type 10 segments against CSPICE" begin
+    @apart @testset "type 10 segments against CSPICE" begin
         for t in SGP4_TLES
             id, class, body = sgp4_id(t), t[1], sgp4_body(t)
             s = segs[id]
@@ -567,7 +575,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         @test throws_kind(() -> spkgeo(ctx, body, segs[5].t1 + 10.0, 1, 399), :nocoverage)
     end
 
-    @testset "accuracy table" begin
+    @apart @testset "accuracy table" begin
         measured("  Largest relative difference from CSPICE of each orbit class " *
             "(samples; of them errors that both engines gave)")
         measured(@sprintf("  %-18s %-22s %-10s %-22s %-10s %-10s", "class", "evsgp4 samples",
@@ -580,7 +588,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         end
     end
 
-    @testset "spkw10 against CSPICE, word for word" begin
+    @apart @testset "spkw10 against CSPICE, word for word" begin
         # Three sets per segment, 29 segments. The words that can differ are the four
         # nutation numbers of a packet, which CSPICE computes with the sine and cosine
         # of the C library; the evaluator of CSPICE N0067 does not read them.
@@ -627,7 +635,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         end
     end
 
-    @testset "segment in the old layout" begin
+    @apart @testset "segment in the old layout" begin
         # Packets of the ten elements only, no epoch before a packet, 15 meta items
         # that are followed by their count: the files that are older than the
         # nutation numbers in the packets.
@@ -658,7 +666,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         @test w <= SGP4_RTOL
     end
 
-    @testset "spkder: higher orders against ForwardDiff and differences" begin
+    @apart @testset "spkder: higher orders against ForwardDiff and differences" begin
         tv = NeoSpice.taylor_var
         for id in (5, 28057, 8195, 28129, 24208, 23177, 4632)
             body = -100000 - id
@@ -724,7 +732,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         end
     end
 
-    @testset "zero allocation and inferred types" begin
+    @apart @testset "zero allocation and inferred types" begin
         for id in (5, 8195, 24208, 23177)
             body = -100000 - id
             s = segs[id]
@@ -750,7 +758,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         @test (@inferred spkder(ctx, body, et, iau_earth, 399, Val(2))) isa NTuple{3,SVector{3,Float64}}
     end
 
-    @testset "errors" begin
+    @apart @testset "errors" begin
         ks = NeoSpice.kernelset(ctx)
         l = NeoSpice._lsk(ks)
         body = Int32(-100005)
@@ -833,7 +841,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         dafcls(hr)
     end
 
-    @testset "time of a query (reported, not asserted)" begin
+    @apart @testset "time of a query (reported, not asserted)" begin
         measured("  Mean time of one query in microseconds")
         measured(@sprintf("  %-34s %-10s %-10s %-14s %-10s %-10s", "case", "spkgeo", "CSPICE",
             "spkder order 3", "evsgp4", "CSPICE"))
@@ -845,7 +853,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
             et = (s.epochs[1] + s.epochs[2]) / 2 + 100.0
             ep, el = parsed[id]
             g8, e10 = SVector{8}(geophs), SVector{10}(el)
-            for n in (200, 20000)         # the first pass compiles
+            for n in (200, nsample(2000, 20000))         # the first pass compiles
                 a = sgp4_time(sgp4_neo_x, n, et, ctx, body)
                 b = sgp4_time(sgp4_c_x, n, et, body)
                 c = sgp4_time(sgp4_neo_x3, n, et, ctx, body)
@@ -860,3 +868,5 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
 
     SPICE.kclear()
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

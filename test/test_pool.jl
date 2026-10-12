@@ -5,6 +5,14 @@
 # `nothing`, or throws for `bodvrd`); `bodn2c`, `bods2c` and `bodc2n` return `nothing`;
 # `namfrm` returns 0 and `frmnam` returns "", as CSPICE does.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
+
 "Pool variable names of CSPICE that match `template`."
 function oracle_names(template::AbstractString)
     out = String[]
@@ -52,7 +60,7 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
     oracle_load(set)
     ctx = neo_context(set)
 
-    @testset "every pool variable of CSPICE" begin
+    @apart @testset "every pool variable of CSPICE" begin
         names = oracle_names("*")
         println("  ", length(names), " pool variables in CSPICE")
         @test length(names) > 500
@@ -77,7 +85,7 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
         @test nnum > 0 && nchr > 0
     end
 
-    @testset "gdpool, gcpool, gipool samples" begin
+    @apart @testset "gdpool, gcpool, gipool samples" begin
         @test gdpool(ctx, "BODY399_RADII") == [6378.1366, 6378.1366, 6356.7519]
         @test gdpool(ctx, "BODY399_RADII") isa Vector{Float64}
         for name in ("BODY301_PM", "BODY499_POLE_RA", "BODY5_NUT_PREC_ANGLES",
@@ -105,7 +113,7 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
         @test throws_kind(() -> gdpool(ctx, "TKFRAME_31009_SPEC"), :badtype)
     end
 
-    @testset "bodvrd" begin
+    @apart @testset "bodvrd" begin
         for body in ("EARTH", "MOON", "SUN", "MARS", "JUPITER", "399", "earth")
             @test bodvrd(ctx, body, "RADII") == SPICE.bodvrd(body, "RADII")
         end
@@ -128,7 +136,7 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
         @test throws_kind(() -> bodvrd(ctx, "NO_SUCH_BODY", "RADII"), :unknownbody)
     end
 
-    @testset "bodn2c, bods2c, bodc2n" begin
+    @apart @testset "bodn2c, bods2c, bodc2n" begin
         names = ["EARTH", "earth", "  Earth  ", "MOON", "SUN", "SSB", "SOLAR SYSTEM BARYCENTER",
             "EMB", "EARTH BARYCENTER", "Earth-Moon   Barycenter", "MARS", "PHOBOS", "IO",
             "JUPITER BARYCENTER", "PLUTO", "CHARON", "CERES", "CASSINI", "VOYAGER 1", "MRO",
@@ -150,7 +158,7 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
         end
     end
 
-    @testset "namfrm, frmnam" begin
+    @apart @testset "namfrm, frmnam" begin
         names = ["J2000", "j2000", "ECLIPJ2000", "B1950", "FK4", "GALACTIC", "MARSIAU",
             "ECLIPB1950", "DE-118", "IAU_EARTH", "IAU_MOON", "IAU_MARS", "IAU_JUPITER",
             "IAU_SUN", "IAU_PHOBOS", "ITRF93", "EARTH_FIXED", "MOON_PA", "MOON_ME",
@@ -165,7 +173,7 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
         end
     end
 
-    @testset "utc2et, et2utc, deltet" begin
+    @apart @testset "utc2et, et2utc, deltet" begin
         # Random calendar dates from 1972 to 2035 with millisecond resolution.
         worst = 0.0; same_str2et = true
         for _ in 1:300
@@ -250,8 +258,10 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
         @test wd <= 1e-9
     end
 
-    @testset "no leap-second kernel" begin
+    @apart @testset "no leap-second kernel" begin
         empty = SpiceContext()
         @test_throws NeoSpice.SpiceError utc2et(empty, "2000-01-01T12:00:00")
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

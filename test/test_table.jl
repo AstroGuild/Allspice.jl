@@ -9,6 +9,14 @@
 #   interpolation: the position agrees within `maxerr` of the table plus the
 #     difference between NeoSpice and CSPICE.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
+
 import ForwardDiff
 import Adapt
 
@@ -26,7 +34,7 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
     t0, t1 = 7.0e8 + 1234.5, 7.0e8 + 200 * 86400.0
     rel(a, b) = norm(a - b) / norm(b)
 
-    @testset "native grid" begin
+    @apart @testset "native grid" begin
         # The Sun has records of 16 days in de440s.bsp; the Earth and the Moon, 4 days.
         for (targ, obs, ref, days) in [(301, 399, "J2000", 4), (399, 10, "ECLIPJ2000", 4),
                 (4, 399, "J2000", 4), (10, 0, "J2000", 16), (399, 301, "ECLIPJ2000", 4)]
@@ -52,7 +60,7 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
         @test a.coef == ephemeris_table(ctx, 301, t0, t1, "J2000", Aberration("NONE"), 399).coef
     end
 
-    @testset "interpolation" begin
+    @apart @testset "interpolation" begin
         tab = ephemeris_table(ctx, 399, t0, t1, "MOON_PA", "NONE", 301; tol=1e-6)
         @test table_span(tab) == (t0, t0 + tab.nint * tab.dt) && table_span(tab)[2] ≈ t1
         @test tab.maxerr <= 1e-6 && tab.ncoef == 16
@@ -74,7 +82,7 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
         @test tab2.ncoef == 8 && tab2.maxerr <= 1e-3
     end
 
-    @testset "errors" begin
+    @apart @testset "errors" begin
         @test throws_kind(() -> ephemeris_table(ctx, 301, t0, t1, "J2000", "LT+S", 399; tol=1e-9, maxintervals=64), :noconvergence)
         @test throws_kind(() -> ephemeris_table(ctx, 301, t1, t0, "J2000", "NONE", 399), :badarg)
         @test throws_kind(() -> ephemeris_table(ctx, 301, t0, t0, "J2000", "NONE", 399), :badarg)
@@ -98,7 +106,7 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
         @test occursin("EphemerisTable{Float64}", sprint(show, tab))
     end
 
-    @testset "derivatives, allocation, types" begin
+    @apart @testset "derivatives, allocation, types" begin
         tab = ephemeris_table(ctx, 301, t0, t1, "J2000", "NONE", 399)
         et = t0 + 4.56e6
         jet = table_jet(tab, et, Val(3))
@@ -125,3 +133,5 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
         @test isbits(small) && table_position(small, 1.5) == SVector(2.0, 5.0, 8.0)
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

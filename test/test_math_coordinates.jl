@@ -8,6 +8,14 @@
 # branch cut of the longitude (negative x axis), and for the geodetic calls points on,
 # inside and far outside the spheroid, oblate and prolate.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
+
 import ForwardDiff
 isdefined(@__MODULE__, :CS) || include("mathoracle.jl")
 
@@ -28,7 +36,7 @@ group("14. math: coordinates", Kernels.PCK11) do
     rang() = rand(rng) < 0.15 ? rand(rng, (0.0, pi, -pi, pi / 2, -pi / 2, 2pi)) : 4pi * rand(rng) - 2pi
     rrad() = rand(rng) < 0.05 ? 0.0 : rmag(rng)
 
-    @testset "rectangular to and from the angular systems" begin
+    @apart @testset "rectangular to and from the angular systems" begin
         for _ in 1:n
             p = rpt()
             r, a1, a2, z = rrad(), rang(), rang(), rmag(rng) * randn(rng)
@@ -71,7 +79,7 @@ group("14. math: coordinates", Kernels.PCK11) do
         @test reccyl([0.0, -1.0, 4.0])[2] ≈ 3pi / 2
     end
 
-    @testset "geodetic and planetographic" begin
+    @apart @testset "geodetic and planetographic" begin
         shapes = ((6378.1366, 1 / 298.25642), (3396.19, 0.00589), (1.0, 0.0), (10.0, 0.9), (2.0, -1.5),
             (1e-3, 0.3), (1e8, 0.5))
         bodies = ("EARTH", "MARS", "MOON", "SUN", "JUPITER", "VENUS", "399", "PHOBOS", "NOSUCHBODY", "MERCURY")
@@ -127,7 +135,7 @@ group("14. math: coordinates", Kernels.PCK11) do
         SPICE.unload(tk)
     end
 
-    @testset "Jacobians" begin
+    @apart @testset "Jacobians" begin
         for _ in 1:n
             p = rpt()
             r, a1, a2 = rrad(), rang(), rang()
@@ -170,7 +178,7 @@ group("14. math: coordinates", Kernels.PCK11) do
         @test NeoSpice.derivatives(cylrec(2.0, 0.3 + tt, 0.4)[1])[2] ≈ -2.0 * sin(0.3)
     end
 
-    @testset "state between coordinate systems" begin
+    @apart @testset "state between coordinate systems" begin
         systems = ("RECTANGULAR", "CYLINDRICAL", "LATITUDINAL", "SPHERICAL", "GEODETIC", "PLANETOGRAPHIC")
         bodies = ("EARTH", "MARS", "MOON", "NOSUCHBODY", "JUPITER")
         for _ in 1:2n
@@ -209,7 +217,7 @@ group("14. math: coordinates", Kernels.PCK11) do
         @test xfmsta(ctx, [0.0, 0, 2, 0, 0, 3], "RECTANGULAR", "LATITUDINAL", "EARTH") == [2.0, 0.0, pi / 2, 3.0, 0.0, 0.0]
     end
 
-    @testset "unit conversion" begin
+    @apart @testset "unit conversion" begin
         units = ("RADIANS", "DEGREES", "ARCMINUTES", "ARCSECONDS", "HOURANGLE", "MINUTEANGLE", "SECONDANGLE",
             "METERS", "KM", "CM", "MM", "LIGHTSECS", "AU", "M", "KILOMETERS", "CENTIMETERS", "MILLIMETERS",
             "FEET", "INCHES", "STATUTE_MILES", "NAUTICAL_MILES", "YARDS", "LIGHTYEARS", "PARSECS", "SECONDS",
@@ -225,7 +233,7 @@ group("14. math: coordinates", Kernels.PCK11) do
         @test ForwardDiff.derivative(x -> convrt(x, "HOURS", "SECONDS"), 2.0) == 3600.0
     end
 
-    @testset "differences against CSPICE" begin
+    @apart @testset "differences against CSPICE" begin
         # The trigonometric functions of Julia and of the C library differ by one unit
         # of rounding for some arguments. A geodetic result has the conditioning of the
         # near point: the altitude of a point 1e5 radii away has the rounding error of
@@ -237,7 +245,7 @@ group("14. math: coordinates", Kernels.PCK11) do
             :dlatdr => 1e-14, :dsphdr => 1e-14, :dcyldr => 1e-14, :xfmsta => 1e-11, :convrt => 0.0))
     end
 
-    @testset "inferred types and no allocation for static arguments" begin
+    @apart @testset "inferred types and no allocation for static arguments" begin
         p = SVector(3100.0, -4200.0, 2500.0)
         re, f = 6378.1366, 1 / 298.25642
         T3, V3, M3 = NTuple{3,Float64}, SVector{3,Float64}, SMatrix{3,3,Float64,9}
@@ -265,3 +273,5 @@ group("14. math: coordinates", Kernels.PCK11) do
     end
     SPICE.kclear()
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

@@ -18,6 +18,14 @@
 # wraps with a wrong count (`spkw02_c`, `spkw03_c`, `ckw02_c`, `ckw03_c`) are called on
 # `SPICE.libcspice` directly, as SPICE.jl does. CSPICE is called from the main task only.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
+
 using Random: randstring
 
 const LIBCSPICE = SPICE.libcspice
@@ -258,6 +266,24 @@ end
 # ---------------------------------------------------------------------------------------
 
 """
+    SegArgs(nt)
+
+Arguments of one segment for a writer: the named tuple `nt` behind a field without a
+concrete type. Each writer has its own tuple type; with this wrapper the helpers that
+take the arguments of any writer (`write_both`, `c_read_spk`, the `bad_*` lists) are
+compiled once and not once for each writer. Fields are read as `a.name`, and
+`merge(a, (name=value,))` gives the arguments with a field replaced.
+"""
+struct SegArgs
+    nt::NamedTuple
+end
+Base.getproperty(a::SegArgs, s::Symbol) = getproperty(getfield(a, :nt), s)
+Base.hasproperty(a::SegArgs, s::Symbol) = hasproperty(getfield(a, :nt), s)
+Base.propertynames(a::SegArgs) = propertynames(getfield(a, :nt))
+Base.values(a::SegArgs) = values(getfield(a, :nt))
+Base.merge(a::SegArgs, b::NamedTuple) = SegArgs(merge(getfield(a, :nt), b))
+
+"""
 One writer under test. `gen(rng, k)` gives valid arguments for segment number `k` of a
 file as a named tuple; `neo` and `cspice` write them; `bad(a)` lists invalid variants
 of the arguments `a` as `(label, arguments, kind, both)`, where `both` says that CSPICE
@@ -270,6 +296,9 @@ struct WriterCase
     neo::Function
     cspice::Function
     bad::Function
+    # `gen` gives a named tuple; the case hands it out as `SegArgs`.
+    WriterCase(name, kind, gen, neo, cspice, bad) =
+        new(name, kind, (rng, k) -> SegArgs(gen(rng, k)), neo, cspice, bad)
 end
 
 "The frame and identifier checks that all SPK writers share."
@@ -598,7 +627,7 @@ function gen_ckw01(rng, k)
         avvs=rand(rng, Bool) ? 1e-3 .* randn(rng, 3, nrec) : nothing)
 end
 function bad_ck_common(a, tname::Symbol)
-    t = getfield(a, tname)
+    t = getproperty(a, tname)
     dup = copy(t)
     length(dup) >= 3 && (dup[3] = dup[2])
     zq = copy(a.quats)
@@ -1009,7 +1038,7 @@ group("9. DAF access, SPK and CK writers") do
     SPICE.kclear()
     sclk = write_sclk(dir)
 
-    @testset "writers: data area, descriptors, names and read-back against CSPICE" begin
+    @apart @testset "writers: data area, descriptors, names and read-back against CSPICE" begin
         ntrial = 6
         measured(@sprintf("  %-8s %5s %9s %9s %5s %5s %6s %8s", "writer", "segs", "doubles", "bit diff",
             "descr", "names", "bytes", "readback"))
@@ -1059,7 +1088,7 @@ group("9. DAF access, SPK and CK writers") do
         end
     end
 
-    @testset "writers: forms of the table arguments" begin
+    @apart @testset "writers: forms of the table arguments" begin
         c = writer_case("spkw13")
         a = c.gen(rng, 1)
         paths = String[]
@@ -1108,7 +1137,7 @@ group("9. DAF access, SPK and CK writers") do
         @test read(pc) == read(p)
     end
 
-    @testset "writers: every input check" begin
+    @apart @testset "writers: every input check" begin
         for c in WRITER_CASES
             @testset "$(c.name)" begin
                 a = c.gen(rng, 1)
@@ -1157,7 +1186,7 @@ group("9. DAF access, SPK and CK writers") do
         end
     end
 
-    @testset "many segments in one file: past one summary record, and appending" begin
+    @apart @testset "many segments in one file: past one summary record, and appending" begin
         c13 = writer_case("spkw13")
         c03 = writer_case("ckw03")
         for (c, counts) in ((c13, (24, 25, 26, 50, 51, 77)), (c03, (25, 26, 60)))
@@ -1206,7 +1235,7 @@ group("9. DAF access, SPK and CK writers") do
         @test_throws SPICE.SpiceError SPICE.spkopa(ckfile)
     end
 
-    @testset "comments: dafac and dafec in both directions" begin
+    @apart @testset "comments: dafac and dafec in both directions" begin
         c = writer_case("spkw13")
         seg(k) = merge(c.gen(rng, k), (states=rand_states(rng, 30), epochs=collect(0.0:29.0), first=0.0, last=29.0, degree=3))
         nbytes = 0
@@ -1291,7 +1320,7 @@ group("9. DAF access, SPK and CK writers") do
         dafcls(hr)
     end
 
-    @testset "empty files, open and close" begin
+    @apart @testset "empty files, open and close" begin
         for (kind, ext) in ((:spk, ".bsp"), (:ck, ".bc")), ncomch in (0, 1, 1000, 1001, 5000)
             pc = joinpath(dir, "empty_c_$(kind)_$ncomch$ext")
             pn = joinpath(dir, "empty_n_$(kind)_$ncomch$ext")
@@ -1336,7 +1365,7 @@ group("9. DAF access, SPK and CK writers") do
         @test !ispath(joinpath(dir, "p.daf"))
     end
 
-    @testset "low-level DAF access" begin
+    @apart @testset "low-level DAF access" begin
         c = writer_case("spkw09")
         segs = [c.gen(rng, k) for k in 1:31]
         comments = rand_comments(rng, 12)
@@ -1499,7 +1528,7 @@ group("9. DAF access, SPK and CK writers") do
         @test_throws SPICE.SpiceError SPICE.dafopr(pd)
     end
 
-    @testset "getfat, spkobj, spkcov, tkvrsn" begin
+    @apart @testset "getfat, spkobj, spkcov, tkvrsn" begin
         c = writer_case("spkw13")
         segs = [merge(c.gen(rng, k), (body=rand(rng, (-41, -42, -43, 501, 2000001)),)) for k in 1:70]
         pc, pn = write_both(c, dir, "coverage", segs)
@@ -1561,7 +1590,7 @@ group("9. DAF access, SPK and CK writers") do
         @test tkvrsn("SPKW13") == "No version found."
     end
 
-    @testset "furnsh of a written file; kinfo, kdata, ktotal" begin
+    @apart @testset "furnsh of a written file; kinfo, kdata, ktotal" begin
         c2 = writer_case("spkw02")
         c3 = writer_case("spkw03")
         seg2 = merge(gen_w0203(rng, 1, 3), (body=-501, center=399))
@@ -1651,7 +1680,7 @@ group("9. DAF access, SPK and CK writers") do
         SPICE.kclear()
     end
 
-    @testset "handles on different tasks" begin
+    @apart @testset "handles on different tasks" begin
         c = writer_case("spkw13")
         jobs = [(seed=SEED + 900 + i, nseg=rand(rng, (3, 26, 40))) for i in 1:16]
         function job(tag, j)
@@ -1683,3 +1712,5 @@ group("9. DAF access, SPK and CK writers") do
         @test files_agree(r)
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

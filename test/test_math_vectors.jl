@@ -8,6 +8,14 @@
 # 0 where NeoSpice has the operation order of the `_c` function, and a few units of
 # rounding where CSPICE runs the f2c routine with another order.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
+
 import ForwardDiff
 isdefined(@__MODULE__, :CS) || include("mathoracle.jl")
 
@@ -19,7 +27,7 @@ group("12. math: vectors and matrices") do
     rm3() = rand(rng) < 0.2 ? Matrix(rrot(rng)) : rmag(rng) * randn(rng, 3, 3)
     rax() = rand(rng, -4:7)
 
-    @testset "three-dimensional vectors" begin
+    @apart @testset "three-dimensional vectors" begin
         for _ in 1:n
             a, b = rpair(rng)
             c = rvec(rng)
@@ -70,7 +78,7 @@ group("12. math: vectors and matrices") do
         @test vadd([1, 2, 3], [1, 1, 1]) === SVector(2.0, 3.0, 4.0)
     end
 
-    @testset "three-dimensional matrices" begin
+    @apart @testset "three-dimensional matrices" begin
         for _ in 1:n
             m1, m2 = rm3(), rm3()
             a = rvec(rng)
@@ -119,7 +127,7 @@ group("12. math: vectors and matrices") do
         @test rotate(0.0, 3) == ident() && rotate(0.3, 4) == rotate(0.3, 1)
     end
 
-    @testset "derivatives of vector functions of a state" begin
+    @apart @testset "derivatives of vector functions of a state" begin
         for _ in 1:n
             s1, s2 = rstate(rng), rstate(rng)
             if rand(rng) < 0.1          # parallel positions
@@ -139,7 +147,7 @@ group("12. math: vectors and matrices") do
         @test dvsep([1.0, 0, 0, 0, 1, 0], [2.0, 0, 0, 0, 0, 1]) == 0.0
     end
 
-    @testset "general-dimension forms" begin
+    @apart @testset "general-dimension forms" begin
         vsepg_nan = 0
         vsepg_abs = 0.0
         for _ in 1:n
@@ -205,7 +213,7 @@ group("12. math: vectors and matrices") do
         @test mxmg(SMatrix{2,2}(1.0, 2, 3, 4), SMatrix{2,2}(1.0, 2, 3, 4)) isa SMatrix{2,2,Float64}
     end
 
-    @testset "differences against CSPICE" begin
+    @apart @testset "differences against CSPICE" begin
         # 0 where the arithmetic is the one of the `_c` function; a few units of rounding
         # where a library function (sine, arcsine) or the f2c operation order enters.
         e = 4 * eps()
@@ -213,7 +221,7 @@ group("12. math: vectors and matrices") do
             :rotvec => e, :twovxf => 1e-13, :ducrss => 1e-13, :dvsep => 1e-12, :vsepg => e))
     end
 
-    @testset "number types: ForwardDiff and Taylor" begin
+    @apart @testset "number types: ForwardDiff and Taylor" begin
         a = SVector(1.2, -0.7, 2.1)
         b = SVector(0.3, 1.9, -0.4)
         # gradient of the norm is the unit vector; of the separation, by differences
@@ -251,7 +259,7 @@ group("12. math: vectors and matrices") do
         @test NeoSpice.derivatives(vcrss(r, b)[1])[1] == vcrss(a, b)[1]
     end
 
-    @testset "inferred types and no allocation for static arguments" begin
+    @apart @testset "inferred types and no allocation for static arguments" begin
         a = SVector(1.2, -0.7, 2.1)
         b = SVector(0.3, 1.9, -0.4)
         m = rrot(rng)
@@ -292,3 +300,5 @@ group("12. math: vectors and matrices") do
         @test alloc_of(vnormg, va) == 0 && alloc_of(vzerog, va) == 0
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

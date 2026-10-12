@@ -8,6 +8,14 @@
 # at the center. The planes and the ellipses include the degenerate ones: a plane
 # through the origin, an ellipse that is a segment or a point, a ray parallel to a plane.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
+
 import ForwardDiff
 isdefined(@__MODULE__, :CS) || include("mathoracle.jl")
 
@@ -69,7 +77,7 @@ group("15. math: ellipsoids, planes and ellipses", Kernels.FULL_SET_FILES...) do
         return cgv2el(c, v1, v2)
     end
 
-    @testset "surface normal, ray intercept, nearest point" begin
+    @apart @testset "surface normal, ray intercept, nearest point" begin
         for _ in 1:2n
             a, b, c = raxes()
             p = rpoint(a, b, c)
@@ -118,7 +126,7 @@ group("15. math: ellipsoids, planes and ellipses", Kernels.FULL_SET_FILES...) do
         @test throws_kind(() -> surfpv([3.0, 0, 0, 0, 0, 0], [-1.0, 0, 0, 0, 0, 0], 3.0, 2.0, 1.0), :invalidvertex)
     end
 
-    @testset "derivatives" begin
+    @apart @testset "derivatives" begin
         a, b, c = 6378.0, 6300.0, 6356.0
         for _ in 1:40
             p = (0.2 + 3 * rand(rng)) * 6378.0 * normalize(r3())
@@ -157,7 +165,7 @@ group("15. math: ellipsoids, planes and ellipses", Kernels.FULL_SET_FILES...) do
         end
     end
 
-    @testset "planes" begin
+    @apart @testset "planes" begin
         for _ in 1:n
             nrm, pnt = rvec(rng), rvec(rng; special=0.2)
             k = rand(rng) < 0.1 ? 0.0 : rmag(rng) * randn(rng)
@@ -197,7 +205,7 @@ group("15. math: ellipsoids, planes and ellipses", Kernels.FULL_SET_FILES...) do
         @test nplnpt([0.0, 0, 0], [1.0, 0, 0], [5.0, 3.0, 4.0]) == ([5.0, 0.0, 0.0], 5.0)
     end
 
-    @testset "ellipses" begin
+    @apart @testset "ellipses" begin
         for _ in 1:n
             ctr = rvec(rng)
             v1, v2 = rpair(rng)
@@ -261,7 +269,7 @@ group("15. math: ellipsoids, planes and ellipses", Kernels.FULL_SET_FILES...) do
         @test throws_kind(() -> edlimb(3.0, 0.0, 1.0, [9.0, 0, 0]), :degeneratecase)
     end
 
-    @testset "terminator" begin
+    @apart @testset "terminator" begin
         oracle_load(Kernels.FULL_SET_FILES)
         ctx = neo_context(Kernels.FULL_SET_FILES)
         cases = (("EARTH", "IAU_EARTH"), ("MOON", "IAU_MOON"), ("MOON", "MOON_PA_DE440"), ("399", "ITRF93"),
@@ -296,14 +304,14 @@ group("15. math: ellipsoids, planes and ellipses", Kernels.FULL_SET_FILES...) do
         SPICE.kclear()
     end
 
-    @testset "differences against CSPICE" begin
+    @apart @testset "differences against CSPICE" begin
         # The ports follow the operation order of CSPICE, so most results are equal bit
         # for bit; the others have a sine, a cosine or an arc tangent of the C library.
         report!(t, "ellipsoid"; tol=0.0, tols=Dict(:ednmpt => 4eps(), :surfpv => 4eps(),
             :inelpl => 8eps(), :edterm => 4eps()))
     end
 
-    @testset "inferred types and no allocation for static arguments" begin
+    @apart @testset "inferred types and no allocation for static arguments" begin
         p = SVector(3.0, -4.0, 5.0)
         u = SVector(-3.0, 4.2, -5.1)
         st = SVector(3.0, -4.0, 5.0, 0.1, 0.2, 0.3)
@@ -330,3 +338,5 @@ group("15. math: ellipsoids, planes and ellipses", Kernels.FULL_SET_FILES...) do
         end
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

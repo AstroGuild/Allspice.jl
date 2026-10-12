@@ -3,6 +3,14 @@
 # Feature files: features/unload.feature, features/load_order_precedence.feature,
 # features/coverage_error.feature
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
+
 "Write a meta-kernel that loads `files` (all in one directory `dir`) and return its path."
 function write_metakernel(tmp::AbstractString, dir::AbstractString, files)
     @assert all(f -> dirname(f) == dir, files)
@@ -32,7 +40,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
     query(ctx, et) = spkezr(ctx, 301, et, "J2000", "NONE", 10)
     cquery(et) = SPICE.spkezr("301", et, "J2000", "NONE", "10")
 
-    @testset "furnsh then unload restores the earlier answers" begin
+    @apart @testset "furnsh then unload restores the earlier answers" begin
         ctx = neo_context([Kernels.LSK, Kernels.DE440S])
         @test ktotal(ctx) == 2
         before = [query(ctx, et) for et in epochs]
@@ -64,7 +72,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test [query(ctx, et) for et in epochs] == before
     end
 
-    @testset "kclear" begin
+    @apart @testset "kclear" begin
         ctx = neo_context(Kernels.full_set())
         @test ktotal(ctx) == length(Kernels.full_set())
         kclear(ctx)
@@ -82,7 +90,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test query(ctx, epochs[1])[1] isa SVector{6,Float64}
     end
 
-    @testset "loading order decides precedence" begin
+    @apart @testset "loading order decides precedence" begin
         for order in ([Kernels.DE405, Kernels.DE440S], [Kernels.DE440S, Kernels.DE405])
             oracle_load(order)
             ctx = neo_context(order)
@@ -128,7 +136,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test throws_kind(() -> pxform(b, "J2000", "IAU_MARS", 1e8), :insufficientangles)
     end
 
-    @testset "meta-kernel in a temporary directory" begin
+    @apart @testset "meta-kernel in a temporary directory" begin
         mktempdir() do tmp
             files = [Kernels.LSK, Kernels.PCK11, Kernels.MOON_TF, Kernels.MOON_BPC]
             mk = write_metakernel(tmp, Kernels.DIR, files)
@@ -164,7 +172,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         end
     end
 
-    @testset "errors" begin
+    @apart @testset "errors" begin
         ctx = neo_context(Kernels.full_set())
         lo, hi = -4.734072e9, 4.735368e9
         # Out of coverage, on both sides, in every form of the call.
@@ -208,7 +216,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test !isempty(err.msg)
     end
 
-    @testset "contexts are independent" begin
+    @apart @testset "contexts are independent" begin
         kclear()                                         # default context: nothing loaded
         c440 = neo_context([Kernels.DE440S])
         c405 = neo_context([Kernels.DE405])
@@ -236,3 +244,5 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test default_context() !== c405
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

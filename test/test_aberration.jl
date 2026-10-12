@@ -18,6 +18,14 @@
 # order below (tolerances as in group 3) and against nested `ForwardDiff` of `spkpos`.
 # The difference between order 1 and the CSPICE velocity is measured and printed.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
+
 import ForwardDiff
 
 const AB_CORRECTIONS = ("LT", "LT+S", "CN", "CN+S", "XLT", "XLT+S", "XCN", "XCN+S")
@@ -103,7 +111,7 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
     # aberration needs the observer at ± 1 s: stay one day inside the coverage.
     span = (DE440S_COVERAGE[1] + 86400.0, DE440S_COVERAGE[2] - 86400.0)
 
-    @testset "correction strings" begin
+    @apart @testset "correction strings" begin
         for (s, uselt, conv, stel, xmit) in (("NONE", false, false, false, false),
                 ("LT", true, false, false, false), ("LT+S", true, false, true, false),
                 ("CN", true, true, false, false), ("CN+S", true, true, true, false),
@@ -146,7 +154,7 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
         ("IAU_EARTH", AB_TOL_BODYFIXED), ("IAU_MOON", AB_TOL_BODYFIXED),
         ("MOON_PA_DE440", AB_TOL_BODYFIXED), ("MOON_ME", AB_TOL_BODYFIXED)]
 
-    @testset "states and light time against CSPICE" begin
+    @apart @testset "states and light time against CSPICE" begin
         epochs = random_epochs(rng, 40, span...)
         measured(@sprintf("  %-14s %-6s %-9s %-9s %-9s %-9s %-9s", "frame", "abcorr",
             "ezr pos", "ezr vel", "ezr lt", "pos pos", "pos lt"))
@@ -162,7 +170,7 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
         end
     end
 
-    @testset "forms of the call" begin
+    @apart @testset "forms of the call" begin
         for et in random_epochs(rng, 5, span...), ab in AB_CORRECTIONS, ref in ("J2000", "IAU_EARTH")
             byid = spkezr(ctx, 301, et, ref, ab, 10)
             @test byid[1] isa SVector{6,Float64} && byid[2] isa Float64
@@ -197,7 +205,7 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
         @test norm(app - xmt) > 1e3
     end
 
-    @testset "default context" begin
+    @apart @testset "default context" begin
         kclear()
         foreach(furnsh, set)
         for ab in ("LT+S", "XCN"), ref in ("J2000", "IAU_MOON")
@@ -211,7 +219,7 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
         kclear()
     end
 
-    @testset "low-level calls against CSPICE" begin
+    @apart @testset "low-level calls against CSPICE" begin
         epochs = random_epochs(rng, 15, span...)
         worst = Dict{String,Float64}()
         note(name, x) = (worst[name] = max(get(worst, name, 0.0), x); x)
@@ -299,7 +307,7 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
         (4, 399, "IAU_MOON", AB_FD_INERTIAL)]
     depochs = record_safe_epochs(rng, 6)
 
-    @testset "spkder: order 0 and the CSPICE velocity" begin
+    @apart @testset "spkder: order 0 and the CSPICE velocity" begin
         measured("  spkder order 1 against the velocity of CSPICE spkezr, largest relative difference")
         for ab in AB_CORRECTIONS
             w0 = 0.0
@@ -333,7 +341,7 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
         @test throws_kind(() -> spkder(ctx, 301, 0.0, "J2000", "LT", 399, Val(-1)), :badarg)
     end
 
-    @testset "spkder: finite differences" begin
+    @apart @testset "spkder: finite differences" begin
         for (targ, obs, ref, fd) in cases, ab in AB_CORRECTIONS
             worst = zeros(3)
             wpos = 0.0
@@ -354,7 +362,7 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
         end
     end
 
-    @testset "spkder: nested ForwardDiff of spkpos (dual-number epoch)" begin
+    @apart @testset "spkder: nested ForwardDiff of spkpos (dual-number epoch)" begin
         probe, plt = spkpos(ctx, 301, ForwardDiff.Dual(depochs[1], 1.0), "IAU_EARTH", "CN+S", 399)
         @test eltype(probe) <: ForwardDiff.Dual && plt isa ForwardDiff.Dual
         @test ForwardDiff.value.(probe) == spkpos(ctx, 301, depochs[1], "IAU_EARTH", "CN+S", 399)[1]
@@ -382,7 +390,7 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
         end
     end
 
-    @testset "zero allocation and inferred types" begin
+    @apart @testset "zero allocation and inferred types" begin
         et = 1.2345e8
         refs = (1, 17, Int(namfrm(ctx, "IAU_EARTH")), Int(namfrm(ctx, "MOON_PA_DE440")),
             Int(namfrm(ctx, "MOON_ME")))
@@ -421,3 +429,5 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
         @test (@inferred stelab(st[SOneTo(3)], st[SVector(4, 5, 6)])) isa SVector{3,Float64}
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

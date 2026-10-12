@@ -6,6 +6,14 @@
 #
 # Error measures: seconds for ET, ticks for encoded SCLK; strings must be equal.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
+
 isdefined(@__MODULE__, :CKFix) || include("ckfixtures.jl")
 
 # ET of the clocks is below 4e9 s (one unit in the last place 5e-7 s) at the end of the
@@ -49,7 +57,7 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
     clocks = ((CKFix.SC_TDB, CKFix.TDB_PSTART, CKFix.TDB_PSTOP, CKFix.TDB_COEF),
         (CKFix.SC_TDT, CKFix.TDT_PSTART, CKFix.TDT_PSTOP, CKFix.TDT_COEF))
 
-    @testset "clock data" begin
+    @apart @testset "clock data" begin
         for (sc, pstart, pstop, _) in clocks
             # CSPICE has no C wrapper of `sctype_`; the Fortran-style function is called.
             @test sctype(ctx, sc) == ccall((:sctype_, SPICE.libcspice), Cint, (Ref{Cint},), sc) == 1
@@ -104,7 +112,7 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
         @test strings_ok
     end
 
-    @testset "clock strings as a user writes them" begin
+    @apart @testset "clock strings as a user writes them" begin
         cases = ((CKFix.SC_TDB, ["1/100.5", "100.5", "1/0000000100.005", "2/2000.000",
                 "2/ 2000 . 17", "  1/  77 12", "9999.255", "2/9999:255", "1/100", "100,3",
                 "2/2000-1", "1/.7", "1/7.", "2000.001", "1.5/100.5"]),
@@ -121,7 +129,7 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
         @test scencd(ctx, CKFix.SC_TDT, "1/1:0:0") == 0.0
     end
 
-    @testset "errors" begin
+    @apart @testset "errors" begin
         sc = CKFix.SC_TDB
         mx = sclk_mxtick(CKFix.TDB_PSTART, CKFix.TDB_PSTOP)
         @test throws_kind(() -> sct2e(ctx, sc, -1.0), :valueoutofrange)
@@ -157,7 +165,7 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
         @test sct2e(bare, sc, 1000.0) == sct2e(ctx, sc, 1000.0)
     end
 
-    @testset "derivatives pass through the conversions" begin
+    @apart @testset "derivatives pass through the conversions" begin
         for (sc, _, _, coef) in clocks
             tikmsc = sc == CKFix.SC_TDB ? 256.0 : CKFix.TDT_TIKMSC
             for k in 1:size(coef, 1)-1
@@ -179,7 +187,7 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
         end
     end
 
-    @testset "no allocation, inferred types" begin
+    @apart @testset "no allocation, inferred types" begin
         for (sc, _, _, coef) in clocks
             t = coef[2, 1] * 0.7
             et = sct2e(ks, sc, t)
@@ -199,7 +207,7 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
         end
     end
 
-    @testset "forms on the default context" begin
+    @apart @testset "forms on the default context" begin
         kclear()
         foreach(furnsh, set)
         sc = CKFix.SC_TDT
@@ -217,3 +225,5 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
         kclear()
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again
