@@ -117,8 +117,23 @@ the default context, plus an inner form on a `KernelSet`.
 
 - `spkgeo(targ::Integer, et, ref, obs::Integer) -> (SVector{6}, lt)`
 - `spkezr(targ, et, ref, abcorr, obs) -> (SVector{6}, lt)`; `spkpos -> (SVector{3}, lt)`.
-  Only `abcorr = "NONE"` in the prototype; `lt` is the one-way light time `|r|/c`.
-- `spkder(targ, et, ref, obs, ::Val{N}) -> NTuple{N+1,SVector{3}}`.
+  `abcorr` is a CSPICE correction string or an `Aberration`; `lt` is the one-way light
+  time.
+- `spkder(targ, et, ref, obs, ::Val{N}) -> NTuple{N+1,SVector{3}}` (geometric) and
+  `spkder(targ, et, ref, abcorr, obs, ::Val{N})`.
+
+## `aberration.jl`
+
+- `struct Aberration` (plain bits; properties `uselt`, `converged`, `stellar`,
+  `transmit`, `geometric`); `Aberration(s::AbstractString)` parses as `zzvalcor` and
+  throws `SpiceError(:badarg, ...)`.
+- `abcorr_state(ks, targ::Int32, et, ref::Int32, corr, obs::Int32) -> (SVector{6}, lt)`
+  (`spkez`), `abcorr_position(...) -> (SVector{3}, lt)` (`spkezp`),
+  `abcorr_jet(..., ::Val{N}) -> NTuple{N+1,Vec3}`.
+- Public: `spkssb(targ, et, ref)`, `spkltc(targ, et, ref, abcorr, stobs)`,
+  `spkaps(targ, et, ref, abcorr, stobs, accobs)`, `spkacs(targ, et, ref, abcorr, obs)`,
+  `spkapo(targ, et, ref, sobs, abcorr)`, `ltime(etobs, obs, dir, targ)`,
+  `stelab(pobj, vobs)`, `stlabx(pobj, vobs)`, with the argument order of CSPICE.
 - `pxform(from, to, et) -> SMatrix{3,3}`; `sxform(from, to, et) -> SMatrix{6,6}`;
   `pxder(from, to, et, ::Val{N}) -> NTuple{N+1,SMatrix{3,3}}`.
 - `gdpool(name)`, `gcpool(name)`, `gipool(name)`, `bodvrd(body, item)`, `bodn2c`,

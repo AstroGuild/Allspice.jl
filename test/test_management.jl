@@ -193,8 +193,8 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test throws_kind(() -> pxform(ctx, "J2000", "NO_SUCH_FRAME", 0.0), :unknownframe)
         @test throws_kind(() -> sxform(ctx, "NO_SUCH_FRAME", "J2000", 0.0), :unknownframe)
         @test throws_kind(() -> pxder(ctx, "J2000", "NO_SUCH_FRAME", 0.0, Val(1)), :unknownframe)
-        # Aberration corrections are not in the prototype.
-        @test throws_kind(() -> spkezr(ctx, 301, 0.0, "J2000", "LT+S", 399), :unsupported)
+        # A correction string that is not valid (group 9 has the full list).
+        @test throws_kind(() -> spkezr(ctx, 301, 0.0, "J2000", "RL+S", 399), :badarg)
         @test spkezr(ctx, 301, 0.0, "J2000", " none ", 399) == spkezr(ctx, 301, 0.0, "J2000", "NONE", 399)
         # A frame whose data are not loaded (binary PCK of DE421 is not on disk).
         if isfile(Kernels.MOON_TF_OLD)
