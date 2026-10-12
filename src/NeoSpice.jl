@@ -56,6 +56,8 @@ export stpool, ldpool, swpool, cvpool, poolversion
 export et2lst, lspcn
 export EKColumnAttr, EKSegmentSummary, EKTable
 export ekopr, ekcls, eknseg, ekssum, ekrcec, ekrced, ekrcei
+export EKFastLoad, ekopn, ekopw, ekbseg, ekappr, ekinsr, ekdelr, ekacec, ekaced, ekacei, ekucec, ekuced, ekucei
+export ekifld, ekaclc, ekacld, ekacli, ekffld
 export EKResult, ekntab, ektnam, ekccnt, ekcii, ekpsel, ekfind, eknelt, ekgc, ekgd, ekgi, ekcolumn
 
 include("dyntypes.jl")      # DynFrame, SwitchFrame, PoolWatch (fields of the types below)
@@ -112,6 +114,9 @@ include("ek/columns.jl")    # EK column entries of classes 1 to 9
 include("ek/query_parse.jl")  # EK query language: scan, parse, resolve names and times, check
 include("ek/query_run.jl")  # EK search: key selection, joins, union, ORDER BY
 include("ek/api.jl")        # ekopr, ekssum, ekrcec, ..., ekntab, ekfind, ekgc, ekgd, ekgi
+include("ek/write_tree.jl")     # EK writers: page allocator and tree insert, delete, build
+include("ek/write_columns.jl")  # EK writers: data pages, column classes 1 to 9, indexes
+include("ek/write.jl")          # ekopn, ekbseg, ekappr, ekace*, ekuce*, ekifld, ekacl*, ekffld
 include("precompile.jl")    # precompile directives for the common signatures
 
 end # module
