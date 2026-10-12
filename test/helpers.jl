@@ -15,6 +15,24 @@ using .Kernels: Kernels
 "Seed of every random sample; change it with the environment variable NEOSPICE_TEST_SEED."
 const SEED = parse(Int, get(ENV, "NEOSPICE_TEST_SEED", "20261011"))
 
+"""
+True for the exhaustive run (environment variable NEOSPICE_TEST_FULL=1). The default
+run has a budget of 120 s for all groups together; a group keeps its large samples,
+long search spans and large files for the exhaustive run.
+"""
+const FULL = get(ENV, "NEOSPICE_TEST_FULL", "0") == "1"
+
+"""
+    nsample(fast, full)
+
+Size of a sample: `fast` in the default run, `full` in the exhaustive run
+(`NEOSPICE_TEST_FULL=1`). Requires `0 <= fast <= full`.
+"""
+function nsample(fast::Integer, full::Integer)
+    @assert 0 <= fast <= full
+    return FULL ? Int(full) : Int(fast)
+end
+
 "Names of the groups that were skipped, with the reason, for the summary of `runtests.jl`."
 const SKIPPED = Tuple{String,String}[]
 
