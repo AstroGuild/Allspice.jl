@@ -8,6 +8,13 @@
 #
 #     julia --startup-file=no --threads=8 --project=test test/runtests.jl states threads
 #
+# Run the groups in several processes, which is the fast way to run the whole suite
+# (about 35 s against 160 s on the development machine):
+#
+#     julia --startup-file=no --threads=8 test/parallel.jl
+#
+# NEOSPICE_TEST_FULL=1 selects the exhaustive run (large samples, all derivative orders).
+#
 # Kernel paths are in `test/kernels.jl`; the environment variables NEOSPICE_KERNEL_DIR,
 # NEOSPICE_DE440S and NEOSPICE_DE405 override them. A group whose kernels are missing is
 # skipped with a visible notice. NEOSPICE_TEST_SEED changes the random samples.

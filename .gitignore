@@ -2,3 +2,4 @@
 /test/data/
 /bench/results/
 *.cov
+test/.group_seconds

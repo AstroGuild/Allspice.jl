@@ -172,3 +172,94 @@ function throws_kind(f, kind::Symbol)
     end
     return false
 end
+
+# Tolerances of the state comparison, used by the groups states, identities, rotations,
+# aberration and management.
+
+"Thresholds of one comparison class. `rel_*` are relative to the vector norm."
+struct StateTol
+    rel_q75::Float64
+    rel_q99::Float64
+    max_pos_km::Float64
+    max_vel_kms::Float64
+end
+
+# The absolute bound `max_pos_km` holds for a component whose vector norm is so small
+# that the bound is above the rounding of the norm. One unit in the last place of a
+# coordinate of Neptune or Pluto (4.5e9 to 9e9 km) is 9.5e-7 km, so there the bound is
+# `ULP_ALLOWANCE` units in the last place of the norm instead: the measured maximum of
+# 1.9e-6 km in the first run is two such units, at a relative difference of 1.8e-15.
+const ULP_ALLOWANCE = 4
+
+# Inertial frame that is the frame of the segments. The Chebyshev sums use the
+# operations of CSPICE, and on the development machine every state was equal to the
+# last bit (maximum difference 0 over 109,200 samples); the bound allows one rounding
+# for a CSPICE build with different floating-point contraction.
+const TOL_J2000 = StateTol(3e-16, 1e-15, 1e-6, 1e-12)
+# Constant rotation on top: one matrix product more.
+const TOL_INERTIAL = StateTol(3e-16, 1e-15, 1e-6, 1e-12)
+# Body-fixed frames. The angle W uses the operations of CSPICE as well, so only the
+# matrix products differ in rounding. Measured: relative position 3.3e-16 at most,
+# relative velocity 9.0e-15 at most (q99 3.5e-15), velocity 2.9e-11 km/s at most.
+const TOL_BODYFIXED = StateTol(3e-16, 2e-14, 1e-6, 1e-9)
+
+"Lowest norm used as the divisor of a relative difference (km, km/s)."
+const POS_FLOOR = 1.0
+const VEL_FLOOR = 1e-6
+
+"""
+    compare_states(ctx, pairs, epochs, ref) -> NamedTuple
+
+Query every (target, observer) pair of `pairs` at every epoch of `epochs` in frame
+`ref` with NeoSpice (integer-ID form on `ctx`) and with CSPICE, and return the vectors
+of absolute and relative component differences and of light-time differences.
+Precondition: CSPICE has the same kernels loaded as `ctx`.
+"""
+function compare_states(ctx, pairs, epochs, ref::AbstractString)
+    @assert !isempty(pairs) && !isempty(epochs)
+    abs_pos = Float64[]; abs_vel = Float64[]
+    rel_pos = Float64[]; rel_vel = Float64[]
+    rel_lt = Float64[]
+    excess_pos = Float64[]      # absolute difference above the rounding allowance
+    for (targ, obs) in pairs
+        st, so = string(targ), string(obs)
+        for et in epochs
+            ref_state, ref_lt = SPICE.spkezr(st, et, ref, "NONE", so)
+            state, lt = spkezr(ctx, targ, et, ref, "NONE", obs)
+            nr = max(norm(@view ref_state[1:3]), POS_FLOOR)
+            nv = max(norm(@view ref_state[4:6]), VEL_FLOOR)
+            for i in 1:3
+                d = abs(state[i] - ref_state[i])
+                push!(abs_pos, d); push!(rel_pos, d / nr)
+                push!(excess_pos, max(d - ULP_ALLOWANCE * eps(nr), 0.0))
+                d = abs(state[i+3] - ref_state[i+3])
+                push!(abs_vel, d); push!(rel_vel, d / nv)
+            end
+            push!(rel_lt, abs(lt - ref_lt) / max(ref_lt, POS_FLOOR / 299792.458))
+        end
+    end
+    @assert length(abs_pos) == 3 * length(pairs) * length(epochs)
+    return (; abs_pos, abs_vel, rel_pos, rel_vel, rel_lt, excess_pos)
+end
+
+"Print the measured quantiles of `d` under `label` and assert them against `tol`."
+function assert_states(label::AbstractString, d, tol::StateTol)
+    rp = report_quantiles("$label: position, relative", d.rel_pos)
+    rv = report_quantiles("$label: velocity, relative", d.rel_vel)
+    ap = report_quantiles("$label: position, absolute km", d.abs_pos)
+    av = report_quantiles("$label: velocity, absolute km/s", d.abs_vel)
+    lt = report_quantiles("$label: light time, relative", d.rel_lt)
+    @testset "$label" begin
+        @test rp.q75 <= tol.rel_q75
+        @test rp.q99 <= tol.rel_q99
+        @test maximum(d.excess_pos) <= tol.max_pos_km
+        @test rv.q75 <= tol.rel_q75
+        @test rv.q99 <= tol.rel_q99
+        @test av.max <= tol.max_vel_kms
+        # Light time is |r|/c: the same relative error as the position norm, plus one
+        # rounding of the square root and one of the division.
+        @test lt.q99 <= max(tol.rel_q99, 4eps())
+        @test lt.max <= max(10 * tol.rel_q99, 4eps())
+    end
+    return nothing
+end
