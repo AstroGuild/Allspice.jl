@@ -126,16 +126,3 @@ end
 bodvrd(ctx::SpiceContext, body::NameOrID, item::AbstractString) =
     bodvrd(kernelset(ctx), body, item)
 bodvrd(body::NameOrID, item::AbstractString) = bodvrd(default_context(), body, item)
-
-# Time conversions (`time.jl` defines the forms on a `KernelSet`).
-deltet(ctx::SpiceContext, epoch::Real, eptype::AbstractString) =
-    deltet(kernelset(ctx), epoch, eptype)
-deltet(epoch::Real, eptype::AbstractString) = deltet(default_context(), epoch, eptype)
-utc2et(ctx::SpiceContext, s::AbstractString) = utc2et(kernelset(ctx), s)
-utc2et(s::AbstractString) = utc2et(default_context(), s)
-str2et(ctx::SpiceContext, s::AbstractString) = str2et(kernelset(ctx), s)
-str2et(s::AbstractString) = str2et(default_context(), s)
-et2utc(ctx::SpiceContext, et::Real, format::AbstractString, prec::Integer) =
-    et2utc(kernelset(ctx), et, format, prec)
-et2utc(et::Real, format::AbstractString, prec::Integer) =
-    et2utc(default_context(), et, format, prec)

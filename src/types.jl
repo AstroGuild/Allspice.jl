@@ -186,15 +186,36 @@ mutable struct KernelSet
 end
 
 """
+    TimeDefaults
+
+Immutable snapshot of the three defaults of `timdef`: `calendar` is `"GREGORIAN"`,
+`"JULIAN"` or `"MIXED"`; `system` is `"UTC"`, `"TDB"`, `"TDT"`, `"TT"` or `""`; `zone`
+is `""` or an offset such as `"UTC-7"`. At most one of `system` and `zone` is not
+empty. Declared `mutable` with `const` fields only so that it lives behind one
+pointer, as `KernelSet` does.
+"""
+mutable struct TimeDefaults
+    const calendar::String
+    const system::String
+    const zone::String
+end
+
+"The defaults of CSPICE at start: Gregorian calendar, UTC, no time zone."
+TimeDefaults() = TimeDefaults("GREGORIAN", "UTC", "")
+
+"""
     SpiceContext()
 
 Holder of the current `KernelSet`. Queries read the reference once and work on that
 snapshot; `furnsh`, `unload` and `kclear` build a new snapshot under `lock` and swap
-the reference atomically. Readers never take the lock.
+the reference atomically. Readers never take the lock. `timedefs` holds the defaults
+of `timdef` in the same way: `timdef` replaces the snapshot under `lock`.
 """
 mutable struct SpiceContext
     @atomic ks::KernelSet
     const lock::ReentrantLock
+    @atomic timedefs::TimeDefaults
+    SpiceContext(ks::KernelSet, lock::ReentrantLock) = new(ks, lock, TimeDefaults())
 end
 
 "Error type of the package. `kind` is a short symbol such as `:nocoverage`."

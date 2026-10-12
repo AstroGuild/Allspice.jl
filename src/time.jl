@@ -1,6 +1,7 @@
-# Time conversions: leap seconds, ET - UTC (`deltet.c`), ISO 8601 calendar strings
-# to ET and ET to UTC strings (the paths of `str2et.c`, `et2utc.c`, `ttrans.c` and
-# `unitim.c` that those conversions use).
+# Time conversions, numeric part: leap seconds, ET - UTC (`deltet.c`), the uniform time
+# scales (`unitim.c`), the time vectors (`ttrans.c`), the Julian and Gregorian
+# calendars (`jul2gr.c`) and the constants. `timeparse.jl` has the strings to ET and
+# `timeout.jl` the ET to strings.
 
 const _SPD = 86400.0
 const _HALFD = 43200.0
@@ -188,7 +189,7 @@ function _tai_to_day(l::LeapSeconds, tai::Float64)
     end
     p = max(p, 1)
     q, secs = _rmaind(tai - _taitab(l, p), _SPD)
-    return trunc(Int, q) + _daytab(l, p), secs
+    return _cint(q) + _daytab(l, p), secs
 end
 
 "Contract: returns the TAI seconds past J2000 of `secs` seconds into UTC day `daynum`."
@@ -197,280 +198,451 @@ function _day_to_tai(l::LeapSeconds, daynum::Int, secs::Float64)::Float64
     return _taitab(l, p) + (secs + Float64(daynum - _daytab(l, p)) * _SPD)
 end
 
-"Contract: the step of `ttrans` for a non-formal input: (day, seconds) with the seconds outside `[0, 86399]` are moved to the day that holds the instant."
-function _regularize(l::LeapSeconds, daynum::Int, secs::Float64)
-    (secs > _SPD - 1.0 || secs < 0.0) || return daynum, secs
-    return _tai_to_day(l, _day_to_tai(l, daynum, secs))
-end
+# ---------------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------------
 
-"Contract: TDB seconds past J2000 of the TAI epoch `tai` (`unitim`)."
-function _tai2tdb(l::LeapSeconds, tai::Float64)::Float64
-    tdt = tai + l.delta_t_a
-    return _tdt2tdb(l, tdt)
-end
+"Contract: returns the Julian date of 1899 DEC 31 12:00:00 (`j1900_c`)."
+j1900() = 2415020.0
+"Contract: returns the Julian date of 1950 JAN 01 00:00:00 (`j1950_c`)."
+j1950() = 2433282.5
+"Contract: returns the Julian date of 2000 JAN 01 12:00:00 (`j2000_c`)."
+j2000() = _JD2000
+"Contract: returns the Julian date of 2100 JAN 01 12:00:00 (`j2100_c`)."
+j2100() = 2488070.0
+"Contract: returns the number of seconds in a Julian year, 31557600 (`jyear_c`)."
+jyear() = 31557600.0
+"Contract: returns the number of seconds in a tropical year, 31556925.9747 (`tyear_c`)."
+tyear() = 31556925.9747
+"Contract: returns the number of seconds in a day, 86400 (`spd_c`)."
+spd() = _SPD
+"Contract: returns the Julian date of the Besselian epoch B1900.0 (`b1900_c`)."
+b1900() = 2415020.31352
+"Contract: returns the Julian date of the Besselian epoch B1950.0 (`b1950_c`)."
+b1950() = 2433282.42345905
+"Contract: returns the speed of light in vacuum in km/s (`clight_c`)."
+clight() = 299792.458
+"Contract: returns pi / 2 (`halfpi_c`)."
+halfpi() = Float64(pi) / 2
+"Contract: returns 2 pi (`twopi_c`)."
+twopi() = 2 * Float64(pi)
+"Contract: returns the number of radians in a degree, pi / 180 (`rpd_c`)."
+rpd() = Float64(pi) / 180.0
+"Contract: returns the number of degrees in a radian, 180 / pi (`dpr_c`)."
+dpr() = 180.0 / Float64(pi)
 
-"Contract: TDB seconds past J2000 of the TDT epoch `tdt` (`unitim`)."
-function _tdt2tdb(l::LeapSeconds, tdt::Float64)::Float64
-    m0, m1 = l.m
-    return tdt + l.k * sin(m0 + m1 * tdt + l.eb * sin(m0 + m1 * tdt))
-end
+# ---------------------------------------------------------------------------------
+# Integer conversions of C and the calendar arithmetic of TTRANS and JUL2GR
+# ---------------------------------------------------------------------------------
 
-"Contract: TAI seconds past J2000 of the TDB epoch `tdb`, by the three fixed-point steps of `unitim`."
-function _tdb2tai(l::LeapSeconds, tdb::Float64)::Float64
-    m0, m1 = l.m
-    tdt = tdb
-    for _ in 1:3
-        tdt = tdb - l.k * sin(m0 + m1 * tdt + l.eb * sin(m0 + m1 * tdt))
+"Contract: returns `x` cut to an integer as the C cast `(integer) x` does on x86: toward zero, and the smallest 32-bit integer when `x` is NaN or out of range."
+@inline _cint(x::Float64)::Int =
+    (x > -2147483649.0 && x < 2147483648.0) ? Int(trunc(Int32, x)) : Int(typemin(Int32))
+
+"Contract: returns the integer nearest to `x`, a tie away from zero, as f2c `i_dnnt`."
+@inline _nint(x::Float64)::Int = _cint(x >= 0.0 ? floor(x + 0.5) : -floor(0.5 - x))
+
+"Contract: returns `x` rounded to a whole number, a tie away from zero, as f2c `d_nint`."
+@inline _dnint(x::Float64)::Float64 = x >= 0.0 ? floor(x + 0.5) : -floor(0.5 - x)
+
+"Contract: `1 <= month <= 12`, any `year`; returns the day number (0001-01-01 is day 0) of the date in the extended Gregorian calendar, as the `DAYNUM` statement function of `ttrans` with its shift of years before 1 by whole 400-year cycles."
+function _tt_daynum(year::Int, month::Int, day::Int)::Int
+    doffst = 0
+    if year <= 0
+        yr400, year = fldmod(year, 400)
+        if year == 0
+            year += 400
+            yr400 -= 1
+        end
+        doffst = yr400 * 146097
     end
-    return tdt - l.delta_t_a
+    y = year - 1
+    n = y * 365 + div(y, 4) - div(y, 100) + div(y, 400) +
+        (_DPJAN0[month] + (month > 2 ? _leap(year) : 0) + day) - 1 + doffst
+    return Int(n % Int32)
+end
+
+"Day number of 1991 JAN 06, a Sunday (`SUNDAY` of `ttrans`)."
+const _SUNDAY = _tt_daynum(1991, 1, 6)
+
+"Contract: `1 <= dofyr <= 366`; returns (month, day of month) of day `dofyr` of a year that has (`leap`) or does not have a leap day."
+@inline function _month_day(dofyr::Int, leap::Bool)
+    tab = leap ? _DPBEGL : _DPJAN0
+    month = 1
+    # Loop invariant: `tab[month] < dofyr`.
+    while month < 12 && tab[month+1] < dofyr
+        month += 1
+    end
+    return month, dofyr - tab[month]
+end
+
+const _RDAYG = _tt_daynum(1582, 10, 15)
+const _RDAYJ = (1582 - 1) * 365 + div(1582 - 1, 4) + (_DPJAN0[10] + 0 + 5) - 1
+const _OFFSTJ = _RDAYJ - _RDAYG
+const _OFFSTG = _RDAYG - _RDAYJ
+
+"""
+    jul2gr(year, month, day) -> (year, month, day, doy)
+
+Contract: the input is a date of the Julian calendar (the year 1 B.C. is 0, 2 B.C. is
+-1; `month` may be outside 1..12 and is reduced into the year); returns the same day
+in the extended Gregorian calendar and its day of year, as CSPICE `jul2gr`.
+"""
+function jul2gr(year::Integer, month::Integer, day::Integer)
+    yroff, mon = fldmod(Int(month) - 1, 12)
+    yr = Int(year) + yroff
+    mon += 1
+    offset = 0
+    if yr <= 0
+        m4, yr = fldmod(yr, 4)
+        if yr == 0
+            yr += 4
+            m4 -= 1
+        end
+        offset = m4 * 1461
+    end
+    jleap = yr % 4 == 0 ? 1 : 0
+    dayj = (yr - 1) * 365 + div(yr - 1, 4) + (_DPJAN0[mon] + (mon > 2 ? jleap : 0) + Int(day)) -
+           1 + offset
+    m400, dayg = fldmod(dayj + _OFFSTG, 146097)
+    m100 = min(3, div(dayg, 36524))
+    dayg -= m100 * 36524
+    m4 = min(24, div(dayg, 1461))
+    dayg -= m4 * 1461
+    m = min(3, div(dayg, 365))
+    dayg -= m * 365
+    dofyr = dayg + 1
+    yr = m400 * 400 + m100 * 100 + m4 * 4 + m + 1
+    mon, dy = _month_day(dofyr, _leap(yr) != 0)
+    return yr, mon, dy, dofyr
+end
+
+"""
+    gr2jul(year, month, day) -> (year, month, day, doy)
+
+Contract: the input is a date of the extended Gregorian calendar; returns the same
+day in the Julian calendar and its day of year, as CSPICE `gr2jul`. Inverse of
+`jul2gr`.
+"""
+function gr2jul(year::Integer, month::Integer, day::Integer)
+    yroff, mon = fldmod(Int(month) - 1, 12)
+    yr = Int(year) + yroff
+    mon += 1
+    dayg = _tt_daynum(yr, mon, Int(day))
+    m4, dayj = fldmod(dayg + _OFFSTJ, 1461)
+    m = min(3, div(dayj, 365))
+    dayj -= m * 365
+    dofyr = dayj + 1
+    yr = m4 * 4 + m + 1
+    mon, dy = _month_day(dofyr, yr % 4 == 0)
+    return yr, mon, dy, dofyr
 end
 
 # ---------------------------------------------------------------------------------
-# Strings to ET
+# Uniform time scales: UNITIM
 # ---------------------------------------------------------------------------------
 
-const _ISO_TIME = raw"(?:(?:T|\s)\s*(\d{1,2})(?::(\d{1,2})(?::(\d{1,2}(?:\.\d*)?))?)?)?"
-const _ISO_LABEL = raw"\s*(Z|UTC|TDB|ET|TDT|TT)?\s*$"
-const _ISO_YMD = Regex(raw"^\s*(\d{4})-(\d{1,2})-(\d{1,2})" * _ISO_TIME * _ISO_LABEL, "i")
-const _ISO_YD = Regex(raw"^\s*(\d{4})-(\d{3})" * _ISO_TIME * _ISO_LABEL, "i")
+# Codes of the uniform scales; 1..5 are of the TDT kind and 6..9 of the TDB kind.
+const _US_JDTDT = 1
+const _US_TAI = 2
+const _US_TDT = 3
+const _US_GPS = 4
+const _US_TT = 5
+const _US_ET = 6
+const _US_JDTDB = 7
+const _US_JED = 8
+const _US_TDB = 9
+
+"Contract: `b` is upper case ASCII; returns whether `a` equals `b` when case and the trailing blanks of `a` are ignored, without allocation."
+function _eqsys(a::AbstractString, b::String)::Bool
+    ca = codeunits(a)
+    cb = codeunits(b)
+    n = length(cb)
+    length(ca) >= n || return false
+    @inbounds for i in 1:n
+        c = ca[i]
+        (UInt8('a') <= c <= UInt8('z')) && (c -= 0x20)
+        c == cb[i] || return false
+    end
+    @inbounds for i in n+1:length(ca)
+        ca[i] == UInt8(' ') || return false
+    end
+    return true
+end
+
+"Contract: returns the code of the uniform time scale `s` (any case, trailing blanks allowed), or 0 if `s` is not one of them. Does not allocate."
+function _unitim_code(s::AbstractString)::Int
+    _eqsys(s, "TDB") && return _US_TDB
+    _eqsys(s, "ET") && return _US_ET
+    _eqsys(s, "TDT") && return _US_TDT
+    _eqsys(s, "TT") && return _US_TT
+    _eqsys(s, "TAI") && return _US_TAI
+    _eqsys(s, "JED") && return _US_JED
+    _eqsys(s, "JDTDB") && return _US_JDTDB
+    _eqsys(s, "JDTDT") && return _US_JDTDT
+    _eqsys(s, "GPS") && return _US_GPS
+    return 0
+end
+
+"Contract: `i`, `o` are codes of uniform scales; returns `epoch` of scale `i` in scale `o` with the arithmetic of CSPICE `unitim`. Generic over the number type; does not allocate."
+@inline function _unitim(l::LeapSeconds, epoch::Real, i::Int, o::Int)
+    t = epoch * 1.0
+    i == o && return t
+    dta, k, eb = l.delta_t_a, l.k, l.eb
+    m0, m1 = l.m
+    if i == _US_TAI
+        t += dta
+    elseif i == _US_GPS
+        t += dta + 19.0
+    elseif i == _US_JDTDT || i == _US_JED || i == _US_JDTDB
+        t = (t - _JD2000) * _SPD
+    end
+    intdt = i <= _US_TT
+    outtdt = o <= _US_TT
+    if intdt && !outtdt
+        t = t + k * sin(m0 + m1 * t + eb * sin(m0 + m1 * t))
+    elseif !intdt && outtdt
+        tdb = t
+        # Loop invariant: `t` is the TDT estimate after the given number of fixed-point
+        # steps; CSPICE takes exactly three.
+        for _ in 1:3
+            t = tdb - k * sin(m0 + m1 * t + eb * sin(m0 + m1 * t))
+        end
+    end
+    if o == _US_TAI
+        t -= dta
+    elseif o == _US_GPS
+        t -= dta + 19.0
+    elseif o == _US_JDTDT || o == _US_JED || o == _US_JDTDB
+        t = t / _SPD + _JD2000
+    end
+    return t
+end
 
 """
-    str2et(ks, s) -> Float64
+    unitim(ks, epoch, insys, outsys)
 
-Contract: `s` is an ISO 8601 calendar string `YYYY-MM-DD` or `YYYY-DDD` (day of
-year), optionally followed by `T` or a blank and `hh[:mm[:ss[.fff]]]`, and optionally
-by a label `UTC`, `Z`, `TDB`, `ET`, `TDT` or `TT` (default UTC); the year is 1 or
-later. Returns TDB seconds past J2000 as CSPICE `str2et` does for these forms; a UTC
-leap second `23:59:60` is accepted. Throws `SpiceError(:badtime)` for another form or
-an impossible date, and `SpiceError(:nolsk)` when the conversion needs a leap-second
-kernel (every system but TDB) and none is loaded. Reads `ks.lsk` only.
+Contract: `insys` and `outsys` are uniform time scales, in any case: `"TAI"`, `"TDT"`,
+`"TT"`, `"GPS"`, `"JDTDT"` (seconds past J2000, or a Julian date for `JD...`, of the
+TDT kind) and `"TDB"`, `"ET"`, `"JDTDB"`, `"JED"` (of the TDB kind). Returns `epoch`
+of scale `insys` expressed in scale `outsys` with the arithmetic of CSPICE `unitim`.
+The result has the number type of `epoch * 1.0`, so a `ForwardDiff.Dual` or a `Taylor`
+epoch keeps its derivatives. Does not allocate. Throws `SpiceError(:badtimetype)` for
+another scale and `SpiceError(:nolsk)` without a leap-second kernel. Reads `ks.lsk`
+only.
 """
-function str2et(ks::KernelSet, s::AbstractString)::Float64
-    bad(why) = throw(SpiceError(:badtime, "cannot convert the time string '$s': $why"))
-    local year::Int, month::Int, day::Int
-    m = match(_ISO_YD, s)
-    if m !== nothing
-        year, month, day = parse(Int, m[1]), 1, parse(Int, m[2])
-        year >= 1 || bad("the year is before 1 A.D.")
-        1 <= day <= 365 + _leap(year) || bad("the day of year is out of range")
-    else
-        m = match(_ISO_YMD, s)
-        m === nothing && bad("the form is not ISO 8601 (YYYY-MM-DD or YYYY-DDD, " *
-                             "optional Thh:mm:ss.fff, optional UTC or TDB label)")
-        year, month, day = parse(Int, m[1]), parse(Int, m[2]), parse(Int, m[3])
-        year >= 1 || bad("the year is before 1 A.D.")
-        1 <= month <= 12 || bad("the month is out of range")
-        dim = month == 12 ? 31 : (month == 2 ? 28 + _leap(year) :
-                                  _DPJAN0[month+1] - _DPJAN0[month])
-        1 <= day <= dim || bad("the day of month is out of range")
-    end
-    g = length(m.captures) - 4          # time and label are the last four groups
-    hh = m[g+1] === nothing ? 0.0 : Float64(parse(Int, m[g+1]))
-    mm = m[g+2] === nothing ? 0.0 : Float64(parse(Int, m[g+2]))
-    ss = m[g+3] === nothing ? 0.0 : _nparsd(m[g+3])
-    label = m[g+4] === nothing ? "UTC" : uppercase(m[g+4])
-    label == "Z" && (label = "UTC")
-    uniform = label in ("TDB", "ET", "TDT", "TT")
-    hh < 24.0 || bad("the hour is out of range")
-    mm < 60.0 || bad("the minute is out of range")
-    ss < (uniform ? 60.0 : 61.0) || bad("the second is out of range")
-    daynum = _daynum(year, month, day)
-    secs = hh * 3600.0 + mm * 60.0 + ss
-    if uniform
-        q, r = _rmaind(secs, _SPD)
-        formal = Float64(daynum + trunc(Int, q) - _DN2000) * _SPD - _HALFD + r
-        return label in ("TDB", "ET") ? formal : _tdt2tdb(_lsk(ks), formal)
-    end
+function unitim(ks::KernelSet, epoch::Real, insys::AbstractString, outsys::AbstractString)
     l = _lsk(ks)
-    daynum, secs = _regularize(l, daynum, secs)
-    return _tai2tdb(l, _day_to_tai(l, daynum, secs))
+    i = _unitim_code(insys)
+    o = _unitim_code(outsys)
+    (i == 0 || o == 0) && _unitim_error(insys, outsys)
+    return _unitim(l, epoch, i, o)
 end
 
-"""
-    utc2et(ks, s) -> Float64
-
-Contract: as `str2et`: `s` is an ISO 8601 calendar string, UTC unless it has another
-label; returns TDB seconds past J2000.
-"""
-utc2et(ks::KernelSet, s::AbstractString)::Float64 = str2et(ks, s)
+@noinline _unitim_error(insys, outsys) = throw(SpiceError(:badtimetype,
+    "one of the time scales '$insys' and '$outsys' is not a uniform scale; the scales " *
+    "are TAI, TDT, TT, GPS, JDTDT, TDB, ET, JDTDB and JED"))
 
 # ---------------------------------------------------------------------------------
-# ET to strings
+# Time vectors: TTRANS
 # ---------------------------------------------------------------------------------
 
-const _POW10 = (1.0, 10.0, 100.0, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13,
-    1e14, 1e15, 1e16, 1e17)
-const _IPOW10 = (1.0, 0.1, 0.01, 0.001, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10, 1e-11,
-    1e-12, 1e-13, 1e-14, 1e-15, 1e-16, 1e-17)
+# Codes of the representations of `ttrans`, in the order of its sorted name table.
+const _TT_NAMES = ("DAYSEC", "DP2000", "ET", "FORMAL", "JDTDB", "JDTDT", "JDUTC", "JED",
+    "TAI", "TDB", "TDT", "YD", "YD.D", "YD.DF", "YDF", "YMD", "YMDF", "YMWD", "YMWDF", "YWD",
+    "YWDF")
+const _TT_DAYSEC = 1
+const _TT_DP2000 = 2
+const _TT_ET = 3
+const _TT_FORMAL = 4
+const _TT_JDTDB = 5
+const _TT_JDTDT = 6
+const _TT_JDUTC = 7
+const _TT_JED = 8
+const _TT_TAI = 9
+const _TT_TDB = 10
+const _TT_TDT = 11
+const _TT_YD = 12
+const _TT_YDD = 13
+const _TT_YDDF = 14
+const _TT_YDF = 15
+const _TT_YMD = 16
+const _TT_YMDF = 17
+const _TT_YMWD = 18
+const _TT_YMWDF = 19
+const _TT_YWD = 20
+const _TT_YWDF = 21
 
-"Contract: `x > 0`; returns the 14 significant decimal digits of `x` and its decimal exponent, generated with the arithmetic of CSPICE `dpstr`."
-function _dpstr14(x::Float64)
-    copy = x
-    exp10 = log10(copy)
-    if exp10 < 0.0
-        expont = trunc(Int, exp10) - 1
-        k = -expont
-        while k > 16
-            copy *= 1e16
-            k -= 16
-        end
-        k != 0 && (copy *= _POW10[k+1])
-    else
-        expont = trunc(Int, exp10)
-        k = expont
-        while k > 16
-            copy *= 1e-16
-            k -= 16
-        end
-        k != 0 && (copy *= _IPOW10[k+1])
-    end
-    copy = (round(copy * _POW10[14], RoundNearestTiesAway) + 0.125) * _IPOW10[14]
-    if copy >= 10.0
-        copy *= 0.1
-        expont += 1
-    end
-    digits = ntuple(_ -> 0, 14)
-    # Loop invariant: digits 1..n-1 are final and `copy` holds the rest, scaled so
-    # that digit n is its integer part.
-    for n in 1:14
-        d = clamp(trunc(Int, copy), 0, 9)
-        digits = Base.setindex(digits, d, n)
-        copy = (copy - d) * 10.0
-    end
-    return digits, expont
+"Contract: `1 <= p <= 21`; returns whether representation `p` is formal, that is, counts every day as 86400 seconds."
+@inline _tt_formal(p::Int) = p == _TT_FORMAL || p == _TT_JDUTC || p == _TT_YDDF ||
+                             p == _TT_YDF || p == _TT_YMDF || p == _TT_YMWDF || p == _TT_YWDF
+
+"Contract: returns the `unitim` code of the uniform representation `p` of `ttrans`, or 0 if `p` is not uniform."
+@inline function _tt_uniform(p::Int)::Int
+    p == _TT_ET && return _US_ET
+    p == _TT_JDTDB && return _US_JDTDB
+    p == _TT_JDTDT && return _US_JDTDT
+    p == _TT_JED && return _US_JED
+    p == _TT_TAI && return _US_TAI
+    p == _TT_TDB && return _US_TDB
+    p == _TT_TDT && return _US_TDT
+    return 0
 end
 
-"Contract: `from <= to`; returns the characters of slots `from..to` of the virtual digit string of CSPICE `zzvsbstr` (negative slots are integer digits, slot 0 is the decimal point), rounded at slot `to`, and whether the rounding carried out of slot `from`."
-function _vsbstr(digits::NTuple{14,Int}, expont::Int, from::Int, to::Int)
-    index(slot) = slot < 0 ? expont + slot + 1 : expont + slot
-    slot = to + 1 == 0 ? 1 : to + 1
-    i = index(slot)
-    incr = 0 <= i < 14 && digits[i+1] >= 5
-    out = Vector{Char}(undef, to - from + 1)
-    for slot in to:-1:from
-        c = if slot == 0
-            '.'
+"Contract: returns the code of the representation `name` of `ttrans` (first word, any case), or 0."
+function _tt_code(name::AbstractString)::Int
+    w = uppercase(first(split(name * " ")))
+    i = findfirst(==(w), _TT_NAMES)
+    return i === nothing ? 0 : i
+end
+
+const TVec = NTuple{7,Float64}
+
+"Contract: returns the time vector whose first components are `x` and whose other components are 0."
+@inline _tvec(x::Vararg{Real,N}) where {N} = ntuple(i -> i <= N ? Float64(x[i]) : 0.0, Val(7))
+
+"""
+    _ttrans(l, pfrom, pto, tv) -> NTuple{7,Float64}
+
+Contract: `pfrom` and `pto` are codes `_TT_*`; `tv` holds the components of an epoch
+in representation `pfrom`. Returns the components of the same epoch in representation
+`pto`, with the steps and the arithmetic of CSPICE `ttrans`; components that `pto`
+does not have are copied from `tv` (as the in-place routine leaves them). Does not
+allocate.
+"""
+function _ttrans(l::LeapSeconds, pfrom::Int, pto::Int, tv::TVec)::TVec
+    nref = length(l.delta_at)
+    daynum = 0
+    secs = 0.0
+    if pfrom == _TT_YMD || pfrom == _TT_YMDF
+        year, month, day = _cint(tv[1]), _cint(tv[2]), _cint(tv[3])
+        dyear, month = fldmod(month - 1, 12)
+        daynum = _tt_daynum(year + dyear, month + 1, day)
+        secs = tv[4] * 3600.0 + tv[5] * 60.0 + tv[6]
+    elseif pfrom == _TT_YD || pfrom == _TT_YDF
+        daynum = _tt_daynum(_cint(tv[1]), 1, _cint(tv[2]))
+        secs = tv[3] * 3600.0 + tv[4] * 60.0 + tv[5]
+    elseif pfrom == _TT_YDD || pfrom == _TT_YDDF
+        day = _cint(tv[2])
+        frac = tv[2] - Float64(day)
+        daynum = _tt_daynum(_cint(tv[1]), 1, day)
+        if pfrom == _TT_YDDF
+            secs = frac * _SPD
         else
-            i = index(slot)
-            if i < 0
-                if incr
-                    incr = false
-                    '1'
-                else
-                    slot < -1 ? ' ' : '0'
-                end
-            elseif i < 14
-                v = digits[i+1] + (incr ? 1 : 0)
-                v == 10 ? '0' : (incr = false; Char('0' + v))
-            else
-                incr = false
-                '0'
-            end
+            daylen = _SPD
+            p = _last_day(l, daynum)
+            isodd(p) && (daylen = _taitab(l, p + 1) - _taitab(l, p))
+            secs = frac * daylen
         end
-        out[slot-from+1] = c
+    elseif pfrom == _TT_FORMAL
+        dp2000, secs = _rmaind(tv[1] + _HALFD, _SPD)
+        daynum = _cint(dp2000) + _DN2000
+    elseif pfrom == _TT_JDUTC
+        daydp, secs = _rmaind((tv[1] - _JD1101) * _SPD, _SPD)
+        daynum = _cint(daydp)
+    elseif pfrom == _TT_DAYSEC
+        daynum = _cint(tv[1])
+        secs = tv[2]
+    elseif pfrom == _TT_DP2000
+        daynum = _cint(tv[1]) + _DN2000
+        secs = tv[2]
+    elseif pfrom == _TT_YWD || pfrom == _TT_YWDF
+        week = _cint(tv[2]) - 1
+        wkday = _cint(tv[3])
+        daynum = _tt_daynum(_cint(tv[1]), 1, 1)
+        fyrday = mod(daynum - _SUNDAY, 7) + 1
+        daynum += week * 7 + mod(wkday - fyrday, 7)
+        secs = tv[4] * 3600.0 + tv[5] * 60.0 + tv[6]
+    elseif pfrom == _TT_YMWD || pfrom == _TT_YMWDF
+        month = _cint(tv[2])
+        (1 <= month <= 12) || throw(SpiceError(:badtime,
+            "the month $month of a year-month-week-day time vector is not in 1..12"))
+        week = _cint(tv[3]) - 1
+        day = _cint(tv[4])
+        daynum = _tt_daynum(_cint(tv[1]), month, 1)
+        fmday = mod(daynum - _SUNDAY, 7) + 1
+        daynum += week * 7 + mod(day - fmday, 7)
+        secs = tv[5] * 3600.0 + tv[6] * 60.0 + tv[7]
+    else
+        uin = _tt_uniform(pfrom)
+        uout = _tt_uniform(pto)
+        uout != 0 && return Base.setindex(tv, _unitim(l, tv[1], uin, uout), 1)
+        daynum, secs = _tai_to_day(l, _unitim(l, tv[1], uin, _US_TAI))
     end
-    return String(out), incr
+    if _tt_formal(pfrom)
+        daydp, secs = _rmaind(secs, _SPD)
+        daynum += _cint(daydp)
+    end
+    # A formal input that goes to a formal output keeps its seconds; every other pair
+    # moves seconds outside [0, 86399] to the day that holds the instant.
+    if !(_tt_formal(pto) && _tt_formal(pfrom)) && (secs > _SPD - 1.0 || secs < 0.0)
+        daynum, secs = _tai_to_day(l, _day_to_tai(l, daynum, secs))
+    end
+    if _tt_formal(pto) && secs > _SPD
+        daynum += 1
+        secs = 0.0
+    end
+    year = month = day = dofyr = 0
+    hours = mins = tsecs = 0.0
+    if pto >= _TT_YD
+        year, month, day, dofyr = _calendar(daynum)
+        exsecs = max(0.0, secs - _SPD + 1.0)
+        hours, tempd = _rmaind(secs - exsecs, 3600.0)
+        mins, tsecs = _rmaind(tempd, 60.0)
+        tsecs += exsecs
+    end
+    if pto == _TT_YMD || pto == _TT_YMDF
+        return (Float64(year), Float64(month), Float64(day), hours, mins, tsecs, tv[7])
+    elseif pto == _TT_YD || pto == _TT_YDF
+        return (Float64(year), Float64(dofyr), hours, mins, tsecs, tv[6], tv[7])
+    elseif pto == _TT_YDD
+        daylen = _SPD
+        p = _last_day(l, daynum)
+        isodd(p) && (daylen = _taitab(l, p + 1) - _taitab(l, p))
+        return (Float64(year), Float64(dofyr) + secs / daylen, tv[3], tv[4], tv[5], tv[6], tv[7])
+    elseif pto == _TT_YDDF
+        return (Float64(year), Float64(dofyr) + secs / _SPD, tv[3], tv[4], tv[5], tv[6], tv[7])
+    elseif pto == _TT_FORMAL
+        return Base.setindex(tv, Float64(daynum - _DN2000) * _SPD - _HALFD + secs, 1)
+    elseif pto == _TT_JDUTC
+        return Base.setindex(tv, _JD1101 + Float64(daynum) + secs / _SPD, 1)
+    elseif pto == _TT_DAYSEC
+        return (Float64(daynum), secs, tv[3], tv[4], tv[5], tv[6], tv[7])
+    elseif pto == _TT_DP2000
+        return (Float64(daynum - _DN2000), secs, tv[3], tv[4], tv[5], tv[6], tv[7])
+    elseif pto == _TT_YWD || pto == _TT_YWDF
+        wday = mod(daynum - _SUNDAY, 7)
+        week = div(dofyr - 1, 7) + 1
+        return (Float64(year), Float64(week), Float64(wday) + 1.0, hours, mins, tsecs, tv[7])
+    elseif pto == _TT_YMWD || pto == _TT_YMWDF
+        week = div(daynum - _tt_daynum(year, month, 1), 7) + 1
+        wday = mod(daynum - _SUNDAY, 7)
+        return (Float64(year), Float64(month), Float64(week), Float64(wday) + 1.0, hours, mins,
+            tsecs)
+    else
+        tai = _day_to_tai(l, daynum, secs)
+        return Base.setindex(tv, _unitim(l, tai, _US_TAI, _tt_uniform(pto)), 1)
+    end
 end
 
 """
-    _dpstrf(x, sigdig) -> String
+    ttrans(ks, from, to, tvec) -> NTuple{7,Float64}
 
-Contract: returns `x` in fixed-point form with `clamp(sigdig, 1, 14)` significant
-digits, as CSPICE `dpstrf(x, sigdig, 'F')` writes it: a blank or `-` for the sign,
-then the digits; the rounding is the two-step rounding of CSPICE (to 14 digits, then
-to the requested digit), so a tie rounds away from zero.
+Contract: `from` and `to` are names of time-vector representations of CSPICE `ttrans`
+(`"YMD"`, `"YMDF"`, `"YD"`, `"YDF"`, `"YD.D"`, `"YD.DF"`, `"YWD"`, `"YWDF"`, `"YMWD"`,
+`"YMWDF"`, `"DAYSEC"`, `"DP2000"`, `"FORMAL"`, `"JDUTC"`, `"TAI"`, `"TDT"`, `"TDB"`,
+`"ET"`, `"JED"`, `"JDTDB"`, `"JDTDT"`), in any case; `tvec` holds up to seven
+components. Returns the seven components of the same epoch in representation `to`.
+Throws `SpiceError(:badtimetype)` for another name and `SpiceError(:nolsk)` without a
+leap-second kernel. Internal: not exported.
 """
-function _dpstrf(x::Float64, sigdig::Integer)::String
-    maxdig = Int(clamp(sigdig, 1, 14))
-    sign = x < 0.0 ? "-" : " "
-    x == 0.0 && return string(sign, "0.", '0'^maxdig)
-    digits, expont = _dpstr14(abs(x))
-    first = expont >= 0 ? -expont - 1 : -expont
-    last = first + maxdig - 1
-    first < 0 && last >= 0 && (last += 1)
-    first = min(-1, first)
-    str, overflow = _vsbstr(digits, expont, first, last)
-    if overflow
-        first -= 1
-        str, _ = _vsbstr(digits, expont, first, last)
-        last > 0 && (str = chop(str))
-    end
-    last < 0 && (str = string(str, '0'^(-1 - last), '.'))
-    return string(sign, lstrip(str, ' '))
-end
-
-"Contract: `n >= 0` and `width >= 1`; returns the decimal digits of `n`, zero-padded on the left to `width`."
-_pad(n::Integer, width::Int) = lpad(string(n), width, '0')
-
-"""
-    et2utc(ks, et, format, prec) -> String
-
-Contract: `format` is `"C"` (`1986 APR 12 16:31:09.814`), `"D"`
-(`1986-102 // 16:31:09.814`), `"ISOC"` (`1986-04-12T16:31:09.814`), `"ISOD"`
-(`1986-102T16:31:09.814`) or `"J"` (`JD 2446533.18834276`), in any case; `prec` is
-the number of decimal places and is limited to 0..14 (CSPICE writes at most 14
-significant digits, so 13 places of seconds and 7 of a Julian date). Returns the UTC string of the
-TDB epoch `et` as CSPICE `et2utc` builds it, with seconds 60 inside a leap second.
-Throws `SpiceError(:badformat)` for another format, `SpiceError(:badtime)` for a year
-before 1 A.D. in an ISO format, and `SpiceError(:nolsk)` without a leap-second
-kernel. Reads `ks.lsk` only.
-"""
-function et2utc(ks::KernelSet, et::Real, format::AbstractString, prec::Integer)::String
-    fmt = uppercase(strip(format))
-    fmt in ("C", "D", "J", "ISOC", "ISOD") || throw(SpiceError(:badformat,
-        "the format '$format' is not one of 'C', 'D', 'J', 'ISOC', 'ISOD'"))
+function ttrans(ks::KernelSet, from::AbstractString, to::AbstractString, tv)
     l = _lsk(ks)
-    p = Int(clamp(prec, 0, 14))
-    tai = _tdb2tai(l, primal(et))
-    if fmt == "J"
-        daynum, secs = _regularize(l, _tai_to_day(l, tai)...)
-        if secs > _SPD
-            daynum += 1
-            secs = 0.0
-        end
-        jd = _JD1101 + Float64(daynum) + secs / _SPD
-        return "JD" * _dpstrf(jd, p + 7)
-    end
-    whole = floor(tai)
-    scale = round(10.0^p)
-    frac = round(scale * (tai - whole), RoundNearestTiesAway)
-    if frac == scale
-        whole += 1.0
-        frac = 0.0
-    end
-    daynum, secs = _regularize(l, _tai_to_day(l, whole)...)
-    year, month, day, dofyr = _calendar(daynum)
-    exsecs = max(0.0, secs - _SPD + 1.0)
-    hours, rest = _rmaind(secs - exsecs, 3600.0)
-    mins, tsecs = _rmaind(rest, 60.0)
-    hh = round(Int, hours)
-    mi = round(Int, mins)
-    sc = round(Int, tsecs + exsecs)
-    clock = string(_pad(hh, 2), ':', _pad(mi, 2), ':', _pad(sc, 2))
-    if p > 0
-        # CSPICE writes `1 + fraction` with `dpstrf`, so at most 13 places exist.
-        fs = _dpstrf(frac / scale + 1.0, p + 1)
-        dot = findfirst('.', fs)
-        clock = string(clock, SubString(fs, dot, min(dot + p, lastindex(fs))))
-    end
-    calendar_style = fmt == "C" || fmt == "D"
-    ystr = if year >= 1000
-        string(year)
-    elseif year > 0
-        calendar_style ? string(year, " A.D.") : string(year)
-    else
-        calendar_style || throw(SpiceError(:badtime,
-            "the year $(1 - year) B.C. cannot be written in an ISO format"))
-        string(1 - year, " B.C.")
-    end
-    sep = (calendar_style && year < 1000) ? " " : "-"
-    if fmt == "C"
-        return string(ystr, ' ', _MONTH_ABBR[month], ' ', _pad(day, 2), ' ', clock)
-    elseif fmt == "ISOC"
-        return string(ystr, '-', _pad(month, 2), '-', _pad(day, 2), 'T', clock)
-    elseif fmt == "D"
-        return string(ystr, sep, _pad(dofyr, 3), " // ", clock)
-    else
-        return string(ystr, '-', _pad(dofyr, 3), 'T', clock)
-    end
+    pfrom = _tt_code(from)
+    pto = _tt_code(to)
+    pfrom == 0 && throw(SpiceError(:badtimetype,
+        "the time-vector representation '$from' is not one that ttrans knows"))
+    pto == 0 && throw(SpiceError(:badtimetype,
+        "the time-vector representation '$to' is not one that ttrans knows"))
+    return _ttrans(l, pfrom, pto, _tvec(tv...))
 end
