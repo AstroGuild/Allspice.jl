@@ -121,6 +121,8 @@ function _spk_state(data::Vector{Float64}, seg::Segment, et::T) where {T<:Real}
         return _spk15(data, seg, et)
     elseif dtype == 17
         return _spk17(data, seg, et)
+    elseif dtype == 10
+        _t10_needs_lsk(seg)     # type 10 needs a kernel set: spk_types/type10.jl
     else
         _unsupported("SPK", dtype)
     end
