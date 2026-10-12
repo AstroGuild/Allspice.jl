@@ -112,6 +112,8 @@ include("geometry/subpoints.jl")     # subpnt, subslr
 include("geometry/intercept.jl")     # sincpt, srfrec
 include("geometry/illumination.jl")  # ilumin, illumg, illumf, phaseq
 include("geometry/occultation.jl")   # occult
+include("geometry/limbterm.jl")      # limbpt, termpt, tangpt
+include("geometry/fov.jl")           # getfov, getfvn, fovray, fovtrg
 include("geometry/azel.jl")          # azlrec, recazl, dazldr, drdazl, azlcpo
 include("precompile.jl")    # precompile directives for the common signatures
 
