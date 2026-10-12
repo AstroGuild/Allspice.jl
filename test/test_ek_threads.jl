@@ -11,6 +11,12 @@
 # reads GROUPS has exactly two valid answers; a query that mixes two snapshots (the
 # table catalogue of one, the files of the other) would give neither or would fail.
 
+# The code of the EK groups is long and most of it runs once, so Julia compiles the
+# module of the tests without optimization while this file runs (5 s less for the five
+# EK groups); the last line of the file gives the default level back. The level of
+# NeoSpice does not change.
+Base.Experimental.@optlevel 0
+
 isdefined(@__MODULE__, :EKLIB) || include("ekfixtures.jl")
 
 group("EK queries: thread safety", Kernels.LSK) do
@@ -19,9 +25,7 @@ group("EK queries: thread safety", Kernels.LSK) do
             "`julia --threads=8 --project=test test/runtests.jl`")
         return
     end
-    dir = mktempdir()
-    model = ek_standard_model(SEED + 1; scale=0.15)
-    paths = String[c_ek_write(joinpath(dir, name), segs) for (name, segs) in model]
+    _, paths = ek_standard_files(SEED + 1; scale=0.15)      # the files of the group `ek_query`
     base = [Kernels.LSK, paths[1], paths[2]]
     extra = paths[3]
     queries = ["SELECT GID, GNAME, WEIGHT FROM GROUPS WHERE GID < 120 ORDER BY GNAME, GID",
@@ -46,7 +50,7 @@ group("EK queries: thread safety", Kernels.LSK) do
     @test !differ[7]                          # the query on EVENTS alone does not
     nq = length(queries)
 
-    @testset "parallel queries on one snapshot equal the serial results" begin
+    ek_part("parallel queries on one snapshot equal the serial results") do
         reps = 12
         par = Vector{Any}(undef, nq * reps)
         Threads.@threads for k in 1:nq*reps
@@ -63,7 +67,7 @@ group("EK queries: thread safety", Kernels.LSK) do
         @test all(same)
     end
 
-    @testset "queries during furnsh and unload of an EK see one valid snapshot" begin
+    ek_part("queries during furnsh and unload of an EK see one valid snapshot") do
         ctx = neo_context(base)
         stop = Threads.Atomic{Bool}(false)
         cycles = Threads.Atomic{Int}(0)
@@ -120,3 +124,5 @@ group("EK queries: thread safety", Kernels.LSK) do
         @test [answer(ctx, q) for q in queries] == ansA
     end
 end
+
+Base.Experimental.@optlevel -1

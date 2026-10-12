@@ -17,7 +17,13 @@
 # counts are printed. Queries for which this port differs from CSPICE on purpose (see
 # the docstring of `_ek_encode_query`) are in a list of their own with the reason.
 
-isdefined(@__MODULE__, :DSKLIB) || include("dskfixtures.jl")
+# The code of the EK groups is long and most of it runs once, so Julia compiles the
+# module of the tests without optimization while this file runs (5 s less for the five
+# EK groups); the last line of the file gives the default level back. The level of
+# NeoSpice does not change.
+Base.Experimental.@optlevel 0
+
+isdefined(@__MODULE__, :EKLIB) || include("ekfixtures.jl")      # `ek_part`, and `dskfixtures.jl`
 isdefined(@__MODULE__, :CKFix) || include("ckfixtures.jl")
 isdefined(NeoSpice, :_ek_encode_query) ||
     Base.include(NeoSpice, joinpath(@__DIR__, "..", "src", "ek", "query_parse.jl"))
@@ -355,8 +361,11 @@ end
 
 # --- the corpus ------------------------------------------------------------------------
 
+# The two corpora are constants: Julia interprets the top-level code that builds them,
+# and needed 0.5 s to compile the two functions that held the lists before.
+
 "Valid queries, written by hand: one or more for each rule of the language."
-function ekq_valid_corpus()
+const EKQ_VALID_CORPUS = let
     q = String[
         # SELECT and FROM
         "SELECT ICOL FROM ALPHA",
@@ -580,11 +589,13 @@ function ekq_valid_corpus()
              join(("(ICOL = $k OR DCOL = $k OR ICOL > 9$k)" for k in 1:4), " AND "))
     push!(q, "SELECT ICOL FROM ALPHA WHERE NOT (" *
              join(("(ICOL = $k AND DCOL = $k)" for k in 1:6), " OR ") * ")")
-    return q
+    q
 end
+"A new copy of the valid queries."
+ekq_valid_corpus() = copy(EKQ_VALID_CORPUS)
 
 "Queries that are not valid, written by hand: one or more for each error message."
-function ekq_invalid_corpus()
+const EKQ_INVALID_CORPUS = let
     q = String[
         # scanner
         " ",
@@ -857,8 +868,10 @@ function ekq_invalid_corpus()
              join(("(ICOL = $k AND DCOL = $k)" for k in 1:13), " OR ") * ")")
     push!(q, "SELECT ICOL FROM ALPHA WHERE NOT (" *
              join(("ICOL BETWEEN $k AND 9$k" for k in 1:12), " OR ") * ")")
-    return q
+    q
 end
+"A new copy of the queries that are not valid."
+ekq_invalid_corpus() = copy(EKQ_INVALID_CORPUS)
 
 "Scalar columns of the tables by type, for the random queries."
 const EKQ_SCALAR = Dict(
@@ -1012,7 +1025,7 @@ group("ek_parse: EK query parser against CSPICE", Kernels.LSK) do
             return res, [r for r in res if !(r[2] in (:valid, :invalid, :signal, :unsafe))]
         end
 
-        @testset "catalogue" begin
+        ek_part("catalogue") do
             @test [t.name for t in fx.tables] == first.(EKQ_TABLES)
             for (t, (_, cols)) in zip(fx.tables, EKQ_TABLES)
                 @test t.cnames == first.(cols)
@@ -1021,64 +1034,65 @@ group("ek_parse: EK query parser against CSPICE", Kernels.LSK) do
             end
         end
 
-        @testset "valid queries" begin
+        ek_part("valid queries") do
             valid = ekq_valid_corpus()
             res, bad = run(valid)
             report("valid", bad)
             notvalid = [r for r in res if r[2] !== :valid]
             report("not valid", setdiff(notvalid, bad))
-            measured(@sprintf("EK parser: %d valid queries by hand, %d equal to CSPICE in the encoded query and in ekpsel",
-                length(valid), count(r -> r[2] === :valid, res)))
+            measured("EK parser: $(length(valid)) valid queries by hand, $(count(r -> r[2] === :valid, res)) " *
+                     "equal to CSPICE in the encoded query and in ekpsel")
             @test length(valid) >= 150
             @test isempty(notvalid)
         end
 
-        @testset "invalid queries" begin
+        ek_part("invalid queries") do
             invalid = ekq_invalid_corpus()
             res, bad = run(invalid)
             report("invalid", bad)
             notinvalid = [r for r in res if r[2] !== :invalid]
             report("not invalid", setdiff(notinvalid, bad))
             messages = unique(replace(r[3], r"\d+" => "0") for r in res if r[2] === :invalid)
-            measured(@sprintf("EK parser: %d invalid queries by hand, %d with flag and message equal to CSPICE, %d distinct messages",
-                length(invalid), count(r -> r[2] === :invalid, res), length(messages)))
+            measured("EK parser: $(length(invalid)) invalid queries by hand, $(count(r -> r[2] === :invalid, res)) " *
+                     "with flag and message equal to CSPICE, $(length(messages)) distinct messages")
             @test length(invalid) >= 100
             @test isempty(notinvalid)
             @test length(messages) >= 60
         end
 
-        @testset "random queries" begin
+        ek_part("random queries") do
             rng = MersenneTwister(SEED)
-            queries = unique(ekq_random_query(rng) for _ in 1:2500)
+            queries = unique(ekq_random_query(rng) for _ in 1:nsample(500, 2500))
             res, bad = run(queries)
             report("random", bad)
             nvalid = count(r -> r[2] === :valid, res)
             ninvalid = count(r -> r[2] === :invalid, res)
-            measured(@sprintf("EK parser: %d random queries, %d valid and %d invalid equal to CSPICE, %d different, %d not sent to CSPICE (undefined read)",
-                length(queries), nvalid, ninvalid, length(bad), count(r -> r[2] === :unsafe, res)))
+            measured("EK parser: $(length(queries)) random queries, $nvalid valid and $ninvalid invalid equal to " *
+                     "CSPICE, $(length(bad)) different, $(count(r -> r[2] === :unsafe, res)) not sent to CSPICE " *
+                     "(undefined read)")
             @test isempty(bad)
-            @test nvalid >= 1000
-            @test ninvalid >= 100
+            @test nvalid >= nsample(200, 1000)
+            @test ninvalid >= nsample(20, 100)
         end
 
-        @testset "random token strings" begin
+        ek_part("random token strings") do
             rng = MersenneTwister(SEED + 1)
             valid = ekq_valid_corpus()
-            queries = unique(String(ekq_fuzz_query(rng, valid)) for _ in 1:4000)
+            queries = unique(String(ekq_fuzz_query(rng, valid)) for _ in 1:nsample(800, 4000))
             res, bad = run(queries; guard_not=true)
             report("fuzz", bad)
             nvalid = count(r -> r[2] === :valid, res)
             ninvalid = count(r -> r[2] === :invalid, res)
             messages = unique(replace(r[3], r"\d+" => "0", r"<[^>]*>" => "<>", r": .*$" => "") for r in res if r[2] === :invalid)
-            measured(@sprintf("EK parser: %d random token strings, %d valid and %d invalid equal to CSPICE, %d different, %d signal, %d not sent to CSPICE, %d message forms",
-                length(queries), nvalid, ninvalid, length(bad), count(r -> r[2] === :signal, res),
-                count(r -> r[2] === :unsafe, res), length(messages)))
+            measured("EK parser: $(length(queries)) random token strings, $nvalid valid and $ninvalid invalid " *
+                     "equal to CSPICE, $(length(bad)) different, $(count(r -> r[2] === :signal, res)) signal, " *
+                     "$(count(r -> r[2] === :unsafe, res)) not sent to CSPICE, $(length(messages)) message forms")
             get(ENV, "EKQ_MESSAGES", "") == "" || foreach(println, sort(messages))
             @test isempty(bad)
-            @test ninvalid >= 2000
+            @test ninvalid >= nsample(400, 2000)
         end
 
-        @testset "threads" begin
+        ek_part("threads") do
             # The parser has no shared state: the same queries on all threads give the
             # results of one thread.
             queries = vcat(ekq_valid_corpus(), ekq_invalid_corpus())
@@ -1095,7 +1109,7 @@ group("ek_parse: EK query parser against CSPICE", Kernels.LSK) do
             @test all(same(parallel[k], serial[mod1(k, length(queries))]) for k in eachindex(parallel))
         end
 
-        @testset "SPICE errors" begin
+        ek_part("SPICE errors") do
             # 8 x 8 x 8 conjunctions of 3 relations: the integer cell is too small.
             big = "SELECT ICOL FROM ALPHA WHERE " * join(("(" * join(("ICOL = $(10k + j)"
                                                                       for j in 1:8), " OR ") * ")" for k in 1:3), " AND ")
@@ -1117,7 +1131,7 @@ group("ek_parse: EK query parser against CSPICE", Kernels.LSK) do
             @test ekq_compare(fx, huge)[1] === :unsafe
         end
 
-        @testset "documented differences" begin
+        ek_part("documented differences") do
             Q = NeoSpice
             enc(query) = Q._ek_encode_query(fx.tables, fx.ks, fx.td, query)
             # More than 2000 characters: CSPICE reads past its buffer.
@@ -1161,7 +1175,7 @@ group("ek_parse: EK query parser against CSPICE", Kernels.LSK) do
                                           "attempting to parse the string <2000 JAN 1>")
         end
 
-        @testset "decoded query" begin
+        ek_part("decoded query") do
             Q = NeoSpice
             query = "select a.icol, vcol, b.tarr from ALPHA a, BETA b where a.icol >= 2 and " *
                     "(ccol like 'S*' or b.xcol not between 1 and a.dcol) and " *
@@ -1202,7 +1216,7 @@ group("ek_parse: EK query parser against CSPICE", Kernels.LSK) do
             @test qt.constraints[1].dval == 0.0
         end
 
-        @testset "column names (zzekpcol)" begin
+        ek_part("column names (zzekpcol)") do
             Q = NeoSpice
             query = "SELECT A.ICOL FROM ALPHA A, BETA, GAMMA_LONG_NAME G WHERE A.ICOL > 0"
             q = Q._ek_encode_query(fx.tables, fx.ks, fx.td, query)[1]
@@ -1233,3 +1247,5 @@ group("ek_parse: EK query parser against CSPICE", Kernels.LSK) do
         c_pending_kind()
     end
 end
+
+Base.Experimental.@optlevel -1

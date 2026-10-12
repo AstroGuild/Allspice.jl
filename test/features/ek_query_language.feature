@@ -67,8 +67,8 @@ Feature: Parse and check a query of the EK query language
       | SELECT ICOL FROM ALPHA WHERE ICOL LIKE 'A' | LIKE and NOT LIKE operators may be used only with character columns.  Column <ICOL> has type INTEGER. |
 
   Scenario: Random queries agree with CSPICE
-    Given 2500 random queries with nested AND, OR, NOT, BETWEEN and parentheses
-    And 4000 random strings of tokens of the query language
+    Given 500 random queries with nested AND, OR, NOT, BETWEEN and parentheses (2500 in the exhaustive run)
+    And 800 random strings of tokens of the query language (4000 in the exhaustive run)
     When both engines encode each query
     Then the error flags are equal and the error messages are equal
     And for a valid query the integer cell, the character buffer and the double buffer of the encoded query are equal element by element
