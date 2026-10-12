@@ -71,7 +71,10 @@ group("EK files: segments, summaries and column entries through a handle") do
         nk(f) = neo_kind(f)
         @test nk(() -> ekssum(hn, 0)) == ck(() -> c_ekssum(hc, 0)) == :indexoutofrange
         @test nk(() -> ekssum(hn, 99)) == ck(() -> c_ekssum(hc, 99))
-        @test nk(() -> ekrcei(hn, 9, 1, "ID")) == ck(() -> c_ekrcei(hc, 9, 1, "ID"))
+        # No oracle call for a segment that does not exist: `ekrcei_c` does not check the
+        # segment number before it reads the segment tree, and the search through
+        # undefined pages took from 1 s to 10 minutes.
+        @test nk(() -> ekrcei(hn, 9, 1, "ID")) == :invalidindex
         @test nk(() -> ekrcei(hn, 1, 1, "NAME")) == ck(() -> c_ekrcei(hc, 1, 1, "NAME")) == :wrongdatatype
         @test nk(() -> ekrced(hn, 1, 1, "ID")) == ck(() -> c_ekrced(hc, 1, 1, "ID")) == :wrongdatatype
         @test nk(() -> ekrcec(hn, 1, 1, "VAL")) == ck(() -> c_ekrcec(hc, 1, 1, "VAL"; maxn=4, maxlen=40)) == :wrongdatatype
