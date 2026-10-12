@@ -26,6 +26,21 @@ export ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
 export spkobj, spkobj!, spkcov, spkcov!, kinfo, kdata, tkvrsn
 export Window, card, wncard, wninsd!, wnvald!, wnunid, wnintd, wndifd, wncomd
 export wnelmd, wnincd, wnfetd, wnsumd
+export vadd, vsub, vscl, vminus, vdot, vcrss, vnorm, vhat, vdist, vsep, vrel, vproj, vperp
+export vlcom, vlcom3, vrotv, vzero, vequ, vpack, vupack, ucrss, unorm, vtmv
+export mxv, mtxv, mxm, mtxm, mxmt, xpose, xpose6, invert, invort, trace, isrot, ident
+export rotate, rotmat, rotvec, twovec, twovxf, dvhat, dvdot, dvcrss, ducrss, dvnorm, dvsep
+export vaddg, vsubg, vsclg, vminug, vequg, vdotg, vnormg, vhatg, unormg, vdistg, vsepg, vrelg
+export vprojg, vlcomg, vzerog, vtmvg, mxvg, mtxvg, mxmg, mtxmg, mxmtg, xposeg
+export eul2m, m2eul, eul2xf, xf2eul, axisar, raxisa, m2q, q2m, qxq, qdq2av, rav2xf, xf2rav
+export sharpr
+export SpicePlane, SpiceEllipse, nearpt, dnearp, surfpt, surfnm, surfpv, npedln, npelpt, nplnpt
+export edlimb, edterm, inedpl, inelpl, inrypl, cgv2el, el2cgv, saelgv, nvc2pl, nvp2pl, psv2pl
+export pl2nvc, pl2nvp, pl2psv, pjelpl, ednmpt, edpnt, vprjp, vprjpi
+export reclat, latrec, recrad, radrec, recsph, sphrec, reccyl, cylrec, cyllat, latcyl, cylsph
+export sphcyl, sphlat, latsph, recgeo, georec, recpgr, pgrrec, xfmsta, convrt
+export drdlat, dlatdr, drdsph, dsphdr, drdcyl, dcyldr, drdgeo, dgeodr, drdpgr, dpgrdr
+export conics, oscelt, oscltx, prop2b, stmp03
 
 include("types.jl")
 include("taylor.jl")        # Taylor{N,T} truncated series, `primal`
@@ -57,6 +72,11 @@ include("spk_types/sgp4.jl")    # SGP4/SDP4 propagation of two-line elements
 include("spk_types/type10.jl")  # SPK type 10: generic segment, TEME to J2000
 include("tle.jl")           # getelm, evsgp4, spkw10
 include("kernel_info.jl")   # spkobj, spkcov, ktotal(kind), kdata, kinfo, tkvrsn
+include("math/vectors.jl")      # vadd ... vsep, mxv, mxm, invert, rotate, twovec, dvhat, g forms
+include("math/rotations.jl")    # eul2m, m2eul, m2q, q2m, qxq, axisar, raxisa, rav2xf, xf2eul
+include("math/ellipsoid.jl")    # SpicePlane, SpiceEllipse, nearpt, surfpt, edlimb, inedpl, npedln
+include("math/coordinates.jl")  # reclat, recgeo, recpgr, ..., Jacobians, xfmsta, convrt
+include("math/conics.jl")       # stmp03, prop2b, conics, oscelt, oscltx
 include("precompile.jl")    # precompile directives for the common signatures
 
 end # module
