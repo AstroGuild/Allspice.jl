@@ -17,15 +17,11 @@
 # coordinate follows the rounding noise in each library, so the two windows have no
 # relation. The test checks only that the two libraries accept the search.
 #
-# A ray that crosses the limb: with a converged correction (`CN`, `XCN` and the `+S`
-# forms) the flag "intercept found" of `sincpt` is not monotone within about 0.3 m of
-# the limb, in CSPICE and in NeoSpice, because the light-time loop stops after a
-# number of iterations that depends on rounding. An end point of the existence window
-# then differs by some milliseconds between the two libraries. The searches on such a
-# ray use the other corrections, and the existence window is compared for the nine
-# corrections with a tolerance of 5e-2 s for the converged ones. A ray that stays near
-# the limb amplifies the rounding of the ray in the intercept point; the end points of
-# the searches on that ray agree within 2e-5 s.
+# A ray that stays near the limb amplifies the rounding of the ray in the intercept
+# point; the end points of the searches on that ray agree within 2e-5 s. The existence
+# window of a ray that crosses the limb is compared for the nine corrections with the
+# tolerance of 2e-6 s (this is also the regression test of the flag "intercept found"
+# of `sincpt` at the limb with a converged correction).
 #
 # Tolerance: the convergence tolerance of every search is the default of CSPICE,
 # 1e-6 s. The number of intervals must be equal and each end point must agree within
@@ -122,9 +118,6 @@ an altitude, or the distance from the center of the Moon (whose radii are equal)
 """
 gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
     (target == "MOON" && sys != "CYLINDRICAL" && crd in ("RADIUS", "RANGE"))
-
-"The corrections whose light-time loop has a fixed number of passes."
-const GFS_FIXED_CORRS = ("NONE", "LT", "LT+S", "XLT", "XLT+S")
 
 group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
     paths = [geo_kernels()..., gfs_track_kernel()]
@@ -243,7 +236,7 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
         nexist = 0
         for (sys, crd) in (("LATITUDINAL", "LATITUDE"), ("RECTANGULAR", "Z"), ("RECTANGULAR", "X"),
                 ("GEODETIC", "LONGITUDE")), (rel, wadj) in GF_VARIANTS
-            corr = rand(rng, GFS_FIXED_CORRS)
+            corr = rand(rng, GF_ABCORRS)
             t0 = start_epoch()
             cn = Window([t0, t0 + 60 * day])
             step = 3 * hour
@@ -269,7 +262,7 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
         n = 0
         for (sys, crds) in GF_SYSTEMS, crd in crds, rel in ("<", "=", "LOCMAX", "ABSMIN")
             gfs_constant("MOON", sys, crd) && continue
-            corr = rand(rng, GFS_FIXED_CORRS)
+            corr = rand(rng, GF_ABCORRS)
             t0 = start_epoch()
             # the direction of the Moon at t0, as the search will see it
             dvec = collect(spkpos(ctx, "MOON", t0, "J2000", corr, "EARTH")[1])
@@ -295,10 +288,8 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
     @testset "gfsntc: the existence window, the nine corrections" begin
         # A coordinate that is less than the reference value wherever the intercept
         # exists: the result is the existence window, contracted as in CSPICE.
-        worst = Dict(false => 0.0, true => 0.0)
+        worst = 0.0
         for corr in GF_ABCORRS, k in 1:4
-            converged = !(corr in GFS_FIXED_CORRS)
-            atol = converged ? 5.0e-2 : 2.0e-6
             t0 = start_epoch()
             if isodd(k)
                 a = ("EARTH", "IAU_EARTH", "Ellipsoid", corr, "MOON", "GF_TRACK", [1.0, 0.0166, 0.0],
@@ -313,15 +304,21 @@ group("gf surface: gfsubc, gfsntc", Kernels.FULL_SET_FILES...) do
             w = gfsntc(ctx, a..., cn)
             ref = GFO.gfsntc(a..., collect(cn))
             @test wncard(w) >= 1
-            ok = gf_compare("gfsntc existence window, " * (converged ? "converged" : "fixed passes"),
-                w, ref; atol)
+            ok = gf_compare("gfsntc existence window", w, ref)
             ok || @info "gfsntc existence case" corr k t0
             @test ok
-            length(w) == length(ref) && (worst[converged] = max(worst[converged],
-                maximum(abs.(collect(w) .- ref))))
+            # the flag of `sincpt` on the two sides of each end point, in the two libraries
+            # (an end point that is an end of the confinement window is not at the limb)
+            for (i, t) in enumerate(w), dt in (-1.05, -0.95)
+                min(abs(t - cn[1]), abs(t - cn[2])) < 2.0 && continue
+                te = t + (isodd(i) ? dt : -dt)
+                nfound = sincpt(ctx, a[3], a[1], te, a[2], corr, a[5], a[6], a[7]) !== nothing
+                @test nfound == (g_sincpt(a[3], a[1], te, a[2], corr, a[5], a[6], a[7]) !== nothing)
+                # (the ray that stays near the limb can meet the target again after
+                # the end of an interval, so the side is checked for the other ray)
+                iseven(k) && @test nfound == (dt > -1.0)
+            end
         end
-        measured(@sprintf("  gfsntc existence window: largest end-point difference %.3e s (fixed passes), %.3e s (converged)",
-            worst[false], worst[true]))
     end
 
     @testset "gfevnt: the surface vector definitions" begin
