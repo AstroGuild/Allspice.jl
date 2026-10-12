@@ -4,6 +4,7 @@ using NeoSpice
 using NeoSpice: KernelSet, spk_jet, frame_jet, frame_rotation, rotation_jet, primal
 using ForwardDiff
 using ForwardDiff: Dual, value, partials
+import StaticArrays
 
 # A query with a dual-number epoch does not run the evaluators on dual numbers. It takes
 # the analytical time derivatives at the plain epoch (the code that the package image
@@ -70,5 +71,48 @@ NeoSpice._ad_order(::Type{ForwardDiff.Dual{Tg,V,N}}) where {Tg,V,N} = 1 + NeoSpi
 "`_with_primal(x::Dual, p)`: `x` with the plain value `p` and the same partials."
 NeoSpice._with_primal(x::ForwardDiff.Dual{Tg}, p::Float64) where {Tg} =
     ForwardDiff.Dual{Tg}(NeoSpice._with_primal(ForwardDiff.value(x), p), ForwardDiff.partials(x))
+
+# --- aberration corrections ---------------------------------------------------------
+#
+# A corrected position with a dual-number epoch is assembled in the same way, from the
+# jet of `spkder` with the correction at the plain epoch. The value is the position of
+# the plain call, and the partials are the exact derivatives of the position function
+# (see the docstring of `spkder`). For `spkezr` the value of the velocity is the
+# velocity that CSPICE defines and its partials are the next orders of the same jet;
+# for the `LT` forms that velocity is not the derivative of the position, so the
+# partial of the position and the value of the velocity differ there, as they do
+# between `spkder` and `spkezr`. The light time is `|r| / c`, because the stellar
+# aberration and the frame change are rotations.
+
+"Light time `|r| / c` of a dual position; zero for the zero vector (a body from itself)."
+@inline function _dual_lt(r::NeoSpice.Vec3{D}) where {D<:Dual}
+    iszero(primal(r[1])) && iszero(primal(r[2])) && iszero(primal(r[3])) && return zero(D)
+    return sqrt(r[1] * r[1] + r[2] * r[2] + r[3] * r[3]) / NeoSpice.CLIGHT
+end
+
+function NeoSpice.abcorr_jet(ks::KernelSet, targ::Int32, et::D, ref::Int32,
+        corr::NeoSpice.Aberration, obs::Int32, v::Val{N}) where {D<:Dual,N}
+    jet = NeoSpice.abcorr_jet(ks, targ, primal(et), ref, corr, obs, Val(N + depth(D)))
+    return lift_jet(jet, et, v)
+end
+
+function NeoSpice.abcorr_position(ks::KernelSet, targ::Int32, et::D, ref::Int32,
+        corr::NeoSpice.Aberration, obs::Int32) where {D<:Dual}
+    t = primal(et)
+    jet = NeoSpice.abcorr_jet(ks, targ, t, ref, corr, obs, Val(depth(D)))
+    r0, _ = NeoSpice.abcorr_position(ks, targ, t, ref, corr, obs)
+    r = lift(0, Base.setindex(jet, r0, 1), et)
+    return r, _dual_lt(r)
+end
+
+function NeoSpice.abcorr_state(ks::KernelSet, targ::Int32, et::D, ref::Int32,
+        corr::NeoSpice.Aberration, obs::Int32) where {D<:Dual}
+    t = primal(et)
+    jet = NeoSpice.abcorr_jet(ks, targ, t, ref, corr, obs, Val(depth(D) + 1))
+    s0, _ = NeoSpice.abcorr_state(ks, targ, t, ref, corr, obs)
+    r = lift(0, Base.setindex(jet, s0[StaticArrays.SVector(1, 2, 3)], 1), et)
+    v = lift(1, Base.setindex(jet, s0[StaticArrays.SVector(4, 5, 6)], 2), et)
+    return vcat(r, v), _dual_lt(r)
+end
 
 end # module
