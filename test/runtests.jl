@@ -20,7 +20,9 @@ const GROUPS = ["states", "rotations", "derivatives", "identities", "pool", "man
     "threads", "quality", "aberration", "spktypes", "time", "sclk", "ck", "dafwrite",
     "windows", "roundtrip", "sgp4", "math_vectors", "math_rotations", "math_coordinates",
     "math_ellipsoid", "math_conics", "dynframes", "poolwrite", "frameinfo", "das", "dsk",
-    "gf_solver", "gf_quantities", "gf_posc", "gf_threads"]
+    "gf_solver", "gf_quantities", "gf_posc", "gf_threads",
+    "geom_subpoints", "geom_illum", "geom_occult", "geom_limbterm", "geom_fov", "geom_constobs",
+    "geom_azel"]
 
 selected = isempty(ARGS) ? GROUPS : ARGS
 unknown = setdiff(selected, GROUPS)

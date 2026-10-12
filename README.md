@@ -12,7 +12,7 @@ The package is a prototype that covers the part of the toolkit which most trajec
 |---|---|---|
 | Kernel loading | SPK, CK, binary PCK, DSK, text kernels (leap seconds, PCK, frames, spacecraft clock), meta-kernels | EK |
 | SPK data types | all types of CSPICE N0067: 1, 2, 3, 5, 8, 9, 10, 12, 13, 14, 15, 17, 18, 19, 20, 21; `getelm`, `evsgp4` | |
-| States | `spkezr`, `spkpos`, `spkgeo`, `spkssb`, `spkltc`, `spkaps`, `spkacs`, `spkapo`, with all aberration corrections of CSPICE | constant-position and constant-velocity observers (`spkcpo` and related calls) |
+| States | `spkezr`, `spkpos`, `spkgeo`, `spkssb`, `spkltc`, `spkaps`, `spkacs`, `spkapo`, with all aberration corrections of CSPICE; constant-position and constant-velocity observers and targets (`spkcpo`, `spkcpt`, `spkcvo`, `spkcvt`) | |
 | Frames | inertial, body-fixed (text and binary PCK), fixed-offset, CK-based, dynamic (all families) and switch frames; `pxform`, `sxform`; `frinfo`, `cidfrm`, `cnmfrm`, `ccifrm`, `tkfram`, `tipbod`, `tisbod`, `pckfrm`, `pckcov` | |
 | Derivatives | `spkder` and `pxder` to any order; a `ForwardDiff.Dual` epoch in the public calls | |
 | Orientation and clocks | CK types 1 to 6, `ckgp`, `ckgpav`, `ckcov`, `ckobj`; spacecraft clock type 1 | |
@@ -22,7 +22,7 @@ The package is a prototype that covers the part of the toolkit which most trajec
 | Mathematics | vectors, matrices, rotations and quaternions, coordinate conversions with their Jacobians, ellipsoid, plane and ellipse calls, conic elements and two-body propagation | |
 | Shape kernels | DAS file access, DSK type 2 read and write, plate access calls, ray-surface intercept (`dskxv`, `dskxsi`, `dskx02`), `latsrf`, `srfnrm`, surface name calls | DSK types other than 2 |
 | Geometry finder | `gfdist`, `gfsep`, `gfposc`, `gfrr`, `gfpa`, `gfuds`, `gfudb`, `gfevnt` for these quantities, `gfstol`, `gfrefn`, `uddf`, `uddc` | `gfsubc`, `gfsntc`, `gfilum`, `gfoclt`, `gftfov`, `gfrfov` |
-| Geometry | | sub-points, illumination, occultation, limb and terminator points, instrument fields of view |
+| Geometry | `subpnt`, `subslr`, `sincpt`, `ilumin`, `illumg`, `illumf`, `phaseq`, `occult`, `limbpt`, `termpt`, `tangpt`, `getfov`, `getfvn`, `fovtrg`, `fovray`, `azlcpo`, `azlrec`, `recazl`, `dazldr`, `drdazl`, `srfrec`, on ellipsoids and on DSK data | |
 
 Three properties differ from CSPICE by design. All loaded data belong to a `SpiceContext`, whose readers take no lock, so that queries from many threads are safe while another thread loads or unloads kernels. A file that is open for access is an object that the caller owns (`h = dafopr(path)`), and the calls that use a hidden current file in CSPICE take that object as their first argument. An answer never depends on earlier calls, because the package keeps no buffers or saved search state between queries.
 
