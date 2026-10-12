@@ -123,7 +123,8 @@ default context. The conversions need a leap-second kernel (`SpiceError(:nolsk)`
   that rotates vectors from frame `from` to frame `to` at `et`, generic over `T`. With
   `et::Taylor` the result carries all derivative orders. Class 1, class 2 (binary PCK
   segment first if one covers the epoch, text-PCK constants otherwise, as `tisbod`
-  does) and class 4 frames; classes 3 and 5 throw `SpiceError(:unsupported, ...)`.
+  does), class 3 (`ck.jl`), class 4, class 5 (`dynframes.jl`) and class 6
+  (`switchframes.jl`) frames; a higher class throws `SpiceError(:unsupported, ...)`.
 - `rotation_jet(ks, from, to, et::Real, ::Val{N}) -> NTuple{N+1,Mat3}`: the same as
   ordinary derivatives.
 

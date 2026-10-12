@@ -1,0 +1,258 @@
+# Group 19: frame information, body constants, body-fixed rotations, binary PCK coverage,
+# local solar time and L_s against CSPICE.
+#
+# Conventions for an absent item: `frinfo`, `cidfrm`, `cnmfrm`, `ccifrm` and `tkfram`
+# return `nothing` where CSPICE returns `found = false`. `tkfram_` has no wrapper in
+# SPICE.jl and is called through `ccall`.
+
+isdefined(@__MODULE__, :CKFix) || include("ckfixtures.jl")
+isdefined(@__MODULE__, :DynFix) || include("dynfixtures.jl")
+
+"`tkfram_` of CSPICE: `(rot, relative frame ID)`, or `nothing` if not found or on an error."
+function oracle_tkfram(id::Integer)
+    rot = zeros(9)
+    frame = Ref{Cint}(0)
+    found = Ref{Cint}(0)
+    ccall((:tkfram_, SPICE.libcspice), Cint, (Ref{Cint}, Ptr{Float64}, Ref{Cint}, Ref{Cint}),
+        Cint(id), rot, frame, found)
+    if ccall((:failed_c, SPICE.libcspice), Cint, ()) != 0
+        ccall((:reset_c, SPICE.libcspice), Cvoid, ())
+        return nothing
+    end
+    found[] == 0 && return nothing
+    return SMatrix{3,3,Float64,9}(rot), Int(frame[])
+end
+
+group("19. frame information, body constants, local solar time", Kernels.FULL_SET_FILES...) do
+    rng = MersenneTwister(SEED + 19)
+    set = [Kernels.full_set()..., CKFix.frame_kernel(), DynFix.frame_kernel()]
+    extra = joinpath(mktempdir(), "objects.tf")
+    write(extra, """
+    KPL/FK
+
+    \\begindata
+       OBJECT_MARS_FRAME      = 'IAU_MARS'
+       OBJECT_599_FRAME       = 'J2000'
+       OBJECT_EARTH_FRAME     = 13000
+       OBJECT_-77_FRAME       = 'TESTSC_T3'
+       OBJECT_301_FRAME       = 'MOON_ME'
+       NAIF_BODY_NAME        += ( 'TEST_PROBE' )
+       NAIF_BODY_CODE        += ( -77 )
+    \\begintext
+    """)
+    for with_objects in (false, true)
+        with_objects && push!(set, extra)
+        oracle_load(set)
+        ctx = neo_context(set)
+        label = with_objects ? " (with OBJECT_*_FRAME variables)" : ""
+
+        frames = vcat(collect(-5:25), collect(10001:10150), collect(13000:13010),
+            [1850000 + i for i in 0:25], [31000, 31001, 31002, 31003, 31004, 31005, 31006,
+                31007, 31008, -77001, -77003, -77900, -77099, -99001, 1400499, 99999999])
+        @testset "frinfo$label" begin
+            nfound = 0
+            for id in frames
+                want = SPICE.frinfo(id)
+                got = frinfo(ctx, id)
+                got == want || @info "frinfo" id got want
+                @test got == want
+                want === nothing || (nfound += 1)
+            end
+            println("  frinfo: ", length(frames), " frame IDs, ", nfound, " found")
+            @test nfound > 150
+            @test (@inferred Union{Nothing,NTuple{3,Int}} frinfo(ctx, 13000)) == SPICE.frinfo(13000)
+        end
+
+        @testset "cidfrm and cnmfrm$label" begin
+            bodies = vcat(collect(-3:12), collect(199:100:999), collect(301:1:305),
+                collect(401:402), collect(501:516), collect(601:618), [10, 9511010, 2000001,
+                    2000004, 2000433, 1000005, -77, -78, -31, 3, 4, 399, 301, 123456789])
+            nfound = 0
+            for b in bodies
+                want = SPICE.cidfrm(b)
+                got = cidfrm(ctx, b)
+                got == want || @info "cidfrm" b got want
+                @test got == want
+                want === nothing || (nfound += 1)
+            end
+            println("  cidfrm: ", length(bodies), " bodies, ", nfound, " found")
+            @test nfound > 50
+            names = ["EARTH", "earth", "  Moon ", "MARS", "JUPITER", "SUN", "PHOBOS", "TEST_PROBE",
+                "SOLAR SYSTEM BARYCENTER", "MARS BARYCENTER", "NOT A BODY", "TITAN", "CERES",
+                "PLUTO", "IO", "Earth  Barycenter", "399", "-77", "499"]
+            for n in names
+                want = SPICE.cnmfrm(n)
+                got = cnmfrm(ctx, n)
+                got == want || @info "cnmfrm" n got want
+                @test got == want
+            end
+        end
+
+        @testset "ccifrm$label" begin
+            n = 0
+            for id in frames
+                info = SPICE.frinfo(id)
+                info === nothing && continue
+                want = SPICE.ccifrm(info[2], info[3])
+                got = ccifrm(ctx, info[2], info[3])
+                got == want || @info "ccifrm" id info got want
+                @test got == want
+                n += 1
+            end
+            for (c, k) in ((1, 0), (1, 22), (2, 398), (2, 31006), (3, -77001), (3, 5), (4, -77900),
+                (5, 1850001), (6, 1850021), (7, 1), (0, 0), (2, 10), (4, 31001))
+                want = SPICE.ccifrm(c, k)
+                got = ccifrm(ctx, c, k)
+                got == want || @info "ccifrm" c k got want
+                @test got == want
+            end
+            println("  ccifrm: ", n, " (class, class ID) pairs of loaded frames")
+        end
+
+        @testset "tkfram$label" begin
+            worst = 0.0
+            nfound = 0
+            for id in (-77900, 31000, 31001, 31002, 31003, 31006, 31007, 1850001, 10013, 5, -5)
+                want = oracle_tkfram(id)
+                got = tkfram(ctx, id)
+                @test (got === nothing) == (want === nothing)
+                (got === nothing || want === nothing) && continue
+                nfound += 1
+                @test got[2] == want[2]
+                worst = max(worst, maximum(abs.(got[1] .- want[1])))
+            end
+            @test nfound >= 3
+            @test worst <= 4 * eps()
+            measured(@sprintf("  %-58s n=%-7d max=%.3e", "tkfram: element of the matrix$label",
+                nfound, worst))
+        end
+    end
+
+    set = [Kernels.full_set()..., CKFix.frame_kernel(), DynFix.frame_kernel()]
+    oracle_load(set)
+    ctx = neo_context(set)
+    ks = NeoSpice.kernelset(ctx)
+
+    @testset "tipbod and tisbod" begin
+        dp = Float64[]; ds = Float64[]; dd = Float64[]
+        for body in (399, 301, 499, 599, 10, 199, 299, 699, 799, 899, 401, 502, 606, 31006),
+            ref in ("J2000", "ECLIPJ2000", "B1950", "FK4", "GALACTIC", 1, 17)
+            body == 31006 && continue
+            for et in random_epochs(rng, 6, -6.0e8, 6.0e8)
+                refname = ref isa Integer ? frmnam(ctx, ref) : ref
+                a = tipbod(ctx, ref, body, et)
+                b = SPICE.tipbod(refname, body, et)
+                push!(dp, maximum(abs.(a .- b)))
+                s = tisbod(ctx, ref, body, et)
+                t = SPICE.tisbod(refname, body, et)
+                push!(ds, maximum(abs.(s[1:3, 1:3] .- t[1:3, 1:3])))
+                scale = maximum(abs.(t[4:6, 1:3]))
+                push!(dd, maximum(abs.(s[4:6, 1:3] .- t[4:6, 1:3])) / scale)
+                @test s[1:3, 4:6] == zeros(3, 3)
+                @test s[4:6, 4:6] == s[1:3, 1:3]
+            end
+        end
+        sp = report_quantiles("tipbod: element of the matrix", dp)
+        ss = report_quantiles("tisbod: element of the rotation block", ds)
+        sd = report_quantiles("tisbod: derivative block (relative)", dd)
+        @test sp.max <= 1e-13
+        @test ss.max <= 1e-13
+        @test sd.max <= 1e-12
+        @test (@inferred tipbod(ks, 1, 399, 1.0e8)) isa SMatrix{3,3,Float64,9}
+        @test (@inferred tisbod(ks, 1, 399, 1.0e8)) isa SMatrix{6,6,Float64,36}
+        @test throws_kind(() -> tipbod(ctx, "IAU_EARTH", 399, 0.0), :irfnotrec)
+        @test throws_kind(() -> tipbod(ctx, "J2000", 123456, 0.0), :framedatanotfound)
+    end
+
+    @testset "pckfrm and pckcov" begin
+        want = sort!(Int[i for i in SPICE.pckfrm!(SPICE.SpiceIntCell(100), Kernels.MOON_BPC)])
+        @test pckfrm(Kernels.MOON_BPC) == want
+        @test pckfrm!([7, 3], Kernels.MOON_BPC) == sort!(unique!(vcat([7, 3], want)))
+        @test !isempty(want)
+        for id in vcat(want, [399, 0])
+            cell = SPICE.pckcov!(SPICE.SpiceDoubleCell(2000), Kernels.MOON_BPC, id)
+            w = Float64[x for x in cell]
+            got = pckcov(Kernels.MOON_BPC, id)
+            @test got isa Window
+            @test collect(got) == w
+        end
+        pre = Window([-1.0e12, -0.9e12])
+        got = pckcov!(pre, Kernels.MOON_BPC, want[1])
+        cell = SPICE.SpiceDoubleCell(2000)
+        SPICE.wninsd!(cell, -1.0e12, -0.9e12)
+        SPICE.pckcov!(cell, Kernels.MOON_BPC, want[1])
+        @test collect(got) == Float64[x for x in cell]
+        @test throws_kind(() -> pckfrm(Kernels.DE440S), :invalidfiletype)
+        @test throws_kind(() -> pckcov(Kernels.LSK, 301), :invalidarchtype)
+    end
+
+    @testset "bodfnd and bodvcd" begin
+        n = 0
+        for body in (399, 301, 499, 10, 599, 1, 3, 9, -77, 2000004, 606),
+            item in ("RADII", "PM", "POLE_RA", "POLE_DEC", "GM", "NUT_PREC_RA", "LONG_AXIS",
+                "radii", "NOTHING", "NUT_PREC_ANGLES", "MAX_PHASE_DEGREE")
+            want = SPICE.bodfnd(body, item)
+            @test bodfnd(ctx, body, item) == want
+            want || continue
+            @test bodvcd(ctx, body, item) == SPICE.bodvcd(body, item)
+            n += 1
+        end
+        println("  bodvcd: ", n, " items equal to CSPICE")
+        @test n > 30
+        @test throws_kind(() -> bodvcd(ctx, 399, "NOTHING"), :kernelvarnotfound)
+        @test (@inferred bodfnd(ctx, 399, "RADII")) === true
+    end
+
+    @testset "et2lst" begin
+        n = 0
+        dsec = Int[]
+        # Bodies with a segment in de440s.bsp; Venus rotates in the retrograde direction.
+        for body in (399, 301, 299, 199, 10),
+            typ in ("PLANETOCENTRIC", "PLANETOGRAPHIC", "planetographic", " Planetocentric ")
+            for et in random_epochs(rng, 12, -6.0e8, 6.0e8)
+                lon = (2 * rand(rng) - 1) * 2pi
+                want = SPICE.et2lst(et, body, lon, strip(typ))
+                got = et2lst(ctx, et, body, lon, typ)
+                n += 1
+                if got == want
+                    push!(dsec, 0)
+                    continue
+                end
+                # The second is truncated: one unit of rounding in the angle can move it.
+                a = 3600 * got[1] + 60 * got[2] + got[3]
+                b = 3600 * want[1] + 60 * want[2] + want[3]
+                d = min(mod(a - b, 86400), mod(b - a, 86400))
+                push!(dsec, d)
+                d <= 1 || @info "et2lst" body typ et lon got want
+            end
+        end
+        nexact = count(==(0), dsec)
+        measured(@sprintf("  %-58s n=%-7d equal=%d max=%d s", "et2lst: all five outputs", n,
+            nexact, maximum(dsec)))
+        @test maximum(dsec) <= 1
+        @test nexact >= n - 3
+        @test et2lst(ctx, 0.0, 10, 1.0, "PLANETOCENTRIC") == SPICE.et2lst(0.0, 10, 1.0, "PLANETOCENTRIC")
+        @test throws_kind(() -> et2lst(ctx, 0.0, 399, 0.0, "GEODETIC"), :unknownsystem)
+        @test throws_kind(() -> et2lst(ctx, 0.0, 1234567, 0.0, "PLANETOCENTRIC"), :cantfindframe)
+        r = @inferred et2lst(ctx, 1.0e8, 399, 0.3, "PLANETOCENTRIC")
+        @test r isa Tuple{Int,Int,Int,String,String}
+    end
+
+    @testset "lspcn" begin
+        d = Float64[]
+        # Bodies with a segment in de440s.bsp and a pole in the PCK.
+        for body in ("EARTH", 399, "MOON", 301, "VENUS", 199, "mercury"),
+            ab in ("NONE", "LT", "LT+S", "CN", "CN+S")
+            for et in random_epochs(rng, 10, -6.0e8, 6.0e8)
+                want = SPICE.lspcn(string(body isa Integer ? bodc2n(ctx, body) : body), et, ab)
+                got = lspcn(ctx, body, et, ab)
+                x = abs(got - want)
+                push!(d, min(x, 2pi - x))
+            end
+        end
+        s = report_quantiles("lspcn: angle (rad)", d)
+        @test s.max <= 2e-12
+        @test 0 <= lspcn(ctx, "EARTH", 0.0, "NONE") < 2pi
+        @test (@inferred lspcn(ks, 399, 1.0e8, "LT+S")) isa Float64
+    end
+end

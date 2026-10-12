@@ -446,8 +446,8 @@ end
 One link of the frame chain: the frame that `id` is defined relative to and the matrix
 from frame `id` to that parent at `et`. Requires `id != 1`. A class 3 (CK) frame is
 linked to J2000 directly and throws `SpiceError(:noframeconnect)` without a CK segment
-for `et`. Class 5 throws `SpiceError(:unsupported)`; a class 4 frame without data throws
-`SpiceError(:framedatanotfound)`.
+for `et`. A class 5 (dynamic) frame is linked to its base frame and a class 6 (switch)
+frame to J2000. A class 4 frame without data throws `SpiceError(:framedatanotfound)`.
 """
 function _frame_step(ks::KernelSet, id::Int32, et::T) where {T<:Real}
     fd = frame_def(ks, id)
@@ -461,20 +461,25 @@ function _frame_step(ks::KernelSet, id::Int32, et::T) where {T<:Real}
         tk === nothing && throw(SpiceError(:framedatanotfound,
             "no valid TKFRAME_* definition is loaded for the fixed-offset frame $id"))
         return tk.relative, Mat3{T}(tk.rot)
-    elseif class == 3
+    elseif class == 3 || class == 6
         # A CK frame is linked to J2000 in one step, through the reference frame of
-        # the CK segment that covers the epoch (`ck.jl`).
+        # the CK segment that covers the epoch (`ck.jl`); a switch frame through the
+        # base frame that is selected for the epoch (`switchframes.jl`).
         return _J2000_FRAME, _ck_chain_to(_CKExact(), ks, id, _J2000_FRAME, et)
+    elseif class == 5
+        # A dynamic frame is linked to its base frame (`dynframes.jl`).
+        return _dyn_frame_step(_CKExact(), ks, fd, et)
     end
     throw(SpiceError(:unsupported,
-        "frame $id has class $class; only classes 1, 2, 3 and 4 are supported"))
+        "frame $id has class $class; only classes 1 to 6 are supported"))
 end
 
 """
     _frame_parent(ks, id) -> Int32
 
 The frame that `id != 1` is defined relative to, without any evaluation: the relative
-frame of a class 4 frame, J2000 for classes 1, 2 and 3. Throws as `_frame_step` does.
+frame of a class 4 frame, the base frame of a class 5 frame, J2000 for classes 1, 2, 3
+and 6. Throws as `_frame_step` does.
 """
 function _frame_parent(ks::KernelSet, id::Int32)
     class = frame_def(ks, id).class
@@ -485,9 +490,10 @@ function _frame_parent(ks::KernelSet, id::Int32)
             "no valid TKFRAME_* definition is loaded for the fixed-offset frame $id"))
         return tk.relative
     end
-    class == 3 && return _J2000_FRAME
+    (class == 3 || class == 6) && return _J2000_FRAME
+    class == 5 && return _dyn_base(ks, id)
     throw(SpiceError(:unsupported,
-        "frame $id has class $class; only classes 1, 2, 3 and 4 are supported"))
+        "frame $id has class $class; only classes 1 to 6 are supported"))
 end
 
 @noinline _chain_too_long(id) = throw(SpiceError(:framechain,
@@ -521,7 +527,8 @@ classes 1, 2 and 3 to J2000) are followed to their first common frame, as `refch
 CSPICE does, and at most `MAX_FRAME_CHAIN` links each. `from == to` gives the identity.
 A class 3 (CK) frame is evaluated as `ckfrot_` does, see `_ck_frame_step`; with a
 `Taylor` epoch the result holds the derivatives of the interpolated rotation. Class 5
-throws `SpiceError(:unsupported)`.
+(dynamic) and class 6 (switch) frames are evaluated as `zzdynrot_` and `zzswfxfm_` do,
+see `dynframes.jl` and `switchframes.jl`.
 """
 function frame_rotation(ks::KernelSet, from::Int32, to::Int32, et::T) where {T<:Real}
     from == to && return one(Mat3{T})
