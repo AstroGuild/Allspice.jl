@@ -215,3 +215,59 @@ function gf_family(relate::AbstractString, adjust::Real)
     r in ("LOCMIN", "LOCMAX") && return "local extremum"
     return adjust == 0 ? "absolute extremum" : "absolute extremum, adjust"
 end
+
+"Random valid window of `n` intervals in [`a`, `b`]; some intervals are singletons."
+function gf_random_window(rng::AbstractRNG, n::Integer, a::Real, b::Real)
+    @assert n >= 1 && b > a
+    x = sort!([a + (b - a) * rand(rng) for _ in 1:2n])
+    for i in 1:2:2n
+        rand(rng) < 0.1 && (x[i+1] = x[i])
+    end
+    w = Window(x)
+    @assert wncard(w) >= 1
+    return w
+end
+
+"The seven relations of the geometry finder."
+const GF_RELATIONS = ("<", "=", ">", "LOCMIN", "LOCMAX", "ABSMIN", "ABSMAX")
+
+"The seven relations and the two absolute extrema with a positive adjust value (flag true)."
+const GF_VARIANTS = ((("<", false), ("=", false), (">", false), ("LOCMIN", false),
+    ("LOCMAX", false), ("ABSMIN", false), ("ABSMAX", false), ("ABSMIN", true), ("ABSMAX", true)))
+
+"The nine aberration corrections of `spkezr`."
+const GF_ABCORRS = ("NONE", "LT", "LT+S", "CN", "CN+S", "XLT", "XLT+S", "XCN", "XCN+S")
+
+"""
+    gf_reference(rng, q, cn, rel, withadjust) -> (refval, adjust)
+
+Reference value and adjust value for a search of the quantity `q` (a `GFQuantity` of
+NeoSpice) on the window `cn`: for `<`, `=`, `>` a value between the quartiles of the
+quantity on the window, so that the search has roots; for an absolute extremum with
+`withadjust` a tenth to a third of the range of the quantity.
+"""
+function gf_reference(rng::AbstractRNG, q, cn::Window, rel::AbstractString, withadjust::Bool)
+    ts = range(cn[1], cn[end]; length=60)
+    vals = [NeoSpice._gf_value(q, Float64(t)) for t in ts]
+    lo, hi = quantile_of(vals, 0.25), quantile_of(vals, 0.75)
+    refval = rel in ("<", "=", ">") ? lo + (hi - lo) * rand(rng) : 0.0
+    adjust = withadjust ? (0.1 + 0.2 * rand(rng)) * (maximum(vals) - minimum(vals)) : 0.0
+    return refval, adjust
+end
+
+"Kind of the `SpiceError` that `f()` throws, or `:none`."
+function gf_kind(f)
+    try
+        f()
+    catch e
+        e isa NeoSpice.SpiceError || rethrow()
+        return e.kind
+    end
+    return :none
+end
+
+"Shortest of three run times of `f()` in seconds (after one warm-up call)."
+function gf_time(f)
+    f()
+    return minimum(@elapsed(f()) for _ in 1:3)
+end

@@ -9,18 +9,6 @@
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
 
-"Random valid window of `n` intervals in [`a`, `b`]; some intervals are singletons."
-function gf_random_window(rng::AbstractRNG, n::Integer, a::Real, b::Real)
-    @assert n >= 1 && b > a
-    x = sort!([a + (b - a) * rand(rng) for _ in 1:2n])
-    for i in 1:2:2n
-        rand(rng) < 0.1 && (x[i+1] = x[i])
-    end
-    w = Window(x)
-    @assert wncard(w) >= 1
-    return w
-end
-
 group("gf solver: user-defined functions, tolerance, callbacks") do
     rng = MersenneTwister(SEED + 6100)
     relations = ("<", "=", ">", "LOCMIN", "LOCMAX", "ABSMIN", "ABSMAX")
