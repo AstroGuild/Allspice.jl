@@ -40,9 +40,13 @@ Conventions that hold everywhere:
   position of `seg.target` relative to `seg.center` in frame `seg.frame` and its time
   derivatives to order N. Order 1 is the velocity that CSPICE returns. For types with
   an independent velocity series (3) order k >= 1 is derivative k-1 of the velocity
-  series. Types 2 and 3 are required; other types throw `SpiceError(:unsupported, ...)`.
+  series. Types 2 and 3 are in this file; types 1, 5, 8, 9, 12 to 15 and 17 to 21 are in
+  `spk_more.jl` and `spk_types/` (one generic `state(data, seg, et::T) -> (pos, vel)`
+  per type that follows CSPICE; order k >= 2 is derivative k-1 of that velocity, from a
+  Taylor epoch). Type 10 throws `SpiceError(:unsupported, ...)`.
 - `spk_eval_position(data, seg, et::T, ::Val{N})`: as above but always derivatives of
-  the position series (differs from `spk_eval` only for type 3).
+  the position function (differs from `spk_eval` where the CSPICE velocity is not the
+  derivative of the position, for example types 3, 8, 9, 14).
 - `pck_eval(data::Vector{Float64}, seg::Segment, et::T, ::Val{N}) -> NTuple{N+1,Vec3}`:
   the stored 3-1-3 Euler angles (PHI, DELTA, W) in radians of a binary PCK type 2
   segment, as `pcke02` returns them, and their time derivatives. `PHI = RA + pi/2`,

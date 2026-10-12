@@ -15,6 +15,7 @@ include("types.jl")
 include("taylor.jl")        # Taylor{N,T} truncated series, `primal`
 include("daf.jl")           # open_daf, segment descriptors
 include("spk_eval.jl")      # spk_eval, pck_eval, find_segment
+include("spk_more.jl")      # SPK types 1, 5, 8, 9, 12 to 15, 17 to 21
 include("textkernel.jl")    # parse_text_kernel, kernel_arch, metakernel_files
 include("names.jl")         # body names and codes, built-in and pool-defined
 include("frames.jl")        # frame definitions, built-in and pool-defined

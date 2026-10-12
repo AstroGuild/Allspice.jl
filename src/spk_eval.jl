@@ -111,7 +111,9 @@ Contract: `seg` is a descriptor from `open_daf` and `data` is the array of the s
 file; `seg.t0 <= primal(et) <= seg.t1` (not checked: outside it the nearest record is
 extrapolated). Type 2: all orders are derivatives of the position series. Type 3:
 order 0 comes from the position series and order `k >= 1` is derivative `k-1` of the
-velocity series. Other types throw `SpiceError(:unsupported, ...)`. No allocation.
+velocity series. Types 1, 5, 8, 9, 12 to 15 and 17 to 21 (`spk_more.jl`): order
+`k >= 2` is derivative `k-1` of the velocity function that CSPICE defines. Type 10
+and unknown types throw `SpiceError(:unsupported, ...)`. No allocation.
 """
 @inline function spk_eval(data::Vector{Float64}, seg::Segment, et::T, v::Val{N}) where {T<:Real,N}
     if seg.dtype == 2
@@ -119,15 +121,16 @@ velocity series. Other types throw `SpiceError(:unsupported, ...)`. No allocatio
     elseif seg.dtype == 3
         return _spk3(data, seg, et, v)
     else
-        _unsupported("SPK", seg.dtype)
+        return _spk_more(data, seg, et, v)      # the other types: spk_more.jl
     end
 end
 
 """
     spk_eval_position(data::Vector{Float64}, seg::Segment, et::T, ::Val{N}) -> NTuple{N+1,Vec3{T}}
 
-As `spk_eval`, but every order is a derivative of the position series (the result
-differs from `spk_eval` only for type 3). Same contract as `spk_eval`.
+As `spk_eval`, but every order is a derivative of the position function (the result
+differs from `spk_eval` for the types whose velocity is not the derivative of the
+position in CSPICE, such as 3, 8, 9 and 14). Same contract as `spk_eval`.
 """
 @inline function spk_eval_position(data::Vector{Float64}, seg::Segment, et::T, v::Val{N}) where {T<:Real,N}
     if seg.dtype == 2
@@ -135,7 +138,7 @@ differs from `spk_eval` only for type 3). Same contract as `spk_eval`.
     elseif seg.dtype == 3
         return _cheb_eval(data, seg, et, 6, 0, v)
     else
-        _unsupported("SPK", seg.dtype)
+        return _spk_more_position(data, seg, et, v)
     end
 end
 
