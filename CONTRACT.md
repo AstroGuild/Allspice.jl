@@ -86,14 +86,33 @@ Conventions that hold everywhere:
 - `inertial_rotation(id::Integer) -> Mat3{Float64}`: constant matrix that rotates
   vectors from J2000 (frame 1) to built-in inertial frame `id`, as `irfrot` gives it.
 
-## `time.jl`
+## `time.jl`, `timeparse.jl`, `timeout.jl`, `time_api.jl`
+
+Every function with a `ks` argument has a form with a `SpiceContext` and a form on the
+default context. The conversions need a leap-second kernel (`SpiceError(:nolsk)`).
 
 - `build_lsk(pool) -> Union{Nothing,LeapSeconds}`.
 - `deltet(ks, epoch::Real, eptype::AbstractString) -> Float64` (ET − UTC, as `deltet_c`).
-- `utc2et(ks, s::AbstractString) -> Float64` and `str2et` for ISO 8601 calendar
-  strings (`YYYY-MM-DDThh:mm:ss.fff`, optional time part, optional `UTC`/`TDB` label).
-- `et2utc(ks, et, format::AbstractString, prec::Integer) -> String` for `"ISOC"`, `"C"`
-  and `"J"`.
+- `unitim(ks, epoch::T, insys, outsys) -> T` between `TAI`, `TDT`, `TT`, `GPS`, `TDB`,
+  `ET`, `JDTDT`, `JDTDB`, `JED`; generic over `T`, no allocation.
+- `ttrans(ks, from, to, tvec) -> NTuple{7,Float64}` (not exported): the 21
+  representations of `ttrans` of SPICELIB.
+- `str2et(ks, s, defs=TimeDefaults()) -> Float64`: every string form of `tpartv`.
+- `utc2et(ks, s) -> Float64` and `tparse(s) -> Float64`, without the range checks that
+  CSPICE makes only after `tparch("YES")`.
+- `tpictr(sample) -> String`: the `timout` picture of an example string.
+- `timout(ks, et, pictur, defs=TimeDefaults()) -> String`: every mark of `timout`.
+- `et2utc(ks, et, format, prec) -> String` for `"C"`, `"D"`, `"J"`, `"ISOC"`, `"ISOD"`.
+- `etcal(et) -> String`.
+- `timdef([ctx], action, item, value="") -> String`: the defaults `CALENDAR`, `SYSTEM`
+  and `ZONE` are an immutable `TimeDefaults` in an atomic field of the `SpiceContext`.
+  A reader loads it once and takes no lock; `SET` builds a new object under the lock
+  of the context. `kclear` and `furnsh` do not change it.
+- `jul2gr(y, m, d)`, `gr2jul(y, m, d) -> (year, month, day, doy)`.
+- Constants: `j1900 j1950 j2000 j2100 jyear tyear spd b1900 b1950 clight halfpi twopi
+  rpd dpr`, each a function without arguments.
+- Errors: `:badtime` (string or epoch), `:badtimetype` (system or representation),
+  `:badtimedefault` (`timdef`), `:badformat` (`et2utc` format, empty picture).
 
 ## `rotations.jl`
 
