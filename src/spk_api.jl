@@ -49,7 +49,9 @@ Return the jet of `seg.target` relative to `seg.center` at `et` in J2000; a segm
 another frame is rotated with the rotation jet of that frame.
 """
 @inline function segment_jet(ks::KernelSet, seg::Segment, et::T, ::Val{N}) where {T<:Real,N}
-    jet = spk_eval(ks.daf[seg.file], seg, et, Val(N))
+    # Type 10 (two-line elements) needs the leap seconds: spk_types/type10.jl.
+    jet = seg.dtype == Int32(10) ? _t10_jet(_lsk(ks), ks.daf[seg.file], seg, et, Val(N)) :
+          spk_eval(ks.daf[seg.file], seg, et, Val(N))
     seg.frame == Int32(1) && return jet
     return rotate_jet(frame_jet(ks, seg.frame, Int32(1), et, Val(N)), jet)
 end

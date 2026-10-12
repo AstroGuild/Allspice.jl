@@ -21,6 +21,7 @@ export dafbfs, dafbbs, daffna, daffpa, dafgs, dafgn, dafps, dafus, dafgda, dafgs
 export dafbna, dafada, dafena, dafws, dafrs, dafrn, dafac, dafec, dafdc
 export spkopn, spkopa, spkcls, spkpds, spkw01, spkw02, spkw03, spkw05, spkw08, spkw09
 export spkw12, spkw13, spkw15, spkw17, spkw18, spkw19, spkw20, spkw21
+export getelm, evsgp4, spkw10
 export ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
 export spkobj, spkobj!, spkcov, spkcov!, kinfo, kdata, tkvrsn
 export Window, card, wncard, wninsd!, wnvald!, wnunid, wnintd, wndifd, wncomd
@@ -52,6 +53,9 @@ include("daf_access.jl")    # DAFHandle, dafopr, dafbfs, daffna, dafgs, dafgda, 
 include("daf_write.jl")     # dafonw, dafopw, dafbna, dafada, dafena, dafac, dafdc
 include("spk_write.jl")     # spkopn, spkopa, spkcls, spkw01 ... spkw21
 include("ck_write.jl")      # ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
+include("spk_types/sgp4.jl")    # SGP4/SDP4 propagation of two-line elements
+include("spk_types/type10.jl")  # SPK type 10: generic segment, TEME to J2000
+include("tle.jl")           # getelm, evsgp4, spkw10
 include("kernel_info.jl")   # spkobj, spkcov, ktotal(kind), kdata, kinfo, tkvrsn
 include("precompile.jl")    # precompile directives for the common signatures
 
