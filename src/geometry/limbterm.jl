@@ -20,7 +20,8 @@ values, with no test of their signs. Throws `SpiceError` (`:kernelvarnotfound`,
 @inline function _geo_radii3(ks::KernelSet, body::Integer, kind::Symbol)
     v = get(ks.pool, 1 <= body <= 999 ? (@inbounds _GEO_RADII_KEYS[body]) :
             string("BODY", body, "_RADII"), nothing)
-    (v isa Vector{Float64} && length(v) == 3) || _geo_bad_radii3(body, v, kind)
+    v isa Vector{Float64} || _geo_bad_radii3(body, v, kind)
+    length(v) == 3 || _geo_bad_radii3(body, v, kind)
     return @inbounds (v[1], v[2], v[3])
 end
 @noinline function _geo_bad_radii3(body, v, kind::Symbol)

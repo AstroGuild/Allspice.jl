@@ -84,6 +84,8 @@ end
 
 "The general case of `_geo_method`."
 @noinline function _geo_method_slow(ks::KernelSet, bodyid::Integer, method::AbstractString)
+    # The C wrappers of CSPICE reject an empty string before the parser sees it.
+    isempty(method) && throw(SpiceError(:emptystring, "the method string is empty"))
     shape, subtyp, _, srflst = _dsk_parse_method(ks, bodyid, method)
     sub = subtyp == "" ? 0x00 : subtyp == "NEAR POINT" ? _GEO_NEARPOINT :
           subtyp == "NADIR" ? _GEO_NADIR : _GEO_INTERCEPT
@@ -223,7 +225,8 @@ Postcondition: the three values are positive. No allocation for an ID in 1:999.
 @inline function _geo_radii(ks::KernelSet, body::Integer)
     v = get(ks.pool, 1 <= body <= 999 ? (@inbounds _GEO_RADII_KEYS[body]) :
             string("BODY", body, "_RADII"), nothing)
-    (v isa Vector{Float64} && length(v) == 3) || _geo_bad_radii(body, v)
+    v isa Vector{Float64} || _geo_bad_radii(body, v)
+    length(v) == 3 || _geo_bad_radii(body, v)
     a, b, c = @inbounds v[1], v[2], v[3]
     (a > 0.0 && b > 0.0 && c > 0.0) || _geo_bad_radii(body, v)
     return a, b, c

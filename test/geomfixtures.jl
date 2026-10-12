@@ -466,6 +466,29 @@ function geo_moon_dsk()
     return path
 end
 
+const GEO_PARTS_PATH = Ref("")
+
+"""
+    geo_parts_dsk() -> String
+
+Write (once per process) a DSK file for the Moon (frame `IAU_MOON`) with surface 3: a
+sphere of 1000 km about the center and a separate sphere of 300 km about the point
+(0, 0, 1600) km. The surface is not connected, so a cutting half plane through both
+parts has three tangent rays. Return the path of the file.
+"""
+function geo_parts_dsk()
+    isfile(GEO_PARTS_PATH[]) && return GEO_PARTS_PATH[]
+    av, ap = ellipsoid_shape(1000.0, 1000.0, 1000.0, 72, 36)
+    bv, bp = ellipsoid_shape(300.0, 300.0, 300.0, 36, 18)
+    verts = vcat(av, [v + V3(0.0, 0.0, 1600.0) for v in bv])
+    plates = vcat(ap, [p .+ length(av) for p in bp])
+    spec = DskSpec(301, 3, 2, "IAU_MOON", 1, Float64[], (-pi, pi, -pi / 2, pi / 2), -1e10, 1e10, 3.0, 4, verts, plates)
+    path = joinpath(mktempdir(), "geo_parts.bds")
+    neo_write_dsk(path, [spec]; ctx=neo_context(Kernels.full_set()))
+    GEO_PARTS_PATH[] = path
+    return path
+end
+
 "The kernel list of the geometry groups: the standard set, the instrument kernel and, with `dsk`, the Moon DSK."
 geo_kernels(; dsk::Bool=false) = dsk ? [Kernels.full_set()..., geo_instrument_kernel(), geo_moon_dsk()] :
                                  [Kernels.full_set()..., geo_instrument_kernel()]
@@ -475,4 +498,132 @@ function geo_setup(; dsk::Bool=false)
     paths = geo_kernels(; dsk)
     oracle_load(paths)
     return neo_context(paths)
+end
+
+# ---------------------------------------------------------------------------------------
+# Shared pieces of the geometry groups
+# ---------------------------------------------------------------------------------------
+
+"Body-fixed frames of each test body."
+const GEO_FIXED = Dict("SUN" => ["IAU_SUN"], "MERCURY" => ["IAU_MERCURY"], "VENUS" => ["IAU_VENUS"],
+    "EARTH" => ["IAU_EARTH"], "MOON" => ["IAU_MOON", "MOON_PA_DE440", "MOON_ME"])
+
+"Largest values of named error measures."
+struct GeoStats
+    d::Dict{String,Float64}
+end
+GeoStats() = GeoStats(Dict{String,Float64}())
+gput!(s::GeoStats, k, v) = (s.d[k] = max(get(s.d, k, 0.0), Float64(v)); nothing)
+gget(s::GeoStats, k) = get(s.d, k, NaN)
+"Print the measures of `s` with the label `title` and keep them for the summary."
+function greport(title, s::GeoStats)
+    for k in sort(collect(keys(s.d)))
+        measured(@sprintf("  %-64s max=%.3e", title * ": " * k, s.d[k]))
+    end
+    return nothing
+end
+
+"True if CSPICE and NeoSpice raise an error of the same kind (and of the kind `expect`, if given)."
+function same_kind(cf, nf; expect=nothing)
+    kc = c_kind(cf)
+    kn = neo_kind(nf)
+    ok = kc !== nothing && kc == kn && (expect === nothing || kn == expect)
+    ok || println("  error kinds: CSPICE ", repr(kc), ", NeoSpice ", repr(kn), ", expected ", repr(expect))
+    return ok
+end
+
+"The second value of two calls of `f(args...)`: the allocation of a compiled call."
+gwarm(f, args...) = (f(args...); f(args...))
+
+"A random unit vector at the angle `ang` from the vector `r`."
+function geo_offset_dir(rng, r, ang)
+    u = normalize(collect(Float64, r))
+    p = normalize(cross(u, randn(rng, 3)))
+    return u * cos(ang) + p * sin(ang)
+end
+
+"Central difference of the vector function `f` at `t` with the step `h`."
+geo_fd(f, t, h) = (collect(f(t + h)) .- collect(f(t - h))) ./ (2h)
+
+# ---------------------------------------------------------------------------------------
+# Synthetic bodies for the occultation cases
+# ---------------------------------------------------------------------------------------
+
+const GEO_OCC_PATHS = Ref(("", ""))
+"Half of the time span of the synthetic ephemerides, seconds about J2000."
+const GEO_OCC_SPAN = 2000.0
+
+"""
+    geo_occult_kernels() -> (spk, tk)
+
+Write (once per process), with the SPK writers of NeoSpice, the ephemerides of the
+synthetic bodies of the occultation cases, for ET in ±$(GEO_OCC_SPAN) s, and a text
+kernel with their names, radii and body-fixed frames:
+
+| ID    | name      | motion                                                        | SPK type |
+|-------|-----------|---------------------------------------------------------------|----------|
+| -5000 | GEO_OBS   | at rest at (10000, 0, 0) km from the Earth, J2000             | 8        |
+| -5001 | GEO_A     | 1000 km from GEO_OBS, crosses the line of sight at 0.05 km/s  | 9        |
+| -5002 | GEO_B     | 2000 km from GEO_OBS, slow drift                              | 13       |
+| -5003 | GEO_OBS2  | at rest at (5000, 0, 0) km from the Moon, J2000               | 8        |
+| -5004 | GEO_STAR  | 5000 km behind the Moon, crosses the line of sight at 2 km/s  | 9        |
+
+The radii of GEO_A are (30, 20, 10) km; the tests set the radii of GEO_B. The frames
+`GEO_A_FIXED` and `GEO_B_FIXED` are fixed offsets from J2000.
+"""
+function geo_occult_kernels()
+    isfile(GEO_OCC_PATHS[][1]) && return GEO_OCC_PATHS[]
+    dir = mktempdir()
+    spk = joinpath(dir, "geo_occult.bsp")
+    T = GEO_OCC_SPAN
+    epochs = collect(range(-T - 100.0, T + 100.0; length=85))
+    line(p0, v) = reduce(hcat, [vcat(p0 .+ v .* t, v) for t in epochs])
+    h = spkopn(spk, "geometry tests", 0)
+    step = epochs[2] - epochs[1]
+    spkw08(h, -5000, 399, "J2000", -T, T, "observer", 1, line([10000.0, 0.0, 0.0], zeros(3)), epochs[1], step)
+    spkw09(h, -5001, 399, "J2000", -T, T, "front body", 3, line([11000.0, 2.0, 3.0], [0.0, 0.05, 0.004]), epochs)
+    spkw13(h, -5002, 399, "J2000", -T, T, "back body", 3, line([12000.0, -4.0, 1.0], [0.001, -0.003, 0.002]), epochs)
+    spkw08(h, -5003, 301, "J2000", -T, T, "observer 2", 1, line([5000.0, 0.0, 0.0], zeros(3)), epochs[1], step)
+    spkw09(h, -5004, 301, "J2000", -T, T, "star", 3, line([-5000.0, 0.0, 300.0], [0.0, 2.0, 0.1]), epochs)
+    spkcls(h)
+    tk = joinpath(dir, "geo_occult.tf")
+    write(tk, """
+    KPL/FK
+
+    Synthetic bodies of the occultation tests (written by the tests).
+
+    \\begindata
+
+       NAIF_BODY_NAME += ( 'GEO_OBS', 'GEO_A', 'GEO_B', 'GEO_OBS2', 'GEO_STAR' )
+       NAIF_BODY_CODE += ( -5000, -5001, -5002, -5003, -5004 )
+
+       BODY-5001_RADII = ( 30.0 20.0 10.0 )
+       BODY-5002_RADII = ( 80.0 60.0 50.0 )
+
+       FRAME_GEO_A_FIXED              = -5001000
+       FRAME_-5001000_NAME            = 'GEO_A_FIXED'
+       FRAME_-5001000_CLASS           = 4
+       FRAME_-5001000_CLASS_ID        = -5001000
+       FRAME_-5001000_CENTER          = -5001
+       TKFRAME_-5001000_SPEC          = 'ANGLES'
+       TKFRAME_-5001000_RELATIVE      = 'J2000'
+       TKFRAME_-5001000_ANGLES        = ( 0.9 0.4 -0.6 )
+       TKFRAME_-5001000_AXES          = ( 3 1 2 )
+       TKFRAME_-5001000_UNITS         = 'RADIANS'
+
+       FRAME_GEO_B_FIXED              = -5002000
+       FRAME_-5002000_NAME            = 'GEO_B_FIXED'
+       FRAME_-5002000_CLASS           = 4
+       FRAME_-5002000_CLASS_ID        = -5002000
+       FRAME_-5002000_CENTER          = -5002
+       TKFRAME_-5002000_SPEC          = 'ANGLES'
+       TKFRAME_-5002000_RELATIVE      = 'J2000'
+       TKFRAME_-5002000_ANGLES        = ( -0.3 1.2 0.5 )
+       TKFRAME_-5002000_AXES          = ( 1 2 3 )
+       TKFRAME_-5002000_UNITS         = 'RADIANS'
+
+    \\begintext
+    """)
+    GEO_OCC_PATHS[] = (spk, tk)
+    return GEO_OCC_PATHS[]
 end

@@ -18,7 +18,8 @@ const _GEO_MAXVRT = 10000
 "The first value of a character pool variable, or `nothing` (`gcpool` with `found` false)."
 @inline function _geo_fov_text(ks::KernelSet, instid::Integer, suffix::String)
     v = _geo_fov_var(ks, instid, suffix)
-    (v isa Vector{String} && !isempty(v)) || return nothing
+    v isa Vector{String} || return nothing
+    isempty(v) && return nothing
     return @inbounds v[1]
 end
 
@@ -27,7 +28,9 @@ function _geo_fov_vec3(ks::KernelSet, instid::Integer, suffix::String, missing::
     v = _geo_fov_var(ks, instid, suffix)
     v === nothing && _geo_fov_error(missing,
         "the variable INS$(instid)$suffix is not in the kernel pool")
-    (v isa Vector{Float64} && length(v) == 3) || _geo_fov_error(bad,
+    v isa Vector{Float64} || _geo_fov_error(bad,
+        "the variable INS$(instid)$suffix must hold 3 numbers")
+    length(v) == 3 || _geo_fov_error(bad,
         "the variable INS$(instid)$suffix must hold 3 numbers")
     return @inbounds Vec3{Float64}(v[1], v[2], v[3])
 end
@@ -36,7 +39,9 @@ end
 function _geo_fov_angle(ks::KernelSet, instid::Integer, suffix::String, missing::Symbol,
         units::Union{Nothing,String})
     v = _geo_fov_var(ks, instid, suffix)
-    (v isa Vector{Float64} && !isempty(v)) || _geo_fov_error(missing,
+    v isa Vector{Float64} || _geo_fov_error(missing,
+        "the variable INS$(instid)$suffix is not in the kernel pool")
+    isempty(v) && _geo_fov_error(missing,
         "the variable INS$(instid)$suffix is not in the kernel pool")
     units === nothing && _geo_fov_error(:unitsmissing,
         "the variable INS$(instid)_FOV_ANGLE_UNITS is not in the kernel pool")

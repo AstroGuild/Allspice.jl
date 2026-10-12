@@ -217,6 +217,8 @@ const _GEO_AT_CENTER = 3
     return _geo_refloc_slow(refloc)
 end
 @noinline function _geo_refloc_slow(refloc::AbstractString)
+    # The C wrappers of CSPICE reject an empty string before the Fortran code sees it.
+    isempty(refloc) && throw(SpiceError(:emptystring, "the reference frame locus string is empty"))
     _dsk_eqstr(refloc, "OBSERVER") && return _GEO_AT_OBSERVER
     _dsk_eqstr(refloc, "TARGET") && return _GEO_AT_TARGET
     _dsk_eqstr(refloc, "CENTER") && return _GEO_AT_CENTER
