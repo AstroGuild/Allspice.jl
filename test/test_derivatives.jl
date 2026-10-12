@@ -7,7 +7,10 @@
 #       block of `sxform`);
 #   (b) order k+1 is the central finite difference of order k;
 #   (c) every order is the nested `ForwardDiff.derivative` of the position function
-#       (of `pxform`), evaluated through the generic path with a `Dual` epoch.
+#       (of `pxform`), evaluated through the generic path with a `Dual` epoch. The
+#       public calls answer a `Dual` epoch from the analytical derivatives (the
+#       ForwardDiff extension), so the generic evaluators are reached with `invoke`
+#       (`generic_pos`, `generic_rot`); the public calls are checked as well.
 #
 # Tolerance of (b). The central difference (f(t+h) - f(t-h)) / 2h has the truncation
 # error h^2/6 * |f'''| and the rounding error eps * |f| / h. With tau the time scale of
@@ -60,6 +63,18 @@ function ad_jet(f, t::Float64)
     d3(s) = ForwardDiff.derivative(d2, s)
     d4(s) = ForwardDiff.derivative(d3, s)
     return (f(t), d1(t), d2(t), d3(t), d4(t))
+end
+
+"Position through the generic evaluators (no analytical shortcut for a `Dual` epoch)."
+generic_pos(ctx, targ, t, ref, obs) = invoke(NeoSpice.spk_jet,
+    Tuple{NeoSpice.KernelSet,Int32,Real,Int32,Int32,Val{0}}, NeoSpice.kernelset(ctx),
+    Int32(targ), t, NeoSpice.frame_id(NeoSpice.kernelset(ctx), ref), Int32(obs), Val(0))[1]
+
+"Rotation through the generic evaluators (no analytical shortcut for a `Dual` epoch)."
+function generic_rot(ctx, from, to, t)
+    ks = NeoSpice.kernelset(ctx)
+    return invoke(NeoSpice.frame_rotation, Tuple{NeoSpice.KernelSet,Int32,Int32,Real}, ks,
+        NeoSpice.frame_id(ks, from), NeoSpice.frame_id(ks, to), t)
 end
 
 group("3. derivatives", Kernels.FULL_SET_FILES...) do
@@ -134,16 +149,19 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
         @test eltype(probe) <: ForwardDiff.Dual
         @test ForwardDiff.value.(probe) == spkpos(ctx, 301, epochs[1], "J2000", "NONE", 399)[1]
         for (targ, obs, ref, _) in state_cases
-            worst = zeros(MAXORDER + 1)
-            pos(t) = spkpos(ctx, targ, t, ref, "NONE", obs)[1]
-            for et in epochs[1:6]
-                ad = ad_jet(pos, et)
-                jet = spkder(ctx, targ, et, ref, obs, Val(MAXORDER))
-                worst .= max.(worst, [reldiff(jet[k], ad[k]) for k in 1:MAXORDER+1])
+            paths = ("generic" => t -> generic_pos(ctx, targ, t, ref, obs),
+                "public" => t -> spkpos(ctx, targ, t, ref, "NONE", obs)[1])
+            for (label, pos) in paths
+                worst = zeros(MAXORDER + 1)
+                for et in epochs[1:6]
+                    ad = ad_jet(pos, et)
+                    jet = spkder(ctx, targ, et, ref, obs, Val(MAXORDER))
+                    worst .= max.(worst, [reldiff(jet[k], ad[k]) for k in 1:MAXORDER+1])
+                end
+                measured(@sprintf("  AD %-7s %3d rel %3d %-11s orders 0..4: %s", label, targ,
+                    obs, ref, join((@sprintf("%.2e", w) for w in worst), " ")))
+                @test all(worst[k] <= AD_RTOL[k] for k in 1:MAXORDER+1)
             end
-            measured(@sprintf("  AD  %3d rel %3d %-11s orders 0..4: %s", targ, obs, ref,
-                join((@sprintf("%.2e", w) for w in worst), " ")))
-            @test all(worst[k] <= AD_RTOL[k] for k in 1:MAXORDER+1)
         end
         # The velocity part of spkezr with a Dual epoch carries the acceleration.
         et = epochs[2]
@@ -193,16 +211,25 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
 
     @testset "pxder: nested ForwardDiff through the generic path" begin
         for (from, to, _) in rot_cases
-            worst = zeros(MAXORDER + 1)
-            rot(t) = pxform(ctx, from, to, t)
-            for et in epochs[1:6]
-                ad = ad_jet(rot, et)
-                jet = pxder(ctx, from, to, et, Val(MAXORDER))
-                worst .= max.(worst, [reldiff(jet[k], ad[k]) for k in 1:MAXORDER+1])
+            paths = ("generic" => t -> generic_rot(ctx, from, to, t),
+                "public" => t -> pxform(ctx, from, to, t))
+            for (label, rot) in paths
+                worst = zeros(MAXORDER + 1)
+                for et in epochs[1:6]
+                    ad = ad_jet(rot, et)
+                    jet = pxder(ctx, from, to, et, Val(MAXORDER))
+                    worst .= max.(worst, [reldiff(jet[k], ad[k]) for k in 1:MAXORDER+1])
+                end
+                measured(@sprintf("  AD %-7s %-11s to %-11s orders 0..4: %s", label, from, to,
+                    join((@sprintf("%.2e", w) for w in worst), " ")))
+                @test all(worst[k] <= AD_RTOL[k] for k in 1:MAXORDER+1)
             end
-            measured(@sprintf("  AD  %-11s to %-11s orders 0..4: %s", from, to,
-                join((@sprintf("%.2e", w) for w in worst), " ")))
-            @test all(worst[k] <= AD_RTOL[k] for k in 1:MAXORDER+1)
         end
+        # pxder with a Dual epoch: the partial of order k is order k+1.
+        et = epochs[3]
+        jd = pxder(ctx, "J2000", "IAU_EARTH", ForwardDiff.Dual(et, 1.0), Val(2))
+        jp = pxder(ctx, "J2000", "IAU_EARTH", et, Val(3))
+        @test all(ForwardDiff.value.(jd[k]) == jp[k] for k in 1:3)
+        @test all(ForwardDiff.partials.(jd[k], 1) == jp[k+1] for k in 1:3)
     end
 end

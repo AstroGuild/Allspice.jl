@@ -24,5 +24,6 @@ include("context.jl")       # build_kernelset, SpiceContext, furnsh, unload, kcl
 include("spk_api.jl")       # spkgeo, spkezr, spkpos, spkder
 include("frame_api.jl")     # pxform, sxform, pxder
 include("pool_api.jl")      # gdpool, gcpool, gipool, bodvrd, bodn2c, ...
+include("precompile.jl")    # precompile directives for the common signatures
 
 end # module
