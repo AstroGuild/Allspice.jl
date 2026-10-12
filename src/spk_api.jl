@@ -1,5 +1,5 @@
 # Ephemeris interface: geometric states from the SPK segments of a `KernelSet`, with
-# time derivatives of any order.
+# time derivatives of any order. The aberration corrections are in `aberration.jl`.
 
 "Speed of light in km/s, the value of `clight_c`."
 const CLIGHT = 299792.458
@@ -145,14 +145,6 @@ function spk_jet(ks::KernelSet, targ::Int32, et::T, ref::Int32, obs::Int32,
     return rotate_jet(frame_jet(ks, Int32(1), ref, et, Val(N)), jet)
 end
 
-"Throw `SpiceError(:unsupported)` unless `abcorr` is `NONE` (case and blanks ignored)."
-@inline function check_abcorr(abcorr::AbstractString)
-    abcorr == "NONE" && return nothing
-    uppercase(filter(!isspace, abcorr)) == "NONE" || throw(SpiceError(:unsupported,
-        "aberration correction \"$abcorr\" is not available; only \"NONE\" is"))
-    return nothing
-end
-
 "Return `et` as a floating-point epoch; throws `SpiceError(:badarg)` if it is not finite."
 @inline function check_epoch(et::Real)
     isfinite(primal(et)) || throw(SpiceError(:badarg, "the epoch is not finite"))
@@ -199,18 +191,15 @@ spkgeo(targ::Integer, et::Real, ref::NameOrID, obs::Integer) =
     spkezr(targ, et, ref, abcorr, obs) -> (SVector{6}, lt)
 
 Return the state (km, km/s) of `targ` relative to `obs` in frame `ref` at ET `et` and
-the one-way light time in seconds, as `spkezr_c`. Only `abcorr = "NONE"` is available;
-another value throws `SpiceError(:unsupported)`.
+the one-way light time in seconds, as `spkezr_c`. `abcorr` is one of `NONE`, `LT`,
+`LT+S`, `CN`, `CN+S`, `XLT`, `XLT+S`, `XCN`, `XCN+S` (case and blanks ignored) or an
+`Aberration`; another value throws `SpiceError(:badarg)`. The numeric methods for a
+parsed correction are in `aberration.jl`.
 """
-function spkezr(ks::KernelSet, targ::NameOrID, et::Real, ref::NameOrID,
-        abcorr::AbstractString, obs::NameOrID)
-    check_abcorr(abcorr)
-    r, v = spk_jet(ks, body_code(ks, targ), check_epoch(et), frame_id(ks, ref),
-        body_code(ks, obs), Val(1))
-    return vcat(r, v), norm(r) / CLIGHT
-end
+spkezr(ks::KernelSet, targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString,
+    obs::NameOrID) = spkezr(ks, targ, et, ref, Aberration(abcorr), obs)
 spkezr(ctx::SpiceContext, targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString,
-    obs::NameOrID) = spkezr(kernelset(ctx), targ, et, ref, abcorr, obs)
+    obs::NameOrID) = spkezr(kernelset(ctx), targ, et, ref, Aberration(abcorr), obs)
 spkezr(targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString, obs::NameOrID) =
     spkezr(default_context(), targ, et, ref, abcorr, obs)
 
@@ -218,16 +207,13 @@ spkezr(targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString, obs::Nam
     spkpos(targ, et, ref, abcorr, obs) -> (SVector{3}, lt)
 
 Return the position (km) of `targ` relative to `obs` in frame `ref` at ET `et` and the
-one-way light time in seconds, as `spkpos_c`. Only `abcorr = "NONE"` is available.
+one-way light time in seconds, as `spkpos_c`. `abcorr` is as for `spkezr`. As in
+CSPICE, the `CN` forms make exactly three light-time iterations here, so the position
+can differ from the position part of `spkezr` at rounding level.
 """
-function spkpos(ks::KernelSet, targ::NameOrID, et::Real, ref::NameOrID,
-        abcorr::AbstractString, obs::NameOrID)
-    check_abcorr(abcorr)
-    (r,) = spk_jet(ks, body_code(ks, targ), check_epoch(et), frame_id(ks, ref),
-        body_code(ks, obs), Val(0))
-    return r, norm(r) / CLIGHT
-end
+spkpos(ks::KernelSet, targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString,
+    obs::NameOrID) = spkpos(ks, targ, et, ref, Aberration(abcorr), obs)
 spkpos(ctx::SpiceContext, targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString,
-    obs::NameOrID) = spkpos(kernelset(ctx), targ, et, ref, abcorr, obs)
+    obs::NameOrID) = spkpos(kernelset(ctx), targ, et, ref, Aberration(abcorr), obs)
 spkpos(targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString, obs::NameOrID) =
     spkpos(default_context(), targ, et, ref, abcorr, obs)

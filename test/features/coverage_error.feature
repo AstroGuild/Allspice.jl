@@ -28,9 +28,9 @@ Feature: Errors for queries that cannot be answered
     When the user asks for a state in the frame "NO_SUCH_FRAME"
     Then a "SpiceError" with kind "unknownframe" is thrown
 
-  Scenario: Aberration correction that the prototype does not have
-    When the user asks for a state with correction "LT+S"
-    Then a "SpiceError" with kind "unsupported" is thrown
+  Scenario: Aberration correction that is not valid
+    When the user asks for a state with correction "RL+S"
+    Then a "SpiceError" with kind "badarg" is thrown
 
   Scenario: Kernel file that does not exist
     When the user loads a path that is not a file
