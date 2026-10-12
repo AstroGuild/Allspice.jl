@@ -27,6 +27,28 @@ Chebyshev, Hermite or Lagrange polynomials of the quaternion components for type
 and 6), composed with the piecewise linear clock conversion `sce2c`. The stored angular
 velocity is not used, so order 1 can differ from the derivative block of `sxform`,
 which is what CSPICE returns.
+
+For a chain with a dynamic frame (class 5) the function that is differentiated is also
+the rotation that `pxform` returns, the one of `zzdynrot_`:
+
+- of-date frames: the precession, nutation and obliquity series as functions of `et`
+  (all terms, also the slow drift of the nutation coefficients that the rates of
+  `zzwahr_` omit);
+- two-vector frames: the positions of `spkpos`, the unit velocities of `spkezr`, the
+  near points and the rotated constant vectors, each with its aberration correction as
+  a function of `et` (light-time corrections `LT` with the one iteration of CSPICE, `CN`
+  with the converged light-time equation, stellar aberration with the velocity of the
+  observer as a function of `et`);
+- Euler frames: the polynomials of the angles;
+- product frames: the product of the factors.
+
+A frozen frame (`FREEZE_EPOCH`) is constant, so its derivatives relative to its base
+are zero. `ROTATION_STATE = 'INERTIAL'` does not change the rotation, so it does not
+change `pxder`: the derivatives are those of the rotating frame, while `sxform` gives a
+zero derivative block for such a frame. A velocity that is given in a non-inertial
+frame takes the frame derivative of `sxform`, as `spkezr` does. For a switch frame
+(class 6) the base that is selected at `et` is differentiated; at an epoch at which
+the selection changes the result is the one of the base that `pxform` selects there.
 """
 function pxder(ks::KernelSet, from::NameOrID, to::NameOrID, et::Real, ::Val{N}) where {N}
     N isa Int && N >= 0 || throw(SpiceError(:badarg, "pxder: the order must be an integer >= 0"))
@@ -46,6 +68,14 @@ at ET `et`, as `sxform_c`; `dR` is the time derivative of the rotation matrix `R
 For a chain with a CK frame (class 3) `dR` is built from the angular velocity of the CK
 segment, as CSPICE does, and only segments with angular velocity are used; see `pxder`
 for the derivative of the interpolated rotation.
+
+For a chain with a dynamic frame (class 5) or a switch frame (class 6) `dR` is the
+derivative block of `zzdynfrm_`, with the choices of CSPICE: velocities of `spkezr`
+for the position vectors, a central difference of the unit velocity over
+`±max(1, et * 2^-27)` seconds for the velocity vectors, the rates of `zzwahr_` for the
+nutation, a zero derivative for constant vectors and for their stellar aberration, a
+zero block for a frozen frame and for `ROTATION_STATE = 'INERTIAL'`. It can therefore
+differ from order 1 of `pxder`, which is the exact derivative of `R`.
 """
 function sxform(ks::KernelSet, from::NameOrID, to::NameOrID, et::Real)
     R, dR = frame_jet(ks, frame_id(ks, from), frame_id(ks, to), check_epoch(et), Val(1))

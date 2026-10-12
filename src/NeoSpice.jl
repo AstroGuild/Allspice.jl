@@ -25,7 +25,13 @@ export ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
 export spkobj, spkobj!, spkcov, spkcov!, kinfo, kdata, tkvrsn
 export Window, card, wncard, wninsd!, wnvald!, wnunid, wnintd, wndifd, wncomd
 export wnelmd, wnincd, wnfetd, wnsumd
+export frinfo, cidfrm, cnmfrm, ccifrm, tkfram, tipbod, tisbod, pckfrm, pckfrm!, pckcov, pckcov!
+export bodfnd, bodvcd, boddef
+export pdpool, pcpool, pipool, dvpool, expool, dtpool, gnpool, szpool, lmpool, clpool
+export stpool, ldpool, swpool, cvpool, poolversion
+export et2lst, lspcn
 
+include("dyntypes.jl")      # DynFrame, SwitchFrame, PoolWatch (fields of the types below)
 include("types.jl")
 include("taylor.jl")        # Taylor{N,T} truncated series, `primal`
 include("daf.jl")           # open_daf, segment descriptors
@@ -40,6 +46,9 @@ include("timeout.jl")       # number formats, timout, et2utc, etcal
 include("rotations.jl")     # build_tk, build_bodyrot, frame_rotation
 include("sclk.jl")          # type 1 spacecraft clocks: build_sclk, sct2e, sce2c, ...
 include("ck.jl")            # CK segment evaluation, types 1 to 6; class 3 frames
+include("dynframes.jl")     # dynamic frames (class 5): parsing and evaluation
+include("switchframes.jl")  # switch frames (class 6)
+include("pool_write.jl")    # pdpool, pcpool, pipool, dvpool, lmpool, ldpool, clpool, boddef, watchers
 include("context.jl")       # build_kernelset, SpiceContext, furnsh, unload, kclear
 include("spk_api.jl")       # spkgeo, spkezr, spkpos, spkder
 include("aberration.jl")    # Aberration, light time, stellar aberration, spkltc, ...
@@ -53,6 +62,8 @@ include("daf_write.jl")     # dafonw, dafopw, dafbna, dafada, dafena, dafac, daf
 include("spk_write.jl")     # spkopn, spkopa, spkcls, spkw01 ... spkw21
 include("ck_write.jl")      # ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
 include("kernel_info.jl")   # spkobj, spkcov, ktotal(kind), kdata, kinfo, tkvrsn
+include("frame_info.jl")    # frinfo, cidfrm, cnmfrm, ccifrm, tkfram, tipbod, tisbod, pckfrm, pckcov, bodfnd, bodvcd
+include("lst.jl")           # et2lst, lspcn
 include("precompile.jl")    # precompile directives for the common signatures
 
 end # module
