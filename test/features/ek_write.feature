@@ -28,9 +28,20 @@ Feature: Write an EK file through a handle that the caller owns
   Scenario: Trees of depth 3
     Given a segment with more rows than a tree of depth 2 can hold
     And entries that fill more data pages than a tree of depth 2 can hold
-    When both engines write the segment, and delete and insert many rows
+    When both engines write the segment with the fast writers
     Then the record tree, the index trees and the data page trees have depth 3
     And the files are equal word for word
+
+  Scenario: Edit trees of depth 3
+    Given a file of NeoSpice with a segment that grew row by row to trees of depth 3
+    When both engines delete and insert many rows
+    Then the two results are equal word for word
+    And both engines read every entry as the model states it
+
+  Scenario: Trees of depth 3 that grow row by row (exhaustive run, NEOSPICE_TEST_FULL=1)
+    Given the same segments, which CSPICE writes row by row in about one minute
+    When both engines write the segments with ekappr, ekacec, ekaced and ekacei
+    Then the files are equal word for word
 
   Scenario: Change an existing file
     Given a file that CSPICE wrote and the same file that NeoSpice wrote

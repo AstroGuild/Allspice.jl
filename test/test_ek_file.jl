@@ -8,6 +8,12 @@
 # several data pages. Then `eknseg`, `ekssum` and every column entry are read with both
 # engines and compared with each other and with the model.
 
+# The code of the EK groups is long and most of it runs once, so Julia compiles the
+# module of the tests without optimization while this file runs (5 s less for the five
+# EK groups); the last line of the file gives the default level back. The level of
+# NeoSpice does not change.
+Base.Experimental.@optlevel 0
+
 isdefined(@__MODULE__, :EKLIB) || include("ekfixtures.jl")
 
 "Read every entry of the EK `path` with both engines; returns the number of entries compared."
@@ -53,18 +59,18 @@ end
 
 group("EK files: segments, summaries and column entries through a handle") do
     dir = mktempdir()
-    model = ek_standard_model(SEED)
+    # The default run reads the small files that the groups `ek_query` and `ek_threads`
+    # load (written once); the exhaustive run reads the whole standard model.
+    model, paths = FULL ? ek_standard_files(SEED) : ek_standard_files(SEED + 1; scale=0.15)
     total = 0
-    for (name, segs) in model
-        path = c_ek_write(joinpath(dir, name), segs)
+    for ((_, segs), path) in zip(model, paths)
         total += ek_compare_file(path, segs)
     end
     measured("  ek_file: $total column entries read with both engines")
-    @test total > 30_000
+    @test total > (FULL ? 30_000 : 5_000)
 
-    @testset "input checks" begin
-        name, segs = model[1]
-        path = joinpath(dir, name)
+    ek_part("input checks") do
+        path = paths[1]
         hn = ekopr(path)
         hc = c_ekopr(path)
         ck(f) = c_kind(f)
@@ -100,3 +106,5 @@ group("EK files: segments, summaries and column entries through a handle") do
         @test nk(() -> ekopr(other)) == ck(() -> c_ekopr(other)) == :wrongarchitecture
     end
 end
+
+Base.Experimental.@optlevel -1

@@ -392,6 +392,45 @@ function ek_standard_model(seed::Int; scale::Float64=1.0)
     return ["events_a.bes" => [ev1, gr2], "events_b.bes" => [ev2, ev3, lk], "groups.bes" => [gr1]]
 end
 
+"""
+    ek_part(body, name)
+
+Run `body()` inside `@testset name`: one part of a group. The parts of a group are
+closures, so Julia compiles each part as a function of its own. The time of the compiler
+grows faster than the length of a function: the body of the group `ek_query` took 3.0 s
+to compile as one function with nine `@testset` blocks, and 0.7 s to 0.9 s less without
+any one of them. `ek_part` does not specialize on `body`, so it is compiled once.
+Postcondition: every test of `body` is recorded in the test set `name`.
+"""
+function ek_part(@nospecialize(body), name::AbstractString)
+    @testset "$name" begin
+        body()
+    end
+    return nothing
+end
+
+"The standard models that CSPICE wrote in this process: (seed, scale) => (model, paths)."
+const EK_STANDARD_FILES = Dict{Tuple{Int,Float64},Any}()
+
+"""
+    ek_standard_files(seed; scale=1.0) -> (model, paths)
+
+The standard model `ek_standard_model(seed; scale)` and the paths of its EK files, which
+CSPICE writes (`c_ek_write`) at the first call for a (seed, scale) pair. Later calls
+give the same files, so the groups that read the same model do not write it again.
+Call it from the main task only. The caller must not change the files.
+Postcondition: `length(paths) == length(model)` and every path is a file.
+"""
+function ek_standard_files(seed::Int; scale::Float64=1.0)
+    model, paths = get!(EK_STANDARD_FILES, (seed, scale)) do
+        dir = mktempdir()
+        m = ek_standard_model(seed; scale=scale)
+        (m, String[c_ek_write(joinpath(dir, name), segs) for (name, segs) in m])
+    end
+    @assert length(paths) == length(model) && all(isfile, paths)
+    return model, paths
+end
+
 "Compare the entry `e` of the model (`nothing` or values) with what an engine read: `(vals, isnull)`."
 function ek_entry_equal(col::EKColSpec, e, got)
     vals, isnull = got

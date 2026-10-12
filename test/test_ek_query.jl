@@ -19,6 +19,12 @@
 # The corpus has hand-written queries (every operator and clause, invalid queries) and
 # generated queries on one, two and three tables.
 
+# The code of the EK groups is long and most of it runs once, so Julia compiles the
+# module of the tests without optimization while this file runs (5 s less for the five
+# EK groups); the last line of the file gives the default level back. The level of
+# NeoSpice does not change.
+Base.Experimental.@optlevel 0
+
 isdefined(@__MODULE__, :EKLIB) || include("ekfixtures.jl")
 
 # ---------------------------------------------------------------------------------------
@@ -123,7 +129,7 @@ function ekq_eval(t, rows, neg::Bool=false)
 end
 
 "The query text of the WHERE tree `t`."
-function ekq_text(rng, t, parent::Symbol=:top)
+function ekq_text(rng, @nospecialize(t), parent::Symbol=:top)
     t isa EKQAtom && return t.text
     t[1] === :not && return "NOT (" * ekq_text(rng, t[2]) * ")"
     s = ekq_text(rng, t[2], t[1]) * (t[1] === :and ? " AND " : " OR ") * ekq_text(rng, t[3], t[1])
@@ -141,6 +147,14 @@ end
 
 "An entry of the model as the fetch calls give it: `nothing`, or the values (strings without trailing blanks)."
 ekq_entry(e) = e === nothing ? nothing : Any[v isa AbstractString ? String(rstrip(v, ' ')) : v for v in e]
+
+"""
+The rows of a query result in an order that does not depend on the engine: the `repr` of
+each row, sorted. Two results hold the same rows in any order if and only if their keys
+are equal. (`sort(rows; by=repr)` gives the same answer but calls `repr` at every
+comparison, which took 33 s of the 61 s of this group.)
+"""
+ekq_rowkeys(rows) = sort!(String[repr(r) for r in rows])
 
 "The rows that the generated query `g` must give, by brute force over the model (no order)."
 function ekq_expected(g::EKQGen)
@@ -198,7 +212,7 @@ function ekq_literal(rng, ctx, tab::EKQTable, c::Int)
         end
         y = rand(rng, 1991:2009); m = rand(rng, 1:12); d = rand(rng, 1:28)
         text = rand(rng, ["$y $(EKQ_MONTHS[m]) $d", "$(EKQ_MONTHS[m]) $d, $y 12:00:00 TDB",
-            @sprintf("%04d-%02d-%02dT06:07:08", y, m, d), "$y $(EKQ_MONTHS[m]) $d 18:30:00.5"])
+            "$y-$(lpad(m, 2, '0'))-$(lpad(d, 2, '0'))T06:07:08", "$y $(EKQ_MONTHS[m]) $d 18:30:00.5"])
         return str2et(ctx, text), ekq_quote(rng, text)
     end
     v === nothing && (v = rand(rng, EK_WORDS))
@@ -273,8 +287,13 @@ function ekq_tree(rng, atoms::Vector)
     return rand(rng) < 0.1 ? (:not, t) : t
 end
 
-"SELECT, FROM, WHERE and ORDER BY text of a generated query."
-function ekq_build(rng, tabs, aliases, names, tree, kind; arrays::Bool=true)
+"""
+SELECT, FROM, WHERE and ORDER BY text of a generated query. A WHERE tree is a nested
+tuple, so each tree has its own type: the functions that only build the text do not
+specialize on it (one compiled method for all trees). `ekq_eval` does specialize, since
+it runs once for each combination of rows.
+"""
+function ekq_build(rng, tabs, aliases, names, @nospecialize(tree), kind; arrays::Bool=true)
     all = [(t, c) for t in eachindex(tabs) for c in eachindex(tabs[t].cols) if arrays || tabs[t].cols[c].size == 1]
     select = [rand(rng, all) for _ in 1:rand(rng, 1:4)]
     from = join([isempty(aliases[t]) ? tabs[t].name : tabs[t].name * " " * aliases[t] for t in eachindex(tabs)], ", ")
@@ -632,17 +651,17 @@ function ek_compare_query(ctx, query::String)
     cvals = c_ek_result(nc, rc.seltype)
     compat = rc.nmrows == nc && neo_ek_result(rc) == cvals
     dvals = neo_ek_result(res)
-    return (cerr=false, nerr=false, msgsame=true, nc=nc, compat=compat, default=dvals == cvals,
-        sameset=sort(dvals; by=repr) == sort(cvals; by=repr), nd=res.nmrows, values=dvals, cmsg="", nmsg="", signal=nothing)
+    default = dvals == cvals
+    return (cerr=false, nerr=false, msgsame=true, nc=nc, compat=compat, default=default,
+        sameset=default || ekq_rowkeys(dvals) == ekq_rowkeys(cvals), nd=res.nmrows, values=dvals, cmsg="",
+        nmsg="", signal=nothing)
 end
 
 "True if one of the defects of CSPICE can change the result of the query `q`."
 ek_defect_possible(q::String) = occursin(r"\bOR\b|NOT|\d\.\d*[1-9]|BETWEEN"i, q)
 
 group("EK queries: catalogue, query corpus against CSPICE and against the model", Kernels.LSK) do
-    dir = mktempdir()
-    model = ek_standard_model(SEED + 1; scale=0.15)
-    paths = String[c_ek_write(joinpath(dir, name), segs) for (name, segs) in model]
+    model, paths = ek_standard_files(SEED + 1; scale=0.15)
     kernels = [Kernels.LSK, paths...]
     oracle_load(kernels)
     ctx = neo_context(kernels)
@@ -651,7 +670,7 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
         reduce(vcat, [s.rows for s in allsegs if s.table == name]))
     events, groups, links = qtable("EVENTS"), qtable("GROUPS"), qtable("LINKS")
 
-    @testset "kernel list: an EK file is a kernel of type EK" begin
+    ek_part("kernel list: an EK file is a kernel of type EK") do
         @test ktotal(ctx, "EK") == SPICE.ktotal("EK") == 3
         @test ktotal(ctx, "ALL") == SPICE.ktotal("ALL") == 4
         for i in 1:3
@@ -663,7 +682,7 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
         end
     end
 
-    @testset "catalogue: ekntab, ektnam, ekccnt, ekcii" begin
+    ek_part("catalogue: ekntab, ektnam, ekccnt, ekcii") do
         @test ekntab(ctx) == c_ekntab() == 3
         for n in 1:ekntab(ctx)
             table = ektnam(ctx, n)
@@ -696,7 +715,7 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
         @test neo_kind(() -> ekccnt(empty, "EVENTS")) == :tablenotloaded
     end
 
-    @testset "ekpsel: the SELECT clause" begin
+    ek_part("ekpsel: the SELECT clause") do
         for q in ["SELECT ID, NAME, VAL, EPOCH, VEC FROM EVENTS",
             "select  e.id ,g.gname, G.T0   from events e, groups g where e.grp = g.gid order by e.id",
             "SELECT EVENTS.LABEL, IVEC FROM EVENTS WHERE ID < 3", "SELECT FOO FROM EVENTS", "SELECT ID FROM"]
@@ -708,20 +727,22 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
 
     rng = MersenneTwister(SEED + 2)
     generated = EKQGen[]
-    for _ in 1:110
+    # The model answers a join by brute force over all combinations of rows (1.8 million
+    # for EVENTS, LINKS and GROUPS), which is most of the time of the generated queries.
+    for _ in 1:nsample(60, 110)
         push!(generated, ekq_single(rng, ctx, events))
     end
-    for _ in 1:50
+    for _ in 1:nsample(25, 50)
         push!(generated, ekq_single(rng, ctx, groups))
     end
-    for _ in 1:20
+    for _ in 1:nsample(10, 20)
         push!(generated, ekq_single(rng, ctx, links))
     end
-    for _ in 1:70
+    for _ in 1:nsample(30, 70)
         push!(generated, ekq_join(rng, ctx, shuffle(rng, rand(rng, [[events, groups], [events, links],
             [links, groups], [events, events], [groups, groups], [links, links]]))))
     end
-    for _ in 1:30
+    for _ in 1:nsample(4, 30)
         push!(generated, ekq_join(rng, ctx, shuffle(rng, rand(rng, [[events, links, groups],
             [links, links, groups], [events, links, links]]))))
     end
@@ -745,7 +766,7 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
         return nothing
     end
 
-    @testset "hand-written queries against CSPICE" begin
+    ek_part("hand-written queries against CSPICE") do
         for q in EK_HAND_QUERIES
             r = ek_compare_query(ctx, q)
             record(r.cerr ? "hand-written, invalid" : "hand-written, valid", q, r)
@@ -756,7 +777,7 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
         end
     end
 
-    @testset "generated queries against CSPICE and against the model" begin
+    ek_part("generated queries against CSPICE and against the model") do
         badmodel = 0
         for g in generated
             r = ek_compare_query(ctx, g.text)
@@ -773,7 +794,7 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
             r.nerr && (println("  unexpected error: ", g.text, "\n     ", r.nmsg); continue)
             r.compat && !r.default && @test ek_defect_possible(g.text)
             expect = ekq_expected(g)
-            ok = sort(expect; by=repr) == sort(r.values; by=repr)
+            ok = ekq_rowkeys(expect) == ekq_rowkeys(r.values)
             if !ok
                 badmodel += 1
                 badmodel <= 5 && println("  differs from the model: ", g.text, "\n     model ", length(expect),
@@ -783,21 +804,22 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
         @test badmodel == 0
     end
 
+    corpus_line(kind, counts) = "  " * rpad(kind, 28) * join(" " * lpad(n, 4) for n in counts)
     total = zeros(Int, 5)
     measured("EK query corpus (queries / equal to CSPICE in compatibility mode / public ekfind equal to " *
              "CSPICE / public ekfind same rows in any order / invalid):")
     for kind in sort(collect(keys(stats)))
         s = stats[kind]
         total .+= s
-        measured(@sprintf("  %-28s %4d %4d %4d %4d %4d", kind, s...))
+        measured(corpus_line(kind, s))
     end
-    measured(@sprintf("  %-28s %4d %4d %4d %4d %4d", "all", total...))
+    measured(corpus_line("all", total))
     @test total[1] >= 200
     @test total[2] == total[1]
     isempty(examples) || println("  queries where the public ekfind differs from CSPICE (defects of CSPICE):\n",
         join(examples, "\n"))
 
-    @testset "the defects of CSPICE, against the model" begin
+    ek_part("the defects of CSPICE, against the model") do
         ids = [r[1][1] for r in events.rows]
         # (b) A double value with a fraction against an indexed integer column.
         for (q, pred) in (("SELECT ID FROM EVENTS WHERE ID < 17.4", x -> x < 17.4),
@@ -818,7 +840,7 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
         @test sort(ekcolumn(res, 1)) == sort(filter(>(50), gids))
     end
 
-    @testset "fetch calls: indices and data types" begin
+    ek_part("fetch calls: indices and data types") do
         q = "SELECT ID, NAME, VAL, EPOCH, IVEC, TAGS FROM EVENTS WHERE ID < 30 ORDER BY ID"
         res, err, msg = ekfind(ctx, q)
         n, cerr, _ = c_ekfind(q)
@@ -879,7 +901,7 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
         @test neo_kind(() -> ekgi(bad, 1, 1)) == :invalidindex
     end
 
-    @testset "a result stays valid after its files are unloaded; unload and reload" begin
+    ek_part("a result stays valid after its files are unloaded; unload and reload") do
         q = "SELECT E.ID, G.GNAME, L.TAG FROM EVENTS E, LINKS L, GROUPS G WHERE E.ID = L.EID AND L.GID = G.GID ORDER BY E.ID"
         res, _, _ = ekfind(ctx, q)
         before = neo_ek_result(res)
@@ -913,7 +935,7 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
         @test ekfind(ctx, "SELECT GID FROM GROUPS")[2]
     end
 
-    @testset "load errors: tables that do not fit" begin
+    ek_part("load errors: tables that do not fit") do
         d2 = mktempdir()
         rng2 = MersenneTwister(SEED + 3)
         base = c_ek_write(joinpath(d2, "base.bes"), [ek_random_segment(rng2, "LINKS", EK_LINK_COLS, 5)])
@@ -937,3 +959,5 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
         SPICE.kclear()
     end
 end
+
+Base.Experimental.@optlevel -1
