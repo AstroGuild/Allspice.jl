@@ -20,8 +20,16 @@ any file: it uses the `DAF` and `TextKernel` objects of the entries. Segment `fi
 numbers index `daf`; `spk`, `pck` and `ck` are in CSPICE priority order (later file
 first, and inside one file later segment first); the pool holds all assignments in load
 order. The spacecraft clocks and the CK meta data are built from the pool.
+
+    build_kernelset(loaded, edited, bodydefs) -> KernelSet
+
+The same with the kernel pool `edited` in the place of the pool of the text kernels
+(a pool with direct edits, see `pool_write.jl`; `nothing` for no edits) and with the
+name and code pairs `bodydefs` of `boddef`.
 """
-function build_kernelset(loaded::Vector{Loaded})
+function build_kernelset(loaded::Vector{Loaded},
+        edited::Union{Nothing,Dict{String,PoolValue}}=nothing,
+        bodydefs::Vector{Tuple{String,Int32}}=Tuple{String,Int32}[])
     daf = Vector{Float64}[]
     spk = Dict{Int32,Vector{Segment}}()
     pck = Dict{Int32,Vector{Segment}}()
@@ -33,13 +41,14 @@ function build_kernelset(loaded::Vector{Loaded})
         if content isa DAF
             push!(daf, content.data)
             filenumber[i] = length(daf)
-        else
+        elseif edited === nothing
             apply_assignments!(pool, content)
         end
     end
     for name in METAKERNEL_VARIABLES
         delete!(pool, name)
     end
+    edited === nothing || (pool = edited)
     for i in length(loaded):-1:1
         content = loaded[i].content
         content isa DAF || continue
@@ -56,13 +65,16 @@ function build_kernelset(loaded::Vector{Loaded})
             push!(get!(() -> Segment[], table, seg.target), seg)
         end
     end
-    name2code, code2name = build_names(pool)
-    frames, framename2id = build_frames(pool)
+    npool = _pool_x_namepool(pool, edited !== nothing)
+    name2code, code2name = build_names(npool)
+    _pool_x_bodydefs!(name2code, code2name, bodydefs)
+    frames, framename2id = build_frames(npool)
     tk = build_tk(pool, frames)
     bodyrot = build_bodyrot(pool)
     lsk = build_lsk(pool)
-    return KernelSet(copy(loaded), daf, spk, pck, pool, name2code, code2name, frames,
-        framename2id, tk, bodyrot, lsk, ck, build_sclk(pool), build_ckmeta(pool))
+    return _dyn_levels(KernelSet(copy(loaded), daf, spk, pck, pool, name2code, code2name, frames,
+        framename2id, tk, bodyrot, lsk, ck, build_sclk(pool), build_ckmeta(pool)),
+        edited !== nothing, bodydefs)
 end
 
 """
@@ -129,7 +141,8 @@ end
 
 Load the kernel at `path` (SPK, binary PCK, text kernel or meta-kernel) into `ctx`.
 The new snapshot replaces the old one atomically; if the load fails, `ctx` is unchanged.
-A path that is already loaded gets a second entry, as in CSPICE.
+A path that is already loaded gets a second entry, as in CSPICE. Direct edits of the
+kernel pool (`pdpool`, ...) stay; the assignments of a text kernel are applied on top.
 """
 function furnsh(ctx::SpiceContext, path::AbstractString)
     isempty(strip(path)) && throw(SpiceError(:badarg, "furnsh: the kernel path is blank"))
@@ -137,8 +150,7 @@ function furnsh(ctx::SpiceContext, path::AbstractString)
         entries = load_entries(path)
         list = copy(kernelset(ctx).loaded)
         append!(list, entries)
-        ks = build_kernelset(list)
-        @atomic ctx.ks = ks
+        _pool_x_swap_loaded!(ctx, list, entries)
     end
     return nothing
 end
@@ -148,7 +160,9 @@ end
 
 Remove the last load-list entry with path `path` and, if it is a meta-kernel, the
 entries that it caused. Kernels that stay loaded are not read again. A path that is not
-loaded changes nothing, as in CSPICE.
+loaded changes nothing, as in CSPICE. If a text kernel is removed, the kernel pool is
+built again from the text kernels that stay, so direct edits of the pool (`pdpool`,
+...) are lost, as in CSPICE.
 """
 function unload(ctx::SpiceContext, path::AbstractString)
     p = String(path)
@@ -162,8 +176,7 @@ function unload(ctx::SpiceContext, path::AbstractString)
             j > i && e.source == p && old[i].source == "" && continue
             push!(list, e)
         end
-        ks = build_kernelset(list)
-        @atomic ctx.ks = ks
+        _pool_x_swap_unloaded!(ctx, list)
     end
     return nothing
 end
@@ -171,12 +184,12 @@ end
 """
     kclear(ctx::SpiceContext) -> Nothing
 
-Replace the snapshot of `ctx` with the empty `KernelSet`.
+Replace the snapshot of `ctx` with the empty `KernelSet`. Direct edits of the kernel
+pool are removed; the names of `boddef` stay, as in CSPICE.
 """
 function kclear(ctx::SpiceContext)
     lock(ctx.lock) do
-        ks = empty_kernelset()
-        @atomic ctx.ks = ks
+        _pool_x_swap_cleared!(ctx)
     end
     return nothing
 end

@@ -930,6 +930,8 @@ function _ck_chain_to(mode, ks::KernelSet, id::Int32, stop::Int32, et::T) where 
         fd = frame_def(ks, cur)
         if fd.class == 3
             cur, step = _ck_frame_step(mode, ks, fd, et)
+        elseif fd.class >= 5        # dynamic and switch frames, `dynframes.jl`
+            cur, step = _dyn_chain_step(mode, ks, fd, et)
         else
             cur, step = _frame_step(ks, cur, _ck_epoch(mode, et))
         end
@@ -941,8 +943,9 @@ end
 """
     _ck_in_chain(ks, id) -> Bool
 
-True if the chain of frame `id` towards J2000 holds a class 3 frame before any other
-link needs an evaluation. Throws as `_frame_parent` does.
+True if the chain of frame `id` towards J2000 holds a frame of class 3, 5 or 6 (the
+classes whose CSPICE state transformation is not the time derivative of the rotation)
+before any other link needs an evaluation. Throws as `_frame_parent` does.
 """
 function _ck_in_chain(ks::KernelSet, id::Int32)
     cur = id
@@ -950,7 +953,8 @@ function _ck_in_chain(ks::KernelSet, id::Int32)
     while cur != _J2000_FRAME       # invariant: no frame from id to before cur is class 3
         n += 1
         n > MAX_FRAME_CHAIN && _chain_too_long(id)
-        frame_def(ks, cur).class == 3 && return true
+        class = frame_def(ks, cur).class
+        (class == 3 || class >= 5) && return true
         cur = _frame_parent(ks, cur)
     end
     return false

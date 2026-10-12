@@ -19,7 +19,7 @@ include("helpers.jl")
 const GROUPS = ["states", "rotations", "derivatives", "identities", "pool", "management",
     "threads", "quality", "aberration", "spktypes", "time", "sclk", "ck", "dafwrite",
     "windows", "roundtrip", "sgp4", "math_vectors", "math_rotations", "math_coordinates",
-    "math_ellipsoid", "math_conics"]
+    "math_ellipsoid", "math_conics", "dynframes", "poolwrite", "frameinfo"]
 
 selected = isempty(ARGS) ? GROUPS : ARGS
 unknown = setdiff(selected, GROUPS)

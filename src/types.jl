@@ -239,6 +239,13 @@ and readers on many threads do not contend.
 - `sclk`: type 1 spacecraft clocks by clock ID (the spacecraft ID, a negative number).
 - `ckmeta`: the pair (`CK_<id>_SCLK`, `CK_<id>_SPK`) for each CK ID that has one of
   these variables in the pool; a missing one of the two holds the default of `ckmeta`.
+- `dyn`, `switch`: definitions of the dynamic frames (class 5) and of the switch frames
+  (class 6) by frame ID, parsed from the pool (`dynframes.jl`, `switchframes.jl`).
+- `inner`: the snapshot with the same data that the evaluation of a dynamic frame of
+  this snapshot uses, or `nothing` at the recursion limit of CSPICE (`dynframes.jl`).
+- `pooledited`: true if `pool` holds direct edits (`pdpool`, `lmpool`, ...), so that it
+  is not the result of the text kernels of `loaded` alone (`pool_write.jl`).
+- `bodydefs`: the name and code pairs of `boddef`, oldest first.
 """
 mutable struct KernelSet
     const loaded::Vector{Loaded}
@@ -256,6 +263,11 @@ mutable struct KernelSet
     const ck::Dict{Int32,Vector{CKSegment}}
     const sclk::Dict{Int32,SclkType1}
     const ckmeta::Dict{Int32,NTuple{2,Int32}}
+    const dyn::Dict{Int32,DynFrame}
+    const switch::Dict{Int32,SwitchFrame}
+    const inner::Union{Nothing,DynLevel{KernelSet}}
+    const pooledited::Bool
+    const bodydefs::Vector{Tuple{String,Int32}}
 end
 
 """
@@ -282,13 +294,15 @@ TimeDefaults() = TimeDefaults("GREGORIAN", "UTC", "")
 Holder of the current `KernelSet`. Queries read the reference once and work on that
 snapshot; `furnsh`, `unload` and `kclear` build a new snapshot under `lock` and swap
 the reference atomically. Readers never take the lock. `timedefs` holds the defaults
-of `timdef` in the same way: `timdef` replaces the snapshot under `lock`.
+of `timdef` in the same way: `timdef` replaces the snapshot under `lock`. `watch` is the
+watcher state of `swpool` and `cvpool` (`pool_write.jl`).
 """
 mutable struct SpiceContext
     @atomic ks::KernelSet
     const lock::ReentrantLock
     @atomic timedefs::TimeDefaults
-    SpiceContext(ks::KernelSet, lock::ReentrantLock) = new(ks, lock, TimeDefaults())
+    const watch::PoolWatch
+    SpiceContext(ks::KernelSet, lock::ReentrantLock) = new(ks, lock, TimeDefaults(), PoolWatch())
 end
 
 "Error type of the package. `kind` is a short symbol such as `:nocoverage`."

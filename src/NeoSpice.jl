@@ -41,7 +41,13 @@ export reclat, latrec, recrad, radrec, recsph, sphrec, reccyl, cylrec, cyllat, l
 export sphcyl, sphlat, latsph, recgeo, georec, recpgr, pgrrec, xfmsta, convrt
 export drdlat, dlatdr, drdsph, dsphdr, drdcyl, dcyldr, drdgeo, dgeodr, drdpgr, dpgrdr
 export conics, oscelt, oscltx, prop2b, stmp03
+export frinfo, cidfrm, cnmfrm, ccifrm, tkfram, tipbod, tisbod, pckfrm, pckfrm!, pckcov, pckcov!
+export bodfnd, bodvcd, boddef
+export pdpool, pcpool, pipool, dvpool, expool, dtpool, gnpool, szpool, lmpool, clpool
+export stpool, ldpool, swpool, cvpool, poolversion
+export et2lst, lspcn
 
+include("dyntypes.jl")      # DynFrame, SwitchFrame, PoolWatch (fields of the types below)
 include("types.jl")
 include("taylor.jl")        # Taylor{N,T} truncated series, `primal`
 include("daf.jl")           # open_daf, segment descriptors
@@ -56,6 +62,9 @@ include("timeout.jl")       # number formats, timout, et2utc, etcal
 include("rotations.jl")     # build_tk, build_bodyrot, frame_rotation
 include("sclk.jl")          # type 1 spacecraft clocks: build_sclk, sct2e, sce2c, ...
 include("ck.jl")            # CK segment evaluation, types 1 to 6; class 3 frames
+include("dynframes.jl")     # dynamic frames (class 5): parsing and evaluation
+include("switchframes.jl")  # switch frames (class 6)
+include("pool_write.jl")    # pdpool, pcpool, pipool, dvpool, lmpool, ldpool, clpool, boddef, watchers
 include("context.jl")       # build_kernelset, SpiceContext, furnsh, unload, kclear
 include("spk_api.jl")       # spkgeo, spkezr, spkpos, spkder
 include("aberration.jl")    # Aberration, light time, stellar aberration, spkltc, ...
@@ -77,6 +86,8 @@ include("math/rotations.jl")    # eul2m, m2eul, m2q, q2m, qxq, axisar, raxisa, r
 include("math/ellipsoid.jl")    # SpicePlane, SpiceEllipse, nearpt, surfpt, edlimb, inedpl, npedln
 include("math/coordinates.jl")  # reclat, recgeo, recpgr, ..., Jacobians, xfmsta, convrt
 include("math/conics.jl")       # stmp03, prop2b, conics, oscelt, oscltx
+include("frame_info.jl")    # frinfo, cidfrm, cnmfrm, ccifrm, tkfram, tipbod, tisbod, pckfrm, pckcov, bodfnd, bodvcd
+include("lst.jl")           # et2lst, lspcn
 include("precompile.jl")    # precompile directives for the common signatures
 
 end # module
