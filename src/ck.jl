@@ -14,33 +14,7 @@
 
 # --- searches in a sorted part of the data array ----------------------------------------
 
-"Number of the elements `data[base+1:base+n]` (ascending) that are `<= x`, as `lstled_`."
-@inline function _lstled(data::Vector{Float64}, base::Int, n::Int, x::Float64)
-    lo, hi = 0, n
-    while lo < hi       # invariant: elements 1:lo are <= x, elements hi+1:n are > x
-        mid = (lo + hi + 1) >>> 1
-        if @inbounds data[base+mid] <= x
-            lo = mid
-        else
-            hi = mid - 1
-        end
-    end
-    return lo
-end
-
-"Number of the elements `data[base+1:base+n]` (ascending) that are `< x`, as `lstltd_`."
-@inline function _lstltd(data::Vector{Float64}, base::Int, n::Int, x::Float64)
-    lo, hi = 0, n
-    while lo < hi       # invariant: elements 1:lo are < x, elements hi+1:n are >= x
-        mid = (lo + hi + 1) >>> 1
-        if @inbounds data[base+mid] < x
-            lo = mid
-        else
-            hi = mid - 1
-        end
-    end
-    return lo
-end
+# `_lstled` and `_lstltd` are in `spk_more.jl`.
 
 "Index in `1:n` of the element of `data[base+1:base+n]` (ascending) closest to `x`; of two equally close the later one, as `lstcld_`. Requires `n >= 1`."
 @inline function _lstcld(data::Vector{Float64}, base::Int, n::Int, x::Float64)

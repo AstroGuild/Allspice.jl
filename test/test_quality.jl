@@ -85,4 +85,18 @@ group("8. quality gates", Kernels.FULL_SET_FILES...) do
         # An integer epoch and a Float32 epoch give Float64 results.
         @test (@inferred spkezr(ctx, 301, 0, 1, "NONE", 399)) isa Tuple{SVector{6,Float64},Float64}
     end
+
+    @testset "package image and method table" begin
+        # A method defined twice makes precompilation fail, and the package then loads
+        # without its image (slow first calls) although every other test passes.
+        project = dirname(Base.active_project())
+        cmd = `$(Base.julia_cmd()) --startup-file=no --project=$project -e "using NeoSpice"`
+        err = IOBuffer()
+        ok = success(pipeline(cmd; stderr=err, stdout=devnull))
+        text = String(take!(err))
+        @test ok
+        @test !occursin("overwritten", text)
+        @test !occursin("precompilation", text)
+        @test isempty(Test.detect_ambiguities(NeoSpice))
+    end
 end

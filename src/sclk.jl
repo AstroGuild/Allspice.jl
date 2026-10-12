@@ -14,8 +14,7 @@ const _SCLK_OUTPUT_DELIM = ('.', ':', '-', ',', ' ')
 "Largest number of clock fields (`MXNFLD`)."
 const _SCLK_MXNFLD = 10
 
-"`_dnint(x)`: nearest whole number, halves away from zero, as `d_nint` (Fortran `ANINT`)."
-@inline _dnint(x::Float64) = round(x, RoundNearestTiesAway)
+# `_dnint` (the `d_nint` of f2c) is in `time.jl`.
 
 """
     _sclk_build(pool, sc) -> Union{SclkType1,Nothing}
