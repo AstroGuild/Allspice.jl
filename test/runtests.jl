@@ -22,7 +22,8 @@ const GROUPS = ["states", "rotations", "derivatives", "identities", "pool", "man
     "math_ellipsoid", "math_conics", "dynframes", "poolwrite", "frameinfo", "das", "dsk",
     "gf_solver", "gf_quantities", "gf_posc", "gf_threads",
     "geom_subpoints", "geom_illum", "geom_occult", "geom_limbterm", "geom_fov", "geom_constobs",
-    "geom_azel", "table"]
+    "geom_azel", "table",
+    "ek_file", "ek_parse", "ek_query", "ek_threads", "ek_write"]
 
 selected = isempty(ARGS) ? GROUPS : ARGS
 unknown = setdiff(selected, GROUPS)
