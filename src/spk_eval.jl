@@ -41,7 +41,7 @@ One step of the Clenshaw recurrence with derivatives: from `b1 = b_{k+1}` and
 `b_k^(m) = 2m b_{k+1}^(m-1) + 2s b_{k+1}^(m) - b_{k+2}^(m)`, plus `c` for `m = 0`.
 Orders 0 and 1 use the operation order of `chbint_` of CSPICE.
 """
-@inline _clenshaw_step(c::Float64, s2::T, b1::NTuple{M,T}, b2::NTuple{M,T}) where {M,T} =
+@inline _clenshaw_step(c::Real, s2::T, b1::NTuple{M,T}, b2::NTuple{M,T}) where {M,T} =
     ntuple(m -> m == 1 ? c + (s2 * b1[1] - b2[1]) :
         (2 * (m - 1)) * b1[m-1] + b1[m] * s2 - b2[m], Val(M))
 
@@ -52,7 +52,7 @@ Value and derivatives (orders 0 to M-1 with respect to `s`) of the Chebyshev ser
 from the last two Clenshaw terms `b1 = b_1` and `b2 = b_2` and the coefficient `c0`:
 `f^(m) = m b_1^(m-1) + s b_1^(m) - b_2^(m)`, plus `c0` for `m = 0`.
 """
-@inline _clenshaw_end(c0::Float64, s::T, b1::NTuple{M,T}, b2::NTuple{M,T}) where {M,T} =
+@inline _clenshaw_end(c0::Real, s::T, b1::NTuple{M,T}, b2::NTuple{M,T}) where {M,T} =
     ntuple(m -> m == 1 ? c0 + (s * b1[1] - b2[1]) :
         (m - 1) * b1[m-1] + s * b1[m] - b2[m], Val(M))
 
@@ -70,7 +70,7 @@ the value and the first derivative come from the same floating-point operations 
 an angle of many turns, where a difference of one unit in the last place is large
 relative to the reduced angle.
 """
-@inline function _cheb3(data::Vector{Float64}, a::Int, ncoef::Int, s::T, radius::Float64,
+@inline function _cheb3(data::AbstractVector{<:Real}, a::Int, ncoef::Int, s::T, radius::Real,
         ::Val{N}) where {T,N}
     M = Val(N + 1)
     z = ntuple(_ -> zero(T), M)

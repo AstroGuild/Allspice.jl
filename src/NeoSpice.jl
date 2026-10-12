@@ -59,6 +59,7 @@ export limbpt, termpt, tangpt, fovtrg, fovray, getfov, getfvn
 export spkcpo, spkcpt, spkcvo, spkcvt, azlcpo, azlrec, recazl, dazldr, drdazl
 export gfdist, gfsep, gfposc, gfrr, gfpa, gfuds, gfudb, gfevnt, gfstol, gfrefn, uddc, uddf
 export gfsubc, gfsntc, gfilum, gfoclt, gftfov, gfrfov
+export EphemerisTable, ephemeris_table, table_position, table_state, table_jet, table_span
 
 include("dyntypes.jl")      # DynFrame, SwitchFrame, PoolWatch (fields of the types below)
 include("dsk_types.jl")     # DLADescr, DSKDescr, DSKSegment, DSKFile, DSKTolerances
@@ -122,6 +123,7 @@ include("gf/quantities.jl")  # distance, separation, range rate, phase angle, co
 include("gf/longitude.jl")   # zzgfcslv, zzgflong: longitude and right-ascension searches
 include("gf/api.jl")         # gfdist, gfsep, gfposc, gfrr, gfpa, gfuds, gfudb, gfevnt, gfstol
 include("gf/stubs.jl")       # gfsubc, gfsntc, gfilum, gfoclt, gftfov, gfrfov (not yet available)
+include("table.jl")         # EphemerisTable, ephemeris_table, table_position, table_state, table_jet
 include("precompile.jl")    # precompile directives for the common signatures
 
 end # module

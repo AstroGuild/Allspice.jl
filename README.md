@@ -23,8 +23,41 @@ The package is a prototype that covers the part of the toolkit which most trajec
 | Shape kernels | DAS file access, DSK type 2 read and write, plate access calls, ray-surface intercept (`dskxv`, `dskxsi`, `dskx02`), `latsrf`, `srfnrm`, surface name calls | DSK types other than 2 |
 | Geometry finder | `gfdist`, `gfsep`, `gfposc`, `gfrr`, `gfpa`, `gfuds`, `gfudb`, `gfevnt` for these quantities, `gfstol`, `gfrefn`, `uddf`, `uddc` | `gfsubc`, `gfsntc`, `gfilum`, `gfoclt`, `gftfov`, `gfrfov` |
 | Geometry | `subpnt`, `subslr`, `sincpt`, `ilumin`, `illumg`, `illumf`, `phaseq`, `occult`, `limbpt`, `termpt`, `tangpt`, `getfov`, `getfvn`, `fovtrg`, `fovray`, `azlcpo`, `azlrec`, `recazl`, `dazldr`, `drdazl`, `srfrec`, on ellipsoids and on DSK data | |
+| Ephemeris tables | `ephemeris_table`, `table_position`, `table_state`, `table_jet`: the position of one body relative to another on a fixed interval, as one array of coefficients for the CPU or a GPU | export of a table as an SPK segment |
 
 Three properties differ from CSPICE by design. All loaded data belong to a `SpiceContext`, whose readers take no lock, so that queries from many threads are safe while another thread loads or unloads kernels. A file that is open for access is an object that the caller owns (`h = dafopr(path)`), and the calls that use a hidden current file in CSPICE take that object as their first argument. An answer never depends on earlier calls, because the package keeps no buffers or saved search state between queries.
+
+## Ephemeris tables
+
+An optimizer or a GPU kernel that needs the position of a body many times on a known interval of time does not need the kernels in its inner loop. `ephemeris_table` extracts the position of one body relative to another on that interval into an `EphemerisTable`, which is one flat array of Chebyshev coefficients on intervals of equal length together with a few numbers, and `table_position`, `table_state` and `table_jet` evaluate it with no kernel set, no segment search and no chain of bodies.
+
+```julia
+tab = ephemeris_table("EARTH", t0, t1, "J2000", "NONE", "SUN")
+x = table_state(tab, et)                    # position (km) and velocity (km/s)
+r, v, a = table_jet(tab, et, Val(2))        # derivatives of any order
+
+using CUDA, Adapt
+gpu = adapt(CuArray, tab)                   # `cu(tab)` gives Float32 coefficients
+states = map(et -> @inbounds(table_state(gpu, et)), CuArray(epochs))
+```
+
+The function has two methods. For a geometric position in an inertial frame from SPK type 2 data, which is the case of the planetary ephemerides, the position is one polynomial for each record of the kernels; the table then takes the record length and the degree of the kernels and agrees with `spkpos` to rounding. In all other cases (a rotating frame, an aberration correction, another SPK type) the function interpolates and doubles the number of intervals until the measured error is below the tolerance `tol`, and the field `maxerr` of the table records the error that it measured. The velocity of a table is always the derivative of its position, and an epoch can be a `ForwardDiff.Dual` number, also on the GPU.
+
+The table below gives measured values for 400 days of de440s.bsp (Intel CPU, one thread; NVIDIA RTX 3090 with 4,000,000 epochs; `bench/table_gpu.jl`). The error is the largest difference from the kernels in km.
+
+| Case | Intervals | Error (km) | Table (ns per epoch) | `spkezr` (ns per epoch) |
+|---|---:|---:|---:|---:|
+| Moon relative to Earth, J2000, `NONE`, CPU | 101 | 2.4e-10 | 36 | 152 |
+| Earth relative to Sun, ECLIPJ2000, `NONE`, CPU | 101 | 1.2e-7 | 36 | 277 |
+| Moon relative to Earth, J2000, `LT+S`, CPU | 128 | 4.3e-6 | 42 | 653 |
+| Earth relative to Moon, MOON_PA, `NONE`, `tol=1e-6`, CPU | 1024 | 4.2e-7 | 42 | 385 |
+| Sun relative to Earth, IAU_EARTH, `NONE`, CPU | 1024 | 3.3e-3 | 42 | 341 |
+| Earth relative to Sun, J2000, GPU, `Float64` | 101 | 1.2e-7 | 1.2 | |
+| Earth relative to Sun, J2000, GPU, `Float32` | 101 | 16 | 0.33 | |
+
+Two limits come from the source and not from the table. The Earth has turned about 50,000 radians since the reference epoch, so that the rounding of its rotation angle moves the Sun by some metres in the IAU_EARTH frame, and no table can be more accurate than that. An aberration-corrected position has steps of some millimetres at the record boundaries of the kernels, because the light-time correction evaluates one body on each side of a boundary. With coefficients of type `Float32` a position keeps about seven digits, which is 16 km at the distance of the Sun.
+
+A query checks that the epoch is inside the table and throws `SpiceError(:nocoverage)` if it is not. The check is a bounds check, so `@inbounds` removes it, as a GPU kernel requires; an epoch outside the table then gives the extrapolation of the nearest interval.
 
 ## Relation to NAIF
 
