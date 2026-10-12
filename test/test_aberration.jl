@@ -372,7 +372,15 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
                 pos(t) = spkpos(ctx, targ, t, ref, ab, obs)[1]
                 ad = ab_ad_jet(pos, et)
                 jet = spkder(ctx, targ, et, ref, ab, obs, Val(3))
-                worst .= max.(worst, [ab_reldiff(jet[k], ad[k]) for k in 1:4])
+                # Order 0 is the position of spkezr, not the one of spkpos. For the
+                # converged forms the two differ in CSPICE as well: spkltc (spkezr)
+                # stops when the light time changes by less than 1e-17 |epoch|, which
+                # is 4e-9 s at 4.5e8 s and can be after one iteration, and spkapo
+                # (spkpos) always makes three. The difference is then the square of
+                # speed over light speed, 4e-12 for the Earth and the Moon.
+                ezr = spkezr(ctx, targ, et, ref, ab, obs)[1][SOneTo(3)]
+                worst[1] = max(worst[1], ab_reldiff(jet[1], ezr))
+                worst[2:4] .= max.(worst[2:4], [ab_reldiff(jet[k], ad[k]) for k in 2:4])
             end
             measured(@sprintf("  AD  %-6s orders 0..3: %s", ab,
                 join((@sprintf("%.2e", w) for w in worst), " ")))
