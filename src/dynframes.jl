@@ -402,7 +402,8 @@ inner snapshot, no pool edits and no `boddef` pairs. `_dyn_levels` completes it.
 KernelSet(loaded, daf, spk, pck, pool, name2code, code2name, frames, framename2id, tk,
     bodyrot, lsk, ck, sclk, ckmeta) = KernelSet(loaded, daf, spk, pck, pool, name2code,
     code2name, frames, framename2id, tk, bodyrot, lsk, ck, sclk, ckmeta,
-    Dict{Int32,DynFrame}(), Dict{Int32,SwitchFrame}(), nothing, false, Tuple{String,Int32}[])
+    Dict{Int32,DynFrame}(), Dict{Int32,SwitchFrame}(), nothing, false, Tuple{String,Int32}[],
+    DSKFile[], Dict{Int32,Vector{DSKSegment}}())
 
 """
     _dyn_levels(base, edited, bodydefs) -> KernelSet
@@ -427,7 +428,8 @@ function _dyn_levels(base::KernelSet, edited::Bool, bodydefs::Vector{Tuple{Strin
         ks = KernelSet(base.loaded, base.daf, base.spk, base.pck, base.pool,
             base.name2code, base.code2name, base.frames, base.framename2id, base.tk,
             base.bodyrot, base.lsk, base.ck, base.sclk, base.ckmeta, dyn, sw,
-            ks === nothing ? nothing : DynLevel{KernelSet}(ks), edited, bodydefs)
+            ks === nothing ? nothing : DynLevel{KernelSet}(ks), edited, bodydefs,
+            base.dskfiles, base.dsk)
     end
     return ks::KernelSet
 end
