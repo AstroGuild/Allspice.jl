@@ -25,6 +25,14 @@ export ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
 export spkobj, spkobj!, spkcov, spkcov!, kinfo, kdata, tkvrsn
 export Window, card, wncard, wninsd!, wnvald!, wnunid, wnintd, wndifd, wncomd
 export wnelmd, wnincd, wnfetd, wnsumd
+export vadd, vsub, vscl, vminus, vdot, vcrss, vnorm, vhat, vdist, vsep, vrel, vproj, vperp
+export vlcom, vlcom3, vrotv, vzero, vequ, vpack, vupack, ucrss, unorm, vtmv
+export mxv, mtxv, mxm, mtxm, mxmt, xpose, xpose6, invert, invort, trace, isrot, ident
+export rotate, rotmat, rotvec, twovec, twovxf, dvhat, dvdot, dvcrss, ducrss, dvnorm, dvsep
+export vaddg, vsubg, vsclg, vminug, vequg, vdotg, vnormg, vhatg, unormg, vdistg, vsepg, vrelg
+export vprojg, vlcomg, vzerog, vtmvg, mxvg, mtxvg, mxmg, mtxmg, mxmtg, xposeg
+export eul2m, m2eul, eul2xf, xf2eul, axisar, raxisa, m2q, q2m, qxq, qdq2av, rav2xf, xf2rav
+export sharpr
 
 include("types.jl")
 include("taylor.jl")        # Taylor{N,T} truncated series, `primal`
@@ -53,6 +61,8 @@ include("daf_write.jl")     # dafonw, dafopw, dafbna, dafada, dafena, dafac, daf
 include("spk_write.jl")     # spkopn, spkopa, spkcls, spkw01 ... spkw21
 include("ck_write.jl")      # ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
 include("kernel_info.jl")   # spkobj, spkcov, ktotal(kind), kdata, kinfo, tkvrsn
+include("math/vectors.jl")      # vadd ... vsep, mxv, mxm, invert, rotate, twovec, dvhat, g forms
+include("math/rotations.jl")    # eul2m, m2eul, m2q, q2m, qxq, axisar, raxisa, rav2xf, xf2eul
 include("precompile.jl")    # precompile directives for the common signatures
 
 end # module
