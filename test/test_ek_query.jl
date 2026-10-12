@@ -189,6 +189,26 @@ function ekq_quote(rng, s::AbstractString)
     return string(q, replace(s, string(q) => string(q, q)), q)
 end
 
+"""
+    ekq_number(text) -> Float64
+
+The double that the EK query language assigns to the number `text`. Contract: `text` is
+a number in the syntax of CSPICE `nparsd`; the result is the output of `nparsd_` of
+CSPICE (the routine that the scanner of queries calls, zzekscan.c line 900) and not of
+NeoSpice, so that the model stays independent of the code under test. `nparsd` does not
+always give the correctly rounded double (it gives `nextfloat(2.756)` for "2.756"),
+thus `parse(Float64, text)` is not the value that a query compares with.
+"""
+function ekq_number(text::AbstractString)
+    x = Ref{Float64}(NaN)
+    msg = fill(UInt8(' '), 160)
+    ptr = Ref{Cint}(0)
+    ccall((:nparsd_, EKLIB), Cint, (Ptr{UInt8}, Ref{Float64}, Ptr{UInt8}, Ref{Cint}, Cint, Cint),
+        text, x, msg, ptr, ncodeunits(text), length(msg))
+    @assert all(==(UInt8(' ')), msg) && !isnan(x[]) "nparsd accepts the number '$text'"
+    return x[]
+end
+
 "A value of the scalar column `col` of `tab`: often one that the model holds. Returns (value, text)."
 function ekq_literal(rng, ctx, tab::EKQTable, c::Int)
     col = tab.cols[c]
@@ -204,7 +224,10 @@ function ekq_literal(rng, ctx, tab::EKQTable, c::Int)
     elseif col.dtype === :DP
         v === nothing && (v = round(500 * randn(rng); digits=1))
         rand(rng) < 0.15 && isinteger(v) && return v, string(Int(v))
-        return v, string(v)
+        # The model compares with the value of the text in the query language, which can
+        # be one unit in the last place away from `v` (see `ekq_number`); an equality with
+        # such a value finds no row in both engines.
+        return ekq_number(string(v)), string(v)
     elseif col.dtype === :TIME
         if v !== nothing && rand(rng) < 0.6
             text = timout(ctx, v, "YYYY MON DD HR:MN:SC.###### TDB ::TDB")
@@ -838,6 +861,24 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
         gids = [r[1][1] for r in groups.rows]
         res, _, _ = ekfind(ctx, "SELECT GID FROM GROUPS WHERE GID > 100 OR GID > 50")
         @test sort(ekcolumn(res, 1)) == sort(filter(>(50), gids))
+    end
+
+    ek_part("a number of a query has the value that nparsd gives") do
+        # Fixed case of the seed 777: `nparsd` (zzekscan.c line 900) reads "2.756" as the
+        # double after 2.756, and NeoSpice reads the same double on purpose. A row with the
+        # value 2.756 (shortest decimal form "2.756") is thus not equal to the number 2.756
+        # of a query, and the model must compare with `ekq_number`.
+        x = ekq_number("2.756")
+        @test x === nextfloat(2.756)
+        @test NeoSpice._nparsd("2.756") === x
+        vcol = findfirst(c -> c.name == "VAL", events.cols)
+        vals = Float64[r[vcol][1] for r in events.rows if r[vcol] !== nothing]
+        for (op, pred) in (("=", ==(x)), (">=", >=(x)), (">", >(x)))
+            q = "SELECT ID FROM EVENTS WHERE VAL $op 2.756"
+            res, err, _ = ekfind(ctx, q)
+            @test !err
+            @test res.nmrows == count(pred, vals) == c_ekfind(q)[1]
+        end
     end
 
     ek_part("fetch calls: indices and data types") do

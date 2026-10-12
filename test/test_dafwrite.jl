@@ -516,7 +516,12 @@ bad_w15(a) = Any[bad_ids(a)..., bad_pds(a)...,
     ("zero periapsis vector", merge(a, (pa=zeros(3),)), :badvector, true),
     ("zero central pole", merge(a, (pv=zeros(3),)), :badvector, true),
     ("negative radius", merge(a, (radius=-1.0,)), :badradius, true),
-    ("pole not orthogonal to periapsis", merge(a, (pa=a.tp .+ 0.1 .* a.pa,)), :badinitstate, true),
+    # `spkw15` compares the dot product of the unit vectors with 1e-5 (spkw15.c, line 463).
+    # The generator scales `tp` and `pa` by reciprocal factors, so the variant is built from
+    # the unit vectors: with the scaled vectors and the factor 1e-3 the dot product is 1e-5,
+    # which is on the limit and both engines accept it.
+    ("pole not orthogonal to periapsis", merge(a, (pa=normalize(a.tp) .+ 0.1 .* normalize(a.pa),)),
+        :badinitstate, true),
     ("first equal to last", merge(a, (last=a.first,)), :baddescrtimes, true),
     ("pole with two components", merge(a, (tp=[1.0, 0.0],)), :badarg, false),
 ]
@@ -583,6 +588,14 @@ function gen_w19(rng, k; nintvl::Integer=rand(rng, 1:4))
         sub = rand(rng, 0:2)
         deg = sub == 1 ? rand(rng, 1:2:27) : rand(rng, (3, 7, 11, 15, 19, 23, 27))
         ep = inc_epochs(rng, n; t0=ivlbds[end] - (rand(rng) < 0.5 ? 0.0 : 5.0))
+        # The first epoch can be 5 s before the start of the interval and a step can be as
+        # short as 1 s, so a short mini-segment (2 packets) can end before its interval
+        # starts. `spkw19` requires strictly increasing interval bounds
+        # (SPICE(BOUNDSOUTOFORDER)), thus such epochs are drawn again; 0.5 s is the largest
+        # distance of the stop bound from the last epoch.
+        while ep[end] - 0.5 <= ivlbds[end]
+            ep = inc_epochs(rng, n; t0=ivlbds[end] - (rand(rng) < 0.5 ? 0.0 : 5.0))
+        end
         push!(npkts, n)
         push!(subtps, sub)
         push!(degres, deg)
@@ -590,6 +603,7 @@ function gen_w19(rng, k; nintvl::Integer=rand(rng, 1:4))
         append!(epochs, ep)
         push!(ivlbds, rand(rng) < 0.5 ? ep[end] : ep[end] - 0.5)
     end
+    @assert all(>(0.0), diff(ivlbds)) "the interval bounds of a type 19 segment increase strictly"
     return (; spk_ids(k)..., first=ivlbds[1], last=ivlbds[end], segid=rand_segid(rng, "T19"), npkts,
         subtps, degres, packts, epochs, ivlbds, sellst=rand(rng, Bool))
 end
@@ -1141,8 +1155,11 @@ group("9. DAF access, SPK and CK writers") do
         for c in WRITER_CASES
             @testset "$(c.name)" begin
                 a = c.gen(rng, 1)
-                # A case with at least three records, so that every variant can be built.
+                # A case with at least three records, so that every variant can be built. The
+                # writers of types 8 and 12 have no epoch vector, thus the count of their
+                # records is the count of the columns of `states`.
                 while !all(v -> !(v isa AbstractVector{Float64}) || length(v) >= 3, values(a)) ||
+                    (hasproperty(a, :states) && size(a.states, 2) < 3) ||
                     (hasproperty(a, :starts) && length(a.starts) < 2)
                     a = c.gen(rng, 1)
                 end
