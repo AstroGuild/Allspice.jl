@@ -36,6 +36,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 import ForwardDiff
 
@@ -461,12 +462,24 @@ function type_reldiff(a, b)
     return nb == 0 ? norm(a - b) : norm(a - b) / nb
 end
 
-"Nested forward-mode derivatives of `f` at `t`, orders 0 to 3, as a tuple."
-function type_ad_jet(f, t::Float64)
-    d1(s) = ForwardDiff.derivative(f, s)
-    d2(s) = ForwardDiff.derivative(d1, s)
-    d3(s) = ForwardDiff.derivative(d2, s)
-    return (f(t), d1(t), d2(t), d3(t))
+"""
+Nesting depth of ForwardDiff through `spk_eval` in check (d). Each depth is a new
+compilation of the evaluators of all the data types (about 0.7 s, 1 s and 1.4 s), so
+the default run nests to depth 1 and the exhaustive run to depth 3.
+"""
+const TYPE_AD_ORDER = nsample(1, 3)
+
+"The function `t -> d^N f / dt^N` by nested forward mode; `f` itself for `N == 0`."
+type_ad_nth(f, ::Val{0}) = f
+function type_ad_nth(f, ::Val{N}) where {N}
+    g = type_ad_nth(f, Val(N - 1))
+    return s -> ForwardDiff.derivative(g, s)
+end
+
+"Nested forward-mode derivatives of `f` at `t`, orders 0 to `N`, as a tuple. Requires `N >= 0`."
+function type_ad_jet(f, t::Float64, ::Val{N}) where {N}
+    @assert N isa Int && N >= 0
+    return ntuple(k -> type_ad_nth(f, Val(k - 1))(t), Val(N + 1))
 end
 
 alloc_type_geo(ctx, body, et) = @allocated spkgeo(ctx, body, et, 1, EARTH)
@@ -492,7 +505,7 @@ group("9. SPK data types against CSPICE") do
     println("  ", length(cases), " segments in ", path)
     @test sort(unique(c.dtype for c in cases)) == [1, 5, 8, 9, 12, 13, 14, 15, 17, 18, 19, 20, 21]
 
-    @testset "states against CSPICE" begin
+    @apart @testset "states against CSPICE" begin
         by_type = Dict{Int,Tuple{Float64,Float64}}()
         for c in cases
             wr, wv = state_errors(ctx, c, case_epochs(rng, c, 300))
@@ -508,7 +521,7 @@ group("9. SPK data types against CSPICE") do
         end
     end
 
-    @testset "name forms and spkezr give the spkgeo state" begin
+    @apart @testset "name forms and spkezr give the spkgeo state" begin
         c = cases[1]
         et = (c.t0 + c.t1) / 2
         byid = spkgeo(ctx, c.body, et, "J2000", EARTH)
@@ -516,7 +529,7 @@ group("9. SPK data types against CSPICE") do
         @test spkpos(ctx, c.body, et, "J2000", "NONE", EARTH)[1] == byid[1][SOneTo(3)]
     end
 
-    @testset "zero allocation and inferred types" begin
+    @apart @testset "zero allocation and inferred types" begin
         for c in cases
             et = c.t0 + 0.37 * (c.t1 - c.t0)
             @testset "$(c.label)" begin
@@ -530,7 +543,7 @@ group("9. SPK data types against CSPICE") do
         end
     end
 
-    @testset "spkder: lower orders, and higher orders against ForwardDiff and differences" begin
+    @apart @testset "spkder: lower orders, and higher orders against ForwardDiff and differences" begin
         for c in cases
             vel(t) = spkgeo(ctx, c.body, t, 1, EARTH)[1][SVector(4, 5, 6)]
             acc(t) = ForwardDiff.derivative(vel, t)
@@ -558,25 +571,25 @@ group("9. SPK data types against CSPICE") do
         end
     end
 
-    @testset "spk_eval_position: every order is a derivative of the position" begin
+    @apart @testset "spk_eval_position: every order is a derivative of the position" begin
         for c in cases
             seg = ks.spk[Int32(c.body)][1]
             data = ks.daf[seg.file]
             pos(t) = NeoSpice.spk_eval(data, seg, t, Val(0))[1]
-            worst = zeros(4)
+            worst = zeros(TYPE_AD_ORDER + 1)
             for et in smooth_epochs(rng, c, 4)
                 jet = NeoSpice.spk_eval_position(data, seg, et, Val(3))
-                ad = type_ad_jet(pos, et)
-                worst .= max.(worst, [type_reldiff(jet[k], ad[k]) for k in 1:4])
+                ad = type_ad_jet(pos, et, Val(TYPE_AD_ORDER))
+                worst .= max.(worst, [type_reldiff(jet[k], ad[k]) for k in 1:TYPE_AD_ORDER+1])
                 @test (@inferred NeoSpice.spk_eval_position(data, seg, et, Val(3))) isa
                       NTuple{4,SVector{3,Float64}}
                 @test NeoSpice.spk_eval_position(data, seg, et, Val(0))[1] == jet[1]
             end
-            @test all(worst[k] <= AD_POS_RTOL[k] for k in 1:4)
+            @test all(worst[k] <= AD_POS_RTOL[k] for k in 1:TYPE_AD_ORDER+1)
         end
     end
 
-    @testset "epoch number types: Taylor epoch, and the Kepler solutions at their special epochs" begin
+    @apart @testset "epoch number types: Taylor epoch, and the Kepler solutions at their special epochs" begin
         for c in cases
             seg = ks.spk[Int32(c.body)][1]
             data = ks.daf[seg.file]
@@ -605,7 +618,7 @@ group("9. SPK data types against CSPICE") do
         end
     end
 
-    @testset "numeric helpers" begin
+    @apart @testset "numeric helpers" begin
         tv = NeoSpice.taylor_var
         der = NeoSpice.derivatives
         # sinh and cosh: the derivatives alternate.
@@ -673,7 +686,7 @@ group("9. SPK data types against CSPICE") do
         @test throws_kind(() -> NeoSpice._kepler_equinoctial(0.8, 0.8), :badorbit)
     end
 
-    @testset "errors" begin
+    @apart @testset "errors" begin
         # Type 10 (two-line elements) is not available.
         seg10 = NeoSpice.Segment(Int32(-1), Int32(399), Int32(1), Int32(10), 0.0, 1.0, Int32(0),
             1, 20, 0.0, 0.0, Int32(0), Int32(0))

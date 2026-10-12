@@ -10,6 +10,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 alloc_spkezr(ctx, et) = @allocated spkezr(ctx, 301, et, 1, "NONE", 399)
 alloc_spkpos(ctx, et) = @allocated spkpos(ctx, 301, et, 1, "NONE", 399)
@@ -39,7 +40,7 @@ group("8. quality gates", Kernels.FULL_SET_FILES...) do
     eclip = 17
     @test iau_earth == 10013 && moon_pa == 31000 && moon_me == 31001
 
-    @testset "zero allocation, integer-ID forms" begin
+    @apart @testset "zero allocation, integer-ID forms" begin
         @test warm(alloc_spkezr, ctx, et) == 0
         @test warm(alloc_spkpos, ctx, et) == 0
         @test warm(alloc_spkgeo, ctx, et) == 0
@@ -62,7 +63,7 @@ group("8. quality gates", Kernels.FULL_SET_FILES...) do
         end
     end
 
-    @testset "allocation of the name forms (reported, not asserted)" begin
+    @apart @testset "allocation of the name forms (reported, not asserted)" begin
         measured("  name form spkezr(ctx, \"MOON\", et, \"J2000\", \"NONE\", \"EARTH\"): " *
             "$(warm(alloc_names, ctx, et)) bytes")
         measured("  name form pxform(ctx, \"J2000\", \"IAU_EARTH\", et): " *
@@ -70,7 +71,7 @@ group("8. quality gates", Kernels.FULL_SET_FILES...) do
         @test true
     end
 
-    @testset "inferred return types" begin
+    @apart @testset "inferred return types" begin
         @test (@inferred spkezr(ctx, 301, et, 1, "NONE", 399)) isa Tuple{SVector{6,Float64},Float64}
         @test (@inferred spkpos(ctx, 301, et, 1, "NONE", 399)) isa Tuple{SVector{3,Float64},Float64}
         @test (@inferred spkgeo(ctx, 301, et, 1, 399)) isa Tuple{SVector{6,Float64},Float64}
@@ -93,7 +94,7 @@ group("8. quality gates", Kernels.FULL_SET_FILES...) do
         @test (@inferred spkezr(ctx, 301, 0, 1, "NONE", 399)) isa Tuple{SVector{6,Float64},Float64}
     end
 
-    @testset "package image and method table" begin
+    @apart @testset "package image and method table" begin
         # A method defined twice makes precompilation fail, and the package then loads
         # without its image (slow first calls) although every other test passes.
         project = dirname(Base.active_project())

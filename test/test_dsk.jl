@@ -26,6 +26,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 isdefined(@__MODULE__, :DSKLIB) || include("dskfixtures.jl")
 
@@ -289,7 +290,8 @@ function dsk_part_2(env)
                 a = rand(rng, 1:np); r = rand(rng, 1:50)
                 @test dskp02(h, d, a, r) == c_dskp02(ch, cd, a, r)
             end
-            @test all(dskn02(h, d, k) == c_dskn02(ch, cd, k) for k in 1:np)
+            # Every plate in the exhaustive run, every tenth plate in the default run.
+            @test all(dskn02(h, d, k) == c_dskn02(ch, cd, k) for k in 1:(FULL ? 1 : 10):np)
             for item in 1:14
                 full = dski02(h, d, item, 1, 10_000_000)
                 @test full == c_dski02(ch, cd, item, 1, 2_000_000)
@@ -430,7 +432,7 @@ end
 function dsk_part_5(env)
     (; rng, dir, tk, spk, specs_a, specs_b, specs_c, files, wctx, comments) = env
     (; loadlist, ctx, ks, shape_e, shape_r, shape_w) = env
-    n = 5000
+    n = nsample(1000, 5000)
     vtx = V3[]; dirs = V3[]
     for k in 1:n
         v, d = dsk_ray(rng, rand(rng, 1:4), shape_r)
@@ -503,6 +505,17 @@ function dsk_part_6(env)
         delta = randn(rng)
         @test collect(pltexp([a, b, c], delta)) == SPICE.pltexp([collect(a), collect(b), collect(c)], delta)
         @test pltexp(hcat(a, b, c), delta) == pltexp((a, b, c) |> collect, delta)
+    end
+    # Fixed cases: three vertices exactly on one line, with the longest edge first, second
+    # and third. A random plate reaches these branches about once in a thousand.
+    for (a, b, c) in ((V3(0.0, 0.0, 0.0), V3(2.0, 0.0, 0.0), V3(1.0, 0.0, 0.0)),
+            (V3(1.0, 0.0, 0.0), V3(0.0, 0.0, 0.0), V3(2.0, 0.0, 0.0)),
+            (V3(2.0, 0.0, 0.0), V3(1.0, 0.0, 0.0), V3(0.0, 0.0, 0.0))),
+        p in (V3(0.5, 1.0, 0.0), V3(-1.0, 2.0, 3.0), V3(5.0, 0.0, 1.0))
+
+        np_, nd = pltnp(p, a, b, c)
+        cp_, cd = SPICE.pltnp(collect(p), collect(a), collect(b), collect(c))
+        maxd = max(maxd, norm(np_ - cp_), abs(nd - cd))
     end
     @test maxd == 0.0
     for s in (specs_a..., specs_b..., specs_c...)
@@ -941,7 +954,7 @@ function dsk_part_14(env)
     (; rng, dir, tk, spk, specs_a, specs_b, specs_c, files, wctx, comments) = env
     (; loadlist, ctx, ks, shape_e, shape_r, shape_w) = env
     iau = Int(NeoSpice.namfrm(ctx, "IAU_MARS"))
-    n = nsample(2_000, 20_000)
+    n = nsample(500, 20_000)
     vtx = [dsk_ray(rng, 1, shape_e)[1] for _ in 1:n]
     dirs = [V3(randn(rng, 3)) * 2.2 - x for x in vtx]
     xpt = Vector{V3}(undef, n)
@@ -1065,15 +1078,15 @@ group("12. DSK type 2 against CSPICE") do
     comments = ["DSK test file", "second comment line"]
     env = (; rng, dir, tk, spk, specs_a, specs_b, specs_c, files, wctx, comments)
 
-    @testset "(a) spatial index, bounds and files of the two writers" begin
+    @apart @testset "(a) spatial index, bounds and files of the two writers" begin
         dsk_part_1(env)
     end
 
-    @testset "(b) access calls" begin
+    @apart @testset "(b) access calls" begin
         dsk_part_2(env)
     end
 
-    @testset "(c) dskx02 on single segments" begin
+    @apart @testset "(c) dskx02 on single segments" begin
         dsk_part_3(env)
     end
 
@@ -1088,53 +1101,53 @@ group("12. DSK type 2 against CSPICE") do
 
     env = (; env..., loadlist, ctx, ks, shape_e, shape_r, shape_w)
 
-    @testset "(d) dskxsi on the loaded files" begin
+    @apart @testset "(d) dskxsi on the loaded files" begin
         dsk_part_4(env)
     end
 
-    @testset "(d) dskxv, argument forms and coverage in time" begin
+    @apart @testset "(d) dskxv, argument forms and coverage in time" begin
         dsk_part_5(env)
     end
 
-    @testset "(e) plate utilities" begin
+    @apart @testset "(e) plate utilities" begin
         dsk_part_6(env)
     end
 
     oracle_load(loadlist)
-    @testset "(e) surface names and codes" begin
+    @apart @testset "(e) surface names and codes" begin
         dsk_part_7(env)
     end
 
-    @testset "(e) latsrf and srfnrm" begin
+    @apart @testset "(e) latsrf and srfnrm" begin
         dsk_part_8(env)
     end
 
-    @testset "(f) tolerances" begin
+    @apart @testset "(f) tolerances" begin
         dsk_part_9(env)
     end
 
-    @testset "(f) kernel management" begin
+    @apart @testset "(f) kernel management" begin
         dsk_part_10(env)
     end
 
-    @testset "(f) input checks of the intercept and the access calls" begin
+    @apart @testset "(f) input checks of the intercept and the access calls" begin
         dsk_part_11(env)
     end
 
-    @testset "(f) input checks of the writer" begin
+    @apart @testset "(f) input checks of the writer" begin
         dsk_part_12(env)
     end
 
     oracle_load(loadlist)
-    @testset "(g) allocation and inference" begin
+    @apart @testset "(g) allocation and inference" begin
         dsk_part_13(env)
     end
 
-    @testset "(g) time per intercept" begin
+    @apart @testset "(g) time per intercept" begin
         dsk_part_14(env)
     end
 
-    @testset "(g) many threads, while another task loads and unloads a DSK" begin
+    @apart @testset "(g) many threads, while another task loads and unloads a DSK" begin
         dsk_part_15(env)
     end
 end

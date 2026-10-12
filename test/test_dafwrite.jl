@@ -24,6 +24,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 using Random: randstring
 
@@ -1037,7 +1038,7 @@ group("9. DAF access, SPK and CK writers") do
     SPICE.kclear()
     sclk = write_sclk(dir)
 
-    @testset "writers: data area, descriptors, names and read-back against CSPICE" begin
+    @apart @testset "writers: data area, descriptors, names and read-back against CSPICE" begin
         ntrial = 6
         measured(@sprintf("  %-8s %5s %9s %9s %5s %5s %6s %8s", "writer", "segs", "doubles", "bit diff",
             "descr", "names", "bytes", "readback"))
@@ -1087,7 +1088,7 @@ group("9. DAF access, SPK and CK writers") do
         end
     end
 
-    @testset "writers: forms of the table arguments" begin
+    @apart @testset "writers: forms of the table arguments" begin
         c = writer_case("spkw13")
         a = c.gen(rng, 1)
         paths = String[]
@@ -1136,7 +1137,7 @@ group("9. DAF access, SPK and CK writers") do
         @test read(pc) == read(p)
     end
 
-    @testset "writers: every input check" begin
+    @apart @testset "writers: every input check" begin
         for c in WRITER_CASES
             @testset "$(c.name)" begin
                 a = c.gen(rng, 1)
@@ -1185,7 +1186,7 @@ group("9. DAF access, SPK and CK writers") do
         end
     end
 
-    @testset "many segments in one file: past one summary record, and appending" begin
+    @apart @testset "many segments in one file: past one summary record, and appending" begin
         c13 = writer_case("spkw13")
         c03 = writer_case("ckw03")
         for (c, counts) in ((c13, (24, 25, 26, 50, 51, 77)), (c03, (25, 26, 60)))
@@ -1234,7 +1235,7 @@ group("9. DAF access, SPK and CK writers") do
         @test_throws SPICE.SpiceError SPICE.spkopa(ckfile)
     end
 
-    @testset "comments: dafac and dafec in both directions" begin
+    @apart @testset "comments: dafac and dafec in both directions" begin
         c = writer_case("spkw13")
         seg(k) = merge(c.gen(rng, k), (states=rand_states(rng, 30), epochs=collect(0.0:29.0), first=0.0, last=29.0, degree=3))
         nbytes = 0
@@ -1319,7 +1320,7 @@ group("9. DAF access, SPK and CK writers") do
         dafcls(hr)
     end
 
-    @testset "empty files, open and close" begin
+    @apart @testset "empty files, open and close" begin
         for (kind, ext) in ((:spk, ".bsp"), (:ck, ".bc")), ncomch in (0, 1, 1000, 1001, 5000)
             pc = joinpath(dir, "empty_c_$(kind)_$ncomch$ext")
             pn = joinpath(dir, "empty_n_$(kind)_$ncomch$ext")
@@ -1364,7 +1365,7 @@ group("9. DAF access, SPK and CK writers") do
         @test !ispath(joinpath(dir, "p.daf"))
     end
 
-    @testset "low-level DAF access" begin
+    @apart @testset "low-level DAF access" begin
         c = writer_case("spkw09")
         segs = [c.gen(rng, k) for k in 1:31]
         comments = rand_comments(rng, 12)
@@ -1527,7 +1528,7 @@ group("9. DAF access, SPK and CK writers") do
         @test_throws SPICE.SpiceError SPICE.dafopr(pd)
     end
 
-    @testset "getfat, spkobj, spkcov, tkvrsn" begin
+    @apart @testset "getfat, spkobj, spkcov, tkvrsn" begin
         c = writer_case("spkw13")
         segs = [merge(c.gen(rng, k), (body=rand(rng, (-41, -42, -43, 501, 2000001)),)) for k in 1:70]
         pc, pn = write_both(c, dir, "coverage", segs)
@@ -1589,7 +1590,7 @@ group("9. DAF access, SPK and CK writers") do
         @test tkvrsn("SPKW13") == "No version found."
     end
 
-    @testset "furnsh of a written file; kinfo, kdata, ktotal" begin
+    @apart @testset "furnsh of a written file; kinfo, kdata, ktotal" begin
         c2 = writer_case("spkw02")
         c3 = writer_case("spkw03")
         seg2 = merge(gen_w0203(rng, 1, 3), (body=-501, center=399))
@@ -1679,7 +1680,7 @@ group("9. DAF access, SPK and CK writers") do
         SPICE.kclear()
     end
 
-    @testset "handles on different tasks" begin
+    @apart @testset "handles on different tasks" begin
         c = writer_case("spkw13")
         jobs = [(seed=SEED + 900 + i, nseg=rand(rng, (3, 26, 40))) for i in 1:16]
         function job(tag, j)

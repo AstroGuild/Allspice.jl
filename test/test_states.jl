@@ -14,6 +14,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 "Thresholds of one comparison class. `rel_*` are relative to the vector norm."
 struct StateTol
@@ -116,7 +117,7 @@ group("1. states against CSPICE", Kernels.FULL_SET_FILES...) do
     @test length(bodies) >= 14
     pairs = ordered_pairs(bodies)
 
-    @testset "de440s, all ordered pairs, J2000" begin
+    @apart @testset "de440s, all ordered pairs, J2000" begin
         epochs = random_epochs(rng, 200, DE440S_COVERAGE...)
         println("  bodies: ", bodies, "; ", length(pairs), " ordered pairs x ",
             length(epochs), " epochs")
@@ -129,14 +130,14 @@ group("1. states against CSPICE", Kernels.FULL_SET_FILES...) do
         (4, 301), (199, 299), (3, 0), (0, 301)]
     small = [p for p in small if (p[1] == 0 || p[1] in bodies) && (p[2] == 0 || p[2] in bodies)]
     epochs50 = random_epochs(rng, 50, DE440S_COVERAGE...)
-    @testset "de440s, frame $ref" for (ref, tol) in (("ECLIPJ2000", TOL_INERTIAL),
+    @apart @testset "de440s, frame $ref" for (ref, tol) in (("ECLIPJ2000", TOL_INERTIAL),
             ("IAU_EARTH", TOL_BODYFIXED), ("IAU_MOON", TOL_BODYFIXED),
             ("MOON_PA", TOL_BODYFIXED), ("MOON_ME", TOL_BODYFIXED))
         d = compare_states(ctx, small, epochs50, ref)
         assert_states("de440s $ref", d, tol)
     end
 
-    @testset "forms of the call" begin
+    @apart @testset "forms of the call" begin
         epochs = random_epochs(rng, 20, DE440S_COVERAGE...)
         named = [("MOON", 301, "EARTH", 399), ("EARTH", 399, "SUN", 10),
             ("SUN", 10, "MOON", 301), ("EARTH BARYCENTER", 3, "SOLAR SYSTEM BARYCENTER", 0),
@@ -177,7 +178,7 @@ group("1. states against CSPICE", Kernels.FULL_SET_FILES...) do
         @test all(iszero, spkezr(ctx, 399, 0.0, "J2000", "NONE", 399)[1])
     end
 
-    @testset "default context" begin
+    @apart @testset "default context" begin
         kclear()
         foreach(furnsh, set)
         for et in random_epochs(rng, 10, DE440S_COVERAGE...)

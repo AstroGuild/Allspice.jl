@@ -16,6 +16,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 "Pool variable names of CSPICE that match `template`, sorted."
 function pw_oracle_names(template::AbstractString)
@@ -74,7 +75,7 @@ group("18. kernel-pool edits and watchers against CSPICE", Kernels.LSK, Kernels.
         "PW_WATCHED = 7"])
     kc = pw_kernel("c.tpc", ["PW_C = 'c'", "PW_EDIT_D = -1.0", "PW_DATE = @2000-JAN-01/12:00:00"])
 
-    @testset "edits, furnsh, unload and kclear" begin
+    @apart @testset "edits, furnsh, unload and kclear" begin
         set = [Kernels.LSK, Kernels.PCK11, ka, Kernels.DE440S]
         oracle_load(set)
         ctx = neo_context(set)
@@ -163,7 +164,7 @@ group("18. kernel-pool edits and watchers against CSPICE", Kernels.LSK, Kernels.
         println("  pool equal to CSPICE after each of ", steps, " steps")
     end
 
-    @testset "random sequence of operations" begin
+    @apart @testset "random sequence of operations" begin
         SPICE.kclear()
         ctx = SpiceContext()
         files = [pw_kernel("r$i.tpc", ["PW_R$(i) = $(i)", "PW_V$(i % 3) = ( $(i).5, 2.0 )",
@@ -221,7 +222,7 @@ group("18. kernel-pool edits and watchers against CSPICE", Kernels.LSK, Kernels.
         @test nbad == 0
     end
 
-    @testset "expool, dtpool, gnpool, szpool, stpool" begin
+    @apart @testset "expool, dtpool, gnpool, szpool, stpool" begin
         set = [Kernels.LSK, Kernels.PCK11, Kernels.MOON_TF, ka]
         oracle_load(set)
         ctx = neo_context(set)
@@ -284,7 +285,7 @@ group("18. kernel-pool edits and watchers against CSPICE", Kernels.LSK, Kernels.
         @test stpool(ctx, "PW_LONG", 0, "//") === nothing
     end
 
-    @testset "tables that are derived from the pool follow an edit" begin
+    @apart @testset "tables that are derived from the pool follow an edit" begin
         set = [Kernels.LSK, Kernels.PCK11, Kernels.DE440S]
         oracle_load(set)
         ctx = neo_context(set)
@@ -324,7 +325,7 @@ group("18. kernel-pool edits and watchers against CSPICE", Kernels.LSK, Kernels.
         @test_throws MethodError pdpool(NeoSpice.kernelset(ctx), "X", [1.0])
     end
 
-    @testset "boddef" begin
+    @apart @testset "boddef" begin
         set = [Kernels.LSK, Kernels.PCK11]
         oracle_load(set)
         ctx = neo_context(set)
@@ -354,7 +355,7 @@ group("18. kernel-pool edits and watchers against CSPICE", Kernels.LSK, Kernels.
         @test bodn2c(SpiceContext(), "PW_BODDEF_ONE") === nothing
     end
 
-    @testset "watchers" begin
+    @apart @testset "watchers" begin
         set = [Kernels.LSK, ka]
         oracle_load(set)
         ctx = neo_context(set)
@@ -431,7 +432,7 @@ group("18. kernel-pool edits and watchers against CSPICE", Kernels.LSK, Kernels.
         @test poolversion(c2) < v7
     end
 
-    @testset "errors" begin
+    @apart @testset "errors" begin
         ctx = SpiceContext()
         @test throws_kind(() -> pdpool(ctx, "", [1.0]), :badvarname)
         @test throws_kind(() -> pdpool(ctx, "   ", [1.0]), :badvarname)

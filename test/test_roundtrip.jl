@@ -11,6 +11,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 group("roundtrip", Kernels.LSK, Kernels.DE440S) do
     rng = MersenneTwister(SEED + 40)
@@ -76,7 +77,7 @@ group("roundtrip", Kernels.LSK, Kernels.DE440S) do
     ctx = neo_context(set)
     ets = vcat(epochs[1], epochs[end], epochs[7], random_epochs(rng, 200, epochs[1], epochs[end]))
 
-    @testset "type 13 SPK written and read by NeoSpice" begin
+    @apart @testset "type 13 SPK written and read by NeoSpice" begin
         worst = 0.0
         for et in ets, (obs, ref) in ((399, "J2000"), (301, "J2000"), (10, "ECLIPJ2000"))
             s, lt = spkezr(ctx, -901, et, ref, "NONE", obs)
@@ -92,7 +93,7 @@ group("roundtrip", Kernels.LSK, Kernels.DE440S) do
         @test spkcov(bsp, -901)[1] == epochs[1]
     end
 
-    @testset "type 3 CK written and read by NeoSpice" begin
+    @apart @testset "type 3 CK written and read by NeoSpice" begin
         worst = 0.0
         for et in ets
             R = pxform(ctx, "J2000", "RT_BUS", et)

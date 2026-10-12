@@ -11,6 +11,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 const ROT_FRAMES = ["J2000", "ECLIPJ2000", "B1950", "GALACTIC", "IAU_EARTH", "IAU_MOON",
     "IAU_MARS", "IAU_JUPITER", "MOON_PA", "MOON_ME"]
@@ -72,7 +73,7 @@ group("2. rotations against CSPICE", Kernels.TEXT_SET_FILES..., Kernels.MOON_BPC
     @test o.max <= ORTHO_TOL
     @test structure_ok
 
-    @testset "forms and types" begin
+    @apart @testset "forms and types" begin
         et = epochs[1]
         R = pxform(ctx, "J2000", "IAU_EARTH", et)
         @test R isa SMatrix{3,3,Float64,9}
@@ -89,7 +90,7 @@ group("2. rotations against CSPICE", Kernels.TEXT_SET_FILES..., Kernels.MOON_BPC
 
     # The same frames near J2000, where the angle W is small: this isolates the model
     # (pole, nutation-precession terms, Chebyshev angles) from the rounding of W.
-    @testset "near J2000" begin
+    @apart @testset "near J2000" begin
         near = random_epochs(rng, 40, -86400.0 * 30, 86400.0 * 30)
         dn = Float64[]
         for from in ROT_FRAMES, to in ROT_FRAMES, et in near

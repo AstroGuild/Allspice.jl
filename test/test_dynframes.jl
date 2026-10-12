@@ -26,6 +26,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 isdefined(@__MODULE__, :CKFix) || include("ckfixtures.jl")
 isdefined(@__MODULE__, :DynFix) || include("dynfixtures.jl")
@@ -165,7 +166,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
     span = 5.5e8
     nepoch = nsample(30, 150)
 
-    @testset "frame definitions are read" begin
+    @apart @testset "frame definitions are read" begin
         for (name, family, center) in DynFix.FRAMES
             id = namfrm(ctx, name)
             @test id == SPICE.namfrm(name) != 0
@@ -187,7 +188,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
     FULL || df_thread_check(ctx, rng)
 
     rows = String[]
-    @testset "pxform, sxform and spkezr for each frame" begin
+    @apart @testset "pxform, sxform and spkezr for each frame" begin
         for (name, family, center) in DynFix.FRAMES
             tol = get(DF_TOL, name, DF_DEFAULT_TOL)
             dp = 0.0; ds = 0.0; dr = 0.0; dv = 0.0; dra = 0.0; dva = 0.0
@@ -225,7 +226,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
         foreach(measured, rows)
     end
 
-    @testset "other corrections, spkpos, and frame to frame" begin
+    @apart @testset "other corrections, spkpos, and frame to frame" begin
         d = Float64[]; dv = Float64[]; dq = Float64[]; dx = Float64[]
         names = first.(DynFix.FRAMES)
         for ab in ("LT", "CN", "CN+S", "XLT", "XLT+S", "XCN", "XCN+S"), name in names
@@ -256,7 +257,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
         @test s4.q99 <= 5e-13
     end
 
-    @testset "pxder against finite differences and sxform" begin
+    @apart @testset "pxder against finite differences and sxform" begin
         lines = String[]
         for (name, family, center) in DynFix.FRAMES
             id = namfrm(ctx, name)
@@ -320,7 +321,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
         end
     end
 
-    @testset "frozen frames and inertial rotation state" begin
+    @apart @testset "frozen frames and inertial rotation state" begin
         for (frozen, live, t0) in (("DT_GSE_FROZEN", "DT_GSE", "2015-MAR-03 01:02:03 TDB"),
             ("DT_ETE_FROZEN", "DT_ETE_OF_DATE", "1995-JUN-15 00:00:00 TDB"))
             et0 = str2et(ctx, t0)
@@ -339,7 +340,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
         end
     end
 
-    @testset "switch frames at the ends of the intervals" begin
+    @apart @testset "switch frames at the ends of the intervals" begin
         worst = 0.0
         n = 0
         for edge in DynFix.SWITCH_EDGES, delta in (-1.0, -1e-3, 0.0, 1e-3, 1.0),
@@ -368,7 +369,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
         @test throws_kind(() -> spkezr(ctx, 301, 7.0e8, "DT_SWITCH_TIME", "NONE", 399), :noframeconnect)
     end
 
-    @testset "no allocation and inferred types" begin
+    @apart @testset "no allocation and inferred types" begin
         lts = Aberration("LT+S"); none = Aberration("NONE"); cn = Aberration("XCN+S")
         et = 1.2345e8
         nalloc = 0
@@ -406,7 +407,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
 
     FULL && df_thread_check(ctx, rng)
 
-    @testset "definitions that are not valid, and the recursion limit" begin
+    @apart @testset "definitions that are not valid, and the recursion limit" begin
         set2 = [set..., DynFix.error_kernel()]
         oracle_load(set2)
         ctx2 = neo_context(set2)     # the load itself does not throw
@@ -443,7 +444,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
         @test df_oracle_kind(:pxform_c, "J2000", "DT_CLASS7", et) !== :none
     end
 
-    @testset "definitions follow furnsh, unload and pool edits" begin
+    @apart @testset "definitions follow furnsh, unload and pool edits" begin
         c = neo_context([Kernels.LSK, Kernels.PCK11, Kernels.DE440S])
         et = 2.0e8
         @test namfrm(c, "DT_GSE") == 0
@@ -463,7 +464,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
               throws_kind(() -> pxform(c, "J2000", "DT_EULER", et), :noframe)
     end
 
-    @testset "switch frames over CK frames" begin
+    @apart @testset "switch frames over CK frames" begin
         set3 = [Kernels.LSK, Kernels.PCK11, Kernels.DE440S, CKFix.all_kernels()...,
             DynFix.switch_ck_kernel()]
         oracle_load(set3)

@@ -14,6 +14,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 import ForwardDiff
 isdefined(@__MODULE__, :CS) || include("mathoracle.jl")
@@ -64,7 +65,7 @@ group("16. math: conics") do
         return vcat(pos, vel)
     end
 
-    @testset "Stumpff functions" begin
+    @apart @testset "Stumpff functions" begin
         for _ in 1:n
             u = rand(rng)
             x = u < 0.3 ? 2.2 * rand(rng) - 1.1 : u < 0.4 ? rand(rng, (0.0, 1.0, -1.0, 1.0 + eps(), -1.0 - eps())) :
@@ -83,7 +84,7 @@ group("16. math: conics") do
         @test d ≈ (SVector(stmp03(0.3 + h)) - SVector(stmp03(0.3 - h))) / 2h rtol = 1e-8
     end
 
-    @testset "propagation of a state" begin
+    @apart @testset "propagation of a state" begin
         for _ in 1:2n
             mu = rmu()
             rand(rng) < 0.03 && (mu = rand(rng, (0.0, -1.0)))
@@ -130,7 +131,7 @@ group("16. math: conics") do
         end
     end
 
-    @testset "state from elements" begin
+    @apart @testset "state from elements" begin
         for _ in 1:2n
             el = relts()
             u = rand(rng)
@@ -158,7 +159,7 @@ group("16. math: conics") do
         @test d[SVector(4, 5, 6)] ≈ -el[8] * q[SVector(1, 2, 3)] / vnorm(q[SVector(1, 2, 3)])^3 rtol = 1e-12
     end
 
-    @testset "elements from a state" begin
+    @apart @testset "elements from a state" begin
         for _ in 1:2n
             mu = rmu()
             rand(rng) < 0.03 && (mu = rand(rng, (0.0, -1.0)))
@@ -210,12 +211,12 @@ group("16. math: conics") do
         end
     end
 
-    @testset "differences against CSPICE" begin
+    @apart @testset "differences against CSPICE" begin
         report!(t, "conics"; tol=4eps(), tols=Dict(:prop2b => 1e-13, :conics => 1e-10,
             :conics_nearparabola => 1e-1))
     end
 
-    @testset "inferred types and no allocation for static arguments" begin
+    @apart @testset "inferred types and no allocation for static arguments" begin
         mu = 398600.4418
         s = SVector(7000.0, 100.0, -300.0, 0.3, 7.2, 1.9)
         el = oscelt(s, 50.0, mu)

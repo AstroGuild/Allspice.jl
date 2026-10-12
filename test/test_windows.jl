@@ -13,6 +13,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 "Endpoints of a SPICE double cell as a vector."
 cell_values(c) = Float64[c[i] for i in 1:SPICE.card(c)]
@@ -48,7 +49,7 @@ group("10. windows") do
     rng = MersenneTwister(SEED + 10)
     ntrial = 400
 
-    @testset "wninsd! and wnvald! build the window of CSPICE" begin
+    @apart @testset "wninsd! and wnvald! build the window of CSPICE" begin
         bad = 0
         for _ in 1:ntrial
             pairs = random_pairs(rng, rand(rng, 0:12))
@@ -73,7 +74,7 @@ group("10. windows") do
         measured(@sprintf("  %-58s trials=%d mismatches=%d", "windows: wninsd!/wnvald! vs CSPICE", ntrial, bad))
     end
 
-    @testset "set operations are equal to CSPICE" begin
+    @apart @testset "set operations are equal to CSPICE" begin
         bad = Dict(k => 0 for k in (:wnunid, :wnintd, :wndifd, :wncomd))
         for _ in 1:ntrial
             a = Window(random_pairs(rng, rand(rng, 0:8)))
@@ -101,7 +102,7 @@ group("10. windows") do
         end
     end
 
-    @testset "queries are equal to CSPICE" begin
+    @apart @testset "queries are equal to CSPICE" begin
         bad = 0
         for _ in 1:ntrial
             w = Window(random_pairs(rng, rand(rng, 0:8)))
@@ -125,7 +126,7 @@ group("10. windows") do
         measured(@sprintf("  %-58s trials=%d mismatches=%d", "windows: wnelmd/wnincd/wnfetd/wnsumd vs CSPICE", ntrial, bad))
     end
 
-    @testset "input checks" begin
+    @apart @testset "input checks" begin
         w = Window([1.0, 2.0, 5.0, 6.0])
         @test throws_kind(() -> wninsd!(w, 3.0, 2.0), :badendpoints)
         @test_throws SPICE.SpiceError SPICE.wninsd!(cell_window(w.data), 3.0, 2.0)

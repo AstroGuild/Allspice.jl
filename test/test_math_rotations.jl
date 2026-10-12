@@ -14,6 +14,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 import ForwardDiff
 isdefined(@__MODULE__, :CS) || include("mathoracle.jl")
@@ -51,7 +52,7 @@ group("13. math: rotations") do
         return Matrix(rrot(rng))
     end
 
-    @testset "Euler angles" begin
+    @apart @testset "Euler angles" begin
         for _ in 1:n
             a3, a2, a1 = rang(), rang(), rang()
             rand(rng) < 0.15 && (a2 = rand(rng, (0.0, pi, -pi, pi / 2, -pi / 2)))
@@ -94,7 +95,7 @@ group("13. math: rotations") do
         @test xf2eul(eul2xf([0.7, 0.4, -1.1, 0.1, 0.2, 0.3], 3, 1, 3), 3, 1, 3)[2] == true
     end
 
-    @testset "axis and angle, quaternions" begin
+    @apart @testset "axis and angle, quaternions" begin
         for _ in 1:n
             ax = rvec(rng)
             th = 20 * rand(rng) - 10
@@ -148,7 +149,7 @@ group("13. math: rotations") do
         @test q2m(zeros(4)) == ident()
     end
 
-    @testset "differences against CSPICE" begin
+    @apart @testset "differences against CSPICE" begin
         # The sine, cosine, arcsine and arctangent of Julia and of the C library differ
         # by one unit of rounding for some arguments, and a matrix product carries that
         # on. An Euler angle near a degenerate case has the error of the matrix divided
@@ -157,7 +158,7 @@ group("13. math: rotations") do
             :xf2eul => 1e-13, :axisar => 1e-15, :raxisa => 1e-15, :qdq2av => 1e-15))
     end
 
-    @testset "number types: ForwardDiff and Taylor" begin
+    @apart @testset "number types: ForwardDiff and Taylor" begin
         e0 = SVector(0.7, 0.4, -1.1)
         de = SVector(0.1, -0.2, 0.3)
         for ax in ((3, 1, 3), (1, 2, 3), (3, 2, 1), (2, 1, 2))
@@ -196,7 +197,7 @@ group("13. math: rotations") do
         @test NeoSpice.derivatives(qxq(qt, qt)[1])[1] ≈ 2 * m2q(eul2m(0.3, 0.0, -0.4, 3, 1, 3))[1]^2 - 1
     end
 
-    @testset "inferred types and no allocation for static arguments" begin
+    @apart @testset "inferred types and no allocation for static arguments" begin
         r = rrot(rng)
         q = m2q(r)
         v = SVector(0.3, -0.5, 0.8)

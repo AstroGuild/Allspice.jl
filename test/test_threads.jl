@@ -23,6 +23,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 group("7. thread safety", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.PCK10) do
     if Threads.nthreads() < 2
@@ -57,7 +58,7 @@ group("7. thread safety", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.PCK1
     @test all(stateA[i] != stateB[i] for i in 1:nq)
     @test all(rotA[i] != rotB[i] for i in 1:nq)
 
-    @testset "pure-query parallel loop equals the serial results bit for bit" begin
+    @apart @testset "pure-query parallel loop equals the serial results bit for bit" begin
         serial_state = stateA
         serial_rot = rotA
         serial_der = [qder(ctxA, i) for i in 1:nq]
@@ -78,7 +79,7 @@ group("7. thread safety", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.PCK1
         println("  ", reps * nq * 3, " parallel queries on ", Threads.nthreads(), " threads")
     end
 
-    @testset "queries during furnsh and unload see one valid snapshot" begin
+    @apart @testset "queries during furnsh and unload see one valid snapshot" begin
         ctx = neo_context(base)
         stop = Threads.Atomic{Bool}(false)
         cycles = Threads.Atomic{Int}(0)
@@ -146,7 +147,7 @@ group("7. thread safety", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.PCK1
         @test [qrot(ctx, i) for i in 1:nq] == rotA
     end
 
-    @testset "independent contexts in parallel" begin
+    @apart @testset "independent contexts in parallel" begin
         answers = Vector{Any}(undef, 16)
         Threads.@threads for k in 1:16
             c = SpiceContext()

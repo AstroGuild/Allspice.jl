@@ -10,6 +10,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 const IDENT_RTOL = 1e-14
 const IDENT_ROT_ATOL = 1e-14
@@ -21,7 +22,7 @@ group("4. algebraic identities", Kernels.FULL_SET_FILES...) do
     epochs = random_epochs(rng, 25, DE440S_COVERAGE...)
     state(a, b, et, ref) = spkezr(ctx, a, et, ref, "NONE", b)[1]
 
-    @testset "state(A,B) = -state(B,A), frame $ref" for ref in ("J2000", "ECLIPJ2000",
+    @apart @testset "state(A,B) = -state(B,A), frame $ref" for ref in ("J2000", "ECLIPJ2000",
             "IAU_EARTH", "MOON_PA")
         worst = 0.0
         for et in epochs, _ in 1:8
@@ -36,7 +37,7 @@ group("4. algebraic identities", Kernels.FULL_SET_FILES...) do
         @test worst <= IDENT_RTOL
     end
 
-    @testset "state(A,C) = state(A,B) + state(B,C), frame $ref" for ref in ("J2000",
+    @apart @testset "state(A,C) = state(A,B) + state(B,C), frame $ref" for ref in ("J2000",
             "ECLIPJ2000", "IAU_EARTH", "MOON_PA")
         worst = 0.0
         for et in epochs, _ in 1:8
@@ -52,7 +53,7 @@ group("4. algebraic identities", Kernels.FULL_SET_FILES...) do
         @test worst <= IDENT_RTOL
     end
 
-    @testset "the same identities for every derivative order" begin
+    @apart @testset "the same identities for every derivative order" begin
         worst = 0.0
         for et in epochs[1:10], _ in 1:4
             a, b, c = rand(rng, bodies), rand(rng, bodies), rand(rng, bodies)
@@ -72,7 +73,7 @@ group("4. algebraic identities", Kernels.FULL_SET_FILES...) do
 
     frames = ["J2000", "ECLIPJ2000", "B1950", "GALACTIC", "IAU_EARTH", "IAU_MOON", "IAU_MARS",
         "IAU_JUPITER", "MOON_PA", "MOON_ME"]
-    @testset "rotation identities" begin
+    @apart @testset "rotation identities" begin
         wchain = 0.0; wtrans = 0.0; wself = 0.0
         for et in epochs, _ in 1:12
             a, b, c = rand(rng, frames), rand(rng, frames), rand(rng, frames)
@@ -90,7 +91,7 @@ group("4. algebraic identities", Kernels.FULL_SET_FILES...) do
         @test wself <= IDENT_ROT_ATOL
     end
 
-    @testset "a state in a rotated frame is sxform times the J2000 state" begin
+    @apart @testset "a state in a rotated frame is sxform times the J2000 state" begin
         worst = 0.0
         for et in epochs, ref in ("ECLIPJ2000", "IAU_EARTH", "MOON_PA")
             s = state(301, 399, et, "J2000")

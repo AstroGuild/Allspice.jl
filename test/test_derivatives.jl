@@ -43,6 +43,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 import ForwardDiff
 
@@ -120,7 +121,7 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
         (399, 301, "MOON_ME", FD_CASES_INERTIAL),
     ]
 
-    @testset "spkder: result types and consistency between orders" begin
+    @apart @testset "spkder: result types and consistency between orders" begin
         et = epochs[1]
         for N in 0:MAXORDER
             jet = spkder(ctx, 301, et, "J2000", 399, Val(N))
@@ -139,7 +140,7 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
         end
     end
 
-    @testset "spkder: orders 0 and 1 are the spkezr state" begin
+    @apart @testset "spkder: orders 0 and 1 are the spkezr state" begin
         worst = 0.0
         for (targ, obs, ref, _) in state_cases, et in epochs
             state, _ = spkezr(ctx, targ, et, ref, "NONE", obs)
@@ -155,7 +156,7 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
         @test worst <= 1e-9
     end
 
-    @testset "spkder: order k+1 against the central difference of order k" begin
+    @apart @testset "spkder: order k+1 against the central difference of order k" begin
         for (targ, obs, ref, fd) in state_cases
             worst = zeros(MAXORDER)
             for et in epochs
@@ -170,7 +171,7 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
         end
     end
 
-    @testset "spkder: nested ForwardDiff through the generic path" begin
+    @apart @testset "spkder: nested ForwardDiff through the generic path" begin
         # The epoch that reaches NeoSpice is a Dual (nested up to `AD_PUBLIC_ORDER` deep).
         probe = spkpos(ctx, 301, ForwardDiff.Dual(epochs[1], 1.0), "J2000", "NONE", 399)[1]
         @test eltype(probe) <: ForwardDiff.Dual
@@ -204,7 +205,7 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
         ("IAU_MARS", "IAU_JUPITER", FD_CASES_FAST),
     ]
 
-    @testset "pxder: orders 0 and 1 are pxform and the sxform block" begin
+    @apart @testset "pxder: orders 0 and 1 are pxform and the sxform block" begin
         worst = 0.0
         for (from, to, _) in rot_cases, et in epochs
             for N in 0:MAXORDER
@@ -224,7 +225,7 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
         @test all(all(iszero, jet[k]) for k in 2:4)
     end
 
-    @testset "pxder: order k+1 against the central difference of order k" begin
+    @apart @testset "pxder: order k+1 against the central difference of order k" begin
         for (from, to, fd) in rot_cases
             worst = zeros(MAXORDER)
             for et in epochs
@@ -237,7 +238,7 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
         end
     end
 
-    @testset "pxder: nested ForwardDiff through the generic path" begin
+    @apart @testset "pxder: nested ForwardDiff through the generic path" begin
         for (from, to, _) in rot_cases
             generic = t -> generic_rot(ctx, from, to, t)
             public = t -> pxform(ctx, from, to, t)

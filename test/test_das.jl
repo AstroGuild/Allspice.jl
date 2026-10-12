@@ -21,6 +21,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 isdefined(@__MODULE__, :DSKLIB) || include("dskfixtures.jl")
 
@@ -104,7 +105,7 @@ group("11. DAS files and DLA segment lists") do
     cfile = c_write_dsk(joinpath(dir, "c.bds"), specs; ifname="internal name", ncomch=5000,
         comments)
 
-    @testset "(a) a file that CSPICE wrote" begin
+    @apart @testset "(a) a file that CSPICE wrote" begin
         h = dasopr(cfile)
         ch = c_dasopr(cfile)
         @test isopen(h)
@@ -134,7 +135,7 @@ group("11. DAS files and DLA segment lists") do
         @test NeoSpice.kernel_arch(cfile) === :DSK
     end
 
-    @testset "(b) a generic DAS file that NeoSpice wrote" begin
+    @apart @testset "(b) a generic DAS file that NeoSpice wrote" begin
         path = joinpath(dir, "generic.das")
         h = dasonw(path, "TEST", "generic file", 2)
         @test isfile(path)
@@ -183,7 +184,7 @@ group("11. DAS files and DLA segment lists") do
         c_dascls(ch)
     end
 
-    @testset "(c) updates and comments through dasopw" begin
+    @apart @testset "(c) updates and comments through dasopw" begin
         path = joinpath(dir, "update.das")
         cp(joinpath(dir, "generic.das"), path)
         ints0, dps0, chars0 = c_das_data(path)
@@ -232,7 +233,7 @@ group("11. DAS files and DLA segment lists") do
     uints = Cint[]
     udps = Float64[]
     uchars = ""
-    @testset "(d) a file that is not segregated" begin
+    @apart @testset "(d) a file that is not segregated" begin
         ch = c_dasonw(unseg, "TEST", "not segregated", 1)
         for _ in 1:120                   # 360 clusters: more than one directory record holds
             a = rand(rng, Cint, rand(rng, 1:600)); append!(uints, a); c_dasadi(ch, a)
@@ -258,7 +259,7 @@ group("11. DAS files and DLA segment lists") do
         @test filesize(seg) < filesize(unseg)
     end
 
-    @testset "(e) the other byte order" begin
+    @apart @testset "(e) the other byte order" begin
         for (name, src) in (("segregated DSK", cfile), ("not segregated", unseg),
                 ("generic", joinpath(dir, "generic.das")))
             swapped = byteswapped_das(src, joinpath(dir, "swapped_" * basename(src)))
@@ -292,7 +293,7 @@ group("11. DAS files and DLA segment lists") do
         end
     end
 
-    @testset "(f) the DLA segment list" begin
+    @apart @testset "(f) the DLA segment list" begin
         h = dasopr(cfile)
         ch = c_dasopr(cfile)
         d = dlabfs(h)
@@ -333,7 +334,7 @@ group("11. DAS files and DLA segment lists") do
         @test dskobj(e) == Int[]
     end
 
-    @testset "(g) input checks" begin
+    @apart @testset "(g) input checks" begin
         missing_file = joinpath(dir, "does_not_exist.das")
         c_open_kind(p) = c_kind(() -> ccall((:dasopr_c, DSKLIB), Cvoid, (Cstring, Ref{Cint}), p, Ref{Cint}(0)))
         @test neo_kind(() -> dasopr(missing_file)) === :filenotfound === c_open_kind(missing_file)

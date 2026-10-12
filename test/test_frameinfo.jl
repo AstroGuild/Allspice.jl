@@ -11,6 +11,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 isdefined(@__MODULE__, :CKFix) || include("ckfixtures.jl")
 isdefined(@__MODULE__, :DynFix) || include("dynfixtures.jl")
@@ -140,7 +141,7 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
     ctx = neo_context(set)
     ks = NeoSpice.kernelset(ctx)
 
-    @testset "tipbod and tisbod" begin
+    @apart @testset "tipbod and tisbod" begin
         dp = Float64[]; ds = Float64[]; dd = Float64[]
         for body in (399, 301, 499, 599, 10, 199, 299, 699, 799, 899, 401, 502, 606, 31006),
             ref in ("J2000", "ECLIPJ2000", "B1950", "FK4", "GALACTIC", 1, 17)
@@ -171,7 +172,7 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
         @test throws_kind(() -> tipbod(ctx, "J2000", 123456, 0.0), :framedatanotfound)
     end
 
-    @testset "pckfrm and pckcov" begin
+    @apart @testset "pckfrm and pckcov" begin
         want = sort!(Int[i for i in SPICE.pckfrm!(SPICE.SpiceIntCell(100), Kernels.MOON_BPC)])
         @test pckfrm(Kernels.MOON_BPC) == want
         @test pckfrm!([7, 3], Kernels.MOON_BPC) == sort!(unique!(vcat([7, 3], want)))
@@ -193,7 +194,7 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
         @test throws_kind(() -> pckcov(Kernels.LSK, 301), :invalidarchtype)
     end
 
-    @testset "bodfnd and bodvcd" begin
+    @apart @testset "bodfnd and bodvcd" begin
         n = 0
         for body in (399, 301, 499, 10, 599, 1, 3, 9, -77, 2000004, 606),
             item in ("RADII", "PM", "POLE_RA", "POLE_DEC", "GM", "NUT_PREC_RA", "LONG_AXIS",
@@ -210,7 +211,7 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
         @test (@inferred bodfnd(ctx, 399, "RADII")) === true
     end
 
-    @testset "et2lst" begin
+    @apart @testset "et2lst" begin
         n = 0
         dsec = Int[]
         # Bodies with a segment in de440s.bsp; Venus rotates in the retrograde direction.
@@ -245,7 +246,7 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
         @test r isa Tuple{Int,Int,Int,String,String}
     end
 
-    @testset "lspcn" begin
+    @apart @testset "lspcn" begin
         d = Float64[]
         # Bodies with a segment in de440s.bsp and a pole in the PCK.
         for body in ("EARTH", 399, "MOON", 301, "VENUS", 199, "mercury"),

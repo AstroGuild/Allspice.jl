@@ -16,6 +16,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 isdefined(@__MODULE__, :CKFix) || include("ckfixtures.jl")
 
@@ -134,7 +135,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
     ks = NeoSpice.kernelset(ctx)
     ckpaths = CKFix.ck_files()
 
-    @testset "CK files are recognised and listed" begin
+    @apart @testset "CK files are recognised and listed" begin
         for p in ckpaths
             @test NeoSpice.kernel_arch(p) === :CK
             daf = NeoSpice.open_daf(p)
@@ -153,7 +154,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         @test throws_kind(() -> ckobj("/no/such/file.bc"), :nofile)
     end
 
-    @testset "ckmeta" begin
+    @apart @testset "ckmeta" begin
         for id in (-77001, -77003, -77053, -78100, -99001, -77099, -5, 0, 12, -1000, -999,
             -2147483000), item in ("SCLK", "SPK", " sclk ")
             @test ckmeta(ctx, id, item) == oracle_ckmeta(id, item)
@@ -163,7 +164,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         @test throws_kind(() -> ckmeta(ctx, -77001, "CLOCK"), :unknownckmeta)
     end
 
-    @testset "ckgp and ckgpav" begin
+    @apart @testset "ckgp and ckgpav" begin
         for case in CK_CASES
             tags = ck_tags(case)
             dcm = Float64[]; dav = Float64[]; dclk = Float64[]
@@ -209,7 +210,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         end
     end
 
-    @testset "ckgp at the pointing instances and with a wrong tolerance" begin
+    @apart @testset "ckgp at the pointing instances and with a wrong tolerance" begin
         for case in CK_CASES
             tags = ck_tags(case)
             ok = true
@@ -230,7 +231,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         @test ckgp(ctx, -77003, 1e11, 10.0, "J2000") == (zero(SMatrix{3,3,Float64}), 0.0, false)
     end
 
-    @testset "priority, tolerance and the angular-velocity rule" begin
+    @apart @testset "priority, tolerance and the angular-velocity rule" begin
         tk = CKFix.ticks_tdb()
         inst = -77003
         base, noav, withav = ks.ck[Int32(inst)][3], ks.ck[Int32(inst)][2], ks.ck[Int32(inst)][1]
@@ -263,7 +264,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         @test maximum(abs.(R .- X[SOneTo(3), SOneTo(3)])) > 0.1
     end
 
-    @testset "pxform, sxform and spkezr with CK frames" begin
+    @apart @testset "pxform, sxform and spkezr with CK frames" begin
         others = ("J2000", "IAU_EARTH", CKFix.TK_FRAME, "TESTSC_T5S1")
         for case in CK_CASES
             tags = ck_tags(case)
@@ -271,7 +272,8 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
             agree_avail = true
             structure_ok = true
             navail = 0
-            for _ in 1:300
+            nticks = nsample(100, 300)
+            for _ in 1:nticks
                 t = ck_random_tick(rng, case, tags)
                 0 <= t || continue
                 et = sct2e(ctx, case.sc, t)
@@ -317,10 +319,10 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
             @test structure_ok
             if case.dtype == 1
                 # Tolerance zero: a type 1 frame exists at the pointing instances only.
-                @test navail <= 300
+                @test navail <= nticks
                 continue
             end
-            @test navail > 300
+            @test navail > nticks
             a = report_quantiles("pxform $(case.label)", dpx)
             @test a.max <= CK_TOL_ROT
             if case.av
@@ -335,7 +337,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         end
     end
 
-    @testset "type 1 frames at their pointing instances" begin
+    @apart @testset "type 1 frames at their pointing instances" begin
         for case in CK_CASES[1:2]
             tags = ck_tags(case)
             n = 0
@@ -364,7 +366,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         end
     end
 
-    @testset "derivatives of the interpolated rotation, and the CSPICE angular velocity" begin
+    @apart @testset "derivatives of the interpolated rotation, and the CSPICE angular velocity" begin
         measured("  exact derivative (pxder) against CSPICE angular velocity (sxform), |ΔdR| / $CK_RATE:")
         for case in CK_CASES
             (case.dtype == 1 || !case.av) && continue
@@ -413,7 +415,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         end
     end
 
-    @testset "no allocation, inferred types" begin
+    @apart @testset "no allocation, inferred types" begin
         tk = CKFix.ticks_tdb()
         for case in CK_CASES
             tags = ck_tags(case)
@@ -452,7 +454,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         @test CKFix.warm(alloc_ck_pxder, ctx, cam, t5, et, Val(2)) == 0
     end
 
-    @testset "ckcov" begin
+    @apart @testset "ckcov" begin
         intervals(cell) = [Tuple(SPICE.wnfetd(cell, i)) for i in 1:SPICE.wncard(cell)]
         nwindows = 0
         for p in ckpaths, id in ckobj(p), needav in (false, true),
@@ -480,7 +482,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
             :invalidfiletype)
     end
 
-    @testset "frames without data" begin
+    @apart @testset "frames without data" begin
         tk = CKFix.ticks_tdb()
         et = sct2e(ctx, CKFix.SC_TDB, tk[20] + 1000.0)
         # A CK frame without any segment, an epoch outside the coverage, a frame whose
@@ -521,7 +523,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         @test after == pxform(two, "J2000", "TESTSC_T3_NOAV", e150)
     end
 
-    @testset "CSPICE answers that depend on the call history" begin
+    @apart @testset "CSPICE answers that depend on the call history" begin
         tk = CKFix.ticks_tdb()
         # 1. `ckr06` keeps the mini-segment of the last call. When a request in a gap is
         #    moved to the next mini-segment, it rounds the clock rate of that
@@ -555,7 +557,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         oracle_ck_reset(-77006)
     end
 
-    @testset "concurrent readers" begin
+    @apart @testset "concurrent readers" begin
         if Threads.nthreads() == 1
             skip_notice("10. concurrent CK readers", "one thread only")
         else

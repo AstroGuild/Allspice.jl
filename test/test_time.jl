@@ -18,6 +18,7 @@
 # methods of NeoSpice keep their own optimization level, except where the compiler
 # inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
+isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 import ForwardDiff
 
@@ -316,7 +317,10 @@ const TS_MALFORMED = ["", " ", "\t", "hello", "Jan", "2000", "12:00:00", "Jan 20
     "2000 Jan 1 12:00 AM PM", "2000-001-01", "1/2/3/4", "2000 Jan 1 \x01", "2000 Jan 1 é",
     "2000 Jan 1 12.5:30", "12 12 12", "1 2", "2000 // 12", "Jan 1 2000 //", "2000-01-01T12:00:00+01:00",
     "99999999999 Jan 1", "2000 Jan 99999999999", "TDB", "UTC", "A.D.", "PM", "::", "//", ".", "-",
-    repeat("1 ", 70), repeat("Wednesday", 40) * " 2000 Jan 1"]
+    repeat("1 ", 70), repeat("Wednesday", 40) * " 2000 Jan 1",
+    # Fixed cases from the random edits: a Julian date with a calendar component, two
+    # days of the month, and a day of the month without a month.
+    "Jan JD 1246975.0", "23 Nov 2070 2:45:4:6.35 P.M.", "2370-251 :: 0:4:51:24"]
 
 "Examples of the header of `str2et.c` (the forms that it lists as accepted)."
 const TS_STR2ET_EXAMPLES = ["1996-12-18T12:28:28", "1986-01-18T12", "1986-01-18T12:19",
@@ -408,6 +412,47 @@ converts a second 60 in a time zone or on the Julian calendar, so that `utc2et` 
 function oracle_unchecked(f, s)
     ccall((:tparch_c, SPICE.libcspice), Cvoid, (Cstring,), "NO")
     return f(s)
+end
+
+"""
+    oracle_tparse(s) -> Float64
+
+`tparse_c` of CSPICE with buffers that are set to zero before the call; throws
+`SPICE.SpiceError` if CSPICE signals an error or writes an error message. The wrapper
+of SPICE.jl reads the message buffer without setting it first, and CSPICE does not
+write the buffer when it rejects the input through its error system (the empty
+string), so the answer of the wrapper for such an input depends on the content of the
+memory: one run in about ten gave the value 0.0 for the empty string.
+"""
+function oracle_tparse(s::AbstractString)
+    msg = zeros(UInt8, 128)
+    out = Ref{Cdouble}(0.0)
+    ccall((:reset_c, SPICE.libcspice), Cvoid, ())
+    ccall((:tparse_c, SPICE.libcspice), Cvoid, (Cstring, Cint, Ref{Cdouble}, Ptr{UInt8}),
+        s, length(msg), out, msg)
+    SPICE.handleerror()
+    text = GC.@preserve msg unsafe_string(pointer(msg))
+    isempty(text) || throw(SPICE.SpiceError(text))
+    return out[]
+end
+
+"""
+    oracle_tpictr(s) -> String
+
+`tpictr_c` of CSPICE with buffers and the success flag set to zero before the call, for
+the same reason as `oracle_tparse`; throws `SPICE.SpiceError` if CSPICE signals an error
+or does not set the flag.
+"""
+function oracle_tpictr(s::AbstractString)
+    pic = zeros(UInt8, 80)
+    msg = zeros(UInt8, 128)
+    ok = Ref{Cint}(0)
+    ccall((:reset_c, SPICE.libcspice), Cvoid, ())
+    ccall((:tpictr_c, SPICE.libcspice), Cvoid, (Cstring, Cint, Cint, Ptr{UInt8}, Ref{Cint}, Ptr{UInt8}),
+        s, length(pic), length(msg), pic, ok, msg)
+    SPICE.handleerror()
+    ok[] != 0 || throw(SPICE.SpiceError(GC.@preserve msg unsafe_string(pointer(msg))))
+    return GC.@preserve pic unsafe_string(pointer(pic))
 end
 
 """
@@ -513,7 +558,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
     end
     order = [first.(families)..., "one random edit", "two random edits"]
 
-    @testset "str2et, every string family" begin
+    @apart @testset "str2et, every string family" begin
         accepted = 0
         for name in order
             r = compare_outcomes("str2et, " * name, corpus[name], SPICE.str2et, s -> str2et(ctx, s))
@@ -530,7 +575,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         @test all(s -> throws_kind(() -> tparse(s), :badtime), filter(s -> !occursin("TDB", s), stale))
     end
 
-    @testset "str2et, header examples and malformed strings" begin
+    @apart @testset "str2et, header examples and malformed strings" begin
         r = compare_outcomes("str2et, examples of str2et.c", TS_STR2ET_EXAMPLES, SPICE.str2et,
             s -> str2et(ctx, s))
         @test r.mixed == 0 && r.unequal == 0
@@ -548,15 +593,15 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         @test throws_kind(() -> str2et(ctx, "not a time"), :badtime)
     end
 
-    @testset "utc2et, tparse, tpictr" begin
+    @apart @testset "utc2et, tparse, tpictr" begin
         all_strings = reduce(vcat, [corpus[name] for name in order])
         sample = vcat(all_strings[1:3:end], TS_STR2ET_EXAMPLES, TS_MALFORMED)
         r = compare_outcomes("utc2et", sample, s -> oracle_unchecked(SPICE.utc2et, s), s -> utc2et(ctx, s))
-        @test r.mixed == 0 && r.unequal == 0 && r.both > 500
-        r = compare_outcomes("tparse", sample, s -> oracle_unchecked(SPICE.tparse, s), tparse)
-        @test r.mixed == 0 && r.unequal == 0 && r.both > 500
-        r = compare_outcomes("tpictr", sample, SPICE.tpictr, tpictr)
-        @test r.mixed == 0 && r.unequal == 0 && r.both > 500
+        @test r.mixed == 0 && r.unequal == 0 && r.both > nsample(200, 500)
+        r = compare_outcomes("tparse", sample, s -> oracle_unchecked(oracle_tparse, s), tparse)
+        @test r.mixed == 0 && r.unequal == 0 && r.both > nsample(200, 500)
+        r = compare_outcomes("tpictr", sample, oracle_tpictr, tpictr)
+        @test r.mixed == 0 && r.unequal == 0 && r.both > nsample(200, 500)
         @test tpictr(ctx, "Mon Apr 22 09:32:38 PDT 1996") == "Wkd Mon DD HR:MN:SC PDT YYYY ::UTC-7"
         @test tparse(ctx, "2000-01-01T12:00:00") == 0.0
         # A picture made from a string writes the epoch of that string in the same form.
@@ -576,7 +621,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
     println("  epochs: ", length(wide), " over 9500 years, ", length(modern), " near the present, ",
         length(dense), " around the ", length(leap_et), " leap-second epochs")
 
-    @testset "et2utc, all formats and precisions" begin
+    @apart @testset "et2utc, all formats and precisions" begin
         cases = [(et, fmt, prec) for et in epochs for (fmt, prec) in
                  (("C", rand(rng, 0:14)), ("D", rand(rng, 0:6)), ("J", rand(rng, 0:14)),
             ("ISOC", rand(rng, 0:14)), ("ISOD", rand(rng, 0:3)), (rand(rng, ("c", "isoc", "IsoD", "j")), 3))]
@@ -593,14 +638,14 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         @test all(abs(str2et(ctx, et2utc(ctx, et, "C", 9)) - et) < 2e-6 for et in modern[1:200])
     end
 
-    @testset "etcal" begin
+    @apart @testset "etcal" begin
         extreme = [1e12, -1e12, 1e15, -1e15, 1.8e14, -1.9e14, 1e17, -1e17, 59.9996, 86399.9996 - 43200.0]
         r = compare_outcomes("etcal", vcat(epochs, extreme), SPICE.etcal, etcal)
         @test r.mixed == 0 && r.unequal == 0
         @test etcal(ctx, 0.0) == "2000 JAN 01 12:00:00.000"
     end
 
-    @testset "timout, pictures of the header and random pictures" begin
+    @apart @testset "timout, pictures of the header and random pictures" begin
         sub = vcat(epochs[1:40:end], dense[1:7:end])
         cases = [(et, pic) for pic in TS_PICTURES for et in sub]
         r = compare_outcomes("timout, listed pictures", cases, c -> SPICE.timout(c[1], c[2], 256),
@@ -617,7 +662,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         @test timout(ctx, et, "Wkd Mon DD HR:MN:SC PDT YYYY ::UTC-7") == "Sat Mar 24 09:23:00 PDT 2018"
     end
 
-    @testset "unitim: every pair of scales, generic, no allocation" begin
+    @apart @testset "unitim: every pair of scales, generic, no allocation" begin
         systems = ["TAI", "TDB", "TDT", "ET", "JDTDB", "JDTDT", "JED", "TT", "GPS"]
         worst = 0.0; nbit = 0; ncmp = 0
         for a in systems, b in systems, _ in 1:60
@@ -657,7 +702,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         end
     end
 
-    @testset "deltet agrees with unitim and ttrans" begin
+    @apart @testset "deltet agrees with unitim and ttrans" begin
         worst = 0.0; wref = 0.0
         # ET - UTC from the time vectors against `deltet` in both directions, away from
         # the leap seconds (the formal UTC count repeats one second there). `deltet`
@@ -679,7 +724,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         @test worst < 1e-6
     end
 
-    @testset "ttrans against the CSPICE library" begin
+    @apart @testset "ttrans against the CSPICE library" begin
         names = collect(NeoSpice._TT_NAMES)
         ncmp = 0; nbit = 0; nmixed = 0; worst = 0.0; shown = 0
         for from in names, to in names, _ in 1:nsample(3, 25)
@@ -710,7 +755,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         @test (@allocated g(l, tv0)) == 0
     end
 
-    @testset "jul2gr, gr2jul and the constants" begin
+    @apart @testset "jul2gr, gr2jul and the constants" begin
         bad = 0
         ndate = nsample(400, 4000)
         for _ in 1:ndate
@@ -734,7 +779,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         @test rpd() === SPICE.rpd() && dpr() === SPICE.dpr()
     end
 
-    @testset "timdef: defaults in the context" begin
+    @apart @testset "timdef: defaults in the context" begin
         try
             @test timdef(ctx, "GET", "CALENDAR") == SPICE.timdef("GET", "CALENDAR") == "GREGORIAN"
             @test timdef(ctx, "get", " system") == SPICE.timdef("GET", "SYSTEM") == "UTC"
@@ -789,7 +834,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         end
     end
 
-    @testset "timdef: readers on other threads during a change" begin
+    @apart @testset "timdef: readers on other threads during a change" begin
         if Threads.nthreads() < 2
             skip_notice("9. timdef and threads", "Threads.nthreads() == 1")
         else
