@@ -4,6 +4,13 @@
 # same segment values in a different order, so a few units in the last place of the
 # largest term is the expected difference.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 const IDENT_RTOL = 1e-14
 const IDENT_ROT_ATOL = 1e-14
 
@@ -96,3 +103,5 @@ group("4. algebraic identities", Kernels.FULL_SET_FILES...) do
         @test worst <= 1e-13
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

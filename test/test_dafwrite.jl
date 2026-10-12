@@ -18,6 +18,13 @@
 # wraps with a wrong count (`spkw02_c`, `spkw03_c`, `ckw02_c`, `ckw03_c`) are called on
 # `SPICE.libcspice` directly, as SPICE.jl does. CSPICE is called from the main task only.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 using Random: randstring
 
 const LIBCSPICE = SPICE.libcspice
@@ -258,6 +265,24 @@ end
 # ---------------------------------------------------------------------------------------
 
 """
+    SegArgs(nt)
+
+Arguments of one segment for a writer: the named tuple `nt` behind a field without a
+concrete type. Each writer has its own tuple type; with this wrapper the helpers that
+take the arguments of any writer (`write_both`, `c_read_spk`, the `bad_*` lists) are
+compiled once and not once for each writer. Fields are read as `a.name`, and
+`merge(a, (name=value,))` gives the arguments with a field replaced.
+"""
+struct SegArgs
+    nt::NamedTuple
+end
+Base.getproperty(a::SegArgs, s::Symbol) = getproperty(getfield(a, :nt), s)
+Base.hasproperty(a::SegArgs, s::Symbol) = hasproperty(getfield(a, :nt), s)
+Base.propertynames(a::SegArgs) = propertynames(getfield(a, :nt))
+Base.values(a::SegArgs) = values(getfield(a, :nt))
+Base.merge(a::SegArgs, b::NamedTuple) = SegArgs(merge(getfield(a, :nt), b))
+
+"""
 One writer under test. `gen(rng, k)` gives valid arguments for segment number `k` of a
 file as a named tuple; `neo` and `cspice` write them; `bad(a)` lists invalid variants
 of the arguments `a` as `(label, arguments, kind, both)`, where `both` says that CSPICE
@@ -270,6 +295,9 @@ struct WriterCase
     neo::Function
     cspice::Function
     bad::Function
+    # `gen` gives a named tuple; the case hands it out as `SegArgs`.
+    WriterCase(name, kind, gen, neo, cspice, bad) =
+        new(name, kind, (rng, k) -> SegArgs(gen(rng, k)), neo, cspice, bad)
 end
 
 "The frame and identifier checks that all SPK writers share."
@@ -598,7 +626,7 @@ function gen_ckw01(rng, k)
         avvs=rand(rng, Bool) ? 1e-3 .* randn(rng, 3, nrec) : nothing)
 end
 function bad_ck_common(a, tname::Symbol)
-    t = getfield(a, tname)
+    t = getproperty(a, tname)
     dup = copy(t)
     length(dup) >= 3 && (dup[3] = dup[2])
     zq = copy(a.quats)
@@ -1683,3 +1711,5 @@ group("9. DAF access, SPK and CK writers") do
         @test files_agree(r)
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

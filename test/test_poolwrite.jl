@@ -10,6 +10,13 @@
 # (CSPICE: order of its hash table) and an empty vector if nothing matches; `stpool`
 # returns `nothing` for an absent string.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 "Pool variable names of CSPICE that match `template`, sorted."
 function pw_oracle_names(template::AbstractString)
     out = String[]
@@ -513,3 +520,5 @@ group("18. kernel-pool edits and watchers against CSPICE", Kernels.LSK, Kernels.
         end
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

@@ -29,6 +29,20 @@
 # Tolerance of (c). Both paths differentiate the same polynomial, so they differ only in
 # rounding, which the same amplification raises with the order. Starting values per
 # order 0..4, relative to the norm of the derivative: see `AD_RTOL`.
+#
+# Size of (c). A `Dual` nested k deep through the generic evaluators is a new compilation
+# of the SPK and frame code for each k, and the cost grows fast with k (about 2 s, 3 s,
+# 6 s and 16 s for the position). The default run therefore nests the generic path to
+# `AD_GENERIC_ORDER` = 1 and the public calls to `AD_PUBLIC_ORDER` = 3; the exhaustive run
+# (`NEOSPICE_TEST_FULL=1`) nests both to order 4. Check (b) covers orders 1 to 4 of
+# `spkder` and `pxder` in both runs.
+
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
 
 import ForwardDiff
 
@@ -36,6 +50,9 @@ const FD_CASES_INERTIAL = (h=2000.0, rtol=2e-4)
 const FD_CASES_FAST = (h=20.0, rtol=2e-5)
 const AD_RTOL = (2e-15, 1e-13, 1e-11, 1e-9, 1e-7)
 const MAXORDER = 4
+"Nesting depth of ForwardDiff through the generic evaluators, and through the public calls."
+const AD_GENERIC_ORDER = nsample(1, MAXORDER)
+const AD_PUBLIC_ORDER = nsample(3, MAXORDER)
 
 "Relative difference `|a - b| / |b|`; for `b == 0` the absolute difference."
 function reldiff(a, b)
@@ -56,13 +73,23 @@ function fd_errors(jet, et::Float64, h::Float64, N::Int)
     return [reldiff((jp[k+1] - jm[k+1]) / (2h), j0[k+2]) for k in 0:N-1]
 end
 
-"Nested forward-mode derivatives of `f` at `t`, orders 0 to 4, as a tuple."
-function ad_jet(f, t::Float64)
-    d1(s) = ForwardDiff.derivative(f, s)
-    d2(s) = ForwardDiff.derivative(d1, s)
-    d3(s) = ForwardDiff.derivative(d2, s)
-    d4(s) = ForwardDiff.derivative(d3, s)
-    return (f(t), d1(t), d2(t), d3(t), d4(t))
+"The function `t -> d^N f / dt^N` by nested forward mode; `f` itself for `N == 0`."
+ad_nth(f, ::Val{0}) = f
+function ad_nth(f, ::Val{N}) where {N}
+    g = ad_nth(f, Val(N - 1))
+    return s -> ForwardDiff.derivative(g, s)
+end
+
+"""
+    ad_jet(f, t, Val(N)) -> NTuple{N+1}
+
+Nested forward-mode derivatives of `f` at `t`, orders 0 to `N`. Requires `0 <= N`.
+"""
+function ad_jet(f, t::Float64, ::Val{N}) where {N}
+    @assert N isa Int && N >= 0
+    jet = ntuple(k -> ad_nth(f, Val(k - 1))(t), Val(N + 1))
+    @assert length(jet) == N + 1
+    return jet
 end
 
 "Position through the generic evaluators (no analytical shortcut for a `Dual` epoch)."
@@ -144,23 +171,24 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
     end
 
     @testset "spkder: nested ForwardDiff through the generic path" begin
-        # The epoch that reaches NeoSpice is a Dual (nested up to four deep).
+        # The epoch that reaches NeoSpice is a Dual (nested up to `AD_PUBLIC_ORDER` deep).
         probe = spkpos(ctx, 301, ForwardDiff.Dual(epochs[1], 1.0), "J2000", "NONE", 399)[1]
         @test eltype(probe) <: ForwardDiff.Dual
         @test ForwardDiff.value.(probe) == spkpos(ctx, 301, epochs[1], "J2000", "NONE", 399)[1]
         for (targ, obs, ref, _) in state_cases
-            paths = ("generic" => t -> generic_pos(ctx, targ, t, ref, obs),
-                "public" => t -> spkpos(ctx, targ, t, ref, "NONE", obs)[1])
-            for (label, pos) in paths
-                worst = zeros(MAXORDER + 1)
+            generic = t -> generic_pos(ctx, targ, t, ref, obs)
+            public = t -> spkpos(ctx, targ, t, ref, "NONE", obs)[1]
+            for (label, order) in (("generic", AD_GENERIC_ORDER), ("public", AD_PUBLIC_ORDER))
+                worst = zeros(order + 1)
                 for et in epochs[1:6]
-                    ad = ad_jet(pos, et)
+                    ad = label == "generic" ? collect(ad_jet(generic, et, Val(AD_GENERIC_ORDER))) :
+                         collect(ad_jet(public, et, Val(AD_PUBLIC_ORDER)))
                     jet = spkder(ctx, targ, et, ref, obs, Val(MAXORDER))
-                    worst .= max.(worst, [reldiff(jet[k], ad[k]) for k in 1:MAXORDER+1])
+                    worst .= max.(worst, [reldiff(jet[k], ad[k]) for k in 1:order+1])
                 end
-                measured(@sprintf("  AD %-7s %3d rel %3d %-11s orders 0..4: %s", label, targ,
-                    obs, ref, join((@sprintf("%.2e", w) for w in worst), " ")))
-                @test all(worst[k] <= AD_RTOL[k] for k in 1:MAXORDER+1)
+                measured(@sprintf("  AD %-7s %3d rel %3d %-11s orders 0..%d: %s", label, targ,
+                    obs, ref, order, join((@sprintf("%.2e", w) for w in worst), " ")))
+                @test all(worst[k] <= AD_RTOL[k] for k in 1:order+1)
             end
         end
         # The velocity part of spkezr with a Dual epoch carries the acceleration.
@@ -211,18 +239,19 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
 
     @testset "pxder: nested ForwardDiff through the generic path" begin
         for (from, to, _) in rot_cases
-            paths = ("generic" => t -> generic_rot(ctx, from, to, t),
-                "public" => t -> pxform(ctx, from, to, t))
-            for (label, rot) in paths
-                worst = zeros(MAXORDER + 1)
+            generic = t -> generic_rot(ctx, from, to, t)
+            public = t -> pxform(ctx, from, to, t)
+            for (label, order) in (("generic", AD_GENERIC_ORDER), ("public", AD_PUBLIC_ORDER))
+                worst = zeros(order + 1)
                 for et in epochs[1:6]
-                    ad = ad_jet(rot, et)
+                    ad = label == "generic" ? collect(ad_jet(generic, et, Val(AD_GENERIC_ORDER))) :
+                         collect(ad_jet(public, et, Val(AD_PUBLIC_ORDER)))
                     jet = pxder(ctx, from, to, et, Val(MAXORDER))
-                    worst .= max.(worst, [reldiff(jet[k], ad[k]) for k in 1:MAXORDER+1])
+                    worst .= max.(worst, [reldiff(jet[k], ad[k]) for k in 1:order+1])
                 end
-                measured(@sprintf("  AD %-7s %-11s to %-11s orders 0..4: %s", label, from, to,
-                    join((@sprintf("%.2e", w) for w in worst), " ")))
-                @test all(worst[k] <= AD_RTOL[k] for k in 1:MAXORDER+1)
+                measured(@sprintf("  AD %-7s %-11s to %-11s orders 0..%d: %s", label, from, to,
+                    order, join((@sprintf("%.2e", w) for w in worst), " ")))
+                @test all(worst[k] <= AD_RTOL[k] for k in 1:order+1)
             end
         end
         # pxder with a Dual epoch: the partial of order k is order k+1.
@@ -233,3 +262,5 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
         @test all(ForwardDiff.partials.(jd[k], 1) == jp[k+1] for k in 1:3)
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

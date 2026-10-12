@@ -4,6 +4,13 @@
 # Each measurement is inside a function, so that the arguments are not global variables
 # (a call on untyped globals allocates on its own account).
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 alloc_spkezr(ctx, et) = @allocated spkezr(ctx, 301, et, 1, "NONE", 399)
 alloc_spkpos(ctx, et) = @allocated spkpos(ctx, 301, et, 1, "NONE", 399)
 alloc_spkgeo(ctx, et) = @allocated spkgeo(ctx, 301, et, 1, 399)
@@ -100,3 +107,5 @@ group("8. quality gates", Kernels.FULL_SET_FILES...) do
         @test isempty(Test.detect_ambiguities(NeoSpice))
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

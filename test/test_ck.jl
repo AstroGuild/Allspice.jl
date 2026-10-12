@@ -10,6 +10,13 @@
 # that depend on the call history"). `oracle_ck_reset` clears the state before each
 # oracle query, so that the comparison is with the answer of a fresh CSPICE.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 isdefined(@__MODULE__, :CKFix) || include("ckfixtures.jl")
 
 const CK_RATE = 2e-3
@@ -574,3 +581,5 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         end
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

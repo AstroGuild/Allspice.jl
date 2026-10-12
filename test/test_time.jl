@@ -12,6 +12,13 @@
 # A conversion has one of two outcomes: a value, or a rejection (an exception of the
 # engine). Both engines must have the same outcome for every input, and equal values.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 import ForwardDiff
 
 "Value of `f()` from CSPICE, or `nothing` if CSPICE signals an error."
@@ -488,7 +495,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
     end
     @test length(leapdays) >= 27
 
-    n = 400     # strings of each family
+    n = nsample(150, 400)     # strings of each family (the timdef checks take 150 of a family)
     families = ["ISO" => () -> ts_iso(rng), "month name" => () -> ts_named(rng),
         "numeric month" => () -> ts_numeric(rng), "day of year" => () -> ts_dayofyear(rng),
         "Julian date" => () -> ts_julian(rng), "era" => () -> ts_era(rng), "A.M./P.M." => () -> ts_ampm(rng),
@@ -496,8 +503,8 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         "out of range" => () -> ts_outofrange(rng)]
     corpus = Dict{String,Vector{String}}(name => [gen() for _ in 1:n] for (name, gen) in families)
     valid = reduce(vcat, [corpus[name] for (name, _) in families])
-    corpus["one random edit"] = [ts_mutate(rng, rand(rng, valid)) for _ in 1:4000]
-    corpus["two random edits"] = [ts_mutate(rng, ts_mutate(rng, rand(rng, valid))) for _ in 1:2000]
+    corpus["one random edit"] = [ts_mutate(rng, rand(rng, valid)) for _ in 1:10n]
+    corpus["two random edits"] = [ts_mutate(rng, ts_mutate(rng, rand(rng, valid))) for _ in 1:5n]
     # Strings for which CSPICE has no defined value are taken out and tested apart.
     stale = String["- jd 2451545.0", "-jd 2451545.0", "- JD 1.5 TDB"]
     for name in ("one random edit", "two random edits")
@@ -515,7 +522,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
             accepted += r.both
             name in ("out of range", "one random edit", "two random edits") || @test r.both > n ÷ 4
         end
-        @test corpus["out of range"] != [] && accepted > 3000
+        @test corpus["out of range"] != [] && accepted > 15n ÷ 2
         println("  strings with a value in CSPICE that depends on the call before: ", length(stale))
         @test all(oracle_stale, stale)
         @test all(s -> throws_kind(() -> str2et(ctx, s), :badtime), stale)
@@ -559,8 +566,8 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
     end
 
     # Epochs: several thousand years, and a dense set around every leap second.
-    wide = random_epochs(rng, 3000, -5000.0 * jyear(), 4500.0 * jyear())
-    modern = random_epochs(rng, 2000, -1.3e9, 1.3e9)
+    wide = random_epochs(rng, nsample(300, 3000), -5000.0 * jyear(), 4500.0 * jyear())
+    modern = random_epochs(rng, nsample(400, 2000), -1.3e9, 1.3e9)
     dense = Float64[]
     for t in leap_et, d in (-2.0, -1.5, -1.0, -0.999999, -0.5, -0.0005, -1e-6, 0.0, 1e-6, 0.0005, 0.5, 1.0, 2.0)
         push!(dense, t + d, t + d + 0.3 * (rand(rng) - 0.5))
@@ -574,7 +581,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
                  (("C", rand(rng, 0:14)), ("D", rand(rng, 0:6)), ("J", rand(rng, 0:14)),
             ("ISOC", rand(rng, 0:14)), ("ISOD", rand(rng, 0:3)), (rand(rng, ("c", "isoc", "IsoD", "j")), 3))]
         r = compare_outcomes("et2utc", cases, c -> oracle_et2utc(c...), c -> et2utc(ctx, c...))
-        @test r.mixed == 0 && r.unequal == 0 && r.both > 20000
+        @test r.mixed == 0 && r.unequal == 0 && r.both > nsample(5000, 20000)
         @test et2utc(ctx, leap_et[end] - 0.5, "C", 3) == "2016 DEC 31 23:59:60.500"
         @test et2utc(ctx, leap_et[end] - 0.5, "ISOD", 1) == "2016-366T23:59:60.5"
         for bad in ("", "X", "ISO", "CAL", " C")
@@ -599,7 +606,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         r = compare_outcomes("timout, listed pictures", cases, c -> SPICE.timout(c[1], c[2], 256),
             c -> timout(ctx, c...))
         @test r.mixed == 0 && r.unequal == 0 && r.rejected == length(sub)   # the picture ""
-        cases = [(rand(rng, epochs), ts_picture(rng)) for _ in 1:6000]
+        cases = [(rand(rng, epochs), ts_picture(rng)) for _ in 1:nsample(600, 6000)]
         r = compare_outcomes("timout, random pictures", cases, c -> SPICE.timout(c[1], c[2], 256),
             c -> timout(ctx, c...))
         @test r.mixed == 0 && r.unequal == 0 && r.both == length(cases)
@@ -675,7 +682,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
     @testset "ttrans against the CSPICE library" begin
         names = collect(NeoSpice._TT_NAMES)
         ncmp = 0; nbit = 0; nmixed = 0; worst = 0.0; shown = 0
-        for from in names, to in names, _ in 1:25
+        for from in names, to in names, _ in 1:nsample(3, 25)
             tv = ts_timevector(rng, from)
             ref = oracle_ttrans(from, to, tv)
             got = neo_outcome(() -> NeoSpice.ttrans(ctx, from, to, tv))
@@ -694,7 +701,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         end
         measured(@sprintf("  %-44s n=%-6d bit-equal=%-6d mixed=%d max|d|=%.3e", "ttrans, 441 pairs of representations",
             ncmp, nbit, nmixed, worst))
-        @test nbit == ncmp && nmixed == 0 && ncmp > 10000
+        @test nbit == ncmp && nmixed == 0 && ncmp > nsample(1000, 10000)
         @test throws_kind(() -> NeoSpice.ttrans(ctx, "YMD", "XYZ", (2000.0, 1.0, 1.0)), :badtimetype)
         tv0 = NeoSpice._tvec(2016.0, 12.0, 31.0, 23.0, 59.0, 60.5)
         l = ks.lsk
@@ -705,7 +712,8 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
 
     @testset "jul2gr, gr2jul and the constants" begin
         bad = 0
-        for _ in 1:4000
+        ndate = nsample(400, 4000)
+        for _ in 1:ndate
             y, m, d = rand(rng, -5000:5000), rand(rng, -5:20), rand(rng, 1:28)
             bad += jul2gr(y, m, d) != oracle_calendar(:jul2gr, y, m, d)
             bad += gr2jul(y, m, d) != oracle_calendar(:gr2jul, y, m, d)
@@ -713,7 +721,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
             bad += gr2jul(g[1], g[2], g[3])[1:3] != jul2gr(gr2jul(g[1], g[2], g[3])[1:3]...)[1:3] &&
                    jul2gr(gr2jul(g[1], g[2], g[3])[1:3]...)[1:3] != g[1:3]
         end
-        println("  jul2gr and gr2jul: 8000 dates compared, different: ", bad)
+        println("  jul2gr and gr2jul: ", 2ndate, " dates compared, different: ", bad)
         @test bad == 0
         @test jul2gr(1582, 10, 5) == (1582, 10, 15, 288)
         @test gr2jul(1582, 10, 15) == (1582, 10, 5, 278)
@@ -807,7 +815,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
             end for _ in 1:max(2, Threads.nthreads() - 1)]
             changes = 0
             # Loop invariant: `changes` defaults were stored, each one complete.
-            while changes < 3000 || (count[] < 2000 && changes < 3_000_000)
+            while changes < nsample(300, 3000) || (count[] < nsample(200, 2000) && changes < 3_000_000)
                 changes += 1
                 isodd(changes) ? timdef(c2, "SET", "ZONE", "UTC+5:30") : timdef(c2, "SET", "SYSTEM", "UTC")
             end
@@ -819,3 +827,5 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
     end
     reset_timdef(ctx)
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

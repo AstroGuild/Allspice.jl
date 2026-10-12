@@ -18,6 +18,13 @@
 # order below (tolerances as in group 3) and against nested `ForwardDiff` of `spkpos`.
 # The difference between order 1 and the CSPICE velocity is measured and printed.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 import ForwardDiff
 
 const AB_CORRECTIONS = ("LT", "LT+S", "CN", "CN+S", "XLT", "XLT+S", "XCN", "XCN+S")
@@ -421,3 +428,5 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
         @test (@inferred stelab(st[SOneTo(3)], st[SVector(4, 5, 6)])) isa SVector{3,Float64}
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

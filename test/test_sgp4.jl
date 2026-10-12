@@ -41,6 +41,13 @@
 # body-fixed frame the velocity of a geosynchronous object is near zero, so a velocity
 # difference is divided by the inertial speed and not by the body-fixed speed.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 import ForwardDiff
 
 const SGP4_RTOL = 1e-12
@@ -845,7 +852,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
             et = (s.epochs[1] + s.epochs[2]) / 2 + 100.0
             ep, el = parsed[id]
             g8, e10 = SVector{8}(geophs), SVector{10}(el)
-            for n in (200, 20000)         # the first pass compiles
+            for n in (200, nsample(2000, 20000))         # the first pass compiles
                 a = sgp4_time(sgp4_neo_x, n, et, ctx, body)
                 b = sgp4_time(sgp4_c_x, n, et, body)
                 c = sgp4_time(sgp4_neo_x3, n, et, ctx, body)
@@ -860,3 +867,5 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
 
     SPICE.kclear()
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

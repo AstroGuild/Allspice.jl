@@ -8,6 +8,13 @@
 # 0 where NeoSpice has the operation order of the `_c` function, and a few units of
 # rounding where CSPICE runs the f2c routine with another order.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 import ForwardDiff
 isdefined(@__MODULE__, :CS) || include("mathoracle.jl")
 
@@ -292,3 +299,5 @@ group("12. math: vectors and matrices") do
         @test alloc_of(vnormg, va) == 0 && alloc_of(vzerog, va) == 0
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

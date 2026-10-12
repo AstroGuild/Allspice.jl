@@ -20,6 +20,13 @@
 # Kernels (frames, body constants, surface names, one SPK segment) are written by the
 # group. CSPICE is called from the main task only.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 isdefined(@__MODULE__, :DSKLIB) || include("dskfixtures.jl")
 
 const DSK_FULL = (-pi, pi, -pi / 2, pi / 2)
@@ -323,7 +330,7 @@ function dsk_part_3(env)
         cd = SPICE.dlabfs(ch)
         for s in specs
             scale = maximum(norm, s.verts) / 3
-            for k in 1:2500
+            for k in 1:nsample(250, 2500)
                 v, dirv = dsk_ray(rng, rand(rng, 1:5), (s.verts, s.plates))
                 kind_scale = k % 2 == 0 ? scale : 1.0
                 v *= kind_scale
@@ -347,7 +354,7 @@ function dsk_part_3(env)
         nray, nhit, nbad, maxerr))
     @test nbad == 0
     @test maxerr == 0.0
-    @test nhit > 8_000
+    @test nhit > nsample(800, 8_000)
     return nothing
 end
 
@@ -358,7 +365,8 @@ function dsk_part_4(env)
     surface_lists = ((), [1], [2], [3], [4], [5], [6], [7], [1, 2], [2, 5], [3, 7], [5, 6],
         [7, 6, 5, 4, 3, 2, 1])
     rows = Tuple{String,Int,Int,Int,Int,Int,Float64,Float64}[]
-    function run_case(label, n, fixref, kinds, shapes, epochs, tol)
+    function run_case(label, nfull, fixref, kinds, shapes, epochs, tol)
+        n = nsample(nfull ÷ 10, nfull)
         nhit = 0; nfound = 0; nplate = 0; nstale = 0; maxerr = 0.0; maxrot = 0.0
         for k in 1:n
             srf = surface_lists[rand(rng, 1:length(surface_lists))]
@@ -396,7 +404,7 @@ function dsk_part_4(env)
 
     # The other body, and the longitude seam of the two halves of surface 5.
     nbad = 0
-    for k in 1:3000
+    for k in 1:nsample(300, 3000)
         v = V3(randn(rng, 3)) * 5
         d = V3(randn(rng, 3)) - v
         cf, same, plate, stale, err, _ = compare_xsi(ctx, ks, "PHOBOS", (), 10.0, "PHOBOS_FIX", v, d)
@@ -404,7 +412,8 @@ function dsk_part_4(env)
     end
     @test nbad == 0
     nbad = 0; nhit = 0
-    for k in 1:4000
+    nseam = nsample(400, 4000)
+    for k in 1:nseam
         lat = (rand(rng) - 0.5) * 3
         lon = rand(rng, (0.0, pi, -pi)) + (rand(rng, Bool) ? 0.0 : 1e-9 * randn(rng))
         target = 3.6 * V3(cos(lon) * cos(lat), sin(lon) * cos(lat), sin(lat))
@@ -413,7 +422,7 @@ function dsk_part_4(env)
         nhit += cf
         nbad += !(same && (plate || stale) && err == 0.0)
     end
-    @test nbad == 0 && nhit > 3000
+    @test nbad == 0 && nhit > 3 * nseam ÷ 4
     return nothing
 end
 
@@ -482,7 +491,7 @@ function dsk_part_6(env)
     (; rng, dir, tk, spk, specs_a, specs_b, specs_c, files, wctx, comments) = env
     (; loadlist, ctx, ks, shape_e, shape_r, shape_w) = env
     maxd = 0.0
-    for _ in 1:2000
+    for _ in 1:nsample(200, 2000)
         p = V3(randn(rng, 3)) * 3
         a, b, c = V3(randn(rng, 3)), V3(randn(rng, 3)), V3(randn(rng, 3))
         rand(rng) < 0.05 && (c = a + rand(rng) * (b - a))      # a degenerate plate
@@ -757,9 +766,15 @@ function dsk_part_11(env)
             Ref{SPICE.DLADescr}, Cint, Cint, Cint, Ref{Cint}, Ptr{Float64}), ch, cd, item, start - 1,
         room, Ref{Cint}(0), zeros(10)))
     for (item, start, room) in ((1, 1, 0), (9, 1, -1), (0, 1, 1), (15, 1, 1), (9, 0, 1),
-            (9, 3 * np + 1, 1), (4, 4, 1), (14, 100000, 1), (1, 2, 1), (5, 0, 1))
+            (9, 3 * np + 1, 1), (4, 4, 1), (14, 100000, 1), (5, 0, 1))
         @test (item, start, neo_kind(() -> dski02(h, d, item, start, room))) == (item, start, c_i02_kind(item, start, room))
     end
+    # Item 1 (the number of vertices) has one element. For a start index above 1 the
+    # answer of CSPICE is not stable: the same call gives SPICE(INDEXOUTOFRANGE) or
+    # SPICE(DASNOSUCHADDRESS), and which one depends on the calls before it (three equal
+    # calls in a row gave both). NeoSpice always gives the first one.
+    @test neo_kind(() -> dski02(h, d, 1, 2, 1)) === :indexoutofrange
+    @test c_i02_kind(1, 2, 1) in (:indexoutofrange, :dasnosuchaddress)
     for (item, start, room) in ((19, 1, 0), (14, 1, 1), (20, 1, 1), (19, 0, 1), (19, 3 * nv + 1, 1),
             (15, 25, 1), (16, 7, 1), (17, 4, 1), (18, 2, 1))
         @test (item, start, neo_kind(() -> dskd02(h, d, item, start, room))) == (item, start, c_d02_kind(item, start, room))
@@ -926,7 +941,7 @@ function dsk_part_14(env)
     (; rng, dir, tk, spk, specs_a, specs_b, specs_c, files, wctx, comments) = env
     (; loadlist, ctx, ks, shape_e, shape_r, shape_w) = env
     iau = Int(NeoSpice.namfrm(ctx, "IAU_MARS"))
-    n = 20_000
+    n = nsample(2_000, 20_000)
     vtx = [dsk_ray(rng, 1, shape_e)[1] for _ in 1:n]
     dirs = [V3(randn(rng, 3)) * 2.2 - x for x in vtx]
     xpt = Vector{V3}(undef, n)
@@ -1003,7 +1018,7 @@ function dsk_part_15(env)
             cycles
         end
         readers = [Threads.@spawn begin
-            for rep in 1:40, i in 1:n
+            for rep in 1:nsample(8, 40), i in 1:n
                 r = try
                     key(q(shared, i))
                 catch
@@ -1123,3 +1138,5 @@ group("12. DSK type 2 against CSPICE") do
         dsk_part_15(env)
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

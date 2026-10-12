@@ -15,6 +15,13 @@
 #   (f) the DLA segment list in both directions;
 #   (g) every input check, with the error kind of CSPICE where CSPICE has one.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 isdefined(@__MODULE__, :DSKLIB) || include("dskfixtures.jl")
 
 function c_dasonw(path, ftype, ifname, ncomr)
@@ -390,3 +397,5 @@ group("11. DAS files and DLA segment lists") do
         dascls(w)
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

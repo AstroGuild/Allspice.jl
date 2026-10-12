@@ -17,6 +17,13 @@
 # `pck00011.tpc`, so an `IAU_NEPTUNE` rotation has exactly two valid answers. A query that
 # mixes two snapshots (segment list of one, data of the other) would give neither.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 group("7. thread safety", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.PCK10) do
     if Threads.nthreads() < 2
         skip_notice("7. thread safety", "Threads.nthreads() == 1; run with " *
@@ -153,3 +160,5 @@ group("7. thread safety", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.PCK1
         @test all(answers[k] == (isodd(k) ? a : b) for k in 1:16)
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

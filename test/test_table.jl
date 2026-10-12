@@ -9,6 +9,13 @@
 #   interpolation: the position agrees within `maxerr` of the table plus the
 #     difference between NeoSpice and CSPICE.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 import ForwardDiff
 import Adapt
 
@@ -125,3 +132,5 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
         @test isbits(small) && table_position(small, 1.5) == SVector(2.0, 5.0, 8.0)
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

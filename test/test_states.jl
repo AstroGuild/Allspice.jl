@@ -8,6 +8,13 @@
 # norm for velocity components). The assertions are on the quantiles q75 and q99 of the
 # relative difference and on the maximum absolute difference.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 "Thresholds of one comparison class. `rel_*` are relative to the vector norm."
 struct StateTol
     rel_q75::Float64
@@ -198,3 +205,5 @@ group("1b. states against CSPICE, de405", Kernels.DE405, Kernels.LSK) do
     d = compare_states(ctx, [(301, 399), (399, 10), (499, 301)], epochs, "ECLIPJ2000")
     assert_states("de405 ECLIPJ2000", d, TOL_INERTIAL)
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

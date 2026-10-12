@@ -7,6 +7,13 @@
 # endpoints are small integers and halves, so that equal endpoints, touching intervals
 # and singleton intervals occur often.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 "Endpoints of a SPICE double cell as a vector."
 cell_values(c) = Float64[c[i] for i in 1:SPICE.card(c)]
 
@@ -138,3 +145,5 @@ group("10. windows") do
         @test w[3] == 5.0 && length(w) == 4 && card(w) == 4 && card([3, 4, 5]) == 3
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

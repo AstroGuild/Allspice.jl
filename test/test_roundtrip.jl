@@ -5,6 +5,13 @@
 # trajectory export needs) are written with NeoSpice, loaded with NeoSpice and with
 # CSPICE, and both engines must return the same states and the same pointing.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 group("roundtrip", Kernels.LSK, Kernels.DE440S) do
     rng = MersenneTwister(SEED + 40)
     dir = mktempdir()
@@ -101,3 +108,5 @@ group("roundtrip", Kernels.LSK, Kernels.DE440S) do
     end
     rm(dir; recursive=true, force=true)
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

@@ -30,6 +30,13 @@
 # the step `h` of the case and the bound `FD_VEL_RTOL`; it is the independent check that
 # both paths carry the derivative through the Kepler solutions of types 5, 15 and 17.
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 import ForwardDiff
 
 const LIBCSPICE = SPICE.libcspice
@@ -717,3 +724,5 @@ group("9. SPK data types against CSPICE") do
         @test refuses("type 5, ellipse", :badorbit, (d, s) -> d[e(s)-1] = 0.0)             # GM
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

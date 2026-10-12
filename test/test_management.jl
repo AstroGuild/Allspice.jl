@@ -3,6 +3,13 @@
 # Feature files: features/unload.feature, features/load_order_precedence.feature,
 # features/coverage_error.feature
 
+# Compile time. In the default run the test code of this group is compiled without
+# optimization (`@optlevel 0` for `Main`, until the end of this file), because the
+# compilation of the test code is the larger part of the run time of the group. The
+# methods of NeoSpice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+FULL || @eval Base.Experimental.@optlevel 0
+
 "Write a meta-kernel that loads `files` (all in one directory `dir`) and return its path."
 function write_metakernel(tmp::AbstractString, dir::AbstractString, files)
     @assert all(f -> dirname(f) == dir, files)
@@ -236,3 +243,5 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test default_context() !== c405
     end
 end
+
+FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again
