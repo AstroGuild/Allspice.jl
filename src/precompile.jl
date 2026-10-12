@@ -20,6 +20,7 @@ let
             precompile(spkpos, (head..., B, F, R, S, B))
             for N in 0:3
                 precompile(spkder, (head..., B, F, R, B, Val{N}))
+                precompile(spkder, (head..., B, F, R, S, B, Val{N}))
             end
         end
     end
