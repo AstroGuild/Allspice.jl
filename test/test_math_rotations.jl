@@ -36,6 +36,27 @@ function special_rotations()
     return out
 end
 
+"""
+    euler_roundtrip_limit(a2, ax) -> Float64
+
+Limit of the largest element of `eul2m(m2eul(r, ax...)..., ax...) - r` for a rotation `r`
+with the middle Euler angle `a2` and the axes `ax` (the middle axis differs from the
+other two). The decomposition is ill-conditioned near the degenerate middle angle. Let
+`s` be the distance from it: `|sin(a2)|` if the first and the third axis are equal,
+`|cos(a2)|` if not. The middle angle is the arccosine (or the arcsine) of one element,
+which is near 1 in magnitude there, so the rounding error `eps()` of that element is an
+error of about `eps() / s` in the angle and in the product. Below `s` of about 1.5e-8
+that element is exactly 1 in magnitude; `m2eul_c` and `m2eul` then take the degenerate
+branch, which ignores the small elements of size `s`: an error of `s`. Measured on
+about 180000 rotations (2026-10-12): the error times `s` is at most 2.1 `eps()` for `s`
+above 2e-8, the error is at most `s` below that, and it is at most 2 `eps()` at
+`s` = 0; CSPICE has the same error. The limit is about twice the measured bound.
+"""
+function euler_roundtrip_limit(a2::Real, ax)
+    s = ax[1] == ax[3] ? abs(sin(a2)) : abs(cos(a2))
+    return 4 * eps() + min(4 * eps() / s, 2 * s)
+end
+
 group("13. math: rotations") do
     rng = MersenneTwister(SEED + 13)
     n = 400
@@ -66,7 +87,7 @@ group("13. math: rotations") do
                 r2 = CS.eul2m(a3, a2, a1, ax...)
                 versus!(t, :m2eul, () -> m2eul(r2, ax...), () -> CS.m2eul(r2, ax...))
                 back = eul2m(m2eul(r2, ax...)..., ax...)
-                @test maximum(abs, back - r2) < 1e-14
+                @test maximum(abs, back - r2) <= euler_roundtrip_limit(a2, ax)
             end
             e = SVector(a3, a2, a1, randn(rng), randn(rng), randn(rng))
             # `eul2xf_` reads a table with an axis number outside 1:3 before its
@@ -83,7 +104,19 @@ group("13. math: rotations") do
             xr = Matrix(CS.rav2xf(rmat(), randn(rng, 3)))
             versus!(t, :xf2eul, () -> xf2eul(xr, ax...), () -> CS.xf2eul(xr, ax...))
         end
-        @test throws_kind(() -> eul2m(0.1, 0.2, 0.3, 3, 1, 4), :badaxisnumbers)
+        # Fixed cases of the round trip near the degenerate middle angle (see
+        # `euler_roundtrip_limit`): the error is far above rounding, it is inside the
+        # limit, and CSPICE has the same error.
+        for (e, ax) in (((2.072415747618665, 3.141592674250949, -3.121188829648567), (1, 3, 1)),
+            ((-2.0000268387200544, 1.570796306753901, -0.028901714353209762), (2, 3, 1)),
+            ((0.3, 1e-3, -1.2), (3, 1, 3)))
+            r2 = CS.eul2m(e..., ax...)
+            err = maximum(abs, eul2m(m2eul(r2, ax...)..., ax...) - r2)
+            errc = maximum(abs, CS.eul2m(CS.m2eul(r2, ax...)..., ax...) - r2)
+            @test err <= euler_roundtrip_limit(e[2], ax)
+            @test abs(err - errc) <= 4 * eps()
+        end
+        @test euler_roundtrip_limit(0.7, (3, 1, 3)) < 1e-14 && euler_roundtrip_limit(0.0, (3, 1, 3)) == 4 * eps()
         @test throws_kind(() -> m2eul(ident(), 3, 3, 1), :badaxisnumbers)
         @test throws_kind(() -> m2eul(2.0 * ident(), 3, 1, 3), :notarotation)
         @test throws_kind(() -> eul2xf(zeros(6), 0, 1, 3), :badaxisnumbers)

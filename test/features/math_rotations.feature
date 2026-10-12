@@ -31,6 +31,11 @@ Feature: Rotation calls
     When the user calls "m2eul"
     Then the first angle is 0 and the third angle carries the whole rotation, as in CSPICE
 
+  Scenario: Euler angles near the singular middle angle
+    Given a rotation whose middle Euler angle is at the distance s from the singular value
+    When the user calls "m2eul" and then "eul2m" with the result
+    Then the rotation is recovered within about eps / s, or within s if s is below 1.5e-8, as in CSPICE
+
   Scenario: Unique Euler angles from a state transformation
     When the user calls "xf2eul"
     Then the flag "unique" is false only at the singular middle angle

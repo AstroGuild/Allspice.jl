@@ -53,6 +53,12 @@ Feature: Vector and matrix calls
     When the user calls "vhat" or "unorm" with the zero vector
     Then the result is the zero vector and no error is thrown
 
+  Scenario: Infinite numerator in the derivative of the separation
+    Given two states of which one has a unit position with an infinite derivative
+    When the user calls "dvsep"
+    Then the error "numericoverflow" is thrown
+    And the test does not call "dvsep_c", because CSPICE stops the process for this input
+
   Scenario: Singular matrix
     When the user calls "invert" with a matrix that has a determinant below 1e-16
     Then the result is the zero matrix, as in CSPICE
