@@ -16,7 +16,8 @@ const _TK_MAXSTR = 80       # MAXCHR: longest string value
 Contract: `path` names a readable file; returns `:SPK`, `:PCK` or `:CK` for a binary
 DAF of that type (ID word `DAF/SPK`, `DAF/PCK`, `DAF/CK`, or the old `NAIF/DAF` with
 summary format ND = 2 and NI = 6 or 5; with NI = 6 the first segment decides between
-SPK and CK, as `open_daf` does) and `:TEXT` for everything that is not a DAF or DAS file.
+SPK and CK, as `open_daf` does), `:DSK` for a DAS file with the ID word `DAS/DSK`, and
+`:TEXT` for everything that is not a DAF or DAS file.
 Throws `SpiceError(:nofile)` for a missing file and `SpiceError(:unsupported)` for
 another binary kernel type.
 """
@@ -42,6 +43,7 @@ function kernel_arch(path::AbstractString)::Symbol
         throw(SpiceError(:unsupported,
             "old-style DAF '$path' has a summary format that is neither SPK nor PCK"))
     elseif startswith(idword, "DAS/")
+        strip(idword[5:end]) == "DSK" && return :DSK
         throw(SpiceError(:unsupported, "DAS kernel '$path' is not supported"))
     end
     return :TEXT

@@ -110,7 +110,7 @@ the meta-kernel that caused the load, or `""` for a kernel loaded directly.
 struct Loaded
     path::String
     source::String
-    content::Union{DAF,TextKernel}
+    content::Union{DAF,TextKernel,DSKFile}
 end
 
 """
@@ -239,6 +239,9 @@ and readers on many threads do not contend.
 - `sclk`: type 1 spacecraft clocks by clock ID (the spacecraft ID, a negative number).
 - `ckmeta`: the pair (`CK_<id>_SCLK`, `CK_<id>_SPK`) for each CK ID that has one of
   these variables in the pool; a missing one of the two holds the default of `ckmeta`.
+- `dskfiles`: the loaded DSK files, in load order; `DSKSegment.file` indexes this vector.
+- `dsk`: DSK segments by centre body ID, in the search order of CSPICE (later file
+  first, and inside a file later segment first).
 """
 mutable struct KernelSet
     const loaded::Vector{Loaded}
@@ -256,6 +259,8 @@ mutable struct KernelSet
     const ck::Dict{Int32,Vector{CKSegment}}
     const sclk::Dict{Int32,SclkType1}
     const ckmeta::Dict{Int32,NTuple{2,Int32}}
+    const dskfiles::Vector{DSKFile}
+    const dsk::Dict{Int32,Vector{DSKSegment}}
 end
 
 """
@@ -282,13 +287,16 @@ TimeDefaults() = TimeDefaults("GREGORIAN", "UTC", "")
 Holder of the current `KernelSet`. Queries read the reference once and work on that
 snapshot; `furnsh`, `unload` and `kclear` build a new snapshot under `lock` and swap
 the reference atomically. Readers never take the lock. `timedefs` holds the defaults
-of `timdef` in the same way: `timdef` replaces the snapshot under `lock`.
+of `timdef` in the same way: `timdef` replaces the snapshot under `lock`. `dsktols`
+holds the DSK tolerances of `dskgtl`/`dskstl` in the same way.
 """
 mutable struct SpiceContext
     @atomic ks::KernelSet
     const lock::ReentrantLock
     @atomic timedefs::TimeDefaults
-    SpiceContext(ks::KernelSet, lock::ReentrantLock) = new(ks, lock, TimeDefaults())
+    @atomic dsktols::DSKTolerances
+    SpiceContext(ks::KernelSet, lock::ReentrantLock) =
+        new(ks, lock, TimeDefaults(), DSKTolerances())
 end
 
 "Error type of the package. `kind` is a short symbol such as `:nocoverage`."

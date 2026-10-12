@@ -27,12 +27,15 @@ function build_kernelset(loaded::Vector{Loaded})
     pck = Dict{Int32,Vector{Segment}}()
     ck = Dict{Int32,Vector{CKSegment}}()
     pool = Dict{String,PoolValue}()
+    dskfiles = DSKFile[]
     filenumber = zeros(Int, length(loaded))
     for (i, entry) in enumerate(loaded)
         content = entry.content
         if content isa DAF
             push!(daf, content.data)
             filenumber[i] = length(daf)
+        elseif content isa DSKFile
+            push!(dskfiles, content)
         else
             apply_assignments!(pool, content)
         end
@@ -62,7 +65,8 @@ function build_kernelset(loaded::Vector{Loaded})
     bodyrot = build_bodyrot(pool)
     lsk = build_lsk(pool)
     return KernelSet(copy(loaded), daf, spk, pck, pool, name2code, code2name, frames,
-        framename2id, tk, bodyrot, lsk, ck, build_sclk(pool), build_ckmeta(pool))
+        framename2id, tk, bodyrot, lsk, ck, build_sclk(pool), build_ckmeta(pool),
+        dskfiles, _dsk_segment_table(dskfiles))
 end
 
 """
@@ -92,12 +96,13 @@ kernelset(ctx::SpiceContext) = @atomic ctx.ks
 """
     read_kernel(path) -> Union{DAF,TextKernel}
 
-Open the binary kernel or parse the text kernel at `path`; throws `SpiceError` if the
-file does not exist.
+Open the binary kernel (DAF, or DSK) or parse the text kernel at `path`; throws
+`SpiceError` if the file does not exist.
 """
 function read_kernel(path::AbstractString)
     isfile(path) || throw(SpiceError(:nofile, "kernel file not found: $path"))
     arch = kernel_arch(path)
+    arch === :DSK && return open_dsk(path)
     return (arch === :SPK || arch === :PCK || arch === :CK) ? open_daf(path) : parse_text_kernel(path)
 end
 
@@ -127,7 +132,7 @@ end
 """
     furnsh(ctx::SpiceContext, path) -> Nothing
 
-Load the kernel at `path` (SPK, binary PCK, text kernel or meta-kernel) into `ctx`.
+Load the kernel at `path` (SPK, binary PCK, CK, DSK, text kernel or meta-kernel) into `ctx`.
 The new snapshot replaces the old one atomically; if the load fails, `ctx` is unchanged.
 A path that is already loaded gets a second entry, as in CSPICE.
 """

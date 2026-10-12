@@ -25,7 +25,16 @@ export ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
 export spkobj, spkobj!, spkcov, spkcov!, kinfo, kdata, tkvrsn
 export Window, card, wncard, wninsd!, wnvald!, wnunid, wnintd, wndifd, wncomd
 export wnelmd, wnincd, wnfetd, wnsumd
+export DASHandle, dasopr, dasopw, dasonw, dascls, dasllc, dashfn, dasrfr, daslla, dashfs
+export dasrdd, dasrdi, dasrdc, dasadd, dasadi, dasadc, dasudd, dasudi, dasac, dasec, dasdc
+export DLADescr, dlaopn, dlabns, dlaens, dlabfs, dlafns, dlabbs, dlafps
+export DSKDescr, DSKSegment, dskobj, dsksrf, dskgd, dskb02, dskz02, dskn02, dskp02, dskv02
+export dski02, dskd02, dskx02, dskxv, dskxv!, dskxsi, dskgtl, dskstl
+export dskopn, dskw02, dskmi2, dskrb2, dskcls
+export pltexp, pltnp, pltnrm, pltar, pltvol
+export latsrf, srfnrm, srfc2s, srfs2c, srfcss, srfscc
 
+include("dsk_types.jl")     # DLADescr, DSKDescr, DSKSegment, DSKFile, DSKTolerances
 include("types.jl")
 include("taylor.jl")        # Taylor{N,T} truncated series, `primal`
 include("daf.jl")           # open_daf, segment descriptors
@@ -52,6 +61,12 @@ include("daf_access.jl")    # DAFHandle, dafopr, dafbfs, daffna, dafgs, dafgda, 
 include("daf_write.jl")     # dafonw, dafopw, dafbna, dafada, dafena, dafac, dafdc
 include("spk_write.jl")     # spkopn, spkopa, spkcls, spkw01 ... spkw21
 include("ck_write.jl")      # ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
+include("das.jl")           # DASHandle, dasopr, dasonw, dascls, dasrdi, dasadi, dasac, dasec
+include("dla.jl")           # dlaopn, dlabns, dlaens, dlabfs, dlafns, dlabbs, dlafps
+include("dsk.jl")           # type 2 geometry, open_dsk, intercept and segment selection
+include("dsk_api.jl")       # dskgtl, dskstl, dskgd, dskb02 ... dskx02, dskxsi, dskxv, plt*
+include("dsk_write.jl")     # dskopn, dskmi2, dskrb2, dskw02, dskcls
+include("surfaces.jl")      # srfc2s, srfs2c, srfcss, srfscc, latsrf, srfnrm
 include("kernel_info.jl")   # spkobj, spkcov, ktotal(kind), kdata, kinfo, tkvrsn
 include("precompile.jl")    # precompile directives for the common signatures
 

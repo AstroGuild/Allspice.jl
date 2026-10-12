@@ -23,13 +23,13 @@ end
 # ---------------------------------------------------------------------------------------
 
 "Kernel types that `ktotal`, `kdata` and `kinfo` report, as in `keeper.f`."
-const KERNEL_KINDS = ("SPK", "CK", "PCK", "EK", "TEXT", "META")
+const KERNEL_KINDS = ("SPK", "CK", "PCK", "DSK", "EK", "TEXT", "META")
 
 """
     kernel_filetype(entry::Loaded) -> String
 
-Type of a load-list entry as CSPICE reports it: `"SPK"`, `"CK"`, `"PCK"` for a binary
-kernel, `"META"` for a text kernel that assigns `KERNELS_TO_LOAD`, `"TEXT"` for every
+Type of a load-list entry as CSPICE reports it: `"SPK"`, `"CK"`, `"PCK"`, `"DSK"` for a
+binary kernel, `"META"` for a text kernel that assigns `KERNELS_TO_LOAD`, `"TEXT"` for every
 other text kernel.
 """
 function kernel_filetype(entry::Loaded)
@@ -62,7 +62,7 @@ end
     ktotal(kind="ALL") -> Int
 
 Number of loaded kernels of the types in `kind`, as `ktotal_c`: `kind` is `"ALL"` or a
-blank-separated list of `SPK`, `CK`, `PCK`, `EK`, `TEXT`, `META` (any case). A
+blank-separated list of `SPK`, `CK`, `PCK`, `DSK`, `EK`, `TEXT`, `META` (any case). A
 meta-kernel counts as one `META` entry plus one entry for each file that it lists.
 """
 ktotal(ks::KernelSet, kind::AbstractString="ALL") = length(_kernels_of_kind(ks, kind))
