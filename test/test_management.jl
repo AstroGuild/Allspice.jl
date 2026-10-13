@@ -6,8 +6,8 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -15,7 +15,7 @@ isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 function write_metakernel(tmp::AbstractString, dir::AbstractString, files)
     @assert all(f -> dirname(f) == dir, files)
     @assert length(dir) <= 80 "PATH_VALUES entry longer than the CSPICE limit"
-    path = joinpath(tmp, "neospice_test.tm")
+    path = joinpath(tmp, "allspice_test.tm")
     list = join(("'\$K/" * basename(f) * "'" for f in files), ",\n                        ")
     write(path, """
     KPL/MK
@@ -77,8 +77,8 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test ktotal(ctx) == length(Kernels.full_set())
         kclear(ctx)
         @test ktotal(ctx) == 0
-        @test_throws NeoSpice.SpiceError query(ctx, epochs[1])
-        @test_throws NeoSpice.SpiceError pxform(ctx, "J2000", "MOON_PA", epochs[1])
+        @test_throws Allspice.SpiceError query(ctx, epochs[1])
+        @test_throws Allspice.SpiceError pxform(ctx, "J2000", "MOON_PA", epochs[1])
         @test throws_kind(() -> gdpool(ctx, "BODY399_RADII"), :notfound)
         # Built-in names and frames need no kernel.
         @test bodn2c(ctx, "EARTH") == 399
@@ -131,7 +131,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         end
         @test bodvrd(a, "NEPTUNE", "PM") != bodvrd(b, "NEPTUNE", "PM")
         @test maximum(abs.(pxform(a, "J2000", "IAU_NEPTUNE", 1e8) - pxform(b, "J2000", "IAU_NEPTUNE", 1e8))) > 1e-3
-        # The mixed Mars constants are an error in CSPICE and in NeoSpice.
+        # The mixed Mars constants are an error in CSPICE and in Allspice.
         @test_throws SPICE.SpiceError SPICE.pxform("J2000", "IAU_MARS", 1e8)
         @test throws_kind(() -> pxform(b, "J2000", "IAU_MARS", 1e8), :insufficientangles)
     end
@@ -165,7 +165,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
             @test ktotal(ctx) == SPICE.ktotal("ALL") == 1
             @test throws_kind(() -> gdpool(ctx, "BODY399_RADII"), :notfound)
             @test spkezr(ctx, 301, epochs[1], "J2000", "NONE", 399)[1] isa SVector{6,Float64}
-            @test_throws NeoSpice.SpiceError pxform(ctx, "J2000", "MOON_PA_DE440", epochs[1])
+            @test_throws Allspice.SpiceError pxform(ctx, "J2000", "MOON_PA_DE440", epochs[1])
             # A missing file gives an error and leaves the context unchanged.
             @test throws_kind(() -> furnsh(ctx, joinpath(tmp, "absent.bsp")), :nofile)
             @test ktotal(ctx) == 1
@@ -194,8 +194,8 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test throws_kind(() -> spkezr(ctx, "NO_SUCH_BODY", 0.0, "J2000", "NONE", "EARTH"), :unknownbody)
         @test throws_kind(() -> spkezr(ctx, "EARTH", 0.0, "J2000", "NONE", "NO_SUCH_BODY"), :unknownbody)
         @test throws_kind(() -> spkder(ctx, "NO_SUCH_BODY", 0.0, "J2000", "EARTH", Val(1)), :unknownbody)
-        @test_throws NeoSpice.SpiceError spkezr(ctx, 599, 0.0, "J2000", "NONE", 399)
-        @test_throws NeoSpice.SpiceError spkezr(ctx, "PHOBOS", 0.0, "J2000", "NONE", "EARTH")
+        @test_throws Allspice.SpiceError spkezr(ctx, 599, 0.0, "J2000", "NONE", 399)
+        @test_throws Allspice.SpiceError spkezr(ctx, "PHOBOS", 0.0, "J2000", "NONE", "EARTH")
         # Unknown frame.
         @test throws_kind(() -> spkezr(ctx, 301, 0.0, "NO_SUCH_FRAME", "NONE", 399), :unknownframe)
         @test throws_kind(() -> pxform(ctx, "J2000", "NO_SUCH_FRAME", 0.0), :unknownframe)
@@ -207,11 +207,11 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         # A frame whose data are not loaded (binary PCK of DE421 is not on disk).
         if isfile(Kernels.MOON_TF_OLD)
             old = neo_context([Kernels.text_set()..., Kernels.MOON_TF_OLD, Kernels.MOON_BPC])
-            @test_throws NeoSpice.SpiceError pxform(old, "J2000", "MOON_PA_DE421", 0.0)
+            @test_throws Allspice.SpiceError pxform(old, "J2000", "MOON_PA_DE421", 0.0)
         end
         # The error is printable and names the kind.
         err = try spkezr(ctx, 301, 1e11, "J2000", "NONE", 399) catch e; e end
-        @test err isa NeoSpice.SpiceError
+        @test err isa Allspice.SpiceError
         @test occursin("nocoverage", sprint(showerror, err))
         @test !isempty(err.msg)
     end
@@ -221,7 +221,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         c440 = neo_context([Kernels.DE440S])
         c405 = neo_context([Kernels.DE405])
         @test ktotal() == 0
-        @test_throws NeoSpice.SpiceError spkezr(301, epochs[1], "J2000", "NONE", 399)
+        @test_throws Allspice.SpiceError spkezr(301, epochs[1], "J2000", "NONE", 399)
         a = [query(c440, et) for et in epochs]
         b = [query(c405, et) for et in epochs]
         @test all(a[i] != b[i] for i in eachindex(epochs))

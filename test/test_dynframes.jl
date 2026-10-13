@@ -8,7 +8,7 @@
 # velocity of `spkezr` are compared relative to their size. CSPICE takes the derivative
 # of a velocity vector by a central difference over about one second, so its derivative
 # block has a rounding noise of about 1e-16 divided by the rotation rate of the frame;
-# NeoSpice makes the same difference, and the two results agree to that noise only. The
+# Allspice makes the same difference, and the two results agree to that noise only. The
 # thresholds below are therefore per frame, each about ten times the measured value.
 #
 # Sizes. Each order of `pxder` above zero is a new number type, and the first evaluation
@@ -17,14 +17,14 @@
 # dynamic frames, so the number types nest one level deeper). The default run therefore
 # uses one order above zero, `DF_ORDER` = 2, and does not call `pxder` for
 # `DT_TWOVEC_IN_DYN`; `pxform`, `sxform` and `spkezr` are compared for every frame in
-# both runs. The exhaustive run (`NEOSPICE_TEST_FULL=1`) uses the orders 1, 2 and 3 for
+# both runs. The exhaustive run (`ALLSPICE_TEST_FULL=1`) uses the orders 1, 2 and 3 for
 # every frame.
 
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -57,12 +57,12 @@ function df_oracle_kind(call::Symbol, from::AbstractString, to::AbstractString, 
     return m === nothing ? :unknown : Symbol(lowercase(m.captures[1]))
 end
 
-"Kind of the `SpiceError` that NeoSpice throws for `f()`; `:none` without an error."
+"Kind of the `SpiceError` that Allspice throws for `f()`; `:none` without an error."
 function df_neo_kind(f)
     try
         f()
     catch e
-        e isa NeoSpice.SpiceError || rethrow()
+        e isa Allspice.SpiceError || rethrow()
         return e.kind
     end
     return :none
@@ -164,7 +164,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
     set = [Kernels.LSK, Kernels.PCK11, Kernels.DE440S, DynFix.frame_kernel()]
     oracle_load(set)
     ctx = neo_context(set)
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     span = 5.5e8
     nepoch = nsample(30, 150)
 
@@ -182,7 +182,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
         @test all(d -> d.errkind === :none, values(ks.dyn))
         @test all(d -> d.errkind === :none, values(ks.switch))
         # A snapshot without a dynamic frame has no inner snapshot.
-        @test NeoSpice.kernelset(neo_context([Kernels.LSK, Kernels.PCK11])).inner === nothing
+        @test Allspice.kernelset(neo_context([Kernels.LSK, Kernels.PCK11])).inner === nothing
         @test ks.inner !== nothing && ks.inner.ks.inner !== nothing
         @test ks.inner.ks.inner.ks.inner === nothing
     end
@@ -416,10 +416,10 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
         end
         println("  ", nalloc, " calls with zero allocation")
         # The rotation is generic over the number type of the epoch.
-        tv = NeoSpice.taylor_var(et, Val(2))
+        tv = Allspice.taylor_var(et, Val(2))
         id = namfrm(ctx, "DT_GSE_LTS")
-        m = @inferred NeoSpice.frame_rotation(ks, Int32(1), Int32(id), tv)
-        @test m isa SMatrix{3,3,NeoSpice.Taylor{2,Float64},9}
+        m = @inferred Allspice.frame_rotation(ks, Int32(1), Int32(id), tv)
+        @test m isa SMatrix{3,3,Allspice.Taylor{2,Float64},9}
         @test maximum(abs.(map(x -> x.v, m) .- pxform(ks, 1, id, et))) <= 1e-13
     end
 
@@ -435,7 +435,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
             @test namfrm(ctx2, name) == SPICE.namfrm(name) != 0
             want = df_oracle_kind(:pxform_c, "J2000", name, et)
             got = df_neo_kind(() -> pxform(ctx2, "J2000", name, et))
-            push!(lines, @sprintf("  %-17s NeoSpice :%-20s CSPICE :%s", name, got, want))
+            push!(lines, @sprintf("  %-17s Allspice :%-20s CSPICE :%s", name, got, want))
             got == want || @info "error kind" name got want
             @test got == want
             @test got == kind
@@ -456,8 +456,8 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
         @test df_neo_kind(() -> pxform(ctx2, "J2000", "DT_EMPTY", et)) !== :none
         @test df_oracle_kind(:pxform_c, "J2000", "DT_EMPTY", et) !== :none
         k7 = df_neo_kind(() -> pxform(ctx2, "J2000", "DT_CLASS7", et))
-        println("  class 5 frame without a definition: NeoSpice :",
-            df_neo_kind(() -> pxform(ctx2, "J2000", "DT_EMPTY", et)), "; frame of class 7: NeoSpice :", k7)
+        println("  class 5 frame without a definition: Allspice :",
+            df_neo_kind(() -> pxform(ctx2, "J2000", "DT_EMPTY", et)), "; frame of class 7: Allspice :", k7)
         @test k7 !== :none
         @test df_oracle_kind(:pxform_c, "J2000", "DT_CLASS7", et) !== :none
     end
@@ -477,7 +477,7 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
         @test maximum(abs.(b .- SPICE.pxform("J2000", "DT_EULER", et))) <= 5e-14
         unload(c, DynFix.frame_kernel())
         @test namfrm(c, "DT_EULER") == 0
-        @test NeoSpice.kernelset(c).inner === nothing
+        @test Allspice.kernelset(c).inner === nothing
         @test throws_kind(() -> pxform(c, "J2000", "DT_EULER", et), :unknownframe) ||
               throws_kind(() -> pxform(c, "J2000", "DT_EULER", et), :noframe)
     end

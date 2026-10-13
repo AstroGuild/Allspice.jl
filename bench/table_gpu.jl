@@ -8,7 +8,7 @@
 #         Pkg.develop(path="."); Pkg.add(["CUDA", "Adapt", "StaticArrays", "ForwardDiff"]);
 #         include("bench/table_gpu.jl")'
 
-using NeoSpice, CUDA, Adapt, StaticArrays, LinearAlgebra, Printf
+using Allspice, CUDA, Adapt, StaticArrays, LinearAlgebra, Printf
 import ForwardDiff
 
 include(joinpath(@__DIR__, "..", "test", "kernels.jl"))
@@ -40,7 +40,7 @@ function main()
 
     rows = Tuple{String,Float64,Float64}[]
     for (name, T) in (("Float64", Float64), ("Float32", Float32))
-        cpu = T === Float64 ? earth : NeoSpice.EphemerisTable{T}(earth)
+        cpu = T === Float64 ? earth : Allspice.EphemerisTable{T}(earth)
         gpu = adapt(CuArray, cpu)
         @assert isbits(cudaconvert(gpu))
         f = let gpu = gpu; et -> state_gpu(gpu, et); end

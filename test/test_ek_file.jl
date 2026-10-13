@@ -11,7 +11,7 @@
 # The code of the EK groups is long and most of it runs once, so Julia compiles the
 # module of the tests without optimization while this file runs (5 s less for the five
 # EK groups); the last line of the file gives the default level back. The level of
-# NeoSpice does not change.
+# Allspice does not change.
 Base.Experimental.@optlevel 0
 
 isdefined(@__MODULE__, :EKLIB) || include("ekfixtures.jl")

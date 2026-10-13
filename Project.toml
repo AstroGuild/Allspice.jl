@@ -1,4 +1,4 @@
-name = "NeoSpice"
+name = "Allspice"
 uuid = "1c6edf61-da3a-4136-b24a-0cb478996395"
 version = "0.1.0"
 authors = ["Alex Pascarella <alex.pascarella@ellissoide.com>"]
@@ -16,8 +16,8 @@ Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 
 [extensions]
-NeoSpiceAdaptExt = "Adapt"
-NeoSpiceForwardDiffExt = "ForwardDiff"
+AllspiceAdaptExt = "Adapt"
+AllspiceForwardDiffExt = "ForwardDiff"
 
 [compat]
 Adapt = "4"

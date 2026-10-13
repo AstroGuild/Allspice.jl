@@ -1,6 +1,6 @@
 Feature: Write SPK and CK files that CSPICE reads as its own
-  NeoSpice writes binary kernels (DAF files) through a handle that the caller owns.
-  CSPICE is the reference: a file that NeoSpice writes must hold the same data, the
+  Allspice writes binary kernels (DAF files) through a handle that the caller owns.
+  CSPICE is the reference: a file that Allspice writes must hold the same data, the
   same descriptors, the same segment names and the same comments as the file that
   CSPICE writes from the same input.
   Executable form: test/test_dafwrite.jl
@@ -11,7 +11,7 @@ Feature: Write SPK and CK files that CSPICE reads as its own
 
   Scenario Outline: A writer gives the data area that CSPICE gives
     Given valid input for the writer <writer>
-    When NeoSpice writes the segment to one new file
+    When Allspice writes the segment to one new file
     And CSPICE writes the same segment to a second new file
     Then each double of the data area has the same bit pattern in the two files
     And the descriptors and the segment names are the same
@@ -49,19 +49,19 @@ Feature: Write SPK and CK files that CSPICE reads as its own
 
   Scenario: A file holds more segments than one summary record
     Given more than 25 segments
-    When NeoSpice writes them to one file
+    When Allspice writes them to one file
     Then the file is equal byte for byte to the file that CSPICE writes
     And a search forward and a search backward find all segments
 
   Scenario: One engine appends to the file of the other engine
     Given a file with 23 segments that CSPICE wrote
-    When NeoSpice opens the file with spkopa and adds segments
+    When Allspice opens the file with spkopa and adds segments
     Then the file holds the data that one engine writes alone
 
   Scenario: Comments go in both directions
     Given a file with a reserved comment area of some size, also zero
     When comment lines are added with dafac before and after the segments
-    Then dafec of NeoSpice and dafec of CSPICE give the same lines from the file
+    Then dafec of Allspice and dafec of CSPICE give the same lines from the file
     And the segments stay readable when the comment area grows and the data move
     And dafdc removes the comment area with the same result in both engines
 
@@ -72,12 +72,12 @@ Feature: Write SPK and CK files that CSPICE reads as its own
 
   Scenario: A file of the other byte order is read but not written
     Given a copy of an SPK file in the non-native byte order
-    When NeoSpice reads the copy
+    When Allspice reads the copy
     Then summaries, names, comments and data are those of the native file
     And dafopw throws SpiceError(:unsupportedbff)
 
   Scenario: A written file is loaded
-    Given an SPK file with a type 2 and a type 3 segment that NeoSpice wrote
+    Given an SPK file with a type 2 and a type 3 segment that Allspice wrote
     When the file is loaded with furnsh
     Then spkgeo gives the states that CSPICE gives from the same file
     And ktotal, kdata and kinfo report the load list as CSPICE does

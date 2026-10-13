@@ -6,27 +6,27 @@
 
 using Test, Random, LinearAlgebra, Printf
 using StaticArrays
-using NeoSpice
+using Allspice
 import SPICE
 
 include("kernels.jl")
 using .Kernels: Kernels
 
-"Seed of every random sample; change it with the environment variable NEOSPICE_TEST_SEED."
-const SEED = parse(Int, get(ENV, "NEOSPICE_TEST_SEED", "20261011"))
+"Seed of every random sample; change it with the environment variable ALLSPICE_TEST_SEED."
+const SEED = parse(Int, get(ENV, "ALLSPICE_TEST_SEED", "20261011"))
 
 """
-True for the exhaustive run (environment variable NEOSPICE_TEST_FULL=1). The default
+True for the exhaustive run (environment variable ALLSPICE_TEST_FULL=1). The default
 run has a budget of 120 s for all groups together; a group keeps its large samples,
 long search spans and large files for the exhaustive run.
 """
-const FULL = get(ENV, "NEOSPICE_TEST_FULL", "0") == "1"
+const FULL = get(ENV, "ALLSPICE_TEST_FULL", "0") == "1"
 
 """
     nsample(fast, full)
 
 Size of a sample: `fast` in the default run, `full` in the exhaustive run
-(`NEOSPICE_TEST_FULL=1`). Requires `0 <= fast <= full`.
+(`ALLSPICE_TEST_FULL=1`). Requires `0 <= fast <= full`.
 """
 function nsample(fast::Integer, full::Integer)
     @assert 0 <= fast <= full
@@ -84,7 +84,7 @@ function oracle_load(paths)
     return nothing
 end
 
-"New explicit NeoSpice context with `paths` loaded in order."
+"New explicit Allspice context with `paths` loaded in order."
 function neo_context(paths)
     ctx = SpiceContext()
     for p in paths
@@ -161,12 +161,12 @@ function spk_bodies(path::AbstractString)
     return sort!(Int[i for i in ids])
 end
 
-"True if `f()` throws a `SpiceError` of NeoSpice with `kind`."
+"True if `f()` throws a `SpiceError` of Allspice with `kind`."
 function throws_kind(f, kind::Symbol)
     try
         f()
     catch e
-        e isa NeoSpice.SpiceError || rethrow()
+        e isa Allspice.SpiceError || rethrow()
         e.kind === kind || @info "SpiceError of another kind" expected = kind got = e.kind msg = e.msg
         return e.kind === kind
     end
@@ -211,7 +211,7 @@ const VEL_FLOOR = 1e-6
     compare_states(ctx, pairs, epochs, ref) -> NamedTuple
 
 Query every (target, observer) pair of `pairs` at every epoch of `epochs` in frame
-`ref` with NeoSpice (integer-ID form on `ctx`) and with CSPICE, and return the vectors
+`ref` with Allspice (integer-ID form on `ctx`) and with CSPICE, and return the vectors
 of absolute and relative component differences and of light-time differences.
 Precondition: CSPICE has the same kernels loaded as `ctx`.
 """

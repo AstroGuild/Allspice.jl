@@ -1,7 +1,7 @@
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-NeoSpice = "1c6edf61-da3a-4136-b24a-0cb478996395"
+Allspice = "1c6edf61-da3a-4136-b24a-0cb478996395"
 SPICE = "5bab7191-041a-5c2e-a744-024b9c3a5062"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 anise_jll = "fd72ad51-21d9-5f89-9335-c19ef8d09a5a"

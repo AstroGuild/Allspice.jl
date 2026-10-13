@@ -47,5 +47,5 @@ Feature: Geometry finder, quantities from the ephemeris
 
   Scenario: Search time
     Given a search of ten years with a step of one day
-    When NeoSpice and CSPICE make the same search
+    When Allspice and CSPICE make the same search
     Then the two search times and their ratio are reported

@@ -1,4 +1,4 @@
-# NeoSpice.jl verification suite. CSPICE (through SPICE.jl) is the oracle.
+# Allspice.jl verification suite. CSPICE (through SPICE.jl) is the oracle.
 #
 # Run all groups, with threads (group 7 needs more than one):
 #
@@ -13,11 +13,11 @@
 #
 #     julia --startup-file=no --threads=8 test/parallel.jl
 #
-# NEOSPICE_TEST_FULL=1 selects the exhaustive run (large samples, all derivative orders).
+# ALLSPICE_TEST_FULL=1 selects the exhaustive run (large samples, all derivative orders).
 #
-# Kernel paths are in `test/kernels.jl`; the environment variables NEOSPICE_KERNEL_DIR,
-# NEOSPICE_DE440S and NEOSPICE_DE405 override them. A group whose kernels are missing is
-# skipped with a visible notice. NEOSPICE_TEST_SEED changes the random samples.
+# Kernel paths are in `test/kernels.jl`; the environment variables ALLSPICE_KERNEL_DIR,
+# ALLSPICE_DE440S and ALLSPICE_DE405 override them. A group whose kernels are missing is
+# skipped with a visible notice. ALLSPICE_TEST_SEED changes the random samples.
 #
 # Behaviour specifications (Given / When / Then) are in `test/features/*.feature`.
 
@@ -40,12 +40,12 @@ selected = isempty(ARGS) ? GROUPS : ARGS
 unknown = setdiff(selected, GROUPS)
 isempty(unknown) || error("unknown test group(s) $(unknown); the groups are $(GROUPS)")
 
-println("NeoSpice tests: Julia ", VERSION, ", ", Threads.nthreads(), " thread(s), seed ", SEED)
+println("Allspice tests: Julia ", VERSION, ", ", Threads.nthreads(), " thread(s), seed ", SEED)
 Threads.nthreads() == 1 && printstyled("NOTE  one thread only: group 7 will be skipped; run " *
     "with `julia --threads=8 --project=test test/runtests.jl`\n"; color=:yellow, bold=true)
 
 try
-    @testset "NeoSpice" begin
+    @testset "Allspice" begin
         for g in selected
             push!(GROUP_SECONDS, g => @elapsed include(joinpath(@__DIR__, "test_$g.jl")))
         end

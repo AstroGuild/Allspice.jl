@@ -15,8 +15,8 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -32,12 +32,12 @@ function oracle_outcome(f)
     end
 end
 
-"Value of `f()` from NeoSpice, or `nothing` if it throws a `SpiceError`."
+"Value of `f()` from Allspice, or `nothing` if it throws a `SpiceError`."
 function neo_outcome(f)
     try
         return f()
     catch e
-        e isa NeoSpice.SpiceError || rethrow()
+        e isa Allspice.SpiceError || rethrow()
         return nothing
     end
 end
@@ -64,7 +64,7 @@ function compare_outcomes(what::AbstractString, inputs, oracle, neo; atol::Float
             mixed += 1
             shown += 1
             shown <= 8 && println("    outcome differs for ", repr(x), ": CSPICE ",
-                ref === nothing ? "rejects" : repr(ref), ", NeoSpice ",
+                ref === nothing ? "rejects" : repr(ref), ", Allspice ",
                 got === nothing ? "rejects" : repr(got))
         else
             both += 1
@@ -78,7 +78,7 @@ function compare_outcomes(what::AbstractString, inputs, oracle, neo; atol::Float
                 unequal += 1
                 shown += 1
                 shown <= 8 && println("    value differs for ", repr(x), ": CSPICE ",
-                    repr(ref), ", NeoSpice ", repr(got))
+                    repr(ref), ", Allspice ", repr(got))
             end
         end
     end
@@ -461,7 +461,7 @@ end
 True if `str2et` of CSPICE gives for `s` a value that depends on the conversion
 before it. This occurs for a Julian date whose sign and number are apart (`- jd 1.5`):
 the number is not read and the value of the earlier call stays in the time vector.
-NeoSpice rejects such a string.
+Allspice rejects such a string.
 """
 function oracle_stale(s::AbstractString)
     occursin(r"jd"i, s) || return false
@@ -527,7 +527,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
     rng = MersenneTwister(SEED + 9)
     oracle_load([Kernels.LSK])
     ctx = neo_context([Kernels.LSK])
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     reset_timdef(ctx)
 
     # Leap-second epochs of the kernel: UTC seconds past J2000 of the day start after
@@ -594,7 +594,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         @test occursin("month", lowercase(msg("2000-13-01")))
         @test occursin("seconds", lowercase(msg("2000 Jan 1 23:59:60")))
         @test occursin("blank", msg("  "))
-        @test throws_kind(() -> str2et(NeoSpice.empty_kernelset(), "2000 Jan 1"), :nolsk)
+        @test throws_kind(() -> str2et(Allspice.empty_kernelset(), "2000 Jan 1"), :nolsk)
         @test throws_kind(() -> str2et(ctx, "not a time"), :badtime)
     end
 
@@ -682,7 +682,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         @test nbit == ncmp
         @test throws_kind(() -> unitim(ctx, 0.0, "UTC", "TDB"), :badtimetype)
         @test throws_kind(() -> unitim(ctx, 0.0, "TDB", "XYZ"), :badtimetype)
-        @test throws_kind(() -> unitim(NeoSpice.empty_kernelset(), 0.0, "TDB", "TAI"), :nolsk)
+        @test throws_kind(() -> unitim(Allspice.empty_kernelset(), 0.0, "TDB", "TAI"), :nolsk)
         @test oracle_outcome(() -> SPICE.unitim(0.0, "UTC", "TDB")) === nothing
         # No allocation, for `unitim` and for `deltet`.
         f1(k, t) = unitim(k, t, "TDB", "TAI")
@@ -700,9 +700,9 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
             @test abs(d - 1.0) < 1e-8 && d != 1.0
             @test abs(d - fd) < 5e-12
             @test ForwardDiff.derivative(x -> unitim(ks, x, "TAI", "JDTDT"), t) == 1.0 / 86400.0
-            tay = unitim(ks, NeoSpice.taylor_var(t, Val(2)), "TDT", "TDB")
-            @test NeoSpice.primal(tay) == unitim(ks, t, "TDT", "TDB")
-            @test abs(NeoSpice.derivatives(tay)[2] - ForwardDiff.derivative(x -> unitim(ks, x, "TDT", "TDB"), t)) < 1e-14
+            tay = unitim(ks, Allspice.taylor_var(t, Val(2)), "TDT", "TDB")
+            @test Allspice.primal(tay) == unitim(ks, t, "TDT", "TDB")
+            @test abs(Allspice.derivatives(tay)[2] - ForwardDiff.derivative(x -> unitim(ks, x, "TDT", "TDB"), t)) < 1e-14
             @test ForwardDiff.value(unitim(ks, ForwardDiff.Dual(t, 1.0), "TDB", "TAI")) === unitim(ks, t, "TDB", "TAI")
         end
     end
@@ -714,7 +714,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         # evaluates the periodic term at a UTC epoch with the UTC value, so the two
         # differ by the change of that term in about one minute (below 1e-7 s).
         for et in modern[1:400]
-            utc = NeoSpice.ttrans(ctx, "TDB", "FORMAL", (et,))[1]
+            utc = Allspice.ttrans(ctx, "TDB", "FORMAL", (et,))[1]
             worst = max(worst, abs((et - utc) - deltet(ctx, et, "ET")), abs((et - utc) - deltet(ctx, utc, "UTC")))
             tai = unitim(ctx, et, "TDB", "TAI")
             leaps = deltet(ctx, et, "ET") - (et - tai)      # TAI - UTC, a whole number
@@ -730,12 +730,12 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
     end
 
     @apart @testset "ttrans against the CSPICE library" begin
-        names = collect(NeoSpice._TT_NAMES)
+        names = collect(Allspice._TT_NAMES)
         ncmp = 0; nbit = 0; nmixed = 0; worst = 0.0; shown = 0
         for from in names, to in names, _ in 1:nsample(3, 25)
             tv = ts_timevector(rng, from)
             ref = oracle_ttrans(from, to, tv)
-            got = neo_outcome(() -> NeoSpice.ttrans(ctx, from, to, tv))
+            got = neo_outcome(() -> Allspice.ttrans(ctx, from, to, tv))
             if ref === nothing || got === nothing
                 nmixed += (ref === nothing) != (got === nothing)
                 continue
@@ -746,16 +746,16 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
             worst = max(worst, maximum(abs.(ref .- got)))
             if !same
                 shown += 1
-                shown <= 6 && println("    ttrans ", from, " -> ", to, " of ", tv, ": CSPICE ", ref, ", NeoSpice ", got)
+                shown <= 6 && println("    ttrans ", from, " -> ", to, " of ", tv, ": CSPICE ", ref, ", Allspice ", got)
             end
         end
         measured(@sprintf("  %-44s n=%-6d bit-equal=%-6d mixed=%d max|d|=%.3e", "ttrans, 441 pairs of representations",
             ncmp, nbit, nmixed, worst))
         @test nbit == ncmp && nmixed == 0 && ncmp > nsample(1000, 10000)
-        @test throws_kind(() -> NeoSpice.ttrans(ctx, "YMD", "XYZ", (2000.0, 1.0, 1.0)), :badtimetype)
-        tv0 = NeoSpice._tvec(2016.0, 12.0, 31.0, 23.0, 59.0, 60.5)
+        @test throws_kind(() -> Allspice.ttrans(ctx, "YMD", "XYZ", (2000.0, 1.0, 1.0)), :badtimetype)
+        tv0 = Allspice._tvec(2016.0, 12.0, 31.0, 23.0, 59.0, 60.5)
         l = ks.lsk
-        g(a, b) = NeoSpice._ttrans(a, NeoSpice._TT_YMD, NeoSpice._TT_TDB, b)
+        g(a, b) = Allspice._ttrans(a, Allspice._TT_YMD, Allspice._TT_TDB, b)
         g(l, tv0)
         @test (@allocated g(l, tv0)) == 0
     end
@@ -830,7 +830,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
             @test str2et(other, "2000 Jan 1 12:00:00") == SPICE.str2et("2000 Jan 1 12:00:00 UTC")
             # The form on a `KernelSet` takes the defaults as an argument and has no state.
             @test str2et(ks, "2000 Jan 1 12:00:00") == str2et(other, "2000 Jan 1 12:00:00")
-            @test str2et(ks, "2000 Jan 1 12:00:00", NeoSpice.TimeDefaults("GREGORIAN", "TDB", "")) == 0.0
+            @test str2et(ks, "2000 Jan 1 12:00:00", Allspice.TimeDefaults("GREGORIAN", "TDB", "")) == 0.0
             # `kclear` does not reset the defaults, as in CSPICE.
             kclear(other); timdef(other, "SET", "ZONE", "PST"); furnsh(other, Kernels.LSK)
             @test timdef(other, "GET", "ZONE") == "UTC-8" && timdef(other, "GET", "SYSTEM") == ""

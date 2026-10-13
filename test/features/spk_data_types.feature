@@ -30,7 +30,7 @@ Feature: States from every SPK data type except two-line elements
 
   Scenario: Epoch on a boundary of the data
     When the user asks for the state at a segment end, at the epoch of a stored state, or at the bound between two records
-    Then NeoSpice selects the same record or window as CSPICE
+    Then Allspice selects the same record or window as CSPICE
     And the state agrees with CSPICE to within rounding
 
   Scenario: Bound between two intervals of a type 19 segment
@@ -47,9 +47,9 @@ Feature: States from every SPK data type except two-line elements
   Scenario: Two-line elements
     Given a segment of type 10
     When the user asks for its state
-    Then NeoSpice throws an error of kind "unsupported"
+    Then Allspice throws an error of kind "unsupported"
 
   Scenario: Damaged segment
     Given a segment whose count at the end does not agree with its length
     When the user asks for its state
-    Then NeoSpice throws an error of kind "baddaf"
+    Then Allspice throws an error of kind "baddaf"

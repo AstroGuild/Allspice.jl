@@ -1,5 +1,5 @@
 Feature: DSK type 2 shape models (triangular plates) with the results of CSPICE
-  A type 2 DSK segment holds vertices, plates and a voxel index. NeoSpice reads such
+  A type 2 DSK segment holds vertices, plates and a voxel index. Allspice reads such
   segments, finds where a ray meets the surface, and writes segments. CSPICE is the
   reference: the same plate and the same point, to rounding level.
   Executable form: test/test_dsk.jl
@@ -12,12 +12,12 @@ Feature: DSK type 2 shape models (triangular plates) with the results of CSPICE
 
   Scenario Outline: The writer gives the file that CSPICE gives
     Given the plate model <model> with bounds in the <system> coordinate system
-    When NeoSpice makes the spatial index with dskmi2 and writes the segment with dskw02
+    When Allspice makes the spatial index with dskmi2 and writes the segment with dskw02
     And CSPICE does the same with the same input
     Then each element of the two spatial indexes is equal
     And each integer and each double of the two files is equal
     And the bytes of the files differ at most in the padding of the last records
-    And CSPICE reads the NeoSpice file as its own
+    And CSPICE reads the Allspice file as its own
 
     Examples:
       | model            | system       |
@@ -38,7 +38,7 @@ Feature: DSK type 2 shape models (triangular plates) with the results of CSPICE
     Given nine loaded segments of one body with different surfaces and overlapping coverage
     And a surface list, an epoch and the body-fixed frame <frame>
     When dskxsi is called for a ray of the kind <kind>
-    Then NeoSpice finds an intercept if and only if CSPICE finds one
+    Then Allspice finds an intercept if and only if CSPICE finds one
     And the segment and the plate are the same
     And the points differ by at most <tolerance> km
 

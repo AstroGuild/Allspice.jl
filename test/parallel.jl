@@ -3,7 +3,7 @@
 #     julia --startup-file=no --threads=8 test/parallel.jl [groups...]
 #
 # Most of the run time of the suite is compilation of test code, which one process
-# cannot share between threads. This driver gives the groups to NEOSPICE_TEST_JOBS
+# cannot share between threads. This driver gives the groups to ALLSPICE_TEST_JOBS
 # processes (default: a quarter of the CPU threads, 8 at most), each of which runs `runtests.jl` with a part of the groups and
 # with the thread count of the driver. The driver prints the output of each process
 # when it ends, then the time of each group and the wall time of the whole run, and it
@@ -70,7 +70,7 @@ function main(args)
     unknown = setdiff(selected, groups)
     isempty(unknown) || error("unknown test group(s) $(unknown); the groups are $(groups)")
     selected = filter(in(selected), groups)
-    njobs = parse(Int, get(ENV, "NEOSPICE_TEST_JOBS", string(clamp(Sys.CPU_THREADS ÷ 4, 1, 8))))
+    njobs = parse(Int, get(ENV, "ALLSPICE_TEST_JOBS", string(clamp(Sys.CPU_THREADS ÷ 4, 1, 8))))
     known = isfile(TIMES_FILE) ? parse_times(TIMES_HEADER * "\n" * read(TIMES_FILE, String)) :
         Dict{String,Float64}()
     mean = isempty(known) ? 1.0 : sum(values(known)) / length(known)

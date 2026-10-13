@@ -13,7 +13,7 @@
 #
 # The default run has 35 searches (each of the five calls with each of the seven
 # relations once), each made twice on many tasks and once on each of three tasks during
-# the loads and unloads; the exhaustive run (`NEOSPICE_TEST_FULL=1`) has 70 searches,
+# the loads and unloads; the exhaustive run (`ALLSPICE_TEST_FULL=1`) has 70 searches,
 # four times on many tasks and three times on each task but one of the process.
 #
 # Behaviour specification: test/features/gf_threads.feature

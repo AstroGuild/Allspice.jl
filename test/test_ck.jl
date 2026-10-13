@@ -13,8 +13,8 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -100,7 +100,7 @@ function try_or_nothing(f, ::Type{E}) where {E}
         return nothing
     end
 end
-neo_try(f) = try_or_nothing(f, NeoSpice.SpiceError)
+neo_try(f) = try_or_nothing(f, Allspice.SpiceError)
 oracle_try(f) = try_or_nothing(f, SPICE.SpiceError)
 
 "Random clock value of `case`: inside or just outside the coverage, or exactly a time tag."
@@ -152,13 +152,13 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
     set = [Kernels.LSK, Kernels.PCK11, Kernels.DE440S, generated...]
     oracle_load(set)
     ctx = neo_context(set)
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     ckpaths = CKFix.ck_files()
 
     @apart @testset "CK files are recognised and listed" begin
         for p in ckpaths
-            @test NeoSpice.kernel_arch(p) === :CK
-            daf = NeoSpice.open_daf(p)
+            @test Allspice.kernel_arch(p) === :CK
+            daf = Allspice.open_daf(p)
             @test daf.kind === :CK
             @test isempty(daf.segments) && !isempty(daf.cksegments)
             @test all(s -> 1 <= s.baddr <= s.eaddr <= length(daf.data) && s.t0 <= s.t1,
@@ -247,7 +247,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         # Fixed case of the saved interval of `ckr05_` (see `oracle_ck_reset`): two
         # requests in the gaps before two successive intervals, each nearer to the start
         # of the interval. CSPICE finds no pointing for the second one after the first
-        # one, and finds it after a reset; NeoSpice keeps no state and finds it.
+        # one, and finds it after a reset; Allspice keeps no state and finds it.
         tk = CKFix.ticks_tdb()
         ia, ib = CKFix.START_INDEX[end-1], CKFix.START_INDEX[end]
         ta = tk[ia] - 0.25 * (tk[ia] - tk[ia-1])
@@ -277,19 +277,19 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         data(seg) = ks.daf[seg.file]
         # Inside the two later segments: `ckgp` takes the one with the highest priority.
         t = tk[150] + 100.0
-        @test ckgp(ctx, inst, t, 0.0, 1)[1] == NeoSpice._ck_eval(data(withav), withav, t, 0.0, false)[2]
+        @test ckgp(ctx, inst, t, 0.0, 1)[1] == Allspice._ck_eval(data(withav), withav, t, 0.0, false)[2]
         # In the later segment without angular velocity only: `ckgp` takes it, `ckgpav`
         # passes over it and takes the first loaded segment.
         t = tk[125] + 100.0
-        @test ckgp(ctx, inst, t, 0.0, 1)[1] == NeoSpice._ck_eval(data(noav), noav, t, 0.0, false)[2]
-        @test ckgpav(ctx, inst, t, 0.0, 1)[1] == NeoSpice._ck_eval(data(base), base, t, 0.0, true)[2]
+        @test ckgp(ctx, inst, t, 0.0, 1)[1] == Allspice._ck_eval(data(noav), noav, t, 0.0, false)[2]
+        @test ckgpav(ctx, inst, t, 0.0, 1)[1] == Allspice._ck_eval(data(base), base, t, 0.0, true)[2]
         @test ckgp(ctx, inst, t, 0.0, 1)[1] != ckgpav(ctx, inst, t, 0.0, 1)[1]
         # Just outside a segment of higher priority, with a tolerance that reaches it: its
         # end point is returned, and the clock time of the answer is that end point.
         t = tk[140] - 50.0
         cmat, av, clkout, found = ckgpav(ctx, inst, t, 100.0, 1)
         @test found && clkout == tk[140]
-        @test cmat == NeoSpice._ck_eval(data(withav), withav, tk[140], 0.0, true)[2]
+        @test cmat == Allspice._ck_eval(data(withav), withav, tk[140], 0.0, true)[2]
         oracle_ck_reset(inst)
         r = SPICE.ckgpav(inst, t, 100.0, "J2000")
         @test r[3] == clkout && maximum(abs.(r[1] .- cmat)) <= CK_TOL_CMAT
@@ -481,8 +481,8 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
             @test CKFix.warm(alloc_ck_pxder, ctx, iau, id, et, Val(3)) == 0
             @test (@inferred pxform(ctx, 1, id, et)) isa SMatrix{3,3,Float64,9}
             @test (@inferred pxder(ctx, 1, id, et, Val(2))) isa NTuple{3,SMatrix{3,3,Float64,9}}
-            @test (@inferred NeoSpice.frame_rotation(ks, Int32(1), Int32(id),
-                NeoSpice.taylor_var(et, Val(2)))) isa SMatrix{3,3,NeoSpice.Taylor{2,Float64},9}
+            @test (@inferred Allspice.frame_rotation(ks, Int32(1), Int32(id),
+                Allspice.taylor_var(et, Val(2)))) isa SMatrix{3,3,Allspice.Taylor{2,Float64},9}
             case.av || continue
             @test CKFix.warm(alloc_ck_sxform, ctx, 1, id, et) == 0
             @test CKFix.warm(alloc_ck_sxform, ctx, iau, id, et) == 0
@@ -573,7 +573,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         # 1. `ckr06` keeps the mini-segment of the last call. When a request in a gap is
         #    moved to the next mini-segment, it rounds the clock rate of that
         #    mini-segment to a whole number (here 0) and keeps it, so the next request
-        #    in that mini-segment is interpolated with wrong derivatives. NeoSpice has
+        #    in that mini-segment is interpolated with wrong derivatives. Allspice has
         #    no state and gives the answer of a fresh CSPICE.
         t = tk[192] + 0.4 * (tk[193] - tk[192])
         oracle_ck_reset(-77006)
@@ -588,7 +588,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         # 2. `ckbsr` keeps the segment of the last search. After a search that needs
         #    angular velocity, a search that does not need it takes that saved segment
         #    although a segment of higher priority (without angular velocity) covers
-        #    the request. NeoSpice applies the priority rule of the CK Required Reading.
+        #    the request. Allspice applies the priority rule of the CK Required Reading.
         t = tk[125] + 100.0
         oracle_ck_reset(-77003)
         fresh = SPICE.ckgp(-77003, t, 0.0, "J2000")

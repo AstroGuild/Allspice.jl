@@ -19,7 +19,7 @@
 # and the two libraries give the same output for the same input.
 #
 # The default run has 20 random cases on the DSK surface of two parts; the exhaustive
-# run (`NEOSPICE_TEST_FULL=1`) has 40. The other samples are the same in the two runs.
+# run (`ALLSPICE_TEST_FULL=1`) has 40. The other samples are the same in the two runs.
 
 isdefined(@__MODULE__, :GEOLIB) || include("geomfixtures.jl")
 
@@ -59,7 +59,7 @@ end
     paths = [geo_kernels(; dsk=true)..., geo_parts_dsk()]
     oracle_load(paths)
     ctx = neo_context(paths)
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     rng = MersenneTwister(SEED + 106)
 
     @testset "limbpt and termpt on ellipsoids, 400 random cases" begin
@@ -182,7 +182,7 @@ end
         @test nmulti > nparts ÷ 4 && most == 3
         @test gget(st, "limbpt points") < LT_TOL.dsk
         @test gget(st, "termpt points") < LT_TOL.dsk
-        # More points than `maxn`: NeoSpice throws, where `limbpt_c` writes past the arrays.
+        # More points than `maxn`: Allspice throws, where `limbpt_c` writes past the arrays.
         et = 1.0e8
         ref = SVector(0.0, 0.0, 1.0)
         n = limbpt(ctx, "TANGENT" * m3, "MOON", et, "IAU_MOON", "NONE", "CENTER", "EARTH", ref, 0.01, 4, 1e-4, 1e-9, 400)[1]
@@ -359,11 +359,11 @@ end
     end
 
     @testset "room in the outputs" begin
-        ks = NeoSpice.kernelset(ctx)
+        ks = Allspice.kernelset(ctx)
         et = 1.0e8
         z = [0.0, 0.0, 1.0]
         # `limbpt_c` does not count the room that is left (it writes past `maxn` points on
-        # DSK data); NeoSpice throws `:outofroom`. With one point per half plane and
+        # DSK data); Allspice throws `:outofroom`. With one point per half plane and
         # `ncuts <= maxn` the two agree.
         a = limbpt(ctx, "TANGENT/ELLIPSOID", "MOON", et, "IAU_MOON", "LT", "CENTER", "EARTH", z, 0.1, 10, 1e-4, 1e-7, 10)
         @test sum(a[1]) == 10

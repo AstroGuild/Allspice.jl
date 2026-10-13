@@ -11,8 +11,8 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -171,11 +171,11 @@ group("14. math: coordinates", Kernels.PCK11) do
         @test throws_kind(() -> dsphdr(0.0, 0.0, 1.0), :pointonzaxis)
         @test throws_kind(() -> dcyldr(0.0, 0.0, 1.0), :pointonzaxis)
         # a Taylor series passes through the conversions that need sine and cosine only
-        tt = NeoSpice.taylor_var(0.0, Val(1))
+        tt = Allspice.taylor_var(0.0, Val(1))
         v = latrec(2.0 + 0.1 * tt, 0.3 + 0.2 * tt, -0.4 + 0.5 * tt)
-        @test map(c -> NeoSpice.derivatives(c)[2], v) ≈ drdlat(2.0, 0.3, -0.4) * [0.1, 0.2, 0.5] rtol = 1e-14
-        @test NeoSpice.derivatives(sphrec(2.0, 0.3 + tt, 0.4)[3])[2] ≈ -2.0 * sin(0.3)
-        @test NeoSpice.derivatives(cylrec(2.0, 0.3 + tt, 0.4)[1])[2] ≈ -2.0 * sin(0.3)
+        @test map(c -> Allspice.derivatives(c)[2], v) ≈ drdlat(2.0, 0.3, -0.4) * [0.1, 0.2, 0.5] rtol = 1e-14
+        @test Allspice.derivatives(sphrec(2.0, 0.3 + tt, 0.4)[3])[2] ≈ -2.0 * sin(0.3)
+        @test Allspice.derivatives(cylrec(2.0, 0.3 + tt, 0.4)[1])[2] ≈ -2.0 * sin(0.3)
     end
 
     @apart @testset "state between coordinate systems" begin

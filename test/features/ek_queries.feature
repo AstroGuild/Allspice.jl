@@ -8,7 +8,7 @@ Feature: Query the loaded EK tables
   Background:
     Given three EK files that the CSPICE writers made from a seeded random model
     And the table EVENTS has segments in two files and GROUPS has segments of the fast writers
-    And the files and a leapseconds kernel are loaded in CSPICE and in a NeoSpice context
+    And the files and a leapseconds kernel are loaded in CSPICE and in a Allspice context
 
   Scenario: An EK file is a loaded kernel
     When ktotal, kdata and kinfo are called with the kind "EK"

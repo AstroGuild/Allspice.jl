@@ -74,8 +74,8 @@ Feature: Two-line elements and SPK segments of type 10
     When the user asks for the state at a segment end that is outside the element epochs
     Then the state is the propagation of the end set
 
-  Scenario: Segment written by NeoSpice
-    When the user writes the same element sets with spkw10 of NeoSpice
+  Scenario: Segment written by Allspice
+    When the user writes the same element sets with spkw10 of Allspice
     Then the file has the size and the layout of the file of CSPICE
     And only stored nutation numbers differ, by rounding
     And each engine gives the same states from either file

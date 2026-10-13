@@ -1,6 +1,6 @@
-module NeoSpiceAdaptExt
+module AllspiceAdaptExt
 
-using NeoSpice: EphemerisTable
+using Allspice: EphemerisTable
 import Adapt
 
 # Move the coefficient array of an ephemeris table to another array type and keep the

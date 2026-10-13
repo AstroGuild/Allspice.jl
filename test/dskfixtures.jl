@@ -230,7 +230,7 @@ function c_dskcls(h, optmiz::Bool=true)
 end
 
 "Write the segments `specs` to the new DSK file `path` with the CSPICE writer."
-function c_write_dsk(path, specs; ifname="NeoSpice test DSK", ncomch=0, makvtl=true,
+function c_write_dsk(path, specs; ifname="Allspice test DSK", ncomch=0, makvtl=true,
         comments=String[])
     isfile(path) && rm(path)
     h = c_dskopn(path, ifname, ncomch)
@@ -244,8 +244,8 @@ function c_write_dsk(path, specs; ifname="NeoSpice test DSK", ncomch=0, makvtl=t
     return path
 end
 
-"Write the segments `specs` to the new DSK file `path` with the NeoSpice writer."
-function neo_write_dsk(path, specs; ifname="NeoSpice test DSK", ncomch=0, makvtl=true,
+"Write the segments `specs` to the new DSK file `path` with the Allspice writer."
+function neo_write_dsk(path, specs; ifname="Allspice test DSK", ncomch=0, makvtl=true,
         comments=String[], ctx=default_context())
     isfile(path) && rm(path)
     h = dskopn(path, ifname, ncomch)
@@ -318,7 +318,7 @@ function c_das_data(path)
     return ints, dps, chars
 end
 
-"All integers, doubles and characters of the DAS file `path`, read with NeoSpice."
+"All integers, doubles and characters of the DAS file `path`, read with Allspice."
 function neo_das_data(path)
     h = dasopr(path)
     lastc, lastd, lasti = daslla(h)

@@ -32,7 +32,7 @@ co_alloc_cvt(ks, et, c, s) = @allocated spkcvt(ks, s, 1.0e8, 399, 1, et, 10013, 
 
 @gf_light group("geom_constobs: spkcpo, spkcpt, spkcvo, spkcvt", Kernels.FULL_SET_FILES...) do
     ctx = geo_setup()
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     rng = MersenneTwister(SEED + 103)
 
     @testset "600 random cases per call" begin

@@ -1,4 +1,4 @@
-# State benchmark: NeoSpice against CSPICE (SPICE.jl) against ANISE (anise_jll).
+# State benchmark: Allspice against CSPICE (SPICE.jl) against ANISE (anise_jll).
 #
 #     julia --startup-file=no --threads=8 --project=bench bench/states.jl
 #
@@ -10,12 +10,12 @@
 #
 # Further cases: the same epochs in random order (defeats a cache of the last record),
 # the Moon relative to the Sun (longer chain: 301 -> 3 -> 0 <- 10), and the throughput
-# of NeoSpice on all threads (through a context and on a `KernelSet` snapshot). CSPICE is not thread safe and is never called from a task.
-# Set NEOSPICE_BENCH_ANISE_THREADS=1 to add the threaded throughput of ANISE.
+# of Allspice on all threads (through a context and on a `KernelSet` snapshot). CSPICE is not thread safe and is never called from a task.
+# Set ALLSPICE_BENCH_ANISE_THREADS=1 to add the threaded throughput of ANISE.
 
 include("common.jl")
 include("anise.jl")
-using NeoSpice
+using Allspice
 import SPICE
 
 require_kernels(Kernels.DE440S)
@@ -91,7 +91,7 @@ end
 """
     check_agreement(ctx, alm, epochs, targ, obs) -> NamedTuple
 
-Largest absolute differences (km, km/s) of NeoSpice and of ANISE from CSPICE over
+Largest absolute differences (km, km/s) of Allspice and of ANISE from CSPICE over
 `epochs`. Throws if a difference is above 1e-4 km or 1e-9 km/s: the engines would then
 not compute the same thing.
 """
@@ -108,7 +108,7 @@ function check_agreement(ctx, alm, epochs, targ, obs)
             va = max(va, maximum(abs.(a[SVector(4, 5, 6)] .- c[4:6])))
         end
     end
-    @assert dn <= 1e-4 && vn <= 1e-9 "NeoSpice differs from CSPICE: $dn km, $vn km/s"
+    @assert dn <= 1e-4 && vn <= 1e-9 "Allspice differs from CSPICE: $dn km, $vn km/s"
     @assert da <= 1e-4 && va <= 1e-9 "ANISE differs from CSPICE: $da km, $va km/s"
     return (; neo_km=dn, neo_kms=vn, anise_km=da, anise_kms=va)
 end
@@ -146,7 +146,7 @@ function main()
     SPICE.kclear(); SPICE.furnsh(Kernels.DE440S)
     ctx = SpiceContext(); furnsh(ctx, Kernels.DE440S)
     kclear(); furnsh(Kernels.DE440S)
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     alm = try
         anise_almanac(Kernels.DE440S)
     catch e
@@ -158,20 +158,20 @@ function main()
     println("ANISE library: ", alm === nothing ? "none" : anise_version())
     agree = check_agreement(ctx, alm, epochs, EARTH, MOON)
     agree2 = check_agreement(ctx, alm, epochs, MOON, SUN)
-    @printf("agreement with CSPICE, Earth rel. Moon: NeoSpice %.2e km %.2e km/s; ANISE %.2e km %.2e km/s\n",
+    @printf("agreement with CSPICE, Earth rel. Moon: Allspice %.2e km %.2e km/s; ANISE %.2e km %.2e km/s\n",
         agree.neo_km, agree.neo_kms, agree.anise_km, agree.anise_kms)
-    @printf("agreement with CSPICE, Moon rel. Sun:   NeoSpice %.2e km %.2e km/s; ANISE %.2e km %.2e km/s\n",
+    @printf("agreement with CSPICE, Moon rel. Sun:   Allspice %.2e km %.2e km/s; ANISE %.2e km %.2e km/s\n",
         agree2.neo_km, agree2.neo_kms, agree2.anise_km, agree2.anise_kms)
 
     rows = Row[]
     g = "Earth rel. Moon, ordered"
-    push!(rows, bench_row(g, "NeoSpice spkezr, integer IDs, context", loop_neo_ids, ctx, epochs, EARTH, MOON; n))
+    push!(rows, bench_row(g, "Allspice spkezr, integer IDs, context", loop_neo_ids, ctx, epochs, EARTH, MOON; n))
     base = rows[end]
-    push!(rows, bench_row(g, "NeoSpice spkezr, names, context", loop_neo_names, ctx, epochs; n))
-    push!(rows, bench_row(g, "NeoSpice spkezr, integer IDs, default context", loop_neo_default, epochs; n))
-    push!(rows, bench_row(g, "NeoSpice spkezr, integer IDs, KernelSet", loop_neo_ks, ks, epochs; n))
+    push!(rows, bench_row(g, "Allspice spkezr, names, context", loop_neo_names, ctx, epochs; n))
+    push!(rows, bench_row(g, "Allspice spkezr, integer IDs, default context", loop_neo_default, epochs; n))
+    push!(rows, bench_row(g, "Allspice spkezr, integer IDs, KernelSet", loop_neo_ks, ks, epochs; n))
     for N in 0:3
-        push!(rows, bench_row(g, "NeoSpice spkder Val($N)", loop_neo_der, ctx, epochs, Val(N); n))
+        push!(rows, bench_row(g, "Allspice spkder Val($N)", loop_neo_der, ctx, epochs, Val(N); n))
     end
     push!(rows, bench_row(g, "CSPICE spkezr (SPICE.jl, names)", loop_cspice_ezr, epochs, "EARTH", "MOON"; n))
     push!(rows, bench_row(g, "CSPICE spkgeo (SPICE.jl, integer IDs)", loop_cspice_geo, epochs, EARTH, MOON; n))
@@ -179,14 +179,14 @@ function main()
         push!(rows, bench_row(g, "ANISE spk_ezr (C interface)", loop_anise, alm, epochs, EARTH, MOON, out; n))
 
     g = "Earth rel. Moon, random order"
-    push!(rows, bench_row(g, "NeoSpice spkezr, integer IDs, context", loop_neo_ids, ctx, shuffled, EARTH, MOON; n))
+    push!(rows, bench_row(g, "Allspice spkezr, integer IDs, context", loop_neo_ids, ctx, shuffled, EARTH, MOON; n))
     push!(rows, bench_row(g, "CSPICE spkezr (SPICE.jl, names)", loop_cspice_ezr, shuffled, "EARTH", "MOON"; n))
     push!(rows, bench_row(g, "CSPICE spkgeo (SPICE.jl, integer IDs)", loop_cspice_geo, shuffled, EARTH, MOON; n))
     alm === nothing ||
         push!(rows, bench_row(g, "ANISE spk_ezr (C interface)", loop_anise, alm, shuffled, EARTH, MOON, out; n))
 
     g = "Moon rel. Sun, ordered"
-    push!(rows, bench_row(g, "NeoSpice spkezr, integer IDs, context", loop_neo_ids, ctx, epochs, MOON, SUN; n))
+    push!(rows, bench_row(g, "Allspice spkezr, integer IDs, context", loop_neo_ids, ctx, epochs, MOON, SUN; n))
     push!(rows, bench_row(g, "CSPICE spkezr (SPICE.jl, names)", loop_cspice_ezr, epochs, "MOON", "SUN"; n))
     push!(rows, bench_row(g, "CSPICE spkgeo (SPICE.jl, integer IDs)", loop_cspice_geo, epochs, MOON, SUN; n))
     alm === nothing ||
@@ -201,15 +201,15 @@ function main()
     thr = IOBuffer()
     println(thr, "| Engine | threads | queries/s | speed-up |")
     println(thr, "|---|---:|---:|---:|")
-    @printf(thr, "| NeoSpice spkezr, integer IDs, context | 1 | %.3e | 1.00 |\n", t1)
-    nt > 1 && @printf(thr, "| NeoSpice spkezr, integer IDs, context | %d | %.3e | %.2f |\n", nt, tn, tn / t1)
+    @printf(thr, "| Allspice spkezr, integer IDs, context | 1 | %.3e | 1.00 |\n", t1)
+    nt > 1 && @printf(thr, "| Allspice spkezr, integer IDs, context | %d | %.3e | %.2f |\n", nt, tn, tn / t1)
     # The same queries on the snapshot itself: no read of the context reference per query.
     qks(i) = spkezr(ks, EARTH, @inbounds(epochs[i%n+1]), J2000, "NONE", MOON)[1][1]
     k1 = throughput(qks, total, 1)
     kn = nt > 1 ? throughput(qks, total, nt) : k1
-    @printf(thr, "| NeoSpice spkezr, integer IDs, KernelSet | 1 | %.3e | 1.00 |\n", k1)
-    nt > 1 && @printf(thr, "| NeoSpice spkezr, integer IDs, KernelSet | %d | %.3e | %.2f |\n", nt, kn, kn / k1)
-    if alm !== nothing && get(ENV, "NEOSPICE_BENCH_ANISE_THREADS", "0") == "1"
+    @printf(thr, "| Allspice spkezr, integer IDs, KernelSet | 1 | %.3e | 1.00 |\n", k1)
+    nt > 1 && @printf(thr, "| Allspice spkezr, integer IDs, KernelSet | %d | %.3e | %.2f |\n", nt, kn, kn / k1)
+    if alm !== nothing && get(ENV, "ALLSPICE_BENCH_ANISE_THREADS", "0") == "1"
         qanise(i) = begin
             o = Ref(AniseState())
             anise_spk_ezr(alm, EARTH, @inbounds(epochs[i%n+1]), J2000, MOON, o)
@@ -222,14 +222,14 @@ function main()
     end
     nt == 1 && println("one thread only: run with --threads=8 for the throughput on threads")
 
-    text = run_header("State benchmark: NeoSpice, CSPICE, ANISE") * """
+    text = run_header("State benchmark: Allspice, CSPICE, ANISE") * """
     Kernel: `$(Kernels.DE440S)` only, in every engine. ANISE library $(alm === nothing ? "not available" : anise_version()).
     Epochs: 100, evenly spaced from 1900-01-01 12:00 ET to 2099-01-01 12:00 ET (end excluded).
     Frame J2000, no aberration correction.
 
     Largest difference from CSPICE on the timed queries:
 
-    | Query | NeoSpice km | NeoSpice km/s | ANISE km | ANISE km/s |
+    | Query | Allspice km | Allspice km/s | ANISE km | ANISE km/s |
     |---|---:|---:|---:|---:|
     | Earth rel. Moon | $(@sprintf("%.2e", agree.neo_km)) | $(@sprintf("%.2e", agree.neo_kms)) | $(@sprintf("%.2e", agree.anise_km)) | $(@sprintf("%.2e", agree.anise_kms)) |
     | Moon rel. Sun | $(@sprintf("%.2e", agree2.neo_km)) | $(@sprintf("%.2e", agree2.neo_kms)) | $(@sprintf("%.2e", agree2.anise_km)) | $(@sprintf("%.2e", agree2.anise_kms)) |

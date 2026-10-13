@@ -2,9 +2,9 @@
 #
 # The functions call the `_c` routines of the C library directly, as `mathoracle.jl`
 # does, for two reasons: the wrappers of SPICE.jl give the long error message only, and
-# the tests need the short one (the `kind` of the `SpiceError` of NeoSpice); and the
+# the tests need the short one (the `kind` of the `SpiceError` of Allspice); and the
 # wrappers of `gfuds` and `gfudb` pass the scalar function to the callbacks, a form that
-# NeoSpice does not use. A CSPICE error becomes a `GFO.CError` with the short message as
+# Allspice does not use. A CSPICE error becomes a `GFO.CError` with the short message as
 # a lower-case symbol.
 #
 # Every search returns the result window as a `Vector{Float64}` of end points. CSPICE is
@@ -232,14 +232,14 @@ end # module GFO
 Module in which `@gf_light` evaluates the body of a group. Its compiler options ask for
 the interpreter, so Julia does not infer and optimize a test body of some hundred lines
 that runs once. Measured on the fifteen geometry groups: the compilation of the bodies
-takes about 40 percent of the compilation time of the groups. The code of NeoSpice, the
+takes about 40 percent of the compilation time of the groups. The code of Allspice, the
 calls into CSPICE and the functions that the test files define at top level belong to
 other modules and are compiled as usual; allocation and inference checks are therefore
 not changed.
 """
 module GFLight
 Base.Experimental.@compiler_options compile=min optimize=0 infer=false
-using Test, Random, LinearAlgebra, Printf, StaticArrays, NeoSpice
+using Test, Random, LinearAlgebra, Printf, StaticArrays, Allspice
 end
 
 """
@@ -270,7 +270,7 @@ end
     gf_pick(i, stride) -> Bool
 
 True if case `i` (counted from 1) of a loop over a product of options belongs to this
-run: every case in the exhaustive run (`NEOSPICE_TEST_FULL=1`), each `stride`-th case
+run: every case in the exhaustive run (`ALLSPICE_TEST_FULL=1`), each `stride`-th case
 in the default run. A stride without a common factor with the sizes of the inner loops
 spreads the cases of the default run over all the options. Requires `stride >= 1`.
 """
@@ -282,7 +282,7 @@ end
 "Number of cases `1:n` that `gf_pick` selects with `stride`."
 gf_npick(n::Integer, stride::Integer) = FULL ? Int(n) : n ÷ stride
 
-"Largest end-point difference in seconds between NeoSpice and CSPICE, by label."
+"Largest end-point difference in seconds between Allspice and CSPICE, by label."
 const GF_MAXDIFF = Dict{String,Float64}()
 "Number of searches compared, by label."
 const GF_COUNT = Dict{String,Int}()
@@ -412,20 +412,20 @@ const GF_ABCORRS = ("NONE", "LT", "LT+S", "CN", "CN+S", "XLT", "XLT+S", "XCN", "
     gf_reference(rng, q, cn, rel, withadjust) -> (refval, adjust)
 
 Reference value and adjust value for a search of the quantity `q` (a `GFQuantity` of
-NeoSpice) on the window `cn`: for `<`, `=`, `>` a value between the quartiles of the
+Allspice) on the window `cn`: for `<`, `=`, `>` a value between the quartiles of the
 quantity on the window, so that the search has roots; for an absolute extremum with
 `withadjust` a tenth to a third of the range of the quantity.
 """
 function gf_reference(rng::AbstractRNG, q, cn::Window, rel::AbstractString, withadjust::Bool)
     ts = range(cn[1], cn[end]; length=60)
-    vals = [NeoSpice._gf_value(q, Float64(t)) for t in ts]
+    vals = [Allspice._gf_value(q, Float64(t)) for t in ts]
     lo, hi = quantile_of(vals, 0.25), quantile_of(vals, 0.75)
     refval = rel in ("<", "=", ">") ? lo + (hi - lo) * rand(rng) : 0.0
     adjust = withadjust ? (0.1 + 0.2 * rand(rng)) * (maximum(vals) - minimum(vals)) : 0.0
     return refval, adjust
 end
 
-# User functions and callbacks of the tests behind fixed types. NeoSpice compiles a search
+# User functions and callbacks of the tests behind fixed types. Allspice compiles a search
 # anew for each type of the user function, of the step function and of each callback
 # (0.2 s to 1.2 s for each), and an anonymous function has a type of its own. With the
 # types below the tests compile each search once; the values are those of the wrapped
@@ -482,7 +482,7 @@ function gf_kind(f)
     try
         f()
     catch e
-        e isa NeoSpice.SpiceError || rethrow()
+        e isa Allspice.SpiceError || rethrow()
         return e.kind
     end
     return :none

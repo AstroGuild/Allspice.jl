@@ -2,7 +2,7 @@
 # time, as one flat array of Chebyshev coefficients on intervals of equal length. A
 # query needs no kernel set, no segment search and no chain of bodies, so it is suited
 # to the inner loop of an optimizer and to a GPU kernel (the table is an `isbits` value
-# when its array is one, see `ext/NeoSpiceAdaptExt.jl`).
+# when its array is one, see `ext/AllspiceAdaptExt.jl`).
 
 """
     EphemerisTable{T,A<:AbstractVector{T}}

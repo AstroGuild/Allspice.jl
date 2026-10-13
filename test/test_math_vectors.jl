@@ -5,14 +5,14 @@
 # Each function runs on several hundred seeded random inputs with magnitudes from 1e-10
 # to 1e10, mixed with the degenerate inputs (zero vector, unit axes, equal, parallel and
 # opposite pairs, very small and very large components). The limit of each function is
-# 0 where NeoSpice has the operation order of the `_c` function, and a few units of
+# 0 where Allspice has the operation order of the `_c` function, and a few units of
 # rounding where CSPICE runs the f2c routine with another order.
 
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -31,7 +31,7 @@ infinite number: it converts the logarithm of the number to an integer and uses 
 result as a subscript of the table `ipower` (dpstr.c, lines 368 to 397), and the
 subscript check of f2c then stops the whole process. Contract: the function makes the
 same CSPICE calls as `dvsep_` before the quotient (`dvhat_c`, `vcrss_c`, `vdot_c`), which
-signal no error, and it does not call NeoSpice.
+signal no error, and it does not call Allspice.
 """
 function dvsep_overflows(s1, s2)
     u1, u2 = CS.dvhat(s1), CS.dvhat(s2)
@@ -48,7 +48,7 @@ product and its derivative with `dvcrss_`, and that intermediate result has an e
 that is not finite (a velocity above about 1e8 with the position 1e-300 becomes
 infinite, and infinity times zero is NaN). CSPICE then returns numbers without meaning:
 the macro `max` of f2c (f2c.h, line 392) drops a NaN operand, so `vperp_` (vperp.c, lines
-178 and 182) can take a NaN velocity for a zero velocity. NeoSpice returns NaN.
+178 and 182) can take a NaN velocity for a zero velocity. Allspice returns NaN.
 Contract: the function repeats the scaling of `ducrss_` and calls `dvcrss_c` only.
 """
 function ducrss_overflows(s1, s2)
@@ -147,7 +147,7 @@ group("12. math: vectors and matrices") do
             versus!(t, :xpose, () -> xpose(m1), () -> CS.xpose(m1))
             m6 = rmag(rng) * randn(rng, 6, 6)
             versus!(t, :xpose6, () -> xpose6(m6), () -> CS.xpose6(m6))
-            versus!(t, :det, () -> NeoSpice.det(m1), () -> CS.det(m1))
+            versus!(t, :det, () -> Allspice.det(m1), () -> CS.det(m1))
             versus!(t, :trace, () -> trace(m1), () -> CS.trace(m1))
             # singular matrices: a repeated row, and a tiny determinant
             ms = rand(rng) < 0.2 ? vcat(m1[1:2, :], m1[1:1, :]) : rand(rng) < 0.1 ? 1e-6 * m1 / maximum(abs, m1) : m1
@@ -303,7 +303,7 @@ group("12. math: vectors and matrices") do
         @test throws_kind(() -> vaddg([1.0, 2.0], [1.0]), :badarg)
         @test throws_kind(() -> mxmg(zeros(2, 3), zeros(2, 3)), :badarg)
         # The accuracy defect of `vsepg_c`: for two directions 1e-9 rad apart it loses
-        # half of the digits, and NeoSpice does not.
+        # half of the digits, and Allspice does not.
         u = [1.0, 0.0, 0.0, 0.0]
         w = [cos(1e-9), sin(1e-9), 0.0, 0.0]
         @test abs(vsepg(u, w) - 1e-9) < 1e-24
@@ -355,16 +355,16 @@ group("12. math: vectors and matrices") do
         @test ducrss(s, s2)[SVector(4, 5, 6)] ≈
               ForwardDiff.derivative(τ -> ucrss(pos(s, τ), pos(s2, τ)), 0.0) rtol = 1e-13
         # a Taylor time series passes through the smooth calls: r(t) = a + b t
-        tt = NeoSpice.taylor_var(0.0, Val(2))
+        tt = Allspice.taylor_var(0.0, Val(2))
         r = SVector(a[1] + b[1] * tt, a[2] + b[2] * tt, a[3] + b[3] * tt)
         nrm = vnorm(r)
-        @test nrm isa NeoSpice.Taylor{2,Float64}
-        @test NeoSpice.derivatives(nrm)[1] == vnorm(a)
-        @test NeoSpice.derivatives(nrm)[2] ≈ vdot(a, b) / vnorm(a) rtol = 1e-14
-        @test NeoSpice.derivatives(vhat(r)[1])[2] ≈ dvhat(vcat(a, b))[4] rtol = 1e-14
-        @test NeoSpice.derivatives(rotate(tt, 1)[2, 3])[2] == 1.0
-        @test NeoSpice.derivatives(mxv(rotate(0.3 * tt, 3), r)[1])[1] == a[1]
-        @test NeoSpice.derivatives(vcrss(r, b)[1])[1] == vcrss(a, b)[1]
+        @test nrm isa Allspice.Taylor{2,Float64}
+        @test Allspice.derivatives(nrm)[1] == vnorm(a)
+        @test Allspice.derivatives(nrm)[2] ≈ vdot(a, b) / vnorm(a) rtol = 1e-14
+        @test Allspice.derivatives(vhat(r)[1])[2] ≈ dvhat(vcat(a, b))[4] rtol = 1e-14
+        @test Allspice.derivatives(rotate(tt, 1)[2, 3])[2] == 1.0
+        @test Allspice.derivatives(mxv(rotate(0.3 * tt, 3), r)[1])[1] == a[1]
+        @test Allspice.derivatives(vcrss(r, b)[1])[1] == vcrss(a, b)[1]
     end
 
     @apart @testset "inferred types and no allocation for static arguments" begin
@@ -384,7 +384,7 @@ group("12. math: vectors and matrices") do
             (vpack, (1.0, 2.0, 3.0), V3), (vupack, (a,), NTuple{3,Float64}), (ucrss, (a, b), V3),
             (vtmv, (a, m, b), Float64), (mxv, (m, a), V3), (mtxv, (m, a), V3), (mxm, (m, m), M3),
             (mtxm, (m, m), M3), (mxmt, (m, m), M3), (xpose, (m,), M3), (xpose6, (m6,), M6),
-            (NeoSpice.det, (m,), Float64), (trace, (m,), Float64), (invert, (m,), M3),
+            (Allspice.det, (m,), Float64), (trace, (m,), Float64), (invert, (m,), M3),
             (invort, (m,), M3), (isrot, (m, 1e-10, 1e-10), Bool), (ident, (), M3),
             (rotate, (0.3, 2), M3), (rotmat, (m, 0.3, 2), M3), (rotvec, (a, 0.3, 2), V3),
             (twovec, (a, 1, b, 2), M3), (twovxf, (s, 1, s2, 2), M6), (dvhat, (s,), V6),

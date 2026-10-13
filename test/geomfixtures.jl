@@ -1,5 +1,5 @@
 # Fixtures of the geometry groups: direct calls into CSPICE, an instrument kernel that
-# the tests write, DSK files for the Moon that the tests write with the NeoSpice DSK
+# the tests write, DSK files for the Moon that the tests write with the Allspice DSK
 # writer, and synthetic bodies for the occultation cases.
 #
 # CSPICE is called from the main task only. Each direct call ends with `c_check`, which
@@ -244,7 +244,7 @@ function g_drdazl(range, az, el, azccw, elplsz)
     return permutedims(j)
 end
 
-"`pdpool_c` and `pdpool` of NeoSpice with the same values."
+"`pdpool_c` and `pdpool` of Allspice with the same values."
 function both_pdpool(ctx, name, values)
     v = collect(Float64, values)
     ccall((:pdpool_c, GEOLIB), Cvoid, (Cstring, Cint, Ptr{Float64}), name, length(v), v)
@@ -253,7 +253,7 @@ function both_pdpool(ctx, name, values)
     return nothing
 end
 
-"`pcpool_c` and `pcpool` of NeoSpice with one string."
+"`pcpool_c` and `pcpool` of Allspice with one string."
 function both_pcpool(ctx, name, value::AbstractString)
     buf = zeros(UInt8, 81)
     copyto!(buf, codeunits(value))
@@ -263,7 +263,7 @@ function both_pcpool(ctx, name, value::AbstractString)
     return nothing
 end
 
-"Remove the pool variable `name` from CSPICE and from the NeoSpice context."
+"Remove the pool variable `name` from CSPICE and from the Allspice context."
 function both_dvpool(ctx, name)
     ccall((:dvpool_c, GEOLIB), Cvoid, (Cstring,), name)
     c_check()
@@ -284,7 +284,7 @@ const GEO_IDS = Dict("SUN" => 10, "MERCURY" => 199, "VENUS" => 299, "EARTH" => 3
 "Random epochs of the geometry groups: 1990 to 2010 (ET seconds), inside all kernels."
 geo_epoch(rng) = (rand(rng) - 0.5) * 6.0e8
 
-"The error kinds of CSPICE and of NeoSpice for the same call."
+"The error kinds of CSPICE and of Allspice for the same call."
 kinds(cf, nf) = (c_kind(cf), neo_kind(nf))
 
 # ---------------------------------------------------------------------------------------
@@ -448,7 +448,7 @@ const GEO_DSK_PATH = Ref("")
 """
     geo_moon_dsk() -> String
 
-Write (once per process), with the DSK writer of NeoSpice, a DSK file for the Moon in
+Write (once per process), with the DSK writer of Allspice, a DSK file for the Moon in
 the frame `IAU_MOON`: surface 1 is a tessellated ellipsoid with the radii of the Moon
 (120 by 60 grid), surface 2 a rough closed surface (radius 1737.4 km, ±1.5 percent,
 90 by 45 grid). Return its path.
@@ -494,7 +494,7 @@ end
 geo_kernels(; dsk::Bool=false) = dsk ? [Kernels.full_set()..., geo_instrument_kernel(), geo_moon_dsk()] :
                                  [Kernels.full_set()..., geo_instrument_kernel()]
 
-"Load the geometry kernels in CSPICE and in a new NeoSpice context, which is returned."
+"Load the geometry kernels in CSPICE and in a new Allspice context, which is returned."
 function geo_setup(; dsk::Bool=false)
     paths = geo_kernels(; dsk)
     oracle_load(paths)
@@ -524,12 +524,12 @@ function greport(title, s::GeoStats)
     return nothing
 end
 
-"True if CSPICE and NeoSpice raise an error of the same kind (and of the kind `expect`, if given)."
+"True if CSPICE and Allspice raise an error of the same kind (and of the kind `expect`, if given)."
 function same_kind(cf, nf; expect=nothing)
     kc = c_kind(cf)
     kn = neo_kind(nf)
     ok = kc !== nothing && kc == kn && (expect === nothing || kn == expect)
-    ok || println("  error kinds: CSPICE ", repr(kc), ", NeoSpice ", repr(kn), ", expected ", repr(expect))
+    ok || println("  error kinds: CSPICE ", repr(kc), ", Allspice ", repr(kn), ", expected ", repr(expect))
     return ok
 end
 
@@ -557,7 +557,7 @@ const GEO_OCC_SPAN = 2000.0
 """
     geo_occult_kernels() -> (spk, tk)
 
-Write (once per process), with the SPK writers of NeoSpice, the ephemerides of the
+Write (once per process), with the SPK writers of Allspice, the ephemerides of the
 synthetic bodies of the occultation cases, for ET in ±$(GEO_OCC_SPAN) s, and a text
 kernel with their names, radii and body-fixed frames:
 

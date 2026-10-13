@@ -23,7 +23,7 @@ az_alloc_rd(a, b, c) = @allocated drdazl(a, b, c, true, false)
 
 @gf_light group("geom_azel: azlrec, recazl, dazldr, drdazl, azlcpo", Kernels.FULL_SET_FILES...) do
     ctx = geo_setup()
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     rng = MersenneTwister(SEED + 104)
 
     @testset "coordinates and Jacobians, 1000 random cases" begin

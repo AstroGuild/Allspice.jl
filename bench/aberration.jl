@@ -1,4 +1,4 @@
-# Aberration benchmark: NeoSpice against CSPICE (SPICE.jl).
+# Aberration benchmark: Allspice against CSPICE (SPICE.jl).
 #
 #     julia --startup-file=no --project=bench bench/aberration.jl
 #
@@ -7,7 +7,7 @@
 # Both engines load de440s.bsp only.
 
 include("common.jl")
-using NeoSpice
+using Allspice
 import SPICE
 
 require_kernels(Kernels.DE440S)
@@ -64,24 +64,24 @@ function main()
 
     rows = Row[]
     g = "Earth rel. Moon, J2000"
-    push!(rows, bench_row(g, "NeoSpice spkezr NONE", loop_neo_ezr, ctx, epochs, "NONE"; n))
+    push!(rows, bench_row(g, "Allspice spkezr NONE", loop_neo_ezr, ctx, epochs, "NONE"; n))
     base = rows[end]
     for ab in ("LT", "LT+S", "CN+S")
-        push!(rows, bench_row(g, "NeoSpice spkezr $ab", loop_neo_ezr, ctx, epochs, ab; n))
+        push!(rows, bench_row(g, "Allspice spkezr $ab", loop_neo_ezr, ctx, epochs, ab; n))
     end
-    push!(rows, bench_row(g, "NeoSpice spkezr Aberration(\"CN+S\")", loop_neo_ezr, ctx, epochs, Aberration("CN+S"); n))
+    push!(rows, bench_row(g, "Allspice spkezr Aberration(\"CN+S\")", loop_neo_ezr, ctx, epochs, Aberration("CN+S"); n))
     for ab in ("NONE", "LT", "LT+S", "CN+S")
         push!(rows, bench_row(g, "CSPICE spkezr $ab", loop_cspice_ezr, epochs, ab; n))
     end
     for ab in ("LT+S", "CN+S")
-        push!(rows, bench_row(g, "NeoSpice spkpos $ab", loop_neo_pos, ctx, epochs, ab; n))
+        push!(rows, bench_row(g, "Allspice spkpos $ab", loop_neo_pos, ctx, epochs, ab; n))
         push!(rows, bench_row(g, "CSPICE spkpos $ab", loop_cspice_pos, epochs, ab; n))
     end
     for ab in ("LT+S", "CN+S"), N in 1:3
-        push!(rows, bench_row(g, "NeoSpice spkder $ab Val($N)", loop_neo_der, ctx, epochs, ab, Val(N); n))
+        push!(rows, bench_row(g, "Allspice spkder $ab Val($N)", loop_neo_der, ctx, epochs, ab, Val(N); n))
     end
 
-    text = run_header("Aberration benchmark: NeoSpice, CSPICE") * """
+    text = run_header("Aberration benchmark: Allspice, CSPICE") * """
     Kernel: `$(Kernels.DE440S)` only, in both engines.
     Epochs: 100, evenly spaced from 1900-01-01 12:00 ET to 2099-01-01 12:00 ET (end excluded).
 

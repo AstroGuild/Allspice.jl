@@ -8,7 +8,7 @@
 #   (a) data area, double by double (bit equality), over the whole address range of
 #       every array, read with `dafgda` of both engines from both files;
 #   (b) descriptors and segment names;
-#   (c) what CSPICE reads from the NeoSpice file (`spkgeo`, `ckgpav`, `ckgp`) against
+#   (c) what CSPICE reads from the Allspice file (`spkgeo`, `ckgpav`, `ckgp`) against
 #       what it reads from its own file;
 #   (d) comments, written with `dafac` and read with `dafec`, in both directions;
 #   (e) many segments in one file, past one summary record, and appending;
@@ -21,8 +21,8 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -125,7 +125,7 @@ end
 # File comparison
 # ---------------------------------------------------------------------------------------
 
-"Everything in the DAF `path` as NeoSpice reads it: summaries, names, arrays, comments, file record."
+"Everything in the DAF `path` as Allspice reads it: summaries, names, arrays, comments, file record."
 function neo_dump(path::AbstractString)
     h = dafopr(path)
     try
@@ -186,10 +186,10 @@ end
 """
     compare_files(pc, pn) -> NamedTuple
 
-Compare the file `pc` that CSPICE wrote with the file `pn` that NeoSpice wrote. The
+Compare the file `pc` that CSPICE wrote with the file `pn` that Allspice wrote. The
 reference is CSPICE reading its own file. `words` is the number of data doubles,
 `badwords` the number that differ in any of the three other readings (CSPICE reads the
-NeoSpice file; NeoSpice reads each file). `bytes` is true if the two files are equal
+Allspice file; Allspice reads each file). `bytes` is true if the two files are equal
 byte for byte.
 """
 function compare_files(pc::AbstractString, pn::AbstractString)
@@ -973,7 +973,7 @@ end
 
 "Hand-written type 1 SCLK kernel for the spacecraft -77: 256 ticks in a second, one partition, TDB."
 function write_sclk(dir::AbstractString)
-    path = joinpath(dir, "neospice_test.tsc")
+    path = joinpath(dir, "allspice_test.tsc")
     write(path, """
     KPL/SCLK
 
@@ -1137,7 +1137,7 @@ group("9. DAF access, SPK and CK writers") do
         @test throws_kind(() -> c.neo(h, b), :invalidrefframe)      # not in the default context
         spkw13(h, b.body, b.center, b.frame, b.first, b.last, b.segid, b.degree, b.states, b.epochs; ctx=ctx)
         spkw13(h, b.body, b.center, b.frame, b.first, b.last, b.segid, b.degree, b.states, b.epochs;
-            ctx=NeoSpice.kernelset(ctx))
+            ctx=Allspice.kernelset(ctx))
         spkcls(h)
         d = neo_dump(p)
         @test [s[2][3] for s in d.sums] == [1977001, 1977001]
@@ -1227,13 +1227,13 @@ group("9. DAF access, SPK and CK writers") do
         segs = [c13.gen(rng, k) for k in 1:57]
         pall, nall = write_both(c13, dir, "append_all", segs)
         pcn, pnc = write_both(c13, dir, "append_part", segs[1:23])
-        hn = spkopa(pcn)                             # CSPICE began the file, NeoSpice appends
+        hn = spkopa(pcn)                             # CSPICE began the file, Allspice appends
         foreach(a -> c13.neo(hn, a), segs[24:40])
         spkcls(hn)
         hn = dafopw(pcn)
         foreach(a -> c13.neo(hn, a), segs[41:57])
         dafcls(hn)
-        hc = SPICE.spkopa(pnc)                       # NeoSpice began the file, CSPICE appends
+        hc = SPICE.spkopa(pnc)                       # Allspice began the file, CSPICE appends
         foreach(a -> c13.cspice(hc, a), segs[24:57])
         SPICE.spkcls(hc)
         for p in (pcn, pnc)
@@ -1291,10 +1291,10 @@ group("9. DAF access, SPK and CK writers") do
             nbytes += r.bytes
             # Cross direction: each engine appends to the file of the other.
             hc = SPICE.dafopw(pn)
-            SPICE.dafac(hc, ["appended by CSPICE", " to the NeoSpice file"])
+            SPICE.dafac(hc, ["appended by CSPICE", " to the Allspice file"])
             SPICE.dafcls(hc)
             hn = dafopw(pc)
-            dafac(hn, ["appended by CSPICE", " to the NeoSpice file"])
+            dafac(hn, ["appended by CSPICE", " to the Allspice file"])
             dafcls(hn)
             r2 = compare_files(pc, pn)
             @test files_agree(r2)
@@ -1374,11 +1374,11 @@ group("9. DAF access, SPK and CK writers") do
         short = joinpath(dir, "short.bsp")
         write(short, "DAF/SPK ")
         @test throws_kind(() -> dafopr(short), :filereadfailed)
-        @test throws_kind(() -> NeoSpice.dafonw(joinpath(dir, "p.daf"), " ", 2, 6, "X", 0), :blankfiletype)
-        @test throws_kind(() -> NeoSpice.dafonw(joinpath(dir, "p.daf"), "SPK", 125, 6, "X", 0), :dafinvalidparams)
-        @test throws_kind(() -> NeoSpice.dafonw(joinpath(dir, "p.daf"), "SPK", 2, 1, "X", 0), :dafinvalidparams)
-        @test throws_kind(() -> NeoSpice.dafonw(joinpath(dir, "p.daf"), "SPK", 124, 6, "X", 0), :dafinvalidparams)
-        @test throws_kind(() -> NeoSpice.dafonw(joinpath(dir, "p.daf"), "SPK", 2, 6, "X", -1), :dafnoresv)
+        @test throws_kind(() -> Allspice.dafonw(joinpath(dir, "p.daf"), " ", 2, 6, "X", 0), :blankfiletype)
+        @test throws_kind(() -> Allspice.dafonw(joinpath(dir, "p.daf"), "SPK", 125, 6, "X", 0), :dafinvalidparams)
+        @test throws_kind(() -> Allspice.dafonw(joinpath(dir, "p.daf"), "SPK", 2, 1, "X", 0), :dafinvalidparams)
+        @test throws_kind(() -> Allspice.dafonw(joinpath(dir, "p.daf"), "SPK", 124, 6, "X", 0), :dafinvalidparams)
+        @test throws_kind(() -> Allspice.dafonw(joinpath(dir, "p.daf"), "SPK", 2, 6, "X", -1), :dafnoresv)
         @test !ispath(joinpath(dir, "p.daf"))
     end
 
@@ -1495,7 +1495,7 @@ group("9. DAF access, SPK and CK writers") do
 
         # The generic array calls with another summary format (ND = 3, NI = 5).
         pg = joinpath(dir, "generic.daf")
-        hg = NeoSpice.dafonw(pg, "TEST", 3, 5, "GENERIC DAF", 1)
+        hg = Allspice.dafonw(pg, "TEST", 3, 5, "GENERIC DAF", 1)
         arrays = [randn(rng, n) for n in (1, 127, 128, 129, 1000, 0, 5)]
         for round in 1:4, (j, v) in enumerate(arrays)
             dafbna(hg, dafps([j, round, 0.5], [j, round, 7, 0, 0]), "ARRAY $j OF ROUND $round")
@@ -1603,7 +1603,7 @@ group("9. DAF access, SPK and CK writers") do
         end
         @test_throws SPICE.SpiceError SPICE.getfat(joinpath(dir, "missing.bsp"))
         @test endswith(tkvrsn("TOOLKIT"), "/" * SPICE.tkvrsn("TOOLKIT"))
-        @test tkvrsn() == tkvrsn(:toolkit) && startswith(tkvrsn(), "NeoSpice_v")
+        @test tkvrsn() == tkvrsn(:toolkit) && startswith(tkvrsn(), "Allspice_v")
         @test tkvrsn("SPKW13") == "No version found."
     end
 
@@ -1627,7 +1627,7 @@ group("9. DAF access, SPK and CK writers") do
         tk1 = joinpath(dir, "vars_1.tpc")
         write(tk1, "KPL/PCK\n\\begindata\nBODY-501_TEST = ( 1.0 2.0 )\n\\begintext\n")
         tk2 = joinpath(dir, "vars_2.tf")
-        write(tk2, "KPL/FK\n\\begindata\nNEOSPICE_TEST_VALUE = ( 3.0 )\n\\begintext\n")
+        write(tk2, "KPL/FK\n\\begindata\nALLSPICE_TEST_VALUE = ( 3.0 )\n\\begintext\n")
         mk = joinpath(dir, "set.tm")
         write(mk, "KPL/MK\n\\begindata\nKERNELS_TO_LOAD = ( '$tk2',\n '$spk2' )\n\\begintext\n")
         order = [spk1, tk1, mk, spk1]
@@ -1646,7 +1646,7 @@ group("9. DAF access, SPK and CK writers") do
             end
         end
         @test worst < 1e-11
-        measured(@sprintf("  %-58s max rel=%.3e", "furnsh of a NeoSpice file: spkgeo vs CSPICE", worst))
+        measured(@sprintf("  %-58s max rel=%.3e", "furnsh of a Allspice file: spkgeo vs CSPICE", worst))
         # Load-list information.
         kinds = ("ALL", "all", "SPK", "spk", "CK", "PCK", "EK", "TEXT", "META", "SPK TEXT", "text  meta ",
             "SPK PCK CK EK TEXT META", "FOO", "SPK FOO", " ")
@@ -1661,7 +1661,7 @@ group("9. DAF access, SPK and CK writers") do
             end
         end
         @test ktotal(ctx) == ktotal(ctx, "ALL") == length(order) + 2
-        @test ktotal(NeoSpice.kernelset(ctx), "META") == 1
+        @test ktotal(Allspice.kernelset(ctx), "META") == 1
         for file in [order; tk2; spk2; joinpath(dir, "not_loaded.bsp")]
             got = kinfo(ctx, file)
             want = SPICE.kinfo(file)

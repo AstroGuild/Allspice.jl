@@ -11,8 +11,8 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -200,9 +200,9 @@ group("13. math: rotations") do
             x = eul2xf(vcat(e0, de), ax...)
             @test x[SVector(4, 5, 6), SVector(1, 2, 3)] ≈ dr rtol = 1e-13
             # the same derivative from a Taylor series of the angles
-            tt = NeoSpice.taylor_var(0.0, Val(1))
+            tt = Allspice.taylor_var(0.0, Val(1))
             rt = eul2m((e0[1] + de[1] * tt), (e0[2] + de[2] * tt), (e0[3] + de[3] * tt), ax...)
-            @test map(v -> NeoSpice.derivatives(v)[2], rt) ≈ dr rtol = 1e-13
+            @test map(v -> Allspice.derivatives(v)[2], rt) ≈ dr rtol = 1e-13
             # the Jacobian of `m2eul` inverts the one of `eul2m`
             j1 = ForwardDiff.jacobian(v -> vec(eul2m(v..., ax...)), e0)
             j2 = ForwardDiff.jacobian(m -> SVector(m2eul(reshape(m, 3, 3), ax...)), vec(Matrix(eul2m(e0..., ax...))))
@@ -216,18 +216,18 @@ group("13. math: rotations") do
         dq = ForwardDiff.derivative(qf, 0.0)
         @test qdq2av(q0, dq) ≈ rate * axis rtol = 1e-13
         rf(τ) = xpose(axisar(axis, 0.6 + rate * τ))
-        x = NeoSpice._m_xform(rf(0.0), ForwardDiff.derivative(rf, 0.0))
+        x = Allspice._m_xform(rf(0.0), ForwardDiff.derivative(rf, 0.0))
         @test xf2rav(x)[2] ≈ rate * axis rtol = 1e-13
         @test rav2xf(rf(0.0), rate * axis) ≈ x rtol = 1e-13
         # Taylor series through the quaternion calls
-        tt = NeoSpice.taylor_var(0.0, Val(2))
+        tt = Allspice.taylor_var(0.0, Val(2))
         qt = m2q(eul2m(0.3 + 0.1 * tt, 0.2 * tt, -0.4 + 0.5 * tt, 3, 1, 3))
-        @test qt isa SVector{4,NeoSpice.Taylor{2,Float64}}
-        @test map(v -> NeoSpice.derivatives(v)[1], qt) == m2q(eul2m(0.3, 0.0, -0.4, 3, 1, 3))
+        @test qt isa SVector{4,Allspice.Taylor{2,Float64}}
+        @test map(v -> Allspice.derivatives(v)[1], qt) == m2q(eul2m(0.3, 0.0, -0.4, 3, 1, 3))
         back = q2m(qt)
         ref = eul2m(0.3 + 0.1 * tt, 0.2 * tt, -0.4 + 0.5 * tt, 3, 1, 3)
-        @test maximum(abs(NeoSpice.derivatives(back[k])[j] - NeoSpice.derivatives(ref[k])[j]) for k in 1:9, j in 1:3) < 1e-14
-        @test NeoSpice.derivatives(qxq(qt, qt)[1])[1] ≈ 2 * m2q(eul2m(0.3, 0.0, -0.4, 3, 1, 3))[1]^2 - 1
+        @test maximum(abs(Allspice.derivatives(back[k])[j] - Allspice.derivatives(ref[k])[j]) for k in 1:9, j in 1:3) < 1e-14
+        @test Allspice.derivatives(qxq(qt, qt)[1])[1] ≈ 2 * m2q(eul2m(0.3, 0.0, -0.4, 3, 1, 3))[1]^2 - 1
     end
 
     @apart @testset "inferred types and no allocation for static arguments" begin

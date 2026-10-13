@@ -2,11 +2,11 @@
 # (no EK file is needed on the machine).
 #
 # A logical model (`EKSegSpec`: one segment with its column declarations and its rows)
-# is written by CSPICE (`c_ek_write`) or by NeoSpice (`neo_ek_write`) with the same
+# is written by CSPICE (`c_ek_write`) or by Allspice (`neo_ek_write`) with the same
 # sequence of calls. CSPICE is called from the main task only.
 #
 # The C interface of CSPICE numbers segments, rows and elements from 0; the wrappers
-# here take and return numbers from 1, as NeoSpice and SPICE.jl do.
+# here take and return numbers from 1, as Allspice and SPICE.jl do.
 
 isdefined(@__MODULE__, :DSKLIB) || include("dskfixtures.jl")
 
@@ -480,7 +480,7 @@ function c_ekfind(query)
     return Int(n[]), err[] != 0, c_string(buf)
 end
 
-"`ekpsel_c` with positions from 1: the same named tuple as `ekpsel` of NeoSpice."
+"`ekpsel_c` with positions from 1: the same named tuple as `ekpsel` of Allspice."
 function c_ekpsel(query)
     n = Ref{Cint}(0)
     err = Ref{Cint}(0)
@@ -547,7 +547,7 @@ function c_ek_result(nmrows::Int, types::Vector{Symbol})
     return out
 end
 
-"The same table of values for an `EKResult` of NeoSpice, read with `eknelt`, `ekgc`, `ekgd`, `ekgi`."
+"The same table of values for an `EKResult` of Allspice, read with `eknelt`, `ekgc`, `ekgd`, `ekgi`."
 function neo_ek_result(res)
     types = res.seltype
     out = Vector{Vector{Any}}(undef, res.nmrows)

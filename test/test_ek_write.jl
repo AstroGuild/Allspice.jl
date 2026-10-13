@@ -2,19 +2,19 @@
 #
 # Feature file: features/ek_write.feature
 #
-# CSPICE is the oracle. A seeded random model is written by CSPICE and by NeoSpice with
+# CSPICE is the oracle. A seeded random model is written by CSPICE and by Allspice with
 # the same sequence of calls; after the close the three DAS address spaces of the two
 # files (characters, doubles, integers) must be equal word for word. The same holds
 # for random edit scripts (insert, delete, update, new segments) that either engine
 # applies to a file that either engine wrote. CSPICE reads and queries the files that
-# NeoSpice wrote, and every input check gives the error of CSPICE.
+# Allspice wrote, and every input check gives the error of CSPICE.
 #
-# The calls are qualified (`NeoSpice.ekopn`), although the writers are exported.
+# The calls are qualified (`Allspice.ekopn`), although the writers are exported.
 
 # The code of the EK groups is long and most of it runs once, so Julia compiles the
 # module of the tests without optimization while this file runs (5 s less for the five
 # EK groups); the last line of the file gives the default level back. The level of
-# NeoSpice does not change.
+# Allspice does not change.
 Base.Experimental.@optlevel 0
 
 isdefined(@__MODULE__, :EKLIB) || include("ekfixtures.jl")
@@ -53,12 +53,12 @@ const EKW_C = (ekopn=c_ekopn, ekopw=c_ekopw, ekopr=c_ekopr, ekcls=c_ekcls, ekbse
     ekacei=c_ekacei, ekucec=c_ekucec, ekuced=c_ekuced, ekucei=c_ekucei, ekifld=c_ekifld,
     ekaclc=ekw_c_ekaclc, ekacld=c_ekacld, ekacli=c_ekacli, ekffld=c_ekffld)
 
-const EKW_N = (ekopn=NeoSpice.ekopn, ekopw=NeoSpice.ekopw, ekopr=ekopr, ekcls=ekcls,
-    ekbseg=NeoSpice.ekbseg, ekappr=NeoSpice.ekappr, ekinsr=NeoSpice.ekinsr,
-    ekdelr=NeoSpice.ekdelr, ekacec=NeoSpice.ekacec, ekaced=NeoSpice.ekaced,
-    ekacei=NeoSpice.ekacei, ekucec=NeoSpice.ekucec, ekuced=NeoSpice.ekuced,
-    ekucei=NeoSpice.ekucei, ekifld=NeoSpice.ekifld, ekaclc=NeoSpice.ekaclc,
-    ekacld=NeoSpice.ekacld, ekacli=NeoSpice.ekacli, ekffld=NeoSpice.ekffld)
+const EKW_N = (ekopn=Allspice.ekopn, ekopw=Allspice.ekopw, ekopr=ekopr, ekcls=ekcls,
+    ekbseg=Allspice.ekbseg, ekappr=Allspice.ekappr, ekinsr=Allspice.ekinsr,
+    ekdelr=Allspice.ekdelr, ekacec=Allspice.ekacec, ekaced=Allspice.ekaced,
+    ekacei=Allspice.ekacei, ekucec=Allspice.ekucec, ekuced=Allspice.ekuced,
+    ekucei=Allspice.ekucei, ekifld=Allspice.ekifld, ekaclc=Allspice.ekaclc,
+    ekacld=Allspice.ekacld, ekacli=Allspice.ekacli, ekffld=Allspice.ekffld)
 
 """
 One call `f(args...)` of an engine as a value. `c_kind` and `neo_kind` are compiled for
@@ -106,21 +106,21 @@ end
 "Depths of the trees of the EK `path`: (segment tree, record trees, index trees, data page trees)."
 function ekw_depths(path)
     h = ekopr(path)
-    depth(tree) = tree > 0 ? Int(h.ints[NeoSpice._ek_ibase(tree)+NeoSpice._EK_TRDPTH]) : 0
+    depth(tree) = tree > 0 ? Int(h.ints[Allspice._ek_ibase(tree)+Allspice._EK_TRDPTH]) : 0
     rec = 0
     idx = 0
     dat = [0, 0, 0]
     for segno in 1:eknseg(h)
-        seg = NeoSpice._ek_segment(h, segno)
-        rec = max(rec, depth(seg.segdsc[NeoSpice._EK_RTIDX]))
+        seg = Allspice._ek_segment(h, segno)
+        rec = max(rec, depth(seg.segdsc[Allspice._EK_RTIDX]))
         for t in 1:3
-            dat[t] = max(dat[t], depth(seg.segdsc[NeoSpice._EK_CPTIDX+t-1]))
+            dat[t] = max(dat[t], depth(seg.segdsc[Allspice._EK_CPTIDX+t-1]))
         end
         for col in seg.columns
             col.ixtype == 1 && (idx = max(idx, depth(col.ixptr)))
         end
     end
-    sgt = depth(NeoSpice._ek_segtree(h))
+    sgt = depth(Allspice._ek_segtree(h))
     ekcls(h)
     return (seg=sgt, rec=rec, idx=idx, chr=dat[1], dp=dat[2], int=dat[3])
 end
@@ -129,7 +129,7 @@ ekw_depth_line(name, d) = "ek_write: tree depths of $name: segment $(d.seg), rec
                           "index $(d.idx), data pages chr $(d.chr), dp $(d.dp), int $(d.int)"
 
 """
-Read every entry of the EK `path` with CSPICE and with NeoSpice and compare both with
+Read every entry of the EK `path` with CSPICE and with Allspice and compare both with
 the model `segs`; returns (entries compared, entries that differ).
 """
 function ekw_read_check(path, segs::Vector{EKSegSpec})
@@ -371,7 +371,7 @@ end
 # (a) The same model with both engines, word for word
 # ---------------------------------------------------------------------------------------
 
-group("EK write: files of NeoSpice are equal to files of CSPICE word for word") do
+group("EK write: files of Allspice are equal to files of CSPICE word for word") do
     dir = mktempdir()
     words = 0
     files = 0
@@ -422,7 +422,7 @@ group("EK write: files of NeoSpice are equal to files of CSPICE word for word") 
     nd, nw = ekw_diff(paths...)
     @test nd == 0
     # Also the file record, the comment area and the directory are equal. CSPICE leaves
-    # records that it does not use any more at the end of the file; NeoSpice does not.
+    # records that it does not use any more at the end of the file; Allspice does not.
     bc = read(paths[1])
     bn = read(paths[2])
     @test length(bn) <= length(bc)
@@ -433,7 +433,7 @@ group("EK write: files of NeoSpice are equal to files of CSPICE word for word") 
     @test bad == 0
     measured(ekw_depth_line("many.bes", ekw_depths(paths[2])))
     measured("ek_write: $files files written by both engines, $words words equal, " *
-             "$(entries + count) entries read back by CSPICE and NeoSpice")
+             "$(entries + count) entries read back by CSPICE and Allspice")
 end
 
 # ---------------------------------------------------------------------------------------
@@ -448,7 +448,7 @@ group("EK write: trees of depth 3 (records, indexes, data pages)") do
     # segment) and 9 ms for each row of DEEP (51 s). The default run therefore compares
     # word for word only the segments of the fast writers, which have trees of depth 3
     # of every kind. The segments that grow row by row are compared word for word in the
-    # exhaustive run. In the default run NeoSpice alone writes the KEYS segment row by
+    # exhaustive run. In the default run Allspice alone writes the KEYS segment row by
     # row, and both engines then edit and read it (below); the DEEP segment that grows
     # row by row is not written.
     deepslow = FULL ? [ekw_deep_segment(rng, "DEEP", nrows)] : EKSegSpec[]
@@ -472,7 +472,7 @@ group("EK write: trees of depth 3 (records, indexes, data pages)") do
         count, bad = ekw_read_check(pn, segs)
         @test bad == 0
     end
-    # Deletes and inserts in the deep trees: both engines edit the file of NeoSpice.
+    # Deletes and inserts in the deep trees: both engines edit the file of Allspice.
     segs = [keyslow, keyfast]
     ops, model = ekw_script(rng, segs, nsample(500, 5000); weights=(0, 1, 6, 1))
     base = ekw_write(EKW_N, joinpath(dir, "keys12.bes"), segs)
@@ -495,10 +495,10 @@ group("EK write: trees of depth 3 (records, indexes, data pages)") do
 end
 
 # ---------------------------------------------------------------------------------------
-# (b) CSPICE loads and queries the files of NeoSpice
+# (b) CSPICE loads and queries the files of Allspice
 # ---------------------------------------------------------------------------------------
 
-group("EK write: CSPICE loads and queries files that NeoSpice wrote") do
+group("EK write: CSPICE loads and queries files that Allspice wrote") do
     dir = mktempdir()
     rng = MersenneTwister(SEED + 4)
     k1 = ek_random_segment(rng, "KEYS", EKW_KEY_COLS, 900; keyrange=1:300)
@@ -512,17 +512,17 @@ group("EK write: CSPICE loads and queries files that NeoSpice wrote") do
     searches = 0
     for (segno, seg) in enumerate((k1, k2, fx)), (c, key) in ((1, 150), (1, 0), (1, 301), (3, -3.0),
         (3, 2.5e3), (2, "beta"), (2, "a"), (2, "~"), (4, 0.0))
-        _, mbase = NeoSpice._ek_mloc(h, segno)
+        _, mbase = Allspice._ek_mloc(h, segno)
         segdsc = h.ints[mbase+1:mbase+24]
         coldsc = h.ints[mbase+24+(c-1)*11+1:mbase+24+c*11]
         vals = [r[c][1] for r in seg.rows if r[c] !== nothing]
         nnull = length(seg.rows) - length(vals)
         key isa String && (vals = [String(rstrip(v)) for v in vals])
-        @test NeoSpice._ekw_illt(h, segdsc, coldsc, length(seg.rows), key) == nnull + count(<(key), vals)
-        @test NeoSpice._ekw_ille(h, segdsc, coldsc, length(seg.rows), key) == nnull + count(<=(key), vals)
+        @test Allspice._ekw_illt(h, segdsc, coldsc, length(seg.rows), key) == nnull + count(<(key), vals)
+        @test Allspice._ekw_ille(h, segdsc, coldsc, length(seg.rows), key) == nnull + count(<=(key), vals)
         searches += 2
     end
-    @test neo_kind(() -> NeoSpice._ekw_illt(h, h.ints[1:24], h.ints[1:11], 0, 1)) === :invalidsize
+    @test neo_kind(() -> Allspice._ekw_illt(h, h.ints[1:24], h.ints[1:11], 0, 1)) === :invalidsize
     ekcls(h)
     SPICE.kclear()
     SPICE.furnsh(path)
@@ -587,7 +587,7 @@ group("EK write: CSPICE loads and queries files that NeoSpice wrote") do
     finally
         SPICE.kclear()
     end
-    measured("ek_write: CSPICE answered $queries queries on a file of NeoSpice, $nent entries " *
+    measured("ek_write: CSPICE answered $queries queries on a file of Allspice, $nent entries " *
              "read, $searches index searches of the write layer")
 end
 
@@ -669,8 +669,8 @@ group("EK write: edits of fast-loaded segments and of cut strings, which fail in
     c_ekcls(hc)
     for del in 1:4
         hn = fastfile(EKW_N, "n_dup$del.bes")
-        NeoSpice.ekucec(hn, 1, del, "S", ["bb"], false)
-        NeoSpice.ekdelr(hn, 1, del)
+        Allspice.ekucec(hn, 1, del, "S", ["bb"], false)
+        Allspice.ekdelr(hn, 1, del)
         ekcls(hn)
         rows = Vector{Any}[Any[Any[s]] for s in deleteat!(["b", "c", "a", "b"], del)]
         nent, bad = ekw_read_check(joinpath(dir, "n_dup$del.bes"), [EKSegSpec("T", scol, rows, true)])
@@ -691,9 +691,9 @@ group("EK write: edits of fast-loaded segments and of cut strings, which fail in
     pn = longfile(EKW_N, "n_long.bes")
     @test ekw_diff(pc, pn)[1] == 0                  # the same index up to here
     hc = c_ekopw(pc)
-    hn = NeoSpice.ekopw(pn)
+    hn = Allspice.ekopw(pn)
     @test c_kind(() -> c_ekdelr(hc, 1, 2)) === :itemnotfound          # the defect of CSPICE
-    NeoSpice.ekdelr(hn, 1, 2)
+    Allspice.ekdelr(hn, 1, 2)
     c_ekcls(hc)
     ekcls(hn)
     nent, bad = ekw_read_check(pn, [EKSegSpec("T", scol, Vector{Any}[Any[Any["abcd"]]], false)])
@@ -741,7 +741,7 @@ group("EK write: edits of fast-loaded segments and of cut strings, which fail in
     end
     @test arrfile(EKW_C, "c_arr.bes") != fill(2, 200)                 # the defect of CSPICE
     @test arrfile(EKW_N, "n_arr.bes") == fill(2, 200)
-    # 5. Random edits by NeoSpice of fast-loaded segments: equal strings in indexed
+    # 5. Random edits by Allspice of fast-loaded segments: equal strings in indexed
     #    columns, array entries over several pages, all rows deleted and rows added
     #    again. CSPICE reads the result and uses the indexes.
     rng = MersenneTwister(SEED + 8)
@@ -778,8 +778,8 @@ group("EK write: edits of fast-loaded segments and of cut strings, which fail in
     finally
         SPICE.kclear()
     end
-    measured("ek_write: NeoSpice applied $(length(ops) + length(more)) edits to fast-loaded " *
-             "segments ($nent entries read back by CSPICE and NeoSpice)")
+    measured("ek_write: Allspice applied $(length(ops) + length(more)) edits to fast-loaded " *
+             "segments ($nent entries read back by CSPICE and Allspice)")
 end
 
 # ---------------------------------------------------------------------------------------
@@ -841,21 +841,21 @@ group("EK write: fast writers for the column classes 1 to 9") do
     b = ek_random_segment(rng, "LINKS", EK_LINK_COLS, 130; fast=true)
     pa = joinpath(dir, "two_a.bes")
     pb = joinpath(dir, "two_b.bes")
-    ha = NeoSpice.ekopn(pa, "A")
-    hb = NeoSpice.ekopn(pb, "B")
-    sa, ra = NeoSpice.ekifld(ha, a.table, length(a.rows), [c.name for c in a.cols], [ekdecl(c) for c in a.cols])
-    sb, rb = NeoSpice.ekifld(hb, b.table, length(b.rows), [c.name for c in b.cols], [ekdecl(c) for c in b.cols])
-    @test ra isa NeoSpice.EKFastLoad && ra isa AbstractVector{Int32} && length(ra) == 90
+    ha = Allspice.ekopn(pa, "A")
+    hb = Allspice.ekopn(pb, "B")
+    sa, ra = Allspice.ekifld(ha, a.table, length(a.rows), [c.name for c in a.cols], [ekdecl(c) for c in a.cols])
+    sb, rb = Allspice.ekifld(hb, b.table, length(b.rows), [c.name for c in b.cols], [ekdecl(c) for c in b.cols])
+    @test ra isa Allspice.EKFastLoad && ra isa AbstractVector{Int32} && length(ra) == 90
     for c in 1:max(length(a.cols), length(b.cols)), (h, s, r, seg) in ((ha, sa, ra, a), (hb, sb, rb, b))
         c <= length(seg.cols) || continue
         col = seg.cols[c]
         vals, entszs, nlflgs = ek_flat_column(seg, c)
-        f = col.dtype === :CHR ? NeoSpice.ekaclc : col.dtype === :INT ? NeoSpice.ekacli : NeoSpice.ekacld
+        f = col.dtype === :CHR ? Allspice.ekaclc : col.dtype === :INT ? Allspice.ekacli : Allspice.ekacld
         f(h, s, col.name, vals, entszs, nlflgs, r)
     end
-    @test neo_kind(() -> NeoSpice.ekffld(ha, sa, rb)) === :wrongsegment
-    NeoSpice.ekffld(hb, sb, rb)
-    NeoSpice.ekffld(ha, sa, ra)
+    @test neo_kind(() -> Allspice.ekffld(ha, sa, rb)) === :wrongsegment
+    Allspice.ekffld(hb, sb, rb)
+    Allspice.ekffld(ha, sa, ra)
     ekcls(ha)
     ekcls(hb)
     for (p, seg) in ((pa, a), (pb, b))
@@ -882,7 +882,7 @@ group("EK write: input checks give the errors of CSPICE") do
     pc = ekw_write(EKW_C, joinpath(dir, "c_checks.bes"), [seg, fseg])
     pn = ekw_write(EKW_N, joinpath(dir, "n_checks.bes"), [seg, fseg])
     hc = c_ekopw(pc)
-    hn = NeoSpice.ekopw(pn)
+    hn = Allspice.ekopw(pn)
     checked = 0
     mismatch = String[]
     # Both engines must fail with the same kind. The call is `w.fname(h, args...)`, or
@@ -891,7 +891,7 @@ group("EK write: input checks give the errors of CSPICE") do
     function same(name, fname::Symbol, @nospecialize(args...); expect=nothing, handle::Bool=true)
         kc = c_kind(EKWCall(EKW_C[fname], handle ? (hc, args...) : args))
         kn = neo_kind(EKWCall(EKW_N[fname], handle ? (hn, args...) : args))
-        (kc == kn && kc !== nothing) || push!(mismatch, "$name: CSPICE $kc, NeoSpice $kn")
+        (kc == kn && kc !== nothing) || push!(mismatch, "$name: CSPICE $kc, Allspice $kn")
         @test kc == kn
         @test kc !== nothing
         expect === nothing || @test kn === expect
@@ -1022,33 +1022,33 @@ group("EK write: input checks give the errors of CSPICE") do
     same("ekopw of a missing file", :ekopw, joinpath(dir, "missing.bes"); handle=false)
     isempty(mismatch) || foreach(println, mismatch)
 
-    # Checks of NeoSpice whose CSPICE counterpart differs or does not exist.
+    # Checks of Allspice whose CSPICE counterpart differs or does not exist.
     path = joinpath(dir, "own.bes")
-    h = NeoSpice.ekopn(path, "OWN")
-    s1, r1 = NeoSpice.ekifld(h, "A", 3, ["K", "D"], ["DATATYPE = INTEGER", "DATATYPE = DOUBLE PRECISION"])
-    @test neo_kind(() -> NeoSpice.ekacli(h, s1, "NOPE", [1, 2, 3], [1, 1, 1], falses(3), r1)) === :bug
-    @test neo_kind(() -> NeoSpice.ekacli(h, s1, "D", [1, 2, 3], [1, 1, 1], falses(3), r1)) === :wrongdatatype
-    @test neo_kind(() -> NeoSpice.ekacld(h, s1, "K", [1.0, 2, 3], [1, 1, 1], falses(3), r1)) === :wrongdatatype
-    @test neo_kind(() -> NeoSpice.ekaclc(h, s1, "K", ["a", "b", "c"], [1, 1, 1], falses(3), r1)) === :wrongdatatype
-    @test neo_kind(() -> NeoSpice.ekacli(h, s1, "K", [1, 2], [1, 1, 1], falses(3), r1)) === :invalidcount
-    @test neo_kind(() -> NeoSpice.ekacli(h, s1 + 1, "K", [1, 2, 3], [1, 1, 1], falses(3), r1)) === :invalidindex
-    NeoSpice.ekacli(h, s1, "K", [1, 2, 3], [1, 1, 1], falses(3), r1)
-    @test neo_kind(() -> NeoSpice.ekffld(h, s1, r1)) === :invalidaddress     # a column is missing
-    NeoSpice.ekacld(h, s1, "D", [1.0, 2.0, 3.0], [1, 1, 1], falses(3), r1)
-    NeoSpice.ekffld(h, s1, r1)
-    s2, r2 = NeoSpice.ekifld(h, "B", 2, ["K"], ["DATATYPE = INTEGER, FIXED_COUNT = TRUE"])
-    @test neo_kind(() -> NeoSpice.ekacli(h, s2, "K", [1, 2], [1, 1], falses(2), r1)) === :wrongsegment
-    @test neo_kind(() -> NeoSpice.ekffld(h, s2, r1)) === :wrongsegment
-    NeoSpice.ekacli(h, s2, "K", [7, 8], Int[], Bool[], r2)
-    NeoSpice.ekffld(h, s2, r2)
+    h = Allspice.ekopn(path, "OWN")
+    s1, r1 = Allspice.ekifld(h, "A", 3, ["K", "D"], ["DATATYPE = INTEGER", "DATATYPE = DOUBLE PRECISION"])
+    @test neo_kind(() -> Allspice.ekacli(h, s1, "NOPE", [1, 2, 3], [1, 1, 1], falses(3), r1)) === :bug
+    @test neo_kind(() -> Allspice.ekacli(h, s1, "D", [1, 2, 3], [1, 1, 1], falses(3), r1)) === :wrongdatatype
+    @test neo_kind(() -> Allspice.ekacld(h, s1, "K", [1.0, 2, 3], [1, 1, 1], falses(3), r1)) === :wrongdatatype
+    @test neo_kind(() -> Allspice.ekaclc(h, s1, "K", ["a", "b", "c"], [1, 1, 1], falses(3), r1)) === :wrongdatatype
+    @test neo_kind(() -> Allspice.ekacli(h, s1, "K", [1, 2], [1, 1, 1], falses(3), r1)) === :invalidcount
+    @test neo_kind(() -> Allspice.ekacli(h, s1 + 1, "K", [1, 2, 3], [1, 1, 1], falses(3), r1)) === :invalidindex
+    Allspice.ekacli(h, s1, "K", [1, 2, 3], [1, 1, 1], falses(3), r1)
+    @test neo_kind(() -> Allspice.ekffld(h, s1, r1)) === :invalidaddress     # a column is missing
+    Allspice.ekacld(h, s1, "D", [1.0, 2.0, 3.0], [1, 1, 1], falses(3), r1)
+    Allspice.ekffld(h, s1, r1)
+    s2, r2 = Allspice.ekifld(h, "B", 2, ["K"], ["DATATYPE = INTEGER, FIXED_COUNT = TRUE"])
+    @test neo_kind(() -> Allspice.ekacli(h, s2, "K", [1, 2], [1, 1], falses(2), r1)) === :wrongsegment
+    @test neo_kind(() -> Allspice.ekffld(h, s2, r1)) === :wrongsegment
+    Allspice.ekacli(h, s2, "K", [7, 8], Int[], Bool[], r2)
+    Allspice.ekffld(h, s2, r2)
     # Records of a segment with fixed-count columns cannot be changed (CSPICE damages the file).
-    @test neo_kind(() -> NeoSpice.ekappr(h, s2)) === :invalidtype
-    @test neo_kind(() -> NeoSpice.ekinsr(h, s2, 1)) === :invalidtype
-    @test neo_kind(() -> NeoSpice.ekdelr(h, s2, 1)) === :invalidtype
-    @test neo_kind(() -> NeoSpice.ekacei(h, s2, 1, "K", [1], false)) === :indexoutofrange
-    @test neo_kind(() -> NeoSpice.ekbseg(h, "T", ["A", "B"], one)) === :invalidcount
+    @test neo_kind(() -> Allspice.ekappr(h, s2)) === :invalidtype
+    @test neo_kind(() -> Allspice.ekinsr(h, s2, 1)) === :invalidtype
+    @test neo_kind(() -> Allspice.ekdelr(h, s2, 1)) === :invalidtype
+    @test neo_kind(() -> Allspice.ekacei(h, s2, 1, "K", [1], false)) === :indexoutofrange
+    @test neo_kind(() -> Allspice.ekbseg(h, "T", ["A", "B"], one)) === :invalidcount
     ekcls(h)
-    @test neo_kind(() -> NeoSpice.ekopn(path, "OWN")) === :fileopenfailed
+    @test neo_kind(() -> Allspice.ekopn(path, "OWN")) === :fileopenfailed
     hr = c_ekopr(path)
     @test c_eknseg(hr) == 2
     @test c_ekrcei(hr, 1, 3, "K") == ([3], false)

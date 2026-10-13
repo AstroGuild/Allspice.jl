@@ -1,7 +1,7 @@
-module NeoSpiceForwardDiffExt
+module AllspiceForwardDiffExt
 
-using NeoSpice
-using NeoSpice: KernelSet, spk_jet, frame_jet, frame_rotation, rotation_jet, primal
+using Allspice
+using Allspice: KernelSet, spk_jet, frame_jet, frame_rotation, rotation_jet, primal
 using ForwardDiff
 using ForwardDiff: Dual, value, partials
 import StaticArrays
@@ -20,7 +20,7 @@ import StaticArrays
 # tests use this as an independent check of the analytical derivatives.
 
 "`primal(x::Dual)`: the plain `Float64` value of a dual number, with all partials removed."
-NeoSpice.primal(x::Dual) = NeoSpice.primal(value(x))
+Allspice.primal(x::Dual) = Allspice.primal(value(x))
 
 "Nesting depth of a dual-number type: 0 for a plain real, 1 + depth of the value type."
 depth(::Type{<:Real}) = 0
@@ -46,31 +46,31 @@ end
 @inline lift_jet(jet::Tuple, x::Dual, ::Val{N}) where {N} =
     ntuple(i -> lift(i - 1, jet, x), Val(N + 1))
 
-function NeoSpice.spk_jet(ks::KernelSet, targ::Int32, et::D, ref::Int32, obs::Int32,
+function Allspice.spk_jet(ks::KernelSet, targ::Int32, et::D, ref::Int32, obs::Int32,
         v::Val{N}) where {D<:Dual,N}
     jet = spk_jet(ks, targ, primal(et), ref, obs, Val(N + depth(D)))
     return lift_jet(jet, et, v)
 end
 
-function NeoSpice.frame_rotation(ks::KernelSet, from::Int32, to::Int32, et::D) where {D<:Dual}
+function Allspice.frame_rotation(ks::KernelSet, from::Int32, to::Int32, et::D) where {D<:Dual}
     jet = rotation_jet(ks, from, to, primal(et), Val(depth(D)))
     return lift(0, jet, et)
 end
 
-NeoSpice.frame_jet(ks::KernelSet, from::Int32, to::Int32, et::Dual, ::Val{0}) =
+Allspice.frame_jet(ks::KernelSet, from::Int32, to::Int32, et::Dual, ::Val{0}) =
     (frame_rotation(ks, from, to, et),)
-function NeoSpice.frame_jet(ks::KernelSet, from::Int32, to::Int32, et::D,
+function Allspice.frame_jet(ks::KernelSet, from::Int32, to::Int32, et::D,
         v::Val{N}) where {D<:Dual,N}
     jet = rotation_jet(ks, from, to, primal(et), Val(N + depth(D)))
     return lift_jet(jet, et, v)
 end
 
 "`_ad_order(Dual)`: a dual number carries one derivative order more than its value type."
-NeoSpice._ad_order(::Type{ForwardDiff.Dual{Tg,V,N}}) where {Tg,V,N} = 1 + NeoSpice._ad_order(V)
+Allspice._ad_order(::Type{ForwardDiff.Dual{Tg,V,N}}) where {Tg,V,N} = 1 + Allspice._ad_order(V)
 
 "`_with_primal(x::Dual, p)`: `x` with the plain value `p` and the same partials."
-NeoSpice._with_primal(x::ForwardDiff.Dual{Tg}, p::Float64) where {Tg} =
-    ForwardDiff.Dual{Tg}(NeoSpice._with_primal(ForwardDiff.value(x), p), ForwardDiff.partials(x))
+Allspice._with_primal(x::ForwardDiff.Dual{Tg}, p::Float64) where {Tg} =
+    ForwardDiff.Dual{Tg}(Allspice._with_primal(ForwardDiff.value(x), p), ForwardDiff.partials(x))
 
 # --- aberration corrections ---------------------------------------------------------
 #
@@ -85,31 +85,31 @@ NeoSpice._with_primal(x::ForwardDiff.Dual{Tg}, p::Float64) where {Tg} =
 # aberration and the frame change are rotations.
 
 "Light time `|r| / c` of a dual position; zero for the zero vector (a body from itself)."
-@inline function _dual_lt(r::NeoSpice.Vec3{D}) where {D<:Dual}
+@inline function _dual_lt(r::Allspice.Vec3{D}) where {D<:Dual}
     iszero(primal(r[1])) && iszero(primal(r[2])) && iszero(primal(r[3])) && return zero(D)
-    return sqrt(r[1] * r[1] + r[2] * r[2] + r[3] * r[3]) / NeoSpice.CLIGHT
+    return sqrt(r[1] * r[1] + r[2] * r[2] + r[3] * r[3]) / Allspice.CLIGHT
 end
 
-function NeoSpice.abcorr_jet(ks::KernelSet, targ::Int32, et::D, ref::Int32,
-        corr::NeoSpice.Aberration, obs::Int32, v::Val{N}) where {D<:Dual,N}
-    jet = NeoSpice.abcorr_jet(ks, targ, primal(et), ref, corr, obs, Val(N + depth(D)))
+function Allspice.abcorr_jet(ks::KernelSet, targ::Int32, et::D, ref::Int32,
+        corr::Allspice.Aberration, obs::Int32, v::Val{N}) where {D<:Dual,N}
+    jet = Allspice.abcorr_jet(ks, targ, primal(et), ref, corr, obs, Val(N + depth(D)))
     return lift_jet(jet, et, v)
 end
 
-function NeoSpice.abcorr_position(ks::KernelSet, targ::Int32, et::D, ref::Int32,
-        corr::NeoSpice.Aberration, obs::Int32) where {D<:Dual}
+function Allspice.abcorr_position(ks::KernelSet, targ::Int32, et::D, ref::Int32,
+        corr::Allspice.Aberration, obs::Int32) where {D<:Dual}
     t = primal(et)
-    jet = NeoSpice.abcorr_jet(ks, targ, t, ref, corr, obs, Val(depth(D)))
-    r0, _ = NeoSpice.abcorr_position(ks, targ, t, ref, corr, obs)
+    jet = Allspice.abcorr_jet(ks, targ, t, ref, corr, obs, Val(depth(D)))
+    r0, _ = Allspice.abcorr_position(ks, targ, t, ref, corr, obs)
     r = lift(0, Base.setindex(jet, r0, 1), et)
     return r, _dual_lt(r)
 end
 
-function NeoSpice.abcorr_state(ks::KernelSet, targ::Int32, et::D, ref::Int32,
-        corr::NeoSpice.Aberration, obs::Int32) where {D<:Dual}
+function Allspice.abcorr_state(ks::KernelSet, targ::Int32, et::D, ref::Int32,
+        corr::Allspice.Aberration, obs::Int32) where {D<:Dual}
     t = primal(et)
-    jet = NeoSpice.abcorr_jet(ks, targ, t, ref, corr, obs, Val(depth(D) + 1))
-    s0, _ = NeoSpice.abcorr_state(ks, targ, t, ref, corr, obs)
+    jet = Allspice.abcorr_jet(ks, targ, t, ref, corr, obs, Val(depth(D) + 1))
+    s0, _ = Allspice.abcorr_state(ks, targ, t, ref, corr, obs)
     r = lift(0, Base.setindex(jet, s0[StaticArrays.SVector(1, 2, 3)], 1), et)
     v = lift(1, Base.setindex(jet, s0[StaticArrays.SVector(4, 5, 6)], 2), et)
     return vcat(r, v), _dual_lt(r)

@@ -14,7 +14,7 @@
 # a state that is true or false, so the brackets differ only if the state differs at a
 # sample, which is possible only within rounding of an entry or of an exit.
 #
-# Default run and exhaustive run (`NEOSPICE_TEST_FULL=1`). The default run compares one
+# Default run and exhaustive run (`ALLSPICE_TEST_FULL=1`). The default run compares one
 # case in three to five of each product of options (`gf_pick`), on 3 days and not 7 for
 # the Sun and on 2 days and not 5 for the ray that crosses the camera once a day, and
 # does not make the table of search times. The least numbers of intervals that the
@@ -27,7 +27,7 @@ isdefined(@__MODULE__, :GEOLIB) || include("geomfixtures.jl")
 
 @gf_light group("gf fov: gftfov, gfrfov, gffove", Kernels.FULL_SET_FILES...) do
     ctx = geo_setup()
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     rng = MersenneTwister(SEED + 6800)
     day = 86400.0
     hour = 3600.0
@@ -161,7 +161,7 @@ isdefined(@__MODULE__, :GEOLIB) || include("geomfixtures.jl")
         a = ("GEO_RECT", "SUN", "ELLIPSOID", "IAU_SUN", "LT+S", "EARTH")
         base = gftfov(ctx, a..., 120.0, cn)
         @test wncard(base) >= 5
-        ks2 = NeoSpice.kernelset(ctx)            # the kernel set after the changes of the pool
+        ks2 = Allspice.kernelset(ctx)            # the kernel set after the changes of the pool
         @test gftfov(ks2, a..., 120.0, cn) == base
         @test gftfov(ks2, -999003, 10, "ellipsoid", namfrm(ctx, "IAU_SUN"), Aberration("LT+S"), 399, 120.0,
             cn) == base
@@ -284,7 +284,7 @@ isdefined(@__MODULE__, :GEOLIB) || include("geomfixtures.jl")
         for (name, neo, ora) in cases2
             @test gf_compare("timing", neo(), ora())
             tn, to = gf_time(neo), gf_time(ora)
-            measured(@sprintf("  %-66s NeoSpice %8.2f ms  CSPICE %8.2f ms  ratio %.2f", name,
+            measured(@sprintf("  %-66s Allspice %8.2f ms  CSPICE %8.2f ms  ratio %.2f", name,
                 1e3 * tn, 1e3 * to, to / tn))
         end
     end

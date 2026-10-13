@@ -3,7 +3,7 @@
 # Feature file: features/load_then_query.feature
 #
 # Error measure, in the manner of the ANISE validation: for each query the absolute
-# difference per component, |NeoSpice - CSPICE|, and the same difference divided by the
+# difference per component, |Allspice - CSPICE|, and the same difference divided by the
 # Euclidean norm of the CSPICE vector (position norm for position components, velocity
 # norm for velocity components). The assertions are on the quantiles q75 and q99 of the
 # relative difference and on the maximum absolute difference.
@@ -11,8 +11,8 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 

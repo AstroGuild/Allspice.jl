@@ -1,19 +1,19 @@
 # Kernel paths for the tests and the benchmarks, in one place.
 #
 # Environment overrides:
-#   NEOSPICE_KERNEL_DIR  directory of the text kernels and the binary PCK
-#   NEOSPICE_DE440S      path of de440s.bsp
-#   NEOSPICE_DE405       path of de405.bsp
+#   ALLSPICE_KERNEL_DIR  directory of the text kernels and the binary PCK
+#   ALLSPICE_DE440S      path of de440s.bsp
+#   ALLSPICE_DE405       path of de405.bsp
 #
 # A test group names the kernels that it needs; `missing_kernels` gives the ones that
 # are not on disk, and the group is skipped with a visible message if there is one.
 
 module Kernels
 
-const DIR = get(ENV, "NEOSPICE_KERNEL_DIR", "/home/alex/.tudat/resource/spice_kernels")
+const DIR = get(ENV, "ALLSPICE_KERNEL_DIR", "/home/alex/.tudat/resource/spice_kernels")
 
-const DE440S = get(ENV, "NEOSPICE_DE440S", "/home/alex/data/ephemerides/de440s.bsp")
-const DE405 = get(ENV, "NEOSPICE_DE405", "/home/alex/malto/data/de405.bsp")
+const DE440S = get(ENV, "ALLSPICE_DE440S", "/home/alex/data/ephemerides/de440s.bsp")
+const DE405 = get(ENV, "ALLSPICE_DE405", "/home/alex/malto/data/de405.bsp")
 const LSK = joinpath(DIR, "naif0012.tls")
 const PCK11 = joinpath(DIR, "pck00011.tpc")
 const PCK10 = joinpath(DIR, "pck00010.tpc")

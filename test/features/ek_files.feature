@@ -1,6 +1,6 @@
 Feature: Read an EK file through a handle that the caller owns
   An EK file holds tables in segments. A segment has typed columns (character, double,
-  integer, time); an entry is one value or an array of values, or null. NeoSpice reads
+  integer, time); an entry is one value or an array of values, or null. Allspice reads
   an EK file through a DAS handle object, with no global state. CSPICE is the reference.
   Executable form: test/test_ek_file.jl
 
@@ -10,7 +10,7 @@ Feature: Read an EK file through a handle that the caller owns
 
   Scenario: Count and summarize the segments
     Given an EK file with several segments
-    When NeoSpice opens the file with ekopr
+    When Allspice opens the file with ekopr
     Then eknseg gives the segment count that CSPICE gives
     And ekssum gives the table name, the row count and the column attributes of CSPICE
 

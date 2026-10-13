@@ -24,7 +24,7 @@ ill_alloc_ph(ks, et, c) = @allocated phaseq(ks, et, 301, 10, 399, c)
 
 @gf_light group("geom_illum: ilumin, illumg, illumf, phaseq", Kernels.FULL_SET_FILES...) do
     ctx = geo_setup(; dsk=true)
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     rng = MersenneTwister(SEED + 102)
     reception = GEO_CORRS[1:5]
 

@@ -49,8 +49,8 @@ Feature: Geometry finder, visibility in a field of view
 
   Scenario Outline: Bad inputs
     Given a valid search with one input replaced by <input>
-    When the search runs in NeoSpice and in CSPICE
-    Then NeoSpice throws a SpiceError of kind <kind>
+    When the search runs in Allspice and in CSPICE
+    Then Allspice throws a SpiceError of kind <kind>
     And CSPICE signals the matching short error
 
     Examples:

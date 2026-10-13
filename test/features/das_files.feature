@@ -1,6 +1,6 @@
 Feature: Read and write DAS files through a handle that the caller owns
   A DAS file holds three address spaces (characters, doubles, integers), a comment
-  area, and directory records that tell where the data records are. NeoSpice reads a
+  area, and directory records that tell where the data records are. Allspice reads a
   DAS file of either byte order, segregated or not, and writes segregated files.
   CSPICE is the reference: each engine must read the files of the other.
   Executable form: test/test_das.jl
@@ -11,12 +11,12 @@ Feature: Read and write DAS files through a handle that the caller owns
 
   Scenario: Read a file that CSPICE wrote
     Given a DSK file with three segments and five comment lines that CSPICE wrote
-    When NeoSpice opens the file with dasopr
+    When Allspice opens the file with dasopr
     Then dasrfr, daslla and dashfs give the values that CSPICE gives
     And dasec gives the comment lines that CSPICE gives
     And every integer and every double has the bit pattern that CSPICE reads
 
-  Scenario: CSPICE reads a file that NeoSpice wrote
+  Scenario: CSPICE reads a file that Allspice wrote
     Given a new DAS file made with dasonw
     When integers, doubles and characters are added in 120 appends of random size
     And comment lines are added with dasac
@@ -34,7 +34,7 @@ Feature: Read and write DAS files through a handle that the caller owns
 
   Scenario: Read a file that is not segregated
     Given a DAS file with 360 interleaved clusters and more than one directory record
-    When NeoSpice opens the file
+    When Allspice opens the file
     Then the three address spaces hold the data in the order of the appends
     And dashfs gives the summary that CSPICE gives
     When the file is opened for write and closed
@@ -42,7 +42,7 @@ Feature: Read and write DAS files through a handle that the caller owns
 
   Scenario Outline: Read a file of the other byte order
     Given the file <file> with each integer and double record byte-swapped
-    When NeoSpice opens the swapped file
+    When Allspice opens the swapped file
     Then the data are equal to the data of the native file
     And CSPICE reads the same values from the swapped file
 

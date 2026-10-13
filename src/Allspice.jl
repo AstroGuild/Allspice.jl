@@ -1,4 +1,4 @@
-module NeoSpice
+module Allspice
 
 using StaticArrays
 using Mmap

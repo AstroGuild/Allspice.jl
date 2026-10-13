@@ -13,7 +13,7 @@
 # write with the SPK writers of types 8, 9 and 13 (see `geo_occult_kernels`).
 #
 # The default run has a third to a fifth of the epochs of each scan (21,500 cases and not 72,600);
-# the exhaustive run (`NEOSPICE_TEST_FULL=1`) has all. The scans are not random, and
+# the exhaustive run (`ALLSPICE_TEST_FULL=1`) has all. The scans are not random, and
 # the default run sees the same codes as the exhaustive run (the test requires it).
 
 isdefined(@__MODULE__, :GEOLIB) || include("geomfixtures.jl")
@@ -34,7 +34,7 @@ function occ_scan(ctx, t1, s1, f1, t2, s2, f2, cor, obs, et0, span, n)
             contact += 1
         else
             bad += 1
-            bad <= 3 && println("  occult differs: ", (t1, s1, t2, s2, cor, obs, et), " NeoSpice ", a, ", CSPICE ", b)
+            bad <= 3 && println("  occult differs: ", (t1, s1, t2, s2, cor, obs, et), " Allspice ", a, ", CSPICE ", b)
         end
     end
     return bad, contact, codes
@@ -187,7 +187,7 @@ occ_alloc_ep(ks, et, c) = @allocated occult(ks, 301, "ELLIPSOID", 10020, 10, "PO
     end
 
     @testset "no allocation and inferred type on ellipsoids and points" begin
-        ks = NeoSpice.kernelset(ctx)
+        ks = Allspice.kernelset(ctx)
         et0 = SPICE.str2et("2017-08-21T18:26:00")
         for c in GEO_CORRS, dt in (0.0, 3000.0, 86400.0 * 40)
             @test gwarm(occ_alloc_ee, ks, et0 + dt, c) == 0

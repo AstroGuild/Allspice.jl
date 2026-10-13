@@ -6,8 +6,8 @@ using StaticArrays
 include(joinpath(@__DIR__, "..", "test", "kernels.jl"))
 using .Kernels: Kernels
 
-"Seconds of sampling per benchmark; the environment variable NEOSPICE_BENCH_SECONDS overrides it."
-const BENCH_SECONDS = parse(Float64, get(ENV, "NEOSPICE_BENCH_SECONDS", "2"))
+"Seconds of sampling per benchmark; the environment variable ALLSPICE_BENCH_SECONDS overrides it."
+const BENCH_SECONDS = parse(Float64, get(ENV, "ALLSPICE_BENCH_SECONDS", "2"))
 
 const RESULTS_DIR = joinpath(@__DIR__, "results")
 

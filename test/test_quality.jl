@@ -7,8 +7,8 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -98,14 +98,14 @@ group("8. quality gates", Kernels.FULL_SET_FILES...) do
         # A method defined twice makes precompilation fail, and the package then loads
         # without its image (slow first calls) although every other test passes.
         project = dirname(Base.active_project())
-        cmd = `$(Base.julia_cmd()) --startup-file=no --project=$project -e "using NeoSpice"`
+        cmd = `$(Base.julia_cmd()) --startup-file=no --project=$project -e "using Allspice"`
         err = IOBuffer()
         ok = success(pipeline(cmd; stderr=err, stdout=devnull))
         text = String(take!(err))
         @test ok
         @test !occursin("overwritten", text)
         @test !occursin("precompilation", text)
-        @test isempty(Test.detect_ambiguities(NeoSpice))
+        @test isempty(Test.detect_ambiguities(Allspice))
     end
 end
 

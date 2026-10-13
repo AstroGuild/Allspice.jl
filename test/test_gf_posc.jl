@@ -11,7 +11,7 @@
 #
 # The default run compares one case in ten of the product of options and one case in
 # thirteen at the branch cut (`gf_pick`), and does not make the table of search times;
-# the exhaustive run (`NEOSPICE_TEST_FULL=1`) compares every case and makes the table.
+# the exhaustive run (`ALLSPICE_TEST_FULL=1`) compares every case and makes the table.
 #
 # Behaviour specification: test/features/gf_coordinates.feature
 
@@ -32,7 +32,7 @@ function gf_inequality_holds(rng::AbstractRNG, q, w::Window, cn::Window, rel::Ab
         k = rand(rng, 1:wncard(cn))
         t = cn[2k-1] + (cn[2k] - cn[2k-1]) * rand(rng)
         any(e -> abs(e - t) <= margin, ends) && continue
-        v = NeoSpice._gf_value(q, t)
+        v = Allspice._gf_value(q, t)
         holds = rel == "<" ? v < refval : v > refval
         ok &= (holds == wnelmd(w, t))
     end
@@ -42,7 +42,7 @@ end
 @gf_light group("gf coordinates: gfposc, longitude and right ascension", Kernels.FULL_SET_FILES...) do
     oracle_load(Kernels.full_set())
     ctx = neo_context(Kernels.full_set())
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     rng = MersenneTwister(SEED + 6300)
     day = 86400.0
 
@@ -65,10 +65,10 @@ end
     end
 
     @testset "the planetographic longitude of Mars is positive west" begin
-        q = NeoSpice._gf_position_coordinate(ks, "SUN", "IAU_MARS", "NONE", "EARTH",
+        q = Allspice._gf_position_coordinate(ks, "SUN", "IAU_MARS", "NONE", "EARTH",
             "PLANETOGRAPHIC", "LONGITUDE")
         @test q.sense == -1
-        q = NeoSpice._gf_position_coordinate(ks, "MOON", "IAU_EARTH", "NONE", "EARTH",
+        q = Allspice._gf_position_coordinate(ks, "MOON", "IAU_EARTH", "NONE", "EARTH",
             "PLANETOGRAPHIC", "LONGITUDE")
         @test q.sense == 1
     end
@@ -97,14 +97,14 @@ end
                 nerr += 1
                 continue
             end
-            q = NeoSpice._gf_position_coordinate(ks, targ, frame, abcorr, obs, sys, crd)
+            q = Allspice._gf_position_coordinate(ks, targ, frame, abcorr, obs, sys, crd)
             refval, adjust = gf_reference(rng, q, cn, rel, wadj)
             w = gfposc(ctx, targ, frame, abcorr, obs, sys, crd, rel, refval, adjust, step, cn)
             ref = GFO.gfposc(targ, frame, abcorr, obs, sys, crd, rel, refval, adjust, step, collect(cn))
             angular = (sys, crd) in GF_ANGULAR
             label = (angular ? "gfposc longitude/RA " : "gfposc other ") * gf_family(rel, adjust)
-            scale = maximum(abs(NeoSpice._gf_value(q, Float64(t))) for t in range(cn[1], cn[end]; length=20))
-            ok = gf_compare(label, w, ref; value=t -> NeoSpice._gf_value(q, t), vtol=64 * eps(scale))
+            scale = maximum(abs(Allspice._gf_value(q, Float64(t))) for t in range(cn[1], cn[end]; length=20))
+            ok = gf_compare(label, w, ref; value=t -> Allspice._gf_value(q, t), vtol=64 * eps(scale))
             ok || @info "gfposc case" targ obs frame abcorr sys crd rel refval adjust step cn
             @test ok
             @test all(t -> wnelmd(cn, t), w)
@@ -125,7 +125,7 @@ end
             step = first(steps)
             t0 = start_epoch()
             cn = Window([t0, t0 + span])
-            q = NeoSpice._gf_position_coordinate(ks, targ, frame, abcorr, obs, sys, crd)
+            q = Allspice._gf_position_coordinate(ks, targ, frame, abcorr, obs, sys, crd)
             for refval in refs, rel in ("<", "=", ">")
                 gf_pick(i += 1, 13) || continue
                 w = gfposc(ctx, targ, frame, abcorr, obs, sys, crd, rel, refval, 0.0, step, cn)
@@ -157,9 +157,9 @@ end
         # is no root of "= pi" and no local extremum.
         t0 = SPICE.str2et("2024 MAR 01")
         cn = Window([t0, t0 + 120 * day])
-        q = NeoSpice._gf_position_coordinate(ks, "MOON", "J2000", "NONE", "EARTH", "RA/DEC",
+        q = Allspice._gf_position_coordinate(ks, "MOON", "J2000", "NONE", "EARTH", "RA/DEC",
             "RIGHT ASCENSION")
-        ra(t) = NeoSpice._gf_value(q, t)
+        ra(t) = Allspice._gf_value(q, t)
         roots = gfposc(ctx, "MOON", "J2000", "NONE", "EARTH", "RA/DEC", "RIGHT ASCENSION", "=",
             pi, 0.0, day, cn)
         @test wncard(roots) in (4, 5)
@@ -244,7 +244,7 @@ end
             ora = () -> GFO.gfposc(a..., c)
             @test gf_compare("timing", neo(), ora())
             tn, to = gf_time(neo), gf_time(ora)
-            measured(@sprintf("  %-58s NeoSpice %8.2f ms  CSPICE %8.2f ms  ratio %.2f", name,
+            measured(@sprintf("  %-58s Allspice %8.2f ms  CSPICE %8.2f ms  ratio %.2f", name,
                 1e3 * tn, 1e3 * to, to / tn))
         end
     end

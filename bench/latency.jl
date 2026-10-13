@@ -7,7 +7,7 @@
 # and is not counted, so that package precompilation is not part of the numbers. The
 # rows are, in the order in which the child measures them:
 #
-#   using NeoSpice                       load time of the package
+#   using Allspice                       load time of the package
 #   first furnsh + first spkezr          load de440s.bsp and one state, name form
 #   first spkder Val(2)                  first jet of order 2
 #   using ForwardDiff                    load time of ForwardDiff and of the extension
@@ -20,12 +20,12 @@ using Printf, Statistics, Dates
 include(joinpath(@__DIR__, "..", "test", "kernels.jl"))
 using .Kernels: Kernels
 
-const REPS = parse(Int, get(ENV, "NEOSPICE_BENCH_REPS", "3"))
+const REPS = parse(Int, get(ENV, "ALLSPICE_BENCH_REPS", "3"))
 
 const CHILD = raw"""
 const KERNEL = ARGS[1]
 const ET = 1.2345e8
-t = time_ns(); using NeoSpice; t_using = (time_ns() - t) / 1e9
+t = time_ns(); using Allspice; t_using = (time_ns() - t) / 1e9
 t = time_ns()
 furnsh(KERNEL)
 state, lt = spkezr("EARTH", ET, "J2000", "NONE", "MOON")
@@ -43,7 +43,7 @@ SPICE.furnsh(KERNEL)
 cstate, _ = SPICE.spkezr("EARTH", ET, "J2000", "NONE", "MOON")
 t_cspice = (time_ns() - t) / 1e9
 @assert isapprox(state, cstate; rtol = 1e-12)
-println("LATENCY using_neospice ", t_using)
+println("LATENCY using_allspice ", t_using)
 println("LATENCY first_furnsh_spkezr ", t_first)
 println("LATENCY first_spkder_2 ", t_der)
 println("LATENCY using_forwarddiff ", t_fd)
@@ -53,7 +53,7 @@ println("LATENCY first_cspice ", t_cspice)
 """
 
 const LABELS = [
-    "using_neospice" => "`using NeoSpice`",
+    "using_allspice" => "`using Allspice`",
     "first_furnsh_spkezr" => "first `furnsh` + first `spkezr` (names)",
     "first_spkder_2" => "first `spkder(..., Val(2))`",
     "using_forwarddiff" => "`using ForwardDiff` (with the extension)",

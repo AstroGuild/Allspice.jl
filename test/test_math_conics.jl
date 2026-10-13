@@ -11,8 +11,8 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -123,11 +123,11 @@ group("16. math: conics") do
             d = ForwardDiff.derivative(τ -> prop2b(mu, s, τ), dt)
             @test d[SVector(1, 2, 3)] ≈ v1 rtol = 1e-12
             @test d[SVector(4, 5, 6)] ≈ -mu * p1 / vnorm(p1)^3 rtol = 1e-12
-            tt = NeoSpice.taylor_var(dt, Val(2))
+            tt = Allspice.taylor_var(dt, Val(2))
             x = prop2b(mu, s, tt)
-            @test map(c -> NeoSpice.derivatives(c)[1], x) == q
-            @test map(c -> NeoSpice.derivatives(c)[2], x) ≈ d rtol = 1e-12
-            @test map(c -> NeoSpice.derivatives(c)[3], x)[SVector(1, 2, 3)] ≈ -mu * p1 / vnorm(p1)^3 rtol = 1e-11
+            @test map(c -> Allspice.derivatives(c)[1], x) == q
+            @test map(c -> Allspice.derivatives(c)[2], x) ≈ d rtol = 1e-12
+            @test map(c -> Allspice.derivatives(c)[3], x)[SVector(1, 2, 3)] ≈ -mu * p1 / vnorm(p1)^3 rtol = 1e-11
         end
     end
 

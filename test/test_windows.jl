@@ -2,7 +2,7 @@
 #
 # Feature file: features/windows.feature
 #
-# Every operation runs on the same random input with NeoSpice (`Window`) and with CSPICE
+# Every operation runs on the same random input with Allspice (`Window`) and with CSPICE
 # (`SPICE.SpiceDoubleCell`), and the endpoint vectors must be equal bit for bit. The
 # endpoints are small integers and halves, so that equal endpoints, touching intervals
 # and singleton intervals occur often.
@@ -10,8 +10,8 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -119,7 +119,7 @@ group("10. windows") do
             meas, avg, stddev, isml, ilon = wnsumd(w)
             cmeas, cavg, cstddev, cisml, cilon = SPICE.wnsumd(c)
             bad += (meas, avg, isml, ilon) != (cmeas, cavg, cisml, cilon)
-            # CSPICE gives NaN where rounding makes the variance negative; NeoSpice gives 0.
+            # CSPICE gives NaN where rounding makes the variance negative; Allspice gives 0.
             bad += !(stddev == cstddev || (isnan(cstddev) && stddev == 0.0))
         end
         @test bad == 0

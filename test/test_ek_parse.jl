@@ -8,8 +8,8 @@
 # `zzekqcnj_`, `zzekqcon_`, `zzekqord_` and `zzekqsel_` decode it, and `ekfind_c` and
 # `ekpsel_c` are the public calls. The group writes its own EK file with the CSPICE
 # writers (three small tables with scalar and array columns of every data type), loads
-# it in CSPICE with `eklef_c`, and builds the table catalogue of NeoSpice from the
-# catalogue calls of CSPICE, so it needs no EK reader of NeoSpice.
+# it in CSPICE with `eklef_c`, and builds the table catalogue of Allspice from the
+# catalogue calls of CSPICE, so it needs no EK reader of Allspice.
 #
 # For each query of the corpus the group compares the error flag and the error message
 # and, for a valid query, the three buffers of the encoded query element by element,
@@ -20,13 +20,13 @@
 # The code of the EK groups is long and most of it runs once, so Julia compiles the
 # module of the tests without optimization while this file runs (5 s less for the five
 # EK groups); the last line of the file gives the default level back. The level of
-# NeoSpice does not change.
+# Allspice does not change.
 Base.Experimental.@optlevel 0
 
 isdefined(@__MODULE__, :EKLIB) || include("ekfixtures.jl")      # `ek_part`, and `dskfixtures.jl`
 isdefined(@__MODULE__, :CKFix) || include("ckfixtures.jl")
-isdefined(NeoSpice, :_ek_encode_query) ||
-    Base.include(NeoSpice, joinpath(@__DIR__, "..", "src", "ek", "query_parse.jl"))
+isdefined(Allspice, :_ek_encode_query) ||
+    Base.include(Allspice, joinpath(@__DIR__, "..", "src", "ek", "query_parse.jl"))
 
 # --- the EK file of the group ----------------------------------------------------------
 
@@ -105,12 +105,12 @@ function ekq_write_ek(path)
     return path
 end
 
-"The table catalogue of NeoSpice, built from the catalogue calls of CSPICE."
+"The table catalogue of Allspice, built from the catalogue calls of CSPICE."
 function ekq_catalogue()
     n = Ref{Cint}(0)
     ccall((:ekntab_c, DSKLIB), Cvoid, (Ref{Cint},), n)
     c_check()
-    tables = NeoSpice.EKTable[]
+    tables = Allspice.EKTable[]
     for t in 0:n[]-1
         buf = zeros(UInt8, 65)
         ccall((:ektnam_c, DSKLIB), Cvoid, (Cint, Cint, Ptr{UInt8}), t, 65, buf)
@@ -120,7 +120,7 @@ function ekq_catalogue()
         ccall((:ekccnt_c, DSKLIB), Cvoid, (Cstring, Ref{Cint}), table, cc)
         c_check()
         cnames = String[]
-        attrs = NeoSpice.EKColumnAttr[]
+        attrs = Allspice.EKColumnAttr[]
         for c in 0:cc[]-1
             cbuf = zeros(UInt8, 33)
             att = zeros(Cint, 6)        # SpiceEKAttDsc: class, type, strlen, size, indexd, nullok
@@ -128,10 +128,10 @@ function ekq_catalogue()
                 table, c, 33, cbuf, att)
             c_check()
             push!(cnames, unsafe_string(pointer(cbuf)))
-            push!(attrs, NeoSpice.EKColumnAttr(att[1], (:CHR, :DP, :INT, :TIME)[att[2]+1],
+            push!(attrs, Allspice.EKColumnAttr(att[1], (:CHR, :DP, :INT, :TIME)[att[2]+1],
                 att[3], att[4], att[5] != 0, att[6] != 0))
         end
-        push!(tables, NeoSpice.EKTable(table, cnames, attrs, NTuple{2,Int32}[]))
+        push!(tables, Allspice.EKTable(table, cnames, attrs, NTuple{2,Int32}[]))
     end
     return tables
 end
@@ -202,7 +202,7 @@ end
 
 "Decode the encoded query `e` of `ekq_c_encd` with the accessors of CSPICE, as an `_EKQuery` without catalogue indices."
 function ekq_c_decode(e)
-    Q = NeoSpice
+    Q = Allspice
     ntab, ncns, ncnj, nord, nsel = (Int(e.i[k]) for k in (8, 9, 10, 11, 12))
     fs() = fill(UInt8(' '), 64)
     tables = String[]
@@ -270,7 +270,7 @@ end
 ekq_samecol(a, b, lex) = a.table == b.table && a.tabidx == b.tabidx && a.name == b.name &&
                          a.colidx == b.colidx && (!lex || (a.lxbeg == b.lxbeg && a.lxend == b.lxend))
 
-"True if the query `q` of NeoSpice equals the decoded query `c` of CSPICE. `zzekqcon_` gives the double of types 2 and 4 and the integer of type 3."
+"True if the query `q` of Allspice equals the decoded query `c` of CSPICE. `zzekqcon_` gives the double of types 2 and 4 and the integer of type 3."
 function ekq_samequery(q, c)
     (q.tables == c.tables && q.aliases == c.aliases && q.conjsizes == c.conjsizes &&
      length(q.constraints) == length(c.constraints) && length(q.orderby) == length(c.orderby) &&
@@ -286,19 +286,19 @@ function ekq_samequery(q, c)
     return all(ekq_samecol(a, b, true) for (a, b) in zip(q.select, c.select))
 end
 
-"`_ek_qencode` of NeoSpice with a thrown `SpiceError` as its kind."
+"`_ek_qencode` of Allspice with a thrown `SpiceError` as its kind."
 function ekq_n_encd(fx, query)
     try
-        q, tabcat, error, errmsg = NeoSpice._ek_qencode(fx.tables, fx.ks, fx.td, query)
+        q, tabcat, error, errmsg = Allspice._ek_qencode(fx.tables, fx.ks, fx.td, query)
         return (q=q, tabcat=tabcat, error=error, errmsg=errmsg, kind=nothing)
     catch e
-        e isa NeoSpice.SpiceError || rethrow()
+        e isa Allspice.SpiceError || rethrow()
         return (q=nothing, tabcat=Int[], error=false, errmsg="", kind=e.kind)
     end
 end
 
 """
-Message of NeoSpice for a non-scalar column where CSPICE has not set the end of the text
+Message of Allspice for a non-scalar column where CSPICE has not set the end of the text
 that it prints (the local variable `LXE(2)` of `zzeksemc_`): CSPICE then reads memory
 at an undefined offset and can end the process, so the oracle is not called.
 """
@@ -324,9 +324,9 @@ function ekq_compare(fx, query::String; guard_not::Bool=false)
     c = ekq_c_encd(query)
     if n.kind !== nothing || c.kind !== nothing
         n.kind === c.kind && return :signal, string(n.kind)
-        return :diff_signal, "NeoSpice $(n.kind), CSPICE $(c.kind) [$(c.errmsg)]"
+        return :diff_signal, "Allspice $(n.kind), CSPICE $(c.kind) [$(c.errmsg)]"
     end
-    n.error == c.error || return :diff_flag, "NeoSpice $(n.error) [$(n.errmsg)], CSPICE " *
+    n.error == c.error || return :diff_flag, "Allspice $(n.error) [$(n.errmsg)], CSPICE " *
                                              "$(c.error) [$(c.errmsg)]"
     # The semantic check stops at IS NULL. The search of ekfind_c then meets constraints
     # that were not checked (it signals SPICE(BUG) for a non-scalar column), so ekfind_c
@@ -335,11 +335,11 @@ function ekq_compare(fx, query::String; guard_not::Bool=false)
     (f.error == c.error && f.errmsg == c.errmsg && f.kind === nothing) ||
         return :diff_ekfind, "ekfind_c: $(f.error) $(f.kind) [$(f.errmsg)]; zzekencd_: [$(c.errmsg)]"
     p = ekq_c_psel(query)
-    s = NeoSpice._ek_psel(fx.tables, fx.ks, fx.td, query)
+    s = Allspice._ek_psel(fx.tables, fx.ks, fx.td, query)
     if n.error
-        n.errmsg == c.errmsg || return :diff_msg, "NeoSpice [$(n.errmsg)], CSPICE [$(c.errmsg)]"
+        n.errmsg == c.errmsg || return :diff_msg, "Allspice [$(n.errmsg)], CSPICE [$(c.errmsg)]"
         (s.error && p.error && s.errmsg == p.errmsg && s.n == 0) ||
-            return :diff_psel, "error case: NeoSpice [$(s.errmsg)], CSPICE [$(p.errmsg)]"
+            return :diff_psel, "error case: Allspice [$(s.errmsg)], CSPICE [$(p.errmsg)]"
         return :invalid, n.errmsg
     end
     n.q.i == c.i || return :diff_cell, "integer cell differs at " *
@@ -348,14 +348,14 @@ function ekq_compare(fx, query::String; guard_not::Bool=false)
     n.q.c[1:nc] == c.c[1:nc] || return :diff_chars, "character buffer differs"
     all(n.q.d[k] === c.d[k] for k in 1:nd) || return :diff_doubles, "double buffer differs: " *
                                                                     "$(n.q.d[1:nd]) $(c.d[1:nd])"
-    q = NeoSpice._ek_qdecode(n.q, n.tabcat)
+    q = Allspice._ek_qdecode(n.q, n.tabcat)
     ekq_samequery(q, ekq_c_decode(c)) || return :diff_decode, "decoded query differs"
     all(fx.tables[q.tabcat[k]].name == q.tables[k] for k in eachindex(q.tables)) ||
         return :diff_decode, "catalogue indices"
     sum(q.conjsizes; init=0) == length(q.constraints) || return :diff_decode, "invariant"
     (!s.error && !p.error && s.n == p.n && s.xbegs == p.xbegs && s.xends == p.xends &&
      s.xtypes == p.xtypes && s.xclass == p.xclass && s.tabs == p.tabs && s.cols == p.cols) ||
-        return :diff_psel, "NeoSpice $(s), CSPICE $(p)"
+        return :diff_psel, "Allspice $(s), CSPICE $(p)"
     return :valid, ""
 end
 
@@ -955,7 +955,7 @@ function ekq_random_query(rng)
     return "SELECT $sel FROM $tabs WHERE $where$order"
 end
 
-const EKQ_VOCABULARY = vcat(collect(NeoSpice._EKQ_KEYWORDS), ["ICOL", "DCOL", "CCOL", "TCOL",
+const EKQ_VOCABULARY = vcat(collect(Allspice._EKQ_KEYWORDS), ["ICOL", "DCOL", "CCOL", "TCOL",
         "IARR", "NAME", "XCOL", "ALPHA", "BETA", "A", "B", "NOSUCH", "alpha", "icol"],
     ["1", "2.5", "-3", "1e2", ".5", "'x'", "\"y z\"", "'2000 JAN 1'", "''", "'"],
     ["(", ")", ",", ".", "*", "=", "!=", "<>", "<", "<=", ">", ">=", "^=", "(", ")", ",", ".",
@@ -1016,7 +1016,7 @@ group("ek_parse: EK query parser against CSPICE", Kernels.LSK) do
     c_check()
     try
         ctx = neo_context(text)
-        fx = (tables=ekq_catalogue(), ks=NeoSpice.kernelset(ctx), td=NeoSpice.TimeDefaults())
+        fx = (tables=ekq_catalogue(), ks=Allspice.kernelset(ctx), td=Allspice.TimeDefaults())
         report(name, list) = for (query, status, detail) in first(list, 12)
             println("  ", name, " ", status, ": ", first(query, 150), "\n      ", detail)
         end
@@ -1096,7 +1096,7 @@ group("ek_parse: EK query parser against CSPICE", Kernels.LSK) do
             # The parser has no shared state: the same queries on all threads give the
             # results of one thread.
             queries = vcat(ekq_valid_corpus(), ekq_invalid_corpus())
-            enc(query) = NeoSpice._ek_encode_query(fx.tables, fx.ks, fx.td, query)
+            enc(query) = Allspice._ek_encode_query(fx.tables, fx.ks, fx.td, query)
             same(a, b) = a[2] == b[2] && a[3] == b[3] && (a[1] === nothing) == (b[1] === nothing) &&
                          (a[1] === nothing || (a[1].conjsizes == b[1].conjsizes &&
                            [c.dval for c in a[1].constraints] == [c.dval for c in b[1].constraints] &&
@@ -1125,14 +1125,14 @@ group("ek_parse: EK query parser against CSPICE", Kernels.LSK) do
                 @test ekq_compare(fx, query) == (:signal, "bug")
             end
             # More than 1000 conjunctions: CSPICE stops the program (array bound check of
-            # f2c), so only NeoSpice is called.
+            # f2c), so only Allspice is called.
             huge = "SELECT ICOL FROM ALPHA WHERE (" * join(("ICOL = $k" for k in 1:32), " OR ") *
                    ") AND (" * join(("DCOL = $k" for k in 1:32), " OR ") * ")"
             @test ekq_compare(fx, huge)[1] === :unsafe
         end
 
         ek_part("documented differences") do
-            Q = NeoSpice
+            Q = Allspice
             enc(query) = Q._ek_encode_query(fx.tables, fx.ks, fx.td, query)
             # More than 2000 characters: CSPICE reads past its buffer.
             long = "SELECT ICOL FROM ALPHA WHERE CCOL = '" * "x"^2000 * "'"
@@ -1144,7 +1144,7 @@ group("ek_parse: EK query parser against CSPICE", Kernels.LSK) do
                 "Every query must contain a FROM clause. The FROM keyword was not found.")
             # A non-scalar column on the left of the first constraint, or in ORDER BY
             # without a constraint before it: CSPICE prints the query up to an undefined
-            # position (a segmentation fault was seen); NeoSpice prints the column name.
+            # position (a segmentation fault was seen); Allspice prints the column name.
             # After IS NULL the semantic check of both engines has stopped already.
             for (query, msg) in (
                 "SELECT ICOL FROM ALPHA WHERE IARR = 1" =>
@@ -1169,14 +1169,14 @@ group("ek_parse: EK query parser against CSPICE", Kernels.LSK) do
                 @test n[3] == c.errmsg
                 @test startswith(n[3], "Unexpected SPICELIB error encountered")
             end
-            none = Q._ek_encode_query(fx.tables, NeoSpice.empty_kernelset(), fx.td,
+            none = Q._ek_encode_query(fx.tables, Allspice.empty_kernelset(), fx.td,
                 "SELECT ICOL FROM ALPHA WHERE TCOL > '2000 JAN 1'")
             @test none == (nothing, true, "Unexpected SPICELIB error encountered while " *
                                           "attempting to parse the string <2000 JAN 1>")
         end
 
         ek_part("decoded query") do
-            Q = NeoSpice
+            Q = Allspice
             query = "select a.icol, vcol, b.tarr from ALPHA a, BETA b where a.icol >= 2 and " *
                     "(ccol like 'S*' or b.xcol not between 1 and a.dcol) and " *
                     "a.tcol > '2000 JAN 1 12:00:00 TDB' order by b.icol desc, ccol"
@@ -1217,7 +1217,7 @@ group("ek_parse: EK query parser against CSPICE", Kernels.LSK) do
         end
 
         ek_part("column names (zzekpcol)") do
-            Q = NeoSpice
+            Q = Allspice
             query = "SELECT A.ICOL FROM ALPHA A, BETA, GAMMA_LONG_NAME G WHERE A.ICOL > 0"
             q = Q._ek_encode_query(fx.tables, fx.ks, fx.td, query)[1]
             e = ekq_c_encd(query)

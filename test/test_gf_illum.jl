@@ -15,7 +15,7 @@
 # the same value at the two epochs within 1e-12 rad.
 #
 # The default run compares one case in four of the product of options (`gf_pick`) and
-# does not make the table of search times; the exhaustive run (`NEOSPICE_TEST_FULL=1`)
+# does not make the table of search times; the exhaustive run (`ALLSPICE_TEST_FULL=1`)
 # compares every case and makes the table.
 #
 # Behaviour specification: test/features/gf_illum.feature
@@ -30,7 +30,7 @@ const GFI_ANGLES = ("PHASE", "INCIDENCE", "EMISSION")
 
 @gf_light group("gf illum: gfilum", Kernels.FULL_SET_FILES...) do
     ctx = geo_setup()
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     rng = MersenneTwister(SEED + 6600)
     day = 86400.0
     hour = 3600.0
@@ -56,13 +56,13 @@ const GFI_ANGLES = ("PHASE", "INCIDENCE", "EMISSION")
             step = rand(rng, steps)
             sp = surface_point(targ)
             cn = confinement(span)
-            q = NeoSpice.GFIllumination(ks, "Ellipsoid", ang, targ, src, fix, corr, obs, sp)
+            q = Allspice.GFIllumination(ks, "Ellipsoid", ang, targ, src, fix, corr, obs, sp)
             refval, adjust = gf_reference(rng, q, cn, rel, wadj)
             w = gfilum(ctx, "Ellipsoid", ang, targ, src, fix, corr, obs, sp, rel, refval, adjust, step, cn)
             ref = GFO.gfilum("Ellipsoid", ang, targ, src, fix, corr, obs, sp, rel, refval, adjust, step,
                 collect(cn))
             ok = gf_compare("gfilum " * lowercase(ang) * " " * gf_family(rel, adjust), w, ref;
-                value=t -> NeoSpice._gf_value(q, t), vtol=1.0e-12)
+                value=t -> Allspice._gf_value(q, t), vtol=1.0e-12)
             ok || @info "gfilum case" targ src obs ang corr sp rel refval adjust step cn
             @test ok
             @test all(t -> wnelmd(cn, t), w)
@@ -75,23 +75,23 @@ const GFI_ANGLES = ("PHASE", "INCIDENCE", "EMISSION")
         sp = g_srfrec(301, 0.3, 0.2)
         cn = Window([0.0, 60 * day])
         for (i, ang) in enumerate(GFI_ANGLES), corr in ("NONE", "CN+S")
-            q = NeoSpice.GFIllumination(ks, "ELLIPSOID", ang, "MOON", "SUN", "IAU_MOON", corr, "EARTH", sp)
+            q = Allspice.GFIllumination(ks, "ELLIPSOID", ang, "MOON", "SUN", "IAU_MOON", corr, "EARTH", sp)
             for t in (1.0e5, 2.0e6, 4.0e6)
                 angles = g_illumg("ELLIPSOID", "MOON", "SUN", t, "IAU_MOON", corr, "EARTH", sp)[3:5]
-                @test NeoSpice._gf_value(q, t) ≈ angles[i] atol = 1.0e-11
+                @test Allspice._gf_value(q, t) ≈ angles[i] atol = 1.0e-11
                 # the rate of `zzilusta` against a central difference of the value
                 h = 30.0
-                fd = (NeoSpice._gf_value(q, t + h) - NeoSpice._gf_value(q, t - h)) / (2h)
-                @test NeoSpice._gf_ilurate(q, t) ≈ fd rtol = 1.0e-4 atol = 1.0e-11
+                fd = (Allspice._gf_value(q, t + h) - Allspice._gf_value(q, t - h)) / (2h)
+                @test Allspice._gf_ilurate(q, t) ≈ fd rtol = 1.0e-4 atol = 1.0e-11
             end
-            vals = [NeoSpice._gf_value(q, t) for t in range(cn[1], cn[2]; length=200)]
+            vals = [Allspice._gf_value(q, t) for t in range(cn[1], cn[2]; length=200)]
             refval = (minimum(vals) + maximum(vals)) / 2
             w = gfilum(ctx, "ELLIPSOID", ang, "MOON", "SUN", "IAU_MOON", corr, "EARTH", sp, "=", refval,
                 0.0, day, cn)
             @test wncard(w) >= 2
             for k in 1:wncard(w)
                 t = w[2k-1]
-                @test (NeoSpice._gf_value(q, t - 5.0) - refval) * (NeoSpice._gf_value(q, t + 5.0) - refval) < 0
+                @test (Allspice._gf_value(q, t - 5.0) - refval) * (Allspice._gf_value(q, t + 5.0) - refval) < 0
             end
         end
     end
@@ -215,7 +215,7 @@ const GFI_ANGLES = ("PHASE", "INCIDENCE", "EMISSION")
             c = collect(cn)
             @test gf_compare("timing", gfilum(ctx, a..., cn), GFO.gfilum(a..., c))
             tn, to = gf_time(() -> gfilum(ctx, a..., cn)), gf_time(() -> GFO.gfilum(a..., c))
-            measured(@sprintf("  %-62s NeoSpice %8.2f ms  CSPICE %8.2f ms  ratio %.2f", name,
+            measured(@sprintf("  %-62s Allspice %8.2f ms  CSPICE %8.2f ms  ratio %.2f", name,
                 1e3 * tn, 1e3 * to, to / tn))
         end
     end

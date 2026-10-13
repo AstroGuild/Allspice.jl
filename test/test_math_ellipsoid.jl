@@ -11,15 +11,15 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 import ForwardDiff
 isdefined(@__MODULE__, :CS) || include("mathoracle.jl")
 
-"A NeoSpice result with a missing value as the symbol `:none`."
+"A Allspice result with a missing value as the symbol `:none`."
 nf(x) = x === nothing ? :none : x
 "A CSPICE result with a false found flag (the last output) as the symbol `:none`."
 cf(t::Tuple) = t[end] ? (length(t) == 2 ? t[1] : t[1:end-1]) : :none
@@ -34,7 +34,7 @@ the positive semi-axes `a`, `b`, `c`: `surfpt_` divides the direction by the sem
 (surfpt.c, lines 384 to 386), and a quotient is infinite (the direction 1e300 with a
 semi-axis below about 1e-8). `vperp_` then divides infinity by infinity, and the macro
 `max` of f2c (f2c.h, line 392) drops the NaN in `vproj_` (vproj.c, lines 262 and 266), so
-CSPICE returns "not found" or the vertex. NeoSpice returns a point of NaN. Contract: the
+CSPICE returns "not found" or the vertex. Allspice returns a point of NaN. Contract: the
 function makes the same three divisions and no other call.
 """
 ray_overflows(u, a, b, c) = a > 0 && b > 0 && c > 0 && !all(isfinite, (u[1] / a, u[2] / b, u[3] / c))
@@ -186,11 +186,11 @@ group("15. math: ellipsoids, planes and ellipses", Kernels.FULL_SET_FILES...) do
             @test sv[SVector(4, 5, 6)] ≈ d rtol = 1e-9
             g = ForwardDiff.jacobian(x -> surfnm(a, b, c, x), p)
             @test norm(g * p) <= 1e-12            # the normal does not change along the ray from the center
-            tt = NeoSpice.taylor_var(0.0, Val(2))
+            tt = Allspice.taylor_var(0.0, Val(2))
             x = surfpt(po .+ tt .* v, u .+ tt .* du, a, b, c)
-            @test map(q -> NeoSpice.derivatives(q)[2], x) ≈ d rtol = 1e-9
+            @test map(q -> Allspice.derivatives(q)[2], x) ≈ d rtol = 1e-9
             y = nearpt(p .+ tt .* v, a, b, c)[1]
-            @test map(q -> NeoSpice.derivatives(q)[2], y) ≈ jac * v rtol = 1e-9
+            @test map(q -> Allspice.derivatives(q)[2], y) ≈ jac * v rtol = 1e-9
         end
     end
 

@@ -15,7 +15,7 @@
 #   deep space           SDP4 with moderate eccentricity and no resonance
 #
 # No SPK file of type 10 is on this machine, so the group writes them with `spkw10_c`
-# of CSPICE (called with `ccall`) and with `spkw10` of NeoSpice.
+# of CSPICE (called with `ccall`) and with `spkw10` of Allspice.
 #
 # Checks:
 #   (a) `getelm` against CSPICE (equal numbers), and its errors;
@@ -26,7 +26,7 @@
 #   (d) states of type 10 segments (`spkgeo` in J2000, `spkezr` in IAU_EARTH) against
 #       CSPICE at random epochs, at the element epochs, at the middle between two element
 #       epochs, where CSPICE changes the pair of sets, and at the segment ends;
-#   (e) a segment that `spkw10` of NeoSpice writes against the segment of CSPICE, word for
+#   (e) a segment that `spkw10` of Allspice writes against the segment of CSPICE, word for
 #       word, with fewer and with more than 100 element sets;
 #   (f) a segment in the old layout (packets of ten numbers, 15 meta items);
 #   (g) orders 2 and 3 of `spkder` against the nested `ForwardDiff.derivative` of the
@@ -44,8 +44,8 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -173,12 +173,12 @@ function sgp4_oracle(f)
     end
 end
 
-"`f()`, or the NeoSpice error that it throws."
+"`f()`, or the Allspice error that it throws."
 function sgp4_neo(f)
     try
         return f()
     catch e
-        e isa NeoSpice.SpiceError || rethrow()
+        e isa Allspice.SpiceError || rethrow()
         return e
     end
 end
@@ -407,7 +407,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
             @test r isa SPICE.SpiceError
             @test throws_kind(() -> getelm(ctx0, 1957, lines), :badtle)
         end
-        @test sgp4_neo(() -> getelm(ctx0, 1957, [l1])) isa NeoSpice.SpiceError
+        @test sgp4_neo(() -> getelm(ctx0, 1957, [l1])) isa Allspice.SpiceError
         # Blanks after column 69 are not an error in either engine.
         long = [l1 * "  ", l2 * "   "]
         @test getelm(ctx0, 1957, long)[1] == SPICE.getelm(1957, long)[1]
@@ -443,7 +443,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
                     (sc isa Exception) == (sn isa Exception) || (mismatch += 1)
                     if sc isa Exception && sn isa Exception
                         push!(kinds, sn.kind)
-                        # The short message of CSPICE is the kind of NeoSpice.
+                        # The short message of CSPICE is the kind of Allspice.
                         occursin(uppercase(String(sn.kind)), uppercase(sc.msg)) || (mismatch += 1)
                     end
                     continue
@@ -467,7 +467,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         ref = evsgp4(ctx0, ep + 600.0, geophs, el)
         @test evsgp4(ctx0, ep + 600.0, Tuple(geophs), Tuple(el)) == ref
         @test evsgp4(ctx0, ep + 600.0, SVector{8}(geophs), SVector{10}(el)) == ref
-        @test evsgp4(NeoSpice.kernelset(ctx0), ep + 600.0, geophs, el) == ref
+        @test evsgp4(Allspice.kernelset(ctx0), ep + 600.0, geophs, el) == ref
         @test (@inferred evsgp4(ctx0, ep + 600.0, geophs, el)) isa SVector{6,Float64}
         # As in CSPICE, QO, SO and AE are not read.
         other = copy(geophs)
@@ -478,19 +478,19 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
     end
 
     @apart @testset "operation mode 2 (improved sidereal time) against CSPICE" begin
-        l = NeoSpice._lsk(NeoSpice.kernelset(ctx0))
+        l = Allspice._lsk(Allspice.kernelset(ctx0))
         worst = 0.0
         for t in SGP4_TLES
             id = sgp4_id(t)
             id in (22312, 28350, 28872, 29141) && continue
             ep, el = parsed[id]
             for opmode in (1, 2)
-                r = NeoSpice._sgp4_init(Tuple(geophs), Tuple(el), NeoSpice._t10_epoch(l, ep), opmode)
+                r = Allspice._sgp4_init(Tuple(geophs), Tuple(el), Allspice._t10_epoch(l, ep), opmode)
                 @test isbits(r)
                 for dt in (0.0, 13.0, -211.0, 733.0, 1500.0)
                     id == SGP4_E97 && dt < 0 && continue
                     sc = sgp4_c_mode(geophs, el, opmode, dt)
-                    p, v = NeoSpice._sgp4_eval(r, dt)
+                    p, v = Allspice._sgp4_eval(r, dt)
                     d = sgp4_reldiff(vcat(p, v), sc)
                     worst = max(worst, id == SGP4_E97 ? 0.0 : d)
                     @test d <= sgp4_tol(id)
@@ -498,16 +498,16 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
             end
         end
         measured(@sprintf("  operation modes 1 and 2, all classes: max relative difference %.2e", worst))
-        @test throws_kind(() -> NeoSpice._sgp4_init(Tuple(geophs), Tuple(parsed[5][2]), 18000.0, 3),
+        @test throws_kind(() -> Allspice._sgp4_init(Tuple(geophs), Tuple(parsed[5][2]), 18000.0, 3),
             :unknownmode)
     end
 
     # ---------------------------------------------------------------------------------
     # Type 10 segments: one per element set, three sets 0.4 day apart, written by CSPICE
-    # and by NeoSpice.
+    # and by Allspice.
     # ---------------------------------------------------------------------------------
     pc = joinpath(dir, "tle_cspice.bsp")
-    pn = joinpath(dir, "tle_neospice.bsp")
+    pn = joinpath(dir, "tle_allspice.bsp")
     segs = Dict{Int,Any}()
     hc = SPICE.spkopn(pc, "TLE", 0)
     hn = spkopn(pn, "TLE", 0)
@@ -547,7 +547,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
                 end
                 valid += 1
                 w2 = max(w2, sgp4_reldiff(sn, sc))
-                # The file of NeoSpice gives the same numbers as the file of CSPICE.
+                # The file of Allspice gives the same numbers as the file of CSPICE.
                 spkgeo(ctxn, body, et, 1, 399)[1] == sn || (mismatch += 1)
                 speed = norm(sc[4:6])
                 bc = SPICE.spkezr(string(body), et, "IAU_EARTH", "NONE", "399")[1]
@@ -667,7 +667,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
     end
 
     @apart @testset "spkder: higher orders against ForwardDiff and differences" begin
-        tv = NeoSpice.taylor_var
+        tv = Allspice.taylor_var
         for id in (5, 28057, 8195, 28129, 24208, 23177, 4632)
             body = -100000 - id
             s = segs[id]
@@ -715,7 +715,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
             f(t) = evsgp4(ctx0, t, geophs, el)
             d1(t) = ForwardDiff.derivative(f, t)
             d2(t) = ForwardDiff.derivative(d1, t)
-            der = NeoSpice.derivatives
+            der = Allspice.derivatives
             @test SVector{6}(ntuple(i -> der(ser[i])[1], 6)) == f(et)
             @test sgp4_vecdiff(SVector{6}(ntuple(i -> der(ser[i])[2], 6)), d1(et)) <= SGP4_AD_RTOL[1]
             @test sgp4_vecdiff(SVector{6}(ntuple(i -> der(ser[i])[3], 6)), d2(et)) <= SGP4_AD_RTOL[2]
@@ -759,8 +759,8 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
     end
 
     @apart @testset "errors" begin
-        ks = NeoSpice.kernelset(ctx)
-        l = NeoSpice._lsk(ks)
+        ks = Allspice.kernelset(ctx)
+        l = Allspice._lsk(ks)
         body = Int32(-100005)
         seg = ks.spk[body][1]
         data = ks.daf[seg.file]
@@ -768,7 +768,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         et = s.epochs[1] + 100.0
         @test seg.dtype == 10
         # `spk_eval` has no kernel set, so it has no leap seconds.
-        @test throws_kind(() -> NeoSpice.spk_eval(data, seg, et, Val(1)), :unsupported)
+        @test throws_kind(() -> Allspice.spk_eval(data, seg, et, Val(1)), :unsupported)
         # A context without a leap-second kernel.
         nolsk = neo_context([pc])
         @test throws_kind(() -> spkgeo(nolsk, -100005, et, 1, 399), :nolsk)
@@ -791,9 +791,9 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         function refuses(change)
             bad = copy(data)
             change(bad)
-            return throws_kind(() -> NeoSpice._t10_state(bad, seg, et, l), :baddaf)
+            return throws_kind(() -> Allspice._t10_state(bad, seg, et, l), :baddaf)
         end
-        @test NeoSpice._t10_state(copy(data), seg, et, l) == NeoSpice._t10_state(data, seg, et, l)
+        @test Allspice._t10_state(copy(data), seg, et, l) == Allspice._t10_state(data, seg, et, l)
         @test refuses(d -> d[e] = 14.0)                 # count of meta items
         @test refuses(d -> d[e] = 1.0e6)
         @test refuses(d -> d[e-17+2] = 7.0)             # NCON
@@ -805,9 +805,9 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         @test refuses(d -> d[e-17+15] = 12.0)           # PKTSZ
         @test refuses(d -> d[e-17+6] = 1.0e5)           # REFBAS
         @test refuses(d -> d[e-17+11] = -1.0)           # PKTBAS
-        short = NeoSpice.Segment(seg.target, seg.center, seg.frame, seg.dtype, seg.t0, seg.t1,
+        short = Allspice.Segment(seg.target, seg.center, seg.frame, seg.dtype, seg.t0, seg.t1,
             seg.file, seg.eaddr - 5, seg.eaddr, 0.0, 0.0, Int32(0), Int32(0))
-        @test throws_kind(() -> NeoSpice._t10_state(data, short, et, l), :baddaf)
+        @test throws_kind(() -> Allspice._t10_state(data, short, et, l), :baddaf)
 
         # spkw10: a refused call writes nothing.
         pw = joinpath(dir, "refused.bsp")
@@ -832,12 +832,12 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         w(-5, 399, "J2000", t0, t1, "accepted", geophs, elems, epochs)
         spkcls(h)
         cw = neo_context(vcat(base, pw))
-        @test length(NeoSpice.kernelset(cw).spk[Int32(-5)]) == 1
+        @test length(Allspice.kernelset(cw).spk[Int32(-5)]) == 1
         @test spkgeo(cw, -5, t0 + 50.0, 1, 399)[1] isa SVector{6,Float64}
         # A file that is open for reading only.
         hr = dafopr(pw)
         @test sgp4_neo(() -> spkw10(hr, -6, 399, "J2000", t0, t1, "x", geophs, elems, epochs;
-            ctx=ctx0)) isa NeoSpice.SpiceError
+            ctx=ctx0)) isa Allspice.SpiceError
         dafcls(hr)
     end
 

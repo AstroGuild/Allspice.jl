@@ -34,14 +34,14 @@
 # of the SPK and frame code for each k, and the cost grows fast with k (about 2 s, 3 s,
 # 6 s and 16 s for the position). The default run therefore nests the generic path to
 # `AD_GENERIC_ORDER` = 1 and the public calls to `AD_PUBLIC_ORDER` = 3; the exhaustive run
-# (`NEOSPICE_TEST_FULL=1`) nests both to order 4. Check (b) covers orders 1 to 4 of
+# (`ALLSPICE_TEST_FULL=1`) nests both to order 4. Check (b) covers orders 1 to 4 of
 # `spkder` and `pxder` in both runs.
 
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -94,15 +94,15 @@ function ad_jet(f, t::Float64, ::Val{N}) where {N}
 end
 
 "Position through the generic evaluators (no analytical shortcut for a `Dual` epoch)."
-generic_pos(ctx, targ, t, ref, obs) = invoke(NeoSpice.spk_jet,
-    Tuple{NeoSpice.KernelSet,Int32,Real,Int32,Int32,Val{0}}, NeoSpice.kernelset(ctx),
-    Int32(targ), t, NeoSpice.frame_id(NeoSpice.kernelset(ctx), ref), Int32(obs), Val(0))[1]
+generic_pos(ctx, targ, t, ref, obs) = invoke(Allspice.spk_jet,
+    Tuple{Allspice.KernelSet,Int32,Real,Int32,Int32,Val{0}}, Allspice.kernelset(ctx),
+    Int32(targ), t, Allspice.frame_id(Allspice.kernelset(ctx), ref), Int32(obs), Val(0))[1]
 
 "Rotation through the generic evaluators (no analytical shortcut for a `Dual` epoch)."
 function generic_rot(ctx, from, to, t)
-    ks = NeoSpice.kernelset(ctx)
-    return invoke(NeoSpice.frame_rotation, Tuple{NeoSpice.KernelSet,Int32,Int32,Real}, ks,
-        NeoSpice.frame_id(ks, from), NeoSpice.frame_id(ks, to), t)
+    ks = Allspice.kernelset(ctx)
+    return invoke(Allspice.frame_rotation, Tuple{Allspice.KernelSet,Int32,Int32,Real}, ks,
+        Allspice.frame_id(ks, from), Allspice.frame_id(ks, to), t)
 end
 
 group("3. derivatives", Kernels.FULL_SET_FILES...) do
@@ -172,7 +172,7 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
     end
 
     @apart @testset "spkder: nested ForwardDiff through the generic path" begin
-        # The epoch that reaches NeoSpice is a Dual (nested up to `AD_PUBLIC_ORDER` deep).
+        # The epoch that reaches Allspice is a Dual (nested up to `AD_PUBLIC_ORDER` deep).
         probe = spkpos(ctx, 301, ForwardDiff.Dual(epochs[1], 1.0), "J2000", "NONE", 399)[1]
         @test eltype(probe) <: ForwardDiff.Dual
         @test ForwardDiff.value.(probe) == spkpos(ctx, 301, epochs[1], "J2000", "NONE", 399)[1]

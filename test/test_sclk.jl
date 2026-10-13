@@ -9,8 +9,8 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -31,7 +31,7 @@ function agree(same, neo, oracle)
     a = try
         neo()
     catch e
-        e isa NeoSpice.SpiceError || rethrow()
+        e isa Allspice.SpiceError || rethrow()
         nothing
     end
     b = try
@@ -53,7 +53,7 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
     set = [Kernels.LSK, CKFix.sclk_kernel()]
     oracle_load(set)
     ctx = neo_context(set)
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     clocks = ((CKFix.SC_TDB, CKFix.TDB_PSTART, CKFix.TDB_PSTOP, CKFix.TDB_COEF),
         (CKFix.SC_TDT, CKFix.TDT_PSTART, CKFix.TDT_PSTOP, CKFix.TDT_COEF))
 
@@ -154,7 +154,7 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
         @test throws_kind(() -> scencd(ctx, sc, "3/100.5"), :badpartnumber)
         @test throws_kind(() -> scencd(ctx, sc, "1/"), :invalidsclkstring)
         # A character of several bytes in a field is an error of the string, not of the code.
-        @test all(s -> try scencd(ctx, sc, s); false catch e; e isa NeoSpice.SpiceError end,
+        @test all(s -> try scencd(ctx, sc, s); false catch e; e isa Allspice.SpiceError end,
             ("1/é:2", "1/100:4é", "é"))
         @test throws_kind(() -> scencd(ctx, sc, "1/10001.0"), :notinpart)
         @test throws_kind(() -> scencd(ctx, CKFix.SC_TDT, "2/1:0:0"), :notinpart)
@@ -173,8 +173,8 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
             tikmsc = sc == CKFix.SC_TDB ? 256.0 : CKFix.TDT_TIKMSC
             for k in 1:size(coef, 1)-1
                 t = coef[k, 1] + (coef[k+1, 1] - coef[k, 1]) * (0.2 + 0.6 * rand(rng))
-                x = sct2e(ctx, sc, NeoSpice.taylor_var(t, Val(2)))
-                e0, e1, e2 = NeoSpice.derivatives(x)
+                x = sct2e(ctx, sc, Allspice.taylor_var(t, Val(2)))
+                e0, e1, e2 = Allspice.derivatives(x)
                 @test e0 == sct2e(ctx, sc, t)
                 h = 64.0
                 fd = (sct2e(ctx, sc, t + h) - sct2e(ctx, sc, t - h)) / 2h
@@ -182,8 +182,8 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
                 # seconds per tick: the record rate (per count) over the ticks in a count
                 @test isapprox(e1, coef[k, 3] / tikmsc; rtol=sc == CKFix.SC_TDB ? 1e-15 : 1e-7)
                 sc == CKFix.SC_TDB && @test e2 == 0.0
-                y = sce2c(ctx, sc, NeoSpice.taylor_var(e0, Val(2)))
-                c0, c1, _ = NeoSpice.derivatives(y)
+                y = sce2c(ctx, sc, Allspice.taylor_var(e0, Val(2)))
+                c0, c1, _ = Allspice.derivatives(y)
                 @test isapprox(c0, t; atol=1e-6)
                 @test isapprox(c1 * e1, 1.0; rtol=1e-12)
             end
@@ -194,8 +194,8 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
         for (sc, _, _, coef) in clocks
             t = coef[2, 1] * 0.7
             et = sct2e(ks, sc, t)
-            tv = NeoSpice.taylor_var(t, Val(2))
-            ev = NeoSpice.taylor_var(et, Val(2))
+            tv = Allspice.taylor_var(t, Val(2))
+            ev = Allspice.taylor_var(et, Val(2))
             @test CKFix.warm(alloc_sct2e, ks, sc, t) == 0
             @test CKFix.warm(alloc_sce2c, ks, sc, et) == 0
             @test CKFix.warm(alloc_sce2t, ks, sc, et) == 0
@@ -204,8 +204,8 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
             @test (@inferred sct2e(ks, sc, t)) isa Float64
             @test (@inferred sce2c(ks, sc, et)) isa Float64
             @test (@inferred sce2t(ks, sc, et)) isa Float64
-            @test (@inferred sct2e(ks, sc, tv)) isa NeoSpice.Taylor{2,Float64}
-            @test (@inferred sce2c(ks, sc, ev)) isa NeoSpice.Taylor{2,Float64}
+            @test (@inferred sct2e(ks, sc, tv)) isa Allspice.Taylor{2,Float64}
+            @test (@inferred sce2c(ks, sc, ev)) isa Allspice.Taylor{2,Float64}
             @test (@inferred sct2e(ctx, sc, 1000)) isa Float64
         end
     end

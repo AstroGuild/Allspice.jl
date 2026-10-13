@@ -8,7 +8,7 @@
 # each quantity and family of relations.
 #
 # The default run compares one case in ten of each product of options (`gf_pick`) and
-# does not make the table of search times; the exhaustive run (`NEOSPICE_TEST_FULL=1`)
+# does not make the table of search times; the exhaustive run (`ALLSPICE_TEST_FULL=1`)
 # compares every case and makes the table.
 #
 # An event can be ill conditioned, and then the two libraries cannot agree to the
@@ -24,7 +24,7 @@
 #   velocities too.
 #
 # Inside that interval the bisection of CSPICE follows its own rounding and the one of
-# NeoSpice follows its own. For these two quantities an end point that differs by more
+# Allspice follows its own. For these two quantities an end point that differs by more
 # than 2e-6 s is accepted only if the quantity has the same value at the two epochs, to
 # the rounding of the states (`gf_compare` with `value`).
 #
@@ -44,7 +44,7 @@ end
 @gf_light group("gf quantities: distance, range rate, separation, phase angle", Kernels.FULL_SET_FILES...) do
     oracle_load(Kernels.full_set())
     ctx = neo_context(Kernels.full_set())
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     rng = MersenneTwister(SEED + 6200)
     et(s) = SPICE.str2et(s)
 
@@ -61,7 +61,7 @@ end
             gf_pick(i += 1, 10) || continue
             cn = gf_confinement(rng, rand(rng, (1, 1, 3)), span)
             step = rand(rng, steps)
-            q = NeoSpice.GFDistance(ks, targ, abcorr, obs)
+            q = Allspice.GFDistance(ks, targ, abcorr, obs)
             refval, adjust = gf_reference(rng, q, cn, rel, wadj)
             w = gfdist(ctx, targ, abcorr, obs, rel, refval, adjust, step, cn)
             ref = GFO.gfdist(targ, abcorr, obs, rel, refval, adjust, step, collect(cn))
@@ -81,12 +81,12 @@ end
             gf_pick(i += 1, 10) || continue
             cn = gf_confinement(rng, rand(rng, (1, 1, 3)), span)
             step = rand(rng, steps)
-            q = NeoSpice.GFRangeRate(ks, targ, abcorr, obs)
+            q = Allspice.GFRangeRate(ks, targ, abcorr, obs)
             refval, adjust = gf_reference(rng, q, cn, rel, wadj)
             w = gfrr(ctx, targ, abcorr, obs, rel, refval, adjust, step, cn)
             ref = GFO.gfrr(targ, abcorr, obs, rel, refval, adjust, step, collect(cn))
             @test gf_compare("gfrr " * gf_family(rel, adjust), w, ref;
-                value=t -> NeoSpice._gf_value(q, t), vtol=64 * eps(30.0))
+                value=t -> Allspice._gf_value(q, t), vtol=64 * eps(30.0))
         end
     end
 
@@ -104,12 +104,12 @@ end
             gf_pick(i += 1, 10) || continue
             cn = gf_confinement(rng, rand(rng, (1, 1, 3)), span)
             step = rand(rng, steps)
-            q = NeoSpice.GFSeparation(ks, t1, s1, f1, t2, s2, f2, abcorr, obs)
+            q = Allspice.GFSeparation(ks, t1, s1, f1, t2, s2, f2, abcorr, obs)
             refval, adjust = gf_reference(rng, q, cn, rel, wadj)
             w = gfsep(ctx, t1, s1, f1, t2, s2, f2, abcorr, obs, rel, refval, adjust, step, cn)
             ref = GFO.gfsep(t1, s1, f1, t2, s2, f2, abcorr, obs, rel, refval, adjust, step, collect(cn))
             @test gf_compare("gfsep " * gf_family(rel, adjust), w, ref;
-                value=t -> NeoSpice._gf_value(q, t), vtol=64 * eps(Float64(pi)))
+                value=t -> Allspice._gf_value(q, t), vtol=64 * eps(Float64(pi)))
         end
     end
 
@@ -126,7 +126,7 @@ end
             gf_pick(i += 1, 11) || continue
             cn = gf_confinement(rng, rand(rng, (1, 1, 3)), span)
             step = rand(rng, steps)
-            q = NeoSpice.GFPhase(ks, targ, illum, abcorr, obs)
+            q = Allspice.GFPhase(ks, targ, illum, abcorr, obs)
             refval, adjust = gf_reference(rng, q, cn, rel, wadj)
             w = gfpa(ctx, targ, illum, abcorr, obs, rel, refval, adjust, step, cn)
             ref = GFO.gfpa(targ, illum, abcorr, obs, rel, refval, adjust, step, collect(cn))
@@ -170,7 +170,7 @@ end
         full = Window([t0, t0 + 200 * GF_DAY])
         i = 0
         for abcorr in ("NONE", "CN+S")
-            qrr = NeoSpice.GFRangeRate(ks, "MOON", abcorr, "EARTH")
+            qrr = Allspice.GFRangeRate(ks, "MOON", abcorr, "EARTH")
             r = gfdist(ctx, "MOON", abcorr, "EARTH", "=", 3.85e5, 0.0, GF_DAY, full)
             p = gfdist(ctx, "MOON", abcorr, "EARTH", "LOCMIN", 0.0, 0.0, GF_DAY, full)
             a = gfdist(ctx, "MOON", abcorr, "EARTH", "LOCMAX", 0.0, 0.0, GF_DAY, full)
@@ -190,7 +190,7 @@ end
                     w = gfrr(ctx, "MOON", abcorr, "EARTH", rel, 0.0, adj / 1.0e5, GF_DAY, cn)
                     ref = GFO.gfrr("MOON", abcorr, "EARTH", rel, 0.0, adj / 1.0e5, GF_DAY, collect(cn))
                     @test gf_compare("gfrr end points, " * gf_family(rel, adj), w, ref;
-                        value=t -> NeoSpice._gf_value(qrr, t), vtol=64 * eps(30.0))
+                        value=t -> Allspice._gf_value(qrr, t), vtol=64 * eps(30.0))
                 end
             end
         end
@@ -384,7 +384,7 @@ end
         for (name, neo, ora) in cases
             @test gf_compare("timing", neo(), ora())
             tn, to = gf_time(neo), gf_time(ora)
-            measured(@sprintf("  %-58s NeoSpice %8.2f ms  CSPICE %8.2f ms  ratio %.2f", name,
+            measured(@sprintf("  %-58s Allspice %8.2f ms  CSPICE %8.2f ms  ratio %.2f", name,
                 1e3 * tn, 1e3 * to, to / tn))
         end
     end

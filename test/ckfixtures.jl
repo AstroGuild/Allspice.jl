@@ -10,7 +10,7 @@
 module CKFix
 
 import SPICE
-using NeoSpice: taylor_var, derivatives
+using Allspice: taylor_var, derivatives
 
 const LIB = SPICE.libcspice
 

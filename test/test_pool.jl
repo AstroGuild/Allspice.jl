@@ -8,8 +8,8 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -27,7 +27,7 @@ function oracle_names(template::AbstractString)
     return unique!(out)
 end
 
-"Number of time conversions of NeoSpice that threw, and the first messages."
+"Number of time conversions of Allspice that threw, and the first messages."
 const NEO_TIME_ERRORS = Ref(0)
 
 """
@@ -40,9 +40,9 @@ function neo_time(f, what)
     try
         return Float64(f())
     catch e
-        e isa NeoSpice.SpiceError || rethrow()
+        e isa Allspice.SpiceError || rethrow()
         NEO_TIME_ERRORS[] += 1
-        NEO_TIME_ERRORS[] <= 3 && println("  NeoSpice threw for ", repr(what), ": ", sprint(showerror, e))
+        NEO_TIME_ERRORS[] <= 3 && println("  Allspice threw for ", repr(what), ": ", sprint(showerror, e))
         return NaN
     end
 end
@@ -129,7 +129,7 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
             @test bodvrd(ctx, "EARTH", "GM") isa Vector{Float64}
         end
         @test_throws SPICE.SpiceError SPICE.bodvrd("EARTH", "NO_SUCH_ITEM")
-        # A blank name is an error in CSPICE; NeoSpice reports "not found".
+        # A blank name is an error in CSPICE; Allspice reports "not found".
         @test bodn2c(ctx, "") === nothing
         @test namfrm(ctx, "") == 0
         @test throws_kind(() -> bodvrd(ctx, "EARTH", "NO_SUCH_ITEM"), :notfound)
@@ -212,7 +212,7 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
         u(s) = neo_time(() -> utc2et(ctx, s), s)
         @test u("2016-12-31T23:59:60.500") - u("2016-12-31T23:59:59.500") ≈ 1.0 atol = 1e-6
         @test u("2017-01-01T00:00:00.500") - u("2016-12-31T23:59:60.500") ≈ 1.0 atol = 1e-6
-        println("  utc2et calls of NeoSpice that threw: ", NEO_TIME_ERRORS[])
+        println("  utc2et calls of Allspice that threw: ", NEO_TIME_ERRORS[])
         @test NEO_TIME_ERRORS[] == 0
 
         # Forms of the input string.
@@ -260,7 +260,7 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
 
     @apart @testset "no leap-second kernel" begin
         empty = SpiceContext()
-        @test_throws NeoSpice.SpiceError utc2et(empty, "2000-01-01T12:00:00")
+        @test_throws Allspice.SpiceError utc2et(empty, "2000-01-01T12:00:00")
     end
 end
 

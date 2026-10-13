@@ -33,8 +33,8 @@
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -299,7 +299,7 @@ Postcondition: the file is closed and every case has `t0 < t1`.
 """
 function write_type_kernel(path::AbstractString, rng::AbstractRNG)
     cases = TypeCase[]
-    h = SPICE.spkopn(path, "NeoSpice test kernel", 0)
+    h = SPICE.spkopn(path, "Allspice test kernel", 0)
     body = -9000
     add!(label, dtype, t0, t1, epochs, hfd; rtol=TYPE_RTOL) = push!(cases,
         TypeCase(label, dtype, body, t0, t1, [t for t in epochs if t0 <= t <= t1], hfd, rtol))
@@ -437,7 +437,7 @@ function case_epochs(rng, c::TypeCase, nrandom::Int)
     return vcat(c.t0, c.t1, special, near, random_epochs(rng, nrandom, c.t0, c.t1))
 end
 
-"Largest relative difference of position and of velocity between NeoSpice and CSPICE for `c`."
+"Largest relative difference of position and of velocity between Allspice and CSPICE for `c`."
 function state_errors(ctx, c::TypeCase, epochs)
     worst_r = 0.0
     worst_v = 0.0
@@ -497,11 +497,11 @@ end
 
 group("9. SPK data types against CSPICE") do
     rng = MersenneTwister(SEED + 9)
-    path = joinpath(mktempdir(), "neospice_types.bsp")
+    path = joinpath(mktempdir(), "allspice_types.bsp")
     cases = write_type_kernel(path, rng)
     oracle_load([path])
     ctx = neo_context([path])
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     println("  ", length(cases), " segments in ", path)
     @test sort(unique(c.dtype for c in cases)) == [1, 5, 8, 9, 12, 13, 14, 15, 17, 18, 19, 20, 21]
 
@@ -575,15 +575,15 @@ group("9. SPK data types against CSPICE") do
         for c in cases
             seg = ks.spk[Int32(c.body)][1]
             data = ks.daf[seg.file]
-            pos(t) = NeoSpice.spk_eval(data, seg, t, Val(0))[1]
+            pos(t) = Allspice.spk_eval(data, seg, t, Val(0))[1]
             worst = zeros(TYPE_AD_ORDER + 1)
             for et in smooth_epochs(rng, c, 4)
-                jet = NeoSpice.spk_eval_position(data, seg, et, Val(3))
+                jet = Allspice.spk_eval_position(data, seg, et, Val(3))
                 ad = type_ad_jet(pos, et, Val(TYPE_AD_ORDER))
                 worst .= max.(worst, [type_reldiff(jet[k], ad[k]) for k in 1:TYPE_AD_ORDER+1])
-                @test (@inferred NeoSpice.spk_eval_position(data, seg, et, Val(3))) isa
+                @test (@inferred Allspice.spk_eval_position(data, seg, et, Val(3))) isa
                       NTuple{4,SVector{3,Float64}}
-                @test NeoSpice.spk_eval_position(data, seg, et, Val(0))[1] == jet[1]
+                @test Allspice.spk_eval_position(data, seg, et, Val(0))[1] == jet[1]
             end
             @test all(worst[k] <= AD_POS_RTOL[k] for k in 1:TYPE_AD_ORDER+1)
         end
@@ -594,10 +594,10 @@ group("9. SPK data types against CSPICE") do
             seg = ks.spk[Int32(c.body)][1]
             data = ks.daf[seg.file]
             et = c.t0 + 0.61 * (c.t1 - c.t0)
-            jet = NeoSpice.spk_eval(data, seg, et, Val(3))
+            jet = Allspice.spk_eval(data, seg, et, Val(3))
             # A Taylor epoch of order 1 with Val(2): series of series. The plain parts
             # are the jet of order 2 and the first-order parts the next orders.
-            nested = NeoSpice.spk_eval(data, seg, NeoSpice.taylor_var(et, Val(1)), Val(2))
+            nested = Allspice.spk_eval(data, seg, Allspice.taylor_var(et, Val(1)), Val(2))
             @test all(map(x -> x.v, nested[k]) ≈ jet[k] for k in 1:3)
             @test map(x -> x.d[1], nested[2]) ≈ jet[3] rtol = 1e-9
             @test map(x -> x.d[1], nested[3]) ≈ jet[4] rtol = 1e-7
@@ -619,8 +619,8 @@ group("9. SPK data types against CSPICE") do
     end
 
     @apart @testset "numeric helpers" begin
-        tv = NeoSpice.taylor_var
-        der = NeoSpice.derivatives
+        tv = Allspice.taylor_var
+        der = Allspice.derivatives
         # sinh and cosh: the derivatives alternate.
         x = 0.7
         @test collect(der(sinh(tv(x, Val(4))))) ≈ [sinh(x), cosh(x), sinh(x), cosh(x), sinh(x)]
@@ -635,70 +635,70 @@ group("9. SPK data types against CSPICE") do
         end
         # Orders that a number type carries, and the replacement of the plain value.
         D1 = ForwardDiff.Dual{Nothing,Float64,1}
-        @test NeoSpice._ad_order(Float64) == 0
-        @test NeoSpice._ad_order(NeoSpice.Taylor{3,Float64}) == 3
-        @test NeoSpice._ad_order(D1) == 1
-        @test NeoSpice._ad_order(ForwardDiff.Dual{Nothing,D1,1}) == 2
-        @test NeoSpice._ad_order(NeoSpice.Taylor{2,D1}) == 3
-        @test NeoSpice._ad_order(Rational{Int}) == 8
-        @test NeoSpice._with_primal(3.0, 1.5) === 1.5
-        y = NeoSpice._with_primal(tv(3.0, Val(2)), 1.5)
+        @test Allspice._ad_order(Float64) == 0
+        @test Allspice._ad_order(Allspice.Taylor{3,Float64}) == 3
+        @test Allspice._ad_order(D1) == 1
+        @test Allspice._ad_order(ForwardDiff.Dual{Nothing,D1,1}) == 2
+        @test Allspice._ad_order(Allspice.Taylor{2,D1}) == 3
+        @test Allspice._ad_order(Rational{Int}) == 8
+        @test Allspice._with_primal(3.0, 1.5) === 1.5
+        y = Allspice._with_primal(tv(3.0, Val(2)), 1.5)
         @test y.c == (1.5, 1.0, 0.0)
-        d = NeoSpice._with_primal(ForwardDiff.Dual(3.0, 2.0), 1.5)
+        d = Allspice._with_primal(ForwardDiff.Dual(3.0, 2.0), 1.5)
         @test ForwardDiff.value(d) == 1.5 && ForwardDiff.partials(d, 1) == 2.0
-        @test NeoSpice._with_primal(1 // 2, 0.25) == 0.25
+        @test Allspice._with_primal(1 // 2, 0.25) == 0.25
         # Stumpff functions: the three branches meet the definitions.
         for z in (-9.0, -0.5, 0.0, 0.5, 9.0)
-            c0, c1, c2, c3 = NeoSpice._stumpff(z)
+            c0, c1, c2, c3 = Allspice._stumpff(z)
             r = sqrt(abs(z))
             e0, e1 = z < 0 ? (cosh(r), sinh(r) / r) : z > 0 ? (cos(r), sin(r) / r) : (1.0, 1.0)
             @test c0 ≈ e0 && c1 ≈ e1
             @test 1 - z * c2 ≈ c0 && 1 - z * c3 ≈ c1
         end
-        @test throws_kind(() -> NeoSpice._stumpff(-1.0e6), :badorbit)
+        @test throws_kind(() -> Allspice._stumpff(-1.0e6), :badorbit)
         # Angle between vectors and rotation about an axis.
         ex, ey, ez = SVector(1.0, 0.0, 0.0), SVector(0.0, 1.0, 0.0), SVector(0.0, 0.0, 1.0)
-        @test NeoSpice._vsep(ex, ey) == pi / 2
-        @test NeoSpice._vsep(ex, -ex) ≈ pi
-        @test NeoSpice._vsep(ex, SVector(1.0, 1.0, 0.0)) ≈ pi / 4
-        @test NeoSpice._vsep(ex, zero(ex)) == 0.0
-        @test NeoSpice._vrotv(ex, ez, pi / 2) ≈ ey
-        @test NeoSpice._vrotv(ex, zero(ez), 1.0) == ex
-        @test NeoSpice._vrotv(zero(ex), ez, 1.0) == zero(ex)
-        @test NeoSpice._dsign(2.0, -0.0) == 2.0 && NeoSpice._dsign(-2.0, -1.0) == -2.0
+        @test Allspice._vsep(ex, ey) == pi / 2
+        @test Allspice._vsep(ex, -ex) ≈ pi
+        @test Allspice._vsep(ex, SVector(1.0, 1.0, 0.0)) ≈ pi / 4
+        @test Allspice._vsep(ex, zero(ex)) == 0.0
+        @test Allspice._vrotv(ex, ez, pi / 2) ≈ ey
+        @test Allspice._vrotv(ex, zero(ez), 1.0) == ex
+        @test Allspice._vrotv(zero(ex), ez, 1.0) == zero(ex)
+        @test Allspice._dsign(2.0, -0.0) == 2.0 && Allspice._dsign(-2.0, -1.0) == -2.0
         # Two-body propagation: zero time gives the state back; bad input is refused.
         r0, v0 = SVector(7000.0, 0.0, 0.0), SVector(0.0, 7.5, 1.0)
-        @test NeoSpice._prop2b(GM_EARTH, r0, v0, 0.0) == (r0, v0)
-        pd, vd = NeoSpice._prop2b(GM_EARTH, r0, v0, ForwardDiff.Dual(0.0, 1.0))
+        @test Allspice._prop2b(GM_EARTH, r0, v0, 0.0) == (r0, v0)
+        pd, vd = Allspice._prop2b(GM_EARTH, r0, v0, ForwardDiff.Dual(0.0, 1.0))
         @test ForwardDiff.value.(pd) ≈ r0 && ForwardDiff.partials.(pd, 1) ≈ v0
         @test ForwardDiff.partials.(vd, 1) ≈ orbit_acc(r0)
         for dt in (-5.0e4, 300.0, 9.0e5)
             ref = orbit_state(collect(vcat(r0, v0)), dt)
-            p, v = NeoSpice._prop2b(GM_EARTH, r0, v0, dt)
+            p, v = Allspice._prop2b(GM_EARTH, r0, v0, dt)
             @test p ≈ ref[1:3] rtol = 1e-13
             @test v ≈ ref[4:6] rtol = 1e-13
         end
-        @test throws_kind(() -> NeoSpice._prop2b(-1.0, r0, v0, 1.0), :badorbit)
-        @test throws_kind(() -> NeoSpice._prop2b(GM_EARTH, zero(r0), v0, 1.0), :badorbit)
-        @test throws_kind(() -> NeoSpice._prop2b(GM_EARTH, r0, 2.0 * r0, 1.0), :badorbit)
-        @test throws_kind(() -> NeoSpice._prop2b(GM_EARTH, r0, 3.0 * v0, 1.0e308), :badorbit)
-        @test NeoSpice._kepler_equinoctial(0.0, 0.3) == 0.0
-        @test throws_kind(() -> NeoSpice._kepler_equinoctial(0.8, 0.8), :badorbit)
+        @test throws_kind(() -> Allspice._prop2b(-1.0, r0, v0, 1.0), :badorbit)
+        @test throws_kind(() -> Allspice._prop2b(GM_EARTH, zero(r0), v0, 1.0), :badorbit)
+        @test throws_kind(() -> Allspice._prop2b(GM_EARTH, r0, 2.0 * r0, 1.0), :badorbit)
+        @test throws_kind(() -> Allspice._prop2b(GM_EARTH, r0, 3.0 * v0, 1.0e308), :badorbit)
+        @test Allspice._kepler_equinoctial(0.0, 0.3) == 0.0
+        @test throws_kind(() -> Allspice._kepler_equinoctial(0.8, 0.8), :badorbit)
     end
 
     @apart @testset "errors" begin
         # Type 10 (two-line elements) is not available.
-        seg10 = NeoSpice.Segment(Int32(-1), Int32(399), Int32(1), Int32(10), 0.0, 1.0, Int32(0),
+        seg10 = Allspice.Segment(Int32(-1), Int32(399), Int32(1), Int32(10), 0.0, 1.0, Int32(0),
             1, 20, 0.0, 0.0, Int32(0), Int32(0))
-        @test throws_kind(() -> NeoSpice.spk_eval(zeros(20), seg10, 0.5, Val(1)), :unsupported)
-        @test throws_kind(() -> NeoSpice.spk_eval_position(zeros(20), seg10, 0.5, Val(2)), :unsupported)
+        @test throws_kind(() -> Allspice.spk_eval(zeros(20), seg10, 0.5, Val(1)), :unsupported)
+        @test throws_kind(() -> Allspice.spk_eval_position(zeros(20), seg10, 0.5, Val(2)), :unsupported)
         # A count at the end of a segment that does not agree with its length.
         for c in cases
             c.dtype in (15, 17, 20) && continue
             seg = ks.spk[Int32(c.body)][1]
             bad = copy(ks.daf[seg.file])
             bad[seg.eaddr] += 1.0
-            @test throws_kind(() -> NeoSpice.spk_eval(bad, seg, (c.t0 + c.t1) / 2, Val(1)), :baddaf)
+            @test throws_kind(() -> Allspice.spk_eval(bad, seg, (c.t0 + c.t1) / 2, Val(1)), :baddaf)
         end
         # One wrong value in the segment: `change(data, seg)` makes it, and the query
         # in the middle of the segment must throw an error of `kind`.
@@ -707,7 +707,7 @@ group("9. SPK data types against CSPICE") do
             seg = ks.spk[Int32(c.body)][1]
             bad = copy(ks.daf[seg.file])
             change(bad, seg)
-            return throws_kind(() -> NeoSpice.spk_eval(bad, seg, (c.t0 + c.t1) / 2, Val(1)), kind)
+            return throws_kind(() -> Allspice.spk_eval(bad, seg, (c.t0 + c.t1) / 2, Val(1)), kind)
         end
         e(seg) = seg.eaddr
         b(seg) = seg.baddr

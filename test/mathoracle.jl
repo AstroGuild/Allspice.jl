@@ -4,7 +4,7 @@
 # not wrap some others, so the oracle calls the C library itself: `CS.name(args...)` is
 # the function `name_c` of CSPICE and `CS.name_(args...)` the f2c routine `name_`. A
 # CSPICE error becomes a `CS.CError` with the short message as a lower-case symbol,
-# which is the `kind` of the `SpiceError` that NeoSpice throws for the same input.
+# which is the `kind` of the `SpiceError` that Allspice throws for the same input.
 #
 # A wrapper is described by the return type and one code for each C argument:
 #
@@ -327,12 +327,12 @@ function reldiff(a, b)
     return s == 0.0 ? d : d / s
 end
 
-"Result of `f()`, or the error kind as a symbol for a NeoSpice or CSPICE error."
+"Result of `f()`, or the error kind as a symbol for a Allspice or CSPICE error."
 function outcome(f)
     try
         return f()
     catch e
-        e isa NeoSpice.SpiceError && return e.kind
+        e isa Allspice.SpiceError && return e.kind
         e isa CS.CError && return e.kind
         rethrow()
     end

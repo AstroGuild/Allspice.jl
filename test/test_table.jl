@@ -7,13 +7,13 @@
 #     kernels, so the position agrees to a few units of rounding (measured 6e-16
 #     relative) and the velocity to rounding times degree^2 (measured 8e-13);
 #   interpolation: the position agrees within `maxerr` of the table plus the
-#     difference between NeoSpice and CSPICE.
+#     difference between Allspice and CSPICE.
 
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
-# methods of NeoSpice keep their own optimization level, except where the compiler
-# inlines one into test code. The exhaustive run (`NEOSPICE_TEST_FULL=1`) is not changed.
+# methods of Allspice keep their own optimization level, except where the compiler
+# inlines one into test code. The exhaustive run (`ALLSPICE_TEST_FULL=1`) is not changed.
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
@@ -93,7 +93,7 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
         @test throws_kind(() -> ephemeris_table(ctx, 301, t0, t1, "J2000", "BAD", 399), :badarg)
         @test_throws SpiceError ephemeris_table(ctx, 301, t0, 1e11, "J2000", "NONE", 399)
         @test_throws SpiceError ephemeris_table(ctx, 499, t0, t1, "J2000", "NONE", 399)
-        @test throws_kind(() -> NeoSpice.EphemerisTable(zeros(5), 0.0, 1.0, 1, 2, 1, 2, 1, 0.0), :badarg)
+        @test throws_kind(() -> Allspice.EphemerisTable(zeros(5), 0.0, 1.0, 1, 2, 1, 2, 1, 0.0), :badarg)
         tab = ephemeris_table(ctx, 301, t0, t1, "J2000", "NONE", 399)
         lo, hi = table_span(tab)
         @test throws_kind(() -> table_position(tab, lo - 1.0), :nocoverage)
@@ -120,7 +120,7 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
         table_alloc(tab, et)
         @test table_alloc(tab, et) == 0
 
-        single = NeoSpice.EphemerisTable{Float32}(tab)
+        single = Allspice.EphemerisTable{Float32}(tab)
         @test single.coef isa Vector{Float32} && table_span(single) == table_span(tab)
         @test table_position(single, et) isa SVector{3,Float32}
         @test rel(table_position(single, et), jet[1]) <= 1e-5
@@ -129,7 +129,7 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
         @test moved.coef isa Vector{Float32} && moved.coef == single.coef
         @test (moved.t0, moved.dt, moved.nint, moved.ncoef, moved.maxerr) ==
               (tab.t0, tab.dt, tab.nint, tab.ncoef, tab.maxerr)
-        small = NeoSpice.EphemerisTable(SVector{6,Float64}(1, 2, 3, 4, 5, 6), 0.0, 2.0, 1, 2, 1, 2, 1, 0.0)
+        small = Allspice.EphemerisTable(SVector{6,Float64}(1, 2, 3, 4, 5, 6), 0.0, 2.0, 1, 2, 1, 2, 1, 0.0)
         @test isbits(small) && table_position(small, 1.5) == SVector(2.0, 5.0, 8.0)
     end
 end

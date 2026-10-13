@@ -14,7 +14,7 @@
 # a state that is true or false, so the brackets differ only if the state differs at a
 # sample, which is possible only within rounding of a contact.
 #
-# Default run and exhaustive run (`NEOSPICE_TEST_FULL=1`). A search of CSPICE over the
+# Default run and exhaustive run (`ALLSPICE_TEST_FULL=1`). A search of CSPICE over the
 # years that hold an eclipse by chance takes 0.04 s for each year, so the default run
 # searches some days about an eclipse of a list of dates (`GFOC_SOLAR`, `GFOC_LUNAR`,
 # `GFOC_VENUS`; the window has one interval or two), each transit with one correction,
@@ -42,7 +42,7 @@ const GFOC_VENUS = ("2000 JUN 10", "2008 JUN 08", "2016 JUN 05")
     paths = [geo_kernels(; dsk=true)..., geo_occult_kernels()...]
     oracle_load(paths)
     ctx = neo_context(paths)
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     rng = MersenneTwister(SEED + 6700)
     day = 86400.0
     hour = 3600.0
@@ -311,7 +311,7 @@ const GFOC_VENUS = ("2000 JUN 10", "2008 JUN 08", "2016 JUN 05")
             c = collect(cn)
             @test gf_compare("timing", gfoclt(ctx, a..., cn), GFO.gfoclt(a..., c))
             tn, to = gf_time(() -> gfoclt(ctx, a..., cn)), gf_time(() -> GFO.gfoclt(a..., c))
-            measured(@sprintf("  %-66s NeoSpice %8.2f ms  CSPICE %8.2f ms  ratio %.2f", name,
+            measured(@sprintf("  %-66s Allspice %8.2f ms  CSPICE %8.2f ms  ratio %.2f", name,
                 1e3 * tn, 1e3 * to, to / tn))
         end
     end

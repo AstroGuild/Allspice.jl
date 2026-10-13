@@ -32,7 +32,7 @@
 # the coordinate has the same value at the two epochs within 1e-12 of its scale (the
 # rounding noise of a coordinate of a surface point is about 1e-13 of its scale).
 #
-# Default run and exhaustive run (`NEOSPICE_TEST_FULL=1`). A search of CSPICE on a surface
+# Default run and exhaustive run (`ALLSPICE_TEST_FULL=1`). A search of CSPICE on a surface
 # point is slow (0.2 s for 60 days of the ray near the limb), so the default run compares
 # one case in sixteen (sub-observer point) or in twelve (ray that follows the target) of
 # the product of options (`gf_pick`), searches the ray near the limb to the end of the
@@ -107,7 +107,7 @@ function gfs_reference(rng::AbstractRNG, q, w::Window, rel::AbstractString, with
     @assert wncard(w) >= 1
     vals = Float64[]
     for i in 1:wncard(w), x in range(0.02, 0.98; length=24)
-        push!(vals, NeoSpice._gf_value(q, w[2i-1] + x * (w[2i] - w[2i-1])))
+        push!(vals, Allspice._gf_value(q, w[2i-1] + x * (w[2i] - w[2i-1])))
     end
     lo, hi = quantile_of(vals, 0.25), quantile_of(vals, 0.75)
     refval = rel in ("<", "=", ">") ? lo + (hi - lo) * rand(rng) : 0.0
@@ -116,7 +116,7 @@ function gfs_reference(rng::AbstractRNG, q, w::Window, rel::AbstractString, with
 end
 
 "Largest absolute value of the coordinate `q` at 20 epochs of the first interval of `w`."
-gfs_scale(q, w::Window) = maximum(abs(NeoSpice._gf_value(q, w[1] + x * (w[2] - w[1])))
+gfs_scale(q, w::Window) = maximum(abs(Allspice._gf_value(q, w[1] + x * (w[2] - w[1])))
                                   for x in range(0.0, 1.0; length=20))
 
 "Tolerance of the value of the coordinate `q` in `gf_compare`: 1e-12 of its scale on `w`."
@@ -143,7 +143,7 @@ gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
     paths = [geo_kernels()..., gfs_track_kernel()]
     oracle_load(paths)
     ctx = neo_context(paths)
-    ks = NeoSpice.kernelset(ctx)
+    ks = Allspice.kernelset(ctx)
     rng = MersenneTwister(SEED + 6500)
     day = 86400.0
     hour = 3600.0
@@ -153,9 +153,9 @@ gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
         t0 = start_epoch()
         return rand(rng) < 0.7 ? Window([t0, t0 + span]) : gf_random_window(rng, 3, t0, t0 + span)
     end
-    subq(targ, fix, meth, corr, obs, sys, crd) = NeoSpice._gf_surface_coordinate(ks, false, true,
+    subq(targ, fix, meth, corr, obs, sys, crd) = Allspice._gf_surface_coordinate(ks, false, true,
         targ, fix, meth, corr, obs, 0, [0.0, 0.0, 0.0], sys, crd)
-    sntq(targ, fix, corr, obs, dref, dvec, sys, crd) = NeoSpice._gf_surface_coordinate(ks, true,
+    sntq(targ, fix, corr, obs, dref, dvec, sys, crd) = Allspice._gf_surface_coordinate(ks, true,
         true, targ, fix, "Ellipsoid", corr, obs, dref, dvec, sys, crd)
 
     @testset "gfsubc: every system, coordinate and relation against CSPICE" begin
@@ -185,7 +185,7 @@ gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
             end
             angular = (sys, crd) in GF_ANGULAR
             label = (angular ? "gfsubc longitude/RA " : "gfsubc other ") * gf_family(rel, adjust)
-            ok = gf_compare(label, w, ref; value=t -> NeoSpice._gf_value(q, t),
+            ok = gf_compare(label, w, ref; value=t -> Allspice._gf_value(q, t),
                 vtol=gfs_vtol(q, cn), wide=gfs_wide(rel, adjust))
             ok || @info "gfsubc case" targ fix obs meth corr sys crd rel refval adjust step cn
             @test ok
@@ -209,7 +209,7 @@ gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
             for i in 1:wncard(w)
                 t = w[2i-1]
                 @test w[2i] == t
-                @test (NeoSpice._gf_value(q, t - 1.0) - refval) * (NeoSpice._gf_value(q, t + 1.0) - refval) < 0
+                @test (Allspice._gf_value(q, t - 1.0) - refval) * (Allspice._gf_value(q, t + 1.0) - refval) < 0
             end
         end
     end
@@ -227,7 +227,7 @@ gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
             gf_pick(i += 1, 12) || (gf_reference_skip(rng, rel, wadj); continue)
             cn = Window([t0, t0 + 3 * day])
             q = sntq("EARTH", "IAU_EARTH", corr, "MOON", "GF_TRACK", dvec, sys, crd)
-            exist = NeoSpice._gf_vecexist(q.vec, cn, NeoSpice._gf_run(step, 1.0e-6))
+            exist = Allspice._gf_vecexist(q.vec, cn, Allspice._gf_run(step, 1.0e-6))
             @test collect(exist) ≈ [cn[1] + 1.0 + 1.0e-6, cn[2] - 1.0 - 1.0e-6]
             refval, adjust = gfs_reference(rng, q, exist, rel, wadj)
             w = gfsntc(ctx, "EARTH", "IAU_EARTH", "Ellipsoid", corr, "MOON", "GF_TRACK", dvec, sys,
@@ -242,7 +242,7 @@ gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
             angular = (sys, crd) in GF_ANGULAR
             label = (angular ? "gfsntc tracking ray, longitude/RA " : "gfsntc tracking ray, other ") *
                     gf_family(rel, adjust)
-            ok = gf_compare(label, w, ref; value=t -> NeoSpice._gf_value(q, t),
+            ok = gf_compare(label, w, ref; value=t -> Allspice._gf_value(q, t),
                 vtol=gfs_vtol(q, exist), wide=gfs_wide(rel, adjust))
             ok || @info "gfsntc case" corr dvec sys crd rel refval adjust step cn
             @test ok
@@ -272,7 +272,7 @@ gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
             cn = Window([t0, t0 + 60 * day])
             step = 3 * hour
             q = sntq("EARTH", "IAU_EARTH", corr, "MOON", "GF_TRACK", dvec, sys, crd)
-            exist = NeoSpice._gf_vecexist(q.vec, cn, NeoSpice._gf_run(step, 1.0e-6))
+            exist = Allspice._gf_vecexist(q.vec, cn, Allspice._gf_run(step, 1.0e-6))
             @test wncard(exist) >= 2
             nexist = max(nexist, wncard(exist))
             refval, adjust = gfs_reference(rng, q, exist, rel, wadj)
@@ -281,7 +281,7 @@ gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
                 # existence window, which holds a part of two intervals (the samples of
                 # the search are those of the whole window)
                 cn = Window([t0, exist[3] + 2.5 * day])
-                exist = NeoSpice._gf_vecexist(q.vec, cn, NeoSpice._gf_run(step, 1.0e-6))
+                exist = Allspice._gf_vecexist(q.vec, cn, Allspice._gf_run(step, 1.0e-6))
                 @test wncard(exist) == 2
             end
             w = gfsntc(ctx, "EARTH", "IAU_EARTH", "ELLIPSOID", corr, "MOON", "GF_TRACK", dvec, sys,
@@ -289,7 +289,7 @@ gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
             ref = GFO.gfsntc("EARTH", "IAU_EARTH", "ELLIPSOID", corr, "MOON", "GF_TRACK", dvec, sys,
                 crd, rel, refval, adjust, step, collect(cn))
             ok = gf_compare("gfsntc grazing ray " * gf_family(rel, adjust), w, ref; atol=2.0e-5,
-                value=t -> NeoSpice._gf_value(q, t), vtol=gfs_vtol(q, exist))
+                value=t -> Allspice._gf_value(q, t), vtol=gfs_vtol(q, exist))
             ok || @info "gfsntc grazing case" corr sys crd rel refval adjust cn
             @test ok
             @test all(t -> wnelmd(exist, t), w)
@@ -311,7 +311,7 @@ gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
             cn = Window([t0 - 6 * hour, t0 + 6 * hour])
             step = 300.0
             q = sntq("MOON", "IAU_MOON", corr, "EARTH", "J2000", dvec, sys, crd)
-            exist = NeoSpice._gf_vecexist(q.vec, cn, NeoSpice._gf_run(step, 1.0e-6))
+            exist = Allspice._gf_vecexist(q.vec, cn, Allspice._gf_run(step, 1.0e-6))
             @test wncard(exist) == 1 && cn[1] < exist[1] < t0 < exist[2] < cn[2]
             refval, adjust = gfs_reference(rng, q, exist, rel, false)
             w = gfsntc(ctx, "MOON", "IAU_MOON", "ellipsoid", corr, "EARTH", "J2000", dvec, sys, crd,
@@ -319,7 +319,7 @@ gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
             ref = GFO.gfsntc("MOON", "IAU_MOON", "ellipsoid", corr, "EARTH", "J2000", dvec, sys, crd,
                 rel, refval, adjust, step, collect(cn))
             ok = gf_compare("gfsntc crossing ray " * gf_family(rel, adjust), w, ref;
-                value=t -> NeoSpice._gf_value(q, t), vtol=gfs_vtol(q, exist))
+                value=t -> Allspice._gf_value(q, t), vtol=gfs_vtol(q, exist))
             ok || @info "gfsntc crossing case" corr sys crd rel refval t0
             @test ok
             n += 1
@@ -536,7 +536,7 @@ gfs_constant(target, sys, crd) = crd == "ALTITUDE" ||
             c = collect(cn)
             @test gf_compare("timing", neo(cn), ora(c))
             tn, to = gf_time(() -> neo(cn)), gf_time(() -> ora(c))
-            measured(@sprintf("  %-62s NeoSpice %8.2f ms  CSPICE %8.2f ms  ratio %.2f", name,
+            measured(@sprintf("  %-62s Allspice %8.2f ms  CSPICE %8.2f ms  ratio %.2f", name,
                 1e3 * tn, 1e3 * to, to / tn))
         end
     end
