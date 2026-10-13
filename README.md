@@ -63,3 +63,7 @@ A query checks that the epoch is inside the table and throws `SpiceError(:nocove
 ## Relation to NAIF
 
 This package is an independent work. NAIF does not develop it, support it or endorse it, and the CSPICE toolkit of NAIF is the reference against which the package is tested.
+
+## Licence
+
+The package is under the MIT licence; see `LICENSE`.
