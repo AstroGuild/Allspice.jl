@@ -1,6 +1,6 @@
 # Evaluation of the SPK data types other than the fixed-interval Chebyshev types 2 and
 # 3: types 1, 5, 8, 9, 12, 13, 14, 15, 17, 18, 19, 20 and 21. Type 10 (two-line
-# elements) is not available.
+# elements) needs the kernel set and is in `spk_types/type10.jl`.
 #
 # Each type has one function `state(data, seg, et::T) -> (pos::Vec3{T}, vel::Vec3{T})`
 # that follows the algorithm of the CSPICE reader and evaluator pair `spkrNN`/`spkeNN`

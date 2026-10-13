@@ -2,35 +2,89 @@
 
 Working note for the first build. Each source file has one owner; the signatures below
 are fixed, and everything else inside a file is the owner's choice. `src/types.jl` and
-`src/NeoSpice.jl` define the shared types and the include order.
+`src/NeoSpice.jl` define the shared types and the include order, and the sections below
+follow that order, so a file uses only the files of the sections before it.
 
 Conventions that hold everywhere:
 
-- Epochs are ET (TDB seconds past J2000). Every evaluator is generic over the epoch
-  number type `T<:Real`, so `Float64`, a `ForwardDiff.Dual` and `Taylor{N,Float64}`
-  all pass through. `primal(et)::Float64` gives the plain value used for all
-  discrete decisions (segment search, record index, branch choice).
+- Epochs are ET (ephemeris time: TDB seconds past J2000). Every evaluator is generic
+  over the epoch number type `T<:Real`, so `Float64`, a `ForwardDiff.Dual` (a dual
+  number, which carries first derivatives) and `Taylor{N,Float64}` all pass through.
+  `primal(et)::Float64` gives the plain value used for all discrete decisions (segment
+  search, record index, branch choice).
 - A "jet of order N" is an `NTuple{N+1}` of ordinary time derivatives, orders 0 to N.
+- A "snapshot" is a `KernelSet`: an immutable value that holds everything loaded. A
+  query reads the snapshot of its context once and takes no lock, and a change
+  (`furnsh`, `unload`, `kclear`, a pool edit) builds a new snapshot under the lock of
+  the context and swaps the reference atomically.
+- Every public call that needs kernel data has three forms: `f(ks::KernelSet, args...)`,
+  `f(ctx::SpiceContext, args...)`, and `f(args...)` on the default context.
 - Hot paths allocate nothing and return `StaticArrays` values.
-- Errors are `throw(SpiceError(kind, msg))`.
+- Errors are `throw(SpiceError(kind, msg))`. The newer files use the short message of
+  CSPICE in lower case as `kind`, for example `:invaliddegree` for SPICE(INVALIDDEGREE).
+- CSPICE keeps state in saved variables and in process-wide tables; this package keeps
+  none. State that CSPICE hides is an object that the caller owns (`DAFHandle`,
+  `DASHandle`, `EKResult`, `EKFastLoad`) or an atomic field of the `SpiceContext`.
+- Where CSPICE computes with 32-bit integers, the port gives the same value: `_cint`
+  (the C cast of a double) and `_wrap32` (reduction to the 32-bit range) of `time.jl`,
+  with `_dnint` and `_nint`, the rounding functions of f2c (the Fortran to C translator
+  that produced most of CSPICE).
 - CSPICE N0067 source is at `/home/alex/mice/src/cspice` for reference; CSPICE is the
   oracle, so match its conventions (units km, km/s, radians in results).
 
+## `types.jl`, `dyntypes.jl`, `dsk_types.jl`, `ek/types.jl`
+
+The shared data types. The three small files come before `types.jl` in the include
+order because `Loaded`, `KernelSet` and `SpiceContext` have fields of their types.
+
+| Type | File | Content |
+|---|---|---|
+| `Vec3{T}`, `Mat3{T}` | `types.jl` | `SVector{3,T}` and `SMatrix{3,3,T,9}` |
+| `Segment`, `CKSegment` | `types.jl` | plain bits (a value without pointers): one SPK or binary PCK segment, one CK segment |
+| `DAF` | `types.jl` | one opened binary kernel: `path`, `kind`, `data`, `segments`, `cksegments` |
+| `PoolValue`, `Assignment`, `TextKernel` | `types.jl` | pool value (`Vector{Float64}` or `Vector{String}`) and a parsed text kernel |
+| `Loaded` | `types.jl` | one load-list entry: `path`, `source`, `content` (`DAF`, `TextKernel`, `DSKFile` or `EKFile`) |
+| `FrameDef`, `TKFrame`, `BodyRot`, `LeapSeconds`, `SclkType1` | `types.jl` | parsed pool data |
+| `KernelSet`, `TimeDefaults`, `SpiceContext`, `SpiceError` | `types.jl` | the snapshot, the defaults of `timdef`, the context, the error type |
+| `DynVector`, `DynFrame`, `DynLevel{K}`, `SwitchFrame`, `PoolWatch` | `dyntypes.jl` | parsed dynamic and switch frames, the recursion link, the watcher state |
+| `DLADescr`, `DSKDescr`, `DSK02Header`, `DSKSegment`, `DSKFile`, `DSKTolerances` | `dsk_types.jl` | shape-kernel descriptors, one loaded file, the six tolerances |
+| `EKColumnAttr`, `EKSegmentSummary`, `_EKColumn`, `_EKSegment`, `EKFile`, `EKTable` | `ek/types.jl` | table-kernel segments, one loaded file, one catalogue entry |
+
+- Every type is immutable after construction, with one exception: the fields `agents`
+  and `notify` of `PoolWatch`, which a caller reads and writes only under the lock of
+  the context (`version` is atomic and never decreases).
+- `KernelSet`, `TimeDefaults`, `DSKTolerances`, `DynFrame` and `SwitchFrame` are declared
+  `mutable` with `const` fields only, so that each lives behind one pointer and an
+  atomic reference to it is one word. `SpiceContext` has the atomic fields `ks`,
+  `timedefs`, `dsktols` and `gftol`, the `lock`, and `watch::PoolWatch`.
+- Priority order in `KernelSet.spk`, `pck`, `ck` and `dsk` is the search order of
+  CSPICE: later file first, and inside one file later segment first. `withfile(s, file)`
+  gives the copy of a `Segment` or `CKSegment` that belongs to file number `file`.
+
 ## `taylor.jl`
 
-- `struct Taylor{N,T} <: Real` with `c::NTuple{N+1,T}` holding Taylor coefficients
-  (`c[k+1] = f⁽ᵏ⁾/k!`). Arithmetic `+ - *` between Taylor values and with plain reals,
-  `/` by a plain real and by a Taylor value, `sin`, `cos`, `sincos`, `sqrt`, `zero`,
-  `one`, `convert`, `promote_rule`.
+- `struct Taylor{N,T} <: Real`: the storage is the value `v::T` (coefficient 0) and the
+  tuple `d::NTuple{N,T}` of the higher coefficients, because Julia cannot write the
+  field type `NTuple{N+1,T}`. The property `x.c::NTuple{N+1,T}` joins them
+  (`c[k+1] = f⁽ᵏ⁾/k!`), and `Taylor{N,T}(c)` splits a tuple of `N+1` coefficients.
+  Arithmetic `+ - *` between Taylor values and with plain reals, `/` by a plain real
+  and by a Taylor value, `inv`, `sin`, `cos`, `sincos`, `sqrt`, `zero`, `one`, `convert`,
+  `promote_rule`. Comparisons are not defined: code that branches must use `primal`.
 - `taylor_var(t::T, ::Val{N}) -> Taylor{N,T}`: the variable `t` with unit derivative.
 - `derivatives(x::Taylor{N,T}) -> NTuple{N+1,T}`: ordinary derivatives (`c[k+1]*k!`).
-- `primal(x::Real)`: `Float64(x)` for plain reals, `primal(x.c[1])` for `Taylor`.
+- `primal(x::Real)`: `Float64(x)` for plain reals, `primal(x.v)` for `Taylor`.
 
 ## `daf.jl`
 
-- `open_daf(path::AbstractString) -> DAF`: validates the file record, handles both
-  byte orders, walks the summary records, fills `Segment` descriptors (including the
-  four directory values for SPK types 2, 3, 20 and PCK type 2).
+- `open_daf(path::AbstractString) -> DAF`: opens a DAF (double precision array file,
+  the container of binary SPK, binary PCK and CK kernels). It validates the file
+  record, handles both byte orders, walks the summary records, and fills the
+  descriptors in file order: `Segment` for `:SPK` and `:PCK` (including the four
+  directory values for SPK types 2, 3, 20 and PCK type 2), `CKSegment` for `:CK`.
+  Postcondition: every segment has finite epochs and
+  `1 <= baddr <= eaddr <= length(data)`. Throws `SpiceError(:nofile)` or `(:baddaf)`.
+- `_daf_sizeok(size, psize, dsize, offset) -> (ok, n)` mirrors `zzsizeok_`, and
+  `_daf_i32(raw, off, little)` reads one 32-bit integer; `daf_access.jl` uses both.
 
 ## `spk_eval.jl`
 
@@ -41,9 +95,10 @@ Conventions that hold everywhere:
   derivatives to order N. Order 1 is the velocity that CSPICE returns. For types with
   an independent velocity series (3) order k >= 1 is derivative k-1 of the velocity
   series. Types 2 and 3 are in this file; types 1, 5, 8, 9, 12 to 15 and 17 to 21 are in
-  `spk_more.jl` and `spk_types/` (one generic `state(data, seg, et::T) -> (pos, vel)`
-  per type that follows CSPICE; order k >= 2 is derivative k-1 of that velocity, from a
-  Taylor epoch). Type 10 throws `SpiceError(:unsupported, ...)`.
+  `spk_more.jl` and `spk_types/`. Type 10 and unknown types throw
+  `SpiceError(:unsupported, ...)`: type 10 needs the leap seconds, which `spk_eval` does
+  not have, so only a query through a `KernelSet` evaluates it (see `spk_api.jl`).
+  Precondition, not checked: `seg.t0 <= primal(et) <= seg.t1`.
 - `spk_eval_position(data, seg, et::T, ::Val{N})`: as above but always derivatives of
   the position function (differs from `spk_eval` where the CSPICE velocity is not the
   derivative of the position, for example types 3, 8, 9, 14).
@@ -52,23 +107,62 @@ Conventions that hold everywhere:
   segment, as `pcke02` returns them, and their time derivatives. `PHI = RA + pi/2`,
   `DELTA = pi/2 - DEC`; the matrix from the segment's inertial frame to the body frame
   is `R3(W) * R1(DELTA) * R3(PHI)`.
+- `_cheb3(data, a, ncoef, s::T, radius, ::Val{N}) -> NTuple{N+1,Vec3{T}}`: the sum of
+  three Chebyshev series and its derivatives, also used by `table.jl`. For a plain
+  epoch the value and the first derivative are equal to the last bit to those of
+  `chbval_` and `chbint_`, which matters for an angle of many turns.
+
+## `spk_more.jl`, `spk_types/chebyshev.jl`, `conic.jl`, `interp.jl`, `mda.jl`, `numeric.jl`
+
+Evaluation of the SPK types other than 2 and 3. Each type has one function
+`state(data, seg, et::T) -> (pos::Vec3{T}, vel::Vec3{T})` that follows the reader and
+evaluator pair `spkrNN`/`spkeNN` of CSPICE, so a plain epoch gives the CSPICE state.
+
+| Function | File | SPK types |
+|---|---|---|
+| `_spk_mda` | `mda.jl` | 1, 21 |
+| `_spk5`, `_spk15`, `_spk17` | `conic.jl` | 5, 15, 17 |
+| `_spk_equal`, `_spk_unequal`, `_spk18`, `_spk19` | `interp.jl` | 8 and 12, 9 and 13, 18, 19 |
+| `_spk14`, `_spk20` | `chebyshev.jl` | 14, 20 |
+
+- `_spk_more(data, seg, et::T, ::Val{N})` and `_spk_more_position(...)` are the
+  branches of `spk_eval` and `spk_eval_position` for these types: order k >= 2 comes
+  from the same `state` function with a Taylor epoch. No allocation.
+- A type other than 2, 3 and 20 has no directory values in its `Segment`: the
+  evaluator reads them from the end of the segment at each call and checks them with
+  `_seg_count`, which throws `SpiceError(:baddaf)`. `_lstltd(data, base, n, x)` and
+  `_lstled(...)` mirror `lstltd` and `lstled` on a part of the data array.
+- `_ad_order(::Type{T}) -> Int` is the number of derivative orders that `T` carries,
+  and `_with_primal(x::T, p::Float64) -> T` replaces the plain value of `x` and keeps
+  its derivative parts. An iterative solution runs on plain numbers as CSPICE does, and
+  Newton steps then give the derivative parts.
 
 ## `textkernel.jl`
 
-- `kernel_arch(path) -> Symbol`: `:SPK`, `:PCK` (binary), or `:TEXT`.
+- `kernel_arch(path) -> Symbol`: `:SPK`, `:PCK` or `:CK` for a binary DAF, `:DSK` or
+  `:EK` for a DAS file with that ID word, and `:TEXT` for every other file. Throws
+  `SpiceError(:nofile)` or, for another binary kernel type, `SpiceError(:unsupported)`.
 - `parse_text_kernel(path) -> TextKernel`: full text-kernel grammar (`\begindata`,
   `\begintext`, `=`, `+=`, numeric and string vectors, `D` exponents, `@` dates as TDB
-  seconds past J2000, quoted strings with doubled quotes, `//` string continuation).
+  seconds past J2000, quoted strings with doubled quotes). String elements are kept
+  raw, so a `//` continuation marker stays in place until `pool_string_joined(values,
+  nth, contin="//")` reads it. `parse_text_lines(path, lines)` does the same on lines in
+  memory; both throw `SpiceError(:badkernel)` for a malformed assignment.
 - `metakernel_files(tk::TextKernel) -> Vector{String}`: paths from `KERNELS_TO_LOAD`
   with `PATH_SYMBOLS`/`PATH_VALUES` substituted; empty if the kernel is not a
   meta-kernel.
-- `apply_assignments!(pool::Dict{String,PoolValue}, tk::TextKernel)`.
+- `apply_assignments!(pool::Dict{String,PoolValue}, tk::TextKernel) -> pool`: a stored
+  vector is never mutated, so vectors shared with an older snapshot stay valid. Throws
+  `SpiceError(:typemismatch)` when `+=` mixes numeric and string values.
+- `_nparsd(s) -> Float64`: the double that `nparsd` of CSPICE computes, which is not
+  always the correctly rounded one; throws `SpiceError(:badnumber)`.
 
 ## `names.jl`
 
 - `normalize_name(s) -> String`: upper case, leading/trailing blanks removed, inner
   blank runs compressed to one.
-- `build_names(pool) -> (name2code, code2name)` from `NAIF_BODY_NAME`/`NAIF_BODY_CODE`.
+- `build_names(pool) -> (name2code, code2name)` from `NAIF_BODY_NAME`/`NAIF_BODY_CODE`;
+  throws `SpiceError(:badpool)` if the pair is not complete or not consistent.
 - `body_code(ks::KernelSet, name::AbstractString) -> Int32` (pool first, then the
   built-in table of `zzidmap.c`, then a string that is an integer); throws
   `SpiceError(:unknownbody, ...)`. `body_code(ks, id::Integer) = Int32(id)`.
@@ -79,8 +173,9 @@ Conventions that hold everywhere:
 - `build_frames(pool) -> (frames::Dict{Int32,FrameDef}, framename2id)` from the
   `FRAME_<name>`, `FRAME_<id>_NAME/_CLASS/_CLASS_ID/_CENTER` variables.
 - `frame_def(ks, id::Integer) -> FrameDef` (built-in inertial frames of `chgirf.c` and
-  built-in non-inertial frames of `zzfdat.c` first, then the pool, as `frinfo` does); throws
-  `SpiceError(:unknownframe, ...)`.
+  built-in non-inertial frames of `zzfdat.c` first, then the pool, as `frinfo` does,
+  then the rule of `frinfo` that an ID in 13000:13999 is a class 2 frame of the Earth
+  with class ID `id - 10000`); throws `SpiceError(:unknownframe, ...)`.
 - `frame_id(ks, name::AbstractString) -> Int32`; `frame_id(ks, id::Integer)`.
 - `frame_name(ks, id) -> Union{String,Nothing}`.
 - `inertial_rotation(id::Integer) -> Mat3{Float64}`: constant matrix that rotates
@@ -91,12 +186,13 @@ Conventions that hold everywhere:
 Every function with a `ks` argument has a form with a `SpiceContext` and a form on the
 default context. The conversions need a leap-second kernel (`SpiceError(:nolsk)`).
 
-- `build_lsk(pool) -> Union{Nothing,LeapSeconds}`.
+- `build_lsk(pool) -> Union{Nothing,LeapSeconds}`; `_lsk(ks) -> LeapSeconds`.
 - `deltet(ks, epoch::Real, eptype::AbstractString) -> Float64` (ET − UTC, as `deltet_c`).
 - `unitim(ks, epoch::T, insys, outsys) -> T` between `TAI`, `TDT`, `TT`, `GPS`, `TDB`,
   `ET`, `JDTDT`, `JDTDB`, `JED`; generic over `T`, no allocation.
 - `ttrans(ks, from, to, tvec) -> NTuple{7,Float64}` (not exported): the 21
-  representations of `ttrans` of SPICELIB.
+  representations of `ttrans` of SPICELIB. The inner form `_ttrans(l::LeapSeconds,
+  pfrom, pto, tv)` takes the codes `_TT_*`, and `_tvec(x...)` builds the time vector.
 - `str2et(ks, s, defs=TimeDefaults()) -> Float64`: every string form of `tpartv`.
 - `utc2et(ks, s) -> Float64` and `tparse(s) -> Float64`, without the range checks that
   CSPICE makes only after `tparch("YES")`.
@@ -106,13 +202,14 @@ default context. The conversions need a leap-second kernel (`SpiceError(:nolsk)`
 - `etcal(et) -> String`.
 - `timdef([ctx], action, item, value="") -> String`: the defaults `CALENDAR`, `SYSTEM`
   and `ZONE` are an immutable `TimeDefaults` in an atomic field of the `SpiceContext`.
-  A reader loads it once and takes no lock; `SET` builds a new object under the lock
-  of the context. `kclear` and `furnsh` do not change it.
+  A reader loads it once with `timedefaults(ctx)` and takes no lock; `SET` builds a new
+  object under the lock of the context. `kclear` and `furnsh` do not change it.
 - `jul2gr(y, m, d)`, `gr2jul(y, m, d) -> (year, month, day, doy)`.
 - Constants: `j1900 j1950 j2000 j2100 jyear tyear spd b1900 b1950 clight halfpi twopi
   rpd dpr`, each a function without arguments.
-- Errors: `:badtime` (string or epoch), `:badtimetype` (system or representation),
-  `:badtimedefault` (`timdef`), `:badformat` (`et2utc` format, empty picture).
+- Errors: `:nolsk`, `:badtime` (string or epoch), `:badtimetype` (system or
+  representation), `:badepochtype` (`eptype` of `deltet`), `:badtimedefault` (`timdef`),
+  `:badformat` (`et2utc` format, empty picture).
 
 ## `rotations.jl`
 
@@ -125,14 +222,117 @@ default context. The conversions need a leap-second kernel (`SpiceError(:nolsk)`
   segment first if one covers the epoch, text-PCK constants otherwise, as `tisbod`
   does), class 3 (`ck.jl`), class 4, class 5 (`dynframes.jl`) and class 6
   (`switchframes.jl`) frames; a higher class throws `SpiceError(:unsupported, ...)`.
+  The two frame chains are followed to their first common frame, as `refchg_` does,
+  for at most `MAX_FRAME_CHAIN` (10) links each (`SpiceError(:framechain)` beyond).
 - `rotation_jet(ks, from, to, et::Real, ::Val{N}) -> NTuple{N+1,Mat3}`: the same as
   ordinary derivatives.
+- `_frame_step(ks, id::Int32, et::T) -> (parent::Int32, rot::Mat3{T})` is one link of a
+  chain (requires `id != 1`), and `_frame_parent(ks, id)` gives the parent without any
+  evaluation. A class 4 frame without data throws `SpiceError(:framedatanotfound)`, and
+  a class 3 frame without a CK segment at `et` throws `SpiceError(:noframeconnect)`.
+- `_body_rotation(ks, classid::Int32, et::T) -> Mat3{T}`: J2000 to a class 2 frame, as
+  `tisbod_`; throws `SpiceError(:framedatanotfound)`.
+
+## `sclk.jl`
+
+Spacecraft clocks (SCLK) of type 1, as `sc01.f` of CSPICE. An encoded SCLK value counts
+"ticks", the units of the least significant clock field, from the start of the first
+partition. The data of every clock are read from the pool once, when the snapshot is
+built, so the conversions are pure functions of the snapshot.
+
+- `build_sclk(pool) -> Dict{Int32,SclkType1}`: a clock with incomplete data is left
+  out, so that a load never fails. `_sclk(ks, sc) -> SclkType1` then throws
+  `SpiceError(:kernelvarnotfound)`, or `SpiceError(:unsupported)` for another clock type.
+- `_sce2c(ks, clock, et::T) -> T` (`scec01`, continuous ticks) is piecewise linear and
+  generic over the number type; it throws `SpiceError(:valueoutofrange)` outside the
+  clock range. `_sce2t(ks, clock, et::Float64)` (`scet01`) rounds to whole ticks.
+- The public calls `sct2e` and `sce2c` are generic too and do not allocate.
+
+## `ck.jl`, `ck_api.jl`
+
+A CK (orientation kernel) segment gives the C-matrix of an instrument: the matrix that
+rotates vectors from the reference frame of the segment to the instrument frame, as a
+function of ticks. The evaluators follow the readers `ckrNN` and the evaluators
+`ckeNN` of CSPICE for types 1 to 6, but read the data array directly and keep no state.
+
+- `_ck_search(ks, inst::Int32, sclk::T, tol::Float64, needav::Bool) -> (found, cmat,
+  av, clkout, ref::Int32)`: the pointing from the first segment in priority order that
+  gives one, as `ckbss_`/`cksns_` with `ckpfs_`. Requires `tol >= 0`; no allocation.
+- Two evaluation modes, which `dynframes.jl` and `switchframes.jl` share. `_CKExact()`
+  gives the rotation in the number type of the epoch (`ckfrot_`). `_CKState()` takes a
+  `Float64` epoch and gives a `Mat3{Taylor{1,Float64}}` whose derivative part comes
+  from the angular velocity of the segment (`ckfxfm_`), because the state
+  transformation of CSPICE is not the time derivative of the rotation for a CK frame.
+- `_ck_frame_step(mode, ks, fd::FrameDef, et) -> (ref::Int32, rot)` is one chain link of
+  a class 3 frame, and `_ck_chain_to(mode, ks, id, stop, et) -> Mat3` follows a chain
+  that may hold class 3 frames, for at most `MAX_FRAME_CHAIN` links, without allocation.
+- `_ck_in_chain(ks, id) -> Bool` is true if the chain of `id` toward J2000 holds a frame
+  of class 3, 5 or 6. For such a chain `frame_jet(ks, from::Int32, to::Int32,
+  et::Float64, Val(1)) -> (R, dR)` of `ck_api.jl`, the jet behind `sxform`, `spkezr` and
+  `spkgeo`, is `_ck_state_rotation` (the two blocks of `sxform_c`, as `frmchg_`); for
+  every other chain it is `rotation_jet`. `_exact_frame_jet` always gives the exact
+  derivatives.
+- Public: `ckgp`, `ckgpav` (`SpiceError(:valueoutofrange)` for `tol < 0`), `ckcov`,
+  `ckobj`, `ckmeta` (`SpiceError(:unknownckmeta)`).
+- Deviation from CSPICE, type 6: when `ckr06_` moves to the next mini-segment it rounds
+  the clock rate of that mini-segment to a whole number; the stored rate is used here.
+
+## `dynframes.jl`, `switchframes.jl`
+
+Dynamic frames (class 5, the parameterized families of `zzdynfrm.c` and `zzdynrot.c`)
+and switch frames (class 6: a frame aligned with the first base frame of a list that
+has data at the request time, as `zzswffet_` and `zzswfxfm_`). The definitions are
+parsed once when the snapshot is built; the evaluation reads the parsed objects only,
+is a pure function of the snapshot and does not allocate.
+
+- `_dyn_levels(base::KernelSet, edited::Bool, bodydefs) -> KernelSet`: the last step of
+  `build_kernelset`. It parses the class 5 and class 6 frames (`_dyn_parse`,
+  `_sw_parse`) and, if a dynamic frame exists, links a chain of `_DYN_LEVELS` (2) inner
+  snapshots with the same data through `inner`; no data are copied.
+- Recursion: a dynamic frame of `ks` is evaluated with the states and the frames of
+  `ks.inner`. The innermost snapshot has `inner === nothing`, and a dynamic frame that
+  is needed there throws `SpiceError(:recursiontoodeep)`, the limit of `zzfrmgt1_`.
+- `_dyn_frame_step(mode, ks, fd, et) -> (base::Int32, rot)` and `_sw_frame_step(mode,
+  ks, fd, et) -> (parent::Int32, rot)` are the chain links, with the modes of `ck.jl`.
+  `_dyn_chain_step` selects between them, and `_dyn_base(ks, id)` gives the base frame
+  without any evaluation.
+- The parsers do not throw: a definition that is not valid gives an object with
+  `errkind !== :none`, and a use of the frame throws that error. A switch frame with no
+  base selected throws `SpiceError(:noframeconnect)`.
+
+## `pool_write.jl`
+
+The write interface of the kernel pool (`pdpool`, `pcpool`, `pipool`, `dvpool`,
+`lmpool`, `ldpool`, `clpool`), the read calls `expool`, `dtpool`, `gnpool`, `szpool`,
+`stpool`, body name definitions (`boddef`) and the watchers (`swpool`, `cvpool`,
+`poolversion`). An edit never changes a snapshot: it goes through the context as
+`furnsh` does.
+
+- `context.jl` calls three functions under the lock of the context:
+  `_pool_x_swap_loaded!(ctx, list, entries)` from `furnsh`,
+  `_pool_x_swap_unloaded!(ctx, list)` from `unload`, and `_pool_x_swap_cleared!(ctx)`
+  from `kclear`. Each swaps in the new snapshot and notifies the watchers.
+- Rule for the load list, which is the rule of CSPICE: an edit stays through a later
+  `furnsh` and through the `unload` of a binary kernel; the `unload` of a text kernel
+  builds the pool again from the text kernels that stay, so every edit is lost;
+  `kclear` removes every edit but keeps the pairs of `boddef`; `clpool` empties the pool
+  and leaves the load list as it is.
+- Deviation from CSPICE: CSPICE keeps one global agent table, and here each
+  `SpiceContext` has its own `PoolWatch`, so `swpool` and `cvpool` are thread safe and
+  two contexts do not see the watches of each other. `poolversion(ctx)` is an atomic
+  counter of the pool changes that a caller reads without a lock.
 
 ## `context.jl`
 
-- `build_kernelset(loaded::Vector{Loaded}) -> KernelSet`; `empty_kernelset()`.
+- `build_kernelset(loaded::Vector{Loaded}, edited=nothing, bodydefs=[]) -> KernelSet`:
+  reads no file, since it uses the objects of the load-list entries. `edited` is a pool
+  with direct edits that takes the place of the pool of the text kernels.
+  `empty_kernelset()`.
 - `SpiceContext()`, `default_context()`, `kernelset(ctx) -> KernelSet` (one atomic read).
-- `furnsh([ctx], path)`, `unload([ctx], path)`, `kclear([ctx])`, `ktotal([ctx])`.
+- `furnsh([ctx], path)`, `unload([ctx], path)`, `kclear([ctx])`, `ktotal([ctx])`. If a
+  load fails, the context is unchanged. `furnsh` throws `SpiceError(:badarg)` for a
+  blank path, `SpiceError(:nofile)` for a missing file and `SpiceError(:unsupported)`
+  for a meta-kernel that lists a meta-kernel.
 
 ## `spk_api.jl`, `frame_api.jl`, `pool_api.jl`
 
@@ -145,12 +345,24 @@ the default context, plus an inner form on a `KernelSet`.
   time.
 - `spkder(targ, et, ref, obs, ::Val{N}) -> NTuple{N+1,SVector{3}}` (geometric) and
   `spkder(targ, et, ref, abcorr, obs, ::Val{N})`.
+- `pxform(from, to, et) -> SMatrix{3,3}`; `sxform(from, to, et) -> SMatrix{6,6}`;
+  `pxder(from, to, et, ::Val{N}) -> NTuple{N+1,SMatrix{3,3}}`.
+- `gdpool(name)`, `gcpool(name)`, `gipool(name)`, `bodvrd(body, item)`, `bodn2c`,
+  `bodc2n`, `bods2c`, `namfrm`, `frmnam`. `bodn2c` and `bods2c` return `nothing` for an
+  unknown name, and `namfrm` returns 0 for an unknown frame.
+- Internal: `spk_jet(ks, targ::Int32, et::T, ref::Int32, obs::Int32, ::Val{N}) ->
+  NTuple{N+1,Vec3}` is the geometric position and its derivatives; it does not allocate
+  and throws `SpiceError(:nocoverage)` or `SpiceError(:nopath)`. It is the place where a
+  type 10 segment is evaluated, with `_t10_jet` and the leap seconds of `ks`.
+  `frame_jet(ks, from, to, et, ::Val{N})` is the rotation jet for any epoch type.
+- `check_epoch(et)` throws `SpiceError(:badarg)` for an epoch that is not finite;
+  `NameOrID = Union{AbstractString,Integer}`; `CLIGHT` is the value of `clight_c`.
 
 ## `aberration.jl`
 
 - `struct Aberration` (plain bits; properties `uselt`, `converged`, `stellar`,
   `transmit`, `geometric`); `Aberration(s::AbstractString)` parses as `zzvalcor` and
-  throws `SpiceError(:badarg, ...)`.
+  throws `SpiceError(:badarg, ...)`. `AbcorrArg` is the union of the two argument forms.
 - `abcorr_state(ks, targ::Int32, et, ref::Int32, corr, obs::Int32) -> (SVector{6}, lt)`
   (`spkez`), `abcorr_position(...) -> (SVector{3}, lt)` (`spkezp`),
   `abcorr_jet(..., ::Val{N}) -> NTuple{N+1,Vec3}`.
@@ -158,14 +370,360 @@ the default context, plus an inner form on a `KernelSet`.
   `spkaps(targ, et, ref, abcorr, stobs, accobs)`, `spkacs(targ, et, ref, abcorr, obs)`,
   `spkapo(targ, et, ref, sobs, abcorr)`, `ltime(etobs, obs, dir, targ)`,
   `stelab(pobj, vobs)`, `stlabx(pobj, vobs)`, with the argument order of CSPICE.
-- `pxform(from, to, et) -> SMatrix{3,3}`; `sxform(from, to, et) -> SMatrix{6,6}`;
-  `pxder(from, to, et, ::Val{N}) -> NTuple{N+1,SMatrix{3,3}}`.
-- `gdpool(name)`, `gcpool(name)`, `gipool(name)`, `bodvrd(body, item)`, `bodn2c`,
-  `bodc2n`, `bods2c`, `namfrm`, `frmnam`.
+
+## `windows.jl`
+
+- `struct Window <: AbstractVector{Float64}`: `data` holds the endpoints of disjoint
+  closed intervals in increasing order, so `w[k]`, `length(w)` and iteration give what
+  a SPICE double cell gives. `Window(endpoints)` copies and validates with `wnvald!`;
+  `_window_of(d)` takes ownership of a valid endpoint vector without a check.
+- Public: `card`, `wncard`, `wninsd!`, `wnvald!`, `wnunid`, `wnintd`, `wndifd`, `wncomd`,
+  `wnelmd`, `wnincd`, `wnfetd`, `wnsumd`. The set operations return a new window.
+- Errors: `:badendpoints` (left > right), `:unmatchendpts` (odd count), `:nointerval`.
+- Deviation from CSPICE: a window has no size limit, so SPICE(WINDOWEXCESS) cannot
+  occur. The coverage calls and every geometry finder search return a `Window`.
+
+## `daf_access.jl`, `daf_write.jl`
+
+Low-level read and write access to DAF files. CSPICE keeps a process-wide table of
+open files and one hidden "current array" for each search; here the opened file is a
+`DAFHandle` that the caller owns, and the search state lives inside it.
+
+| Group | Functions |
+|---|---|
+| open and close | `dafopr(path)`, `dafopw(path)`, `dafonw(path, ftype, nd, ni, ifname, resv)`, `dafcls(h)` |
+| search and read | `dafbfs`, `dafbbs`, `daffna -> Bool`, `daffpa -> Bool`, `dafgs`, `dafgn`, `dafgda`, `dafgsr` |
+| summary | `dafhsf(h) -> (nd, ni)`, `dafps(dc, ic)`, `dafus(sum, nd, ni) -> (dc, ic)`, `dafws`, `dafrs`, `dafrn` |
+| add an array | `dafbna(h, sum, name)`, `dafada(h, data)`, `dafena(h)` |
+| comments, file record | `dafac`, `dafec -> Vector{String}`, `dafdc`, `dafrfr` |
+| architecture | `getfat(path) -> (arch, kind)`, `idw2at(idword) -> (arch, kind)` |
+
+- Thread safety: there is no global state, so two tasks can work on two handles at the
+  same time. One handle is not safe for concurrent use, and a caller that shares a
+  handle between tasks must hold a lock around every call.
+- A file never shrinks, and the bytes of an array are in place before its summary is,
+  so a reader that opens the file between two calls sees a valid DAF. Rule for the
+  caller: `furnsh` a file only after `dafcls`, `spkcls` or `ckcls` has returned, and
+  unload a kernel before an append, because a loaded map does not see later segments.
+- `_daf_add_array!(h, dc, ic, name, data)` adds one complete array; the segment writers
+  call it after all input checks. `_daf_check_write(h, who)` throws `:dafnosuchhandle` or
+  `:dafinvalidaccess`, and `_daf_check_current(h, who)` throws `:nocurrentarray`.
+
+## `spk_write.jl`, `ck_write.jl`
+
+The segment writers: `spkopn`, `spkopa`, `spkcls`, `spkpds`, `spkw01` to `spkw21`
+(types 1, 2, 3, 5, 8, 9, 12, 13, 15, 17 to 21), and `ckopn`, `ckcls`, `ckw01`, `ckw02`,
+`ckw03`, `ckw05`, `ckw06`. Each writer makes the input checks of the SPICELIB routine in
+the same order, so the data area is equal bit for bit to the one that CSPICE writes
+from the same input.
+
+- Argument lists follow SPICE.jl (the Julia wrapper of CSPICE). A table of states,
+  quaternions or packets is a vector of vectors, a matrix with one row of the table in
+  each column, or a flat vector; `_seg_flat(who, what, x, rowlen) -> (flat, n, rowlen)`
+  converts it and throws `SpiceError(:badarg)` if the shape does not fit.
+- `SegFrame` is a frame name or a frame ID, and `SegContext` (the keyword `ctx`) is the
+  `SpiceContext` or `KernelSet` that resolves a name; `_seg_refcode(who, ctx, frame)`
+  throws `SpiceError(:invalidrefframe)`. `_seg_close(h, what)` closes a file as `spkcls`
+  does: a file that is open for write must hold a segment (`:nosegmentsfound`).
+- Deviation from SPICE.jl 0.2.5: the record count of `ckw02` and `ckw03` is always the
+  length of the input (that version passes one record less to CSPICE).
+
+## `das.jl`, `dla.jl`
+
+A DAS file (direct access, segregated) is the container under shape kernels and table
+kernels: three address spaces, each numbered from 1, of characters, doubles and 32-bit
+integers. The DLA layer (DAS linked array) is a doubly linked list of segments in a
+DAS file.
+
+- `DASHandle`: owned by the caller, with the three address spaces as the plain arrays
+  `chars`, `dps` and `ints` (`ints[a]` is the integer at DAS address `a`). The arrays
+  of a read handle are memory-mapped for a segregated file of native byte order and
+  are never modified; a write handle works on owned copies in memory.
+- `dascls` of a write handle writes the complete, segregated file and moves it into
+  place in one step, so a reader that has the old file mapped keeps a consistent
+  image. One handle is not safe for concurrent use.
+- `_das_load(path, who, writable) -> DASHandle` reads a file of either byte order and
+  throws `SpiceError(:baddasdirectory)` for a directory that is not consistent.
+  `_das_check_open` throws `:dasnosuchhandle`, and `_das_check_write` throws that kind
+  or `:dasinvalidaccess`.
+- `_dla_segments(ints, path) -> Vector{DLADescr}` gives all descriptors in file order
+  and throws `SpiceError(:baddladescriptor)` if the list has a cycle.
+
+## `dsk.jl`, `dsk_api.jl`, `dsk_write.jl`
+
+Shape kernels (DSK, digital shape kernel) of type 2: a surface of triangular plates
+with a grid of volume cells ("voxels") that selects the plates near a ray. The
+geometry functions are ports of the CSPICE routines that the intercept needs, in the
+order of the floating-point operations of CSPICE; all are pure and none allocates.
+
+- `open_dsk(path) -> DSKFile`: a DAS file with the ID word `DAS/DSK`, of either byte
+  order, segregated or not. Throws the kinds of `dasopr`, `:invalidfiletype`,
+  `:invalidformat` or `:dasnosuchaddress`. Postcondition: every segment lies inside
+  the arrays, so only the pointers inside the data can be out of range later.
+
+| Function | Mirrors | Result | Error kinds |
+|---|---|---|---|
+| `_dsk_x02(ints, dps, seg, tols, vertex, raydir)` | `dskx02` | `(plid, xpt, found)` | `:rayiszerovector` |
+| `_dsk_bux(ks, tols, bodyid, srflst, et, fixfid, vertex, raydir)` | `zzdskbux`, `zzsbfxri` | `(xpt, segidx, plid, found)`; `segidx` indexes `ks.dsk[bodyid]` | `:nodsksegments`, `:dskdatanotfound` |
+| `_dsk_bun(ks, tols, bodyid, srflst, et, fixfid, point)` | `zzdskbun`, `zzsbfnrm` | outward unit normal | `:nodsksegments`, `:pointnotinsegment`, `:pointoffsurface` |
+| `_dsk_sph(ks, segs, bodyid, srflst)` | `zzdsksph` | `(minrad, maxrad)` | `:dskdatanotfound` |
+
+- All matching segments have the same priority and the nearest intercept wins, so
+  `dskxsi` and `dskxv` accept `pri == false` only (`SpiceError(:badpriorityspec)`), as
+  CSPICE does. `dskxsi` returns a `DSKSegment` in place of the triple (handle, DLA
+  descriptor, DSK descriptor) of CSPICE.
+- The tolerances of `dskgtl`/`dskstl` are a `DSKTolerances` in an atomic field of the
+  context: `dsktolerances(ctx)` is one atomic read, and a call on a `KernelSet` without
+  a context uses `_DSK_DEFAULT_TOLS`.
+- `dsk_write.jl` (`dskopn`, `dskmi2`, `dskrb2`, `dskw02`, `dskcls`) has no cross-file
+  interface beyond the public API; the spatial index has the layout of CSPICE.
+
+## `surfaces.jl`
+
+Surface names and codes (`srfc2s`, `srfs2c`, `srfcss`, `srfscc`), the computation
+method strings, and the surface point calls `latsrf` and `srfnrm`. The surface name
+map is read from the snapshot at each query, so there is no hidden state.
+
+- `_dsk_lex_method(method) -> Vector{String}` mirrors `zzlexmet` (`:syntaxerror`), and
+  `_dsk_parse_method(ks, bodyid, method) -> (shape, subtyp, pri, srflst)` mirrors
+  `zzprsmet`, with `shape` equal to `:ellipsoid` or `:dsk`. The second throws
+  `:badmethodsyntax`, `:badpriorityspec`, `:idcodenotfound` or `:toomanysurfaces`.
+
+## `spk_types/sgp4.jl`, `spk_types/type10.jl`, `tle.jl`
+
+SGP4 and SDP4 propagation of two-line element sets, SPK type 10, and the public calls
+`getelm`, `evsgp4` and `spkw10`. The propagator gives a state in the TEME frame (true
+equator, mean equinox), which `type10.jl` turns to J2000 as `zzteme.f` does.
+
+- CSPICE keeps the initialized propagator in saved variables; here there is none.
+  `_sgp4_init(geophs::NTuple{8,Float64}, elems::NTuple{10,Float64}, epoch, opmode) ->
+  NamedTuple` returns the constants of one element set as a plain-bits record, and
+  `_sgp4_eval(r, t::T) -> (pos, vel)` propagates that record to `t` minutes from the
+  element epoch, so a `Taylor` time gives the derivatives of the state.
+- Error kinds, those of CSPICE: `_sgp4_init` throws `:suborbital` or `:invalidelements`,
+  and `_sgp4_eval` throws `:badmeanmotion`, `:badmeccentricity`, `:badmsemimajor`,
+  `:badpeccentricity`, `:badsemilatus` or `:orbitdecay`.
+- `_t10_jet(l::LeapSeconds, data, seg, et::T, ::Val{N}) -> NTuple{N+1,Vec3{T}}` is the
+  jet of a type 10 segment in the convention of `spk_eval`; it does not allocate, and
+  it throws `SpiceError(:baddaf)` for a segment that is not valid. This type is the
+  only one that needs a leap-second kernel, because the element epoch is turned to UTC.
+
+## `kernel_info.jl`
+
+Information calls: `spkobj`, `spkobj!`, `spkcov`, `spkcov!`, `ktotal(kind)`, `kdata`,
+`kinfo`, `tkvrsn`.
+
+- `_require_binary_kernel(who, path, kind)` checks with `getfat` and throws
+  `:invalidformat` (a transfer file), `:invalidarchtype` or `:invalidfiletype`.
+  `_each_summary(f, path)` calls `f(dc, ic, handle)` for every array of a DAF on a
+  private read handle that it closes afterwards; `frame_info.jl` uses both helpers.
+- Deviation from CSPICE: the handle that `kdata` and `kinfo` return is always 0,
+  because a loaded kernel has no DAF handle in this package.
+
+## `math/vectors.jl`, `rotations.jl`, `ellipsoid.jl`, `coordinates.jl`, `conics.jl`
+
+The vector, matrix, rotation, ellipsoid, coordinate and conic calls of CSPICE. Each
+public function has the CSPICE name, returns its results instead of filling output
+arguments, and follows the arithmetic of the CSPICE source, so a `Float64` input gives
+the CSPICE result. The functions are generic over the number type, and every discrete
+decision is made on `primal`.
+
+- A call that has a "found" flag in CSPICE returns `nothing` when the flag is false. A
+  matrix has the mathematical index order, and a Jacobian `J` has
+  `J[i, j] = d out_i / d in_j`.
+- `SpicePlane{T}` (unit `normal` and `constant >= 0` when made by `nvc2pl`, `nvp2pl` or
+  `psv2pl`) and `SpiceEllipse{T}` (orthogonal semi-axes when made by `cgv2el`).
+- Kernels without input conversion that the geometry files call: `_m_nearpt(positn, a,
+  b, c) -> (npoint, alt)`, `_m_surfpt(positn, u, a, b, c) -> (found, point)`,
+  `_m_surfnm`, `_m_cgv2el`, `_m_saelgv`, `_m_latrec`, `_m_reclat`, and vector helpers
+  such as `_m_dot`, `_m_cross`, `_m_norm`, `_m_hat`.
+
+## `frame_info.jl`, `lst.jl`
+
+Frame information (`frinfo`, `cidfrm`, `cnmfrm`, `ccifrm`), fixed-offset frame data
+(`tkfram`), body orientation (`tipbod`, `tisbod`), the contents of a binary PCK file
+(`pckfrm`, `pckfrm!`, `pckcov`, `pckcov!`), body constants (`bodfnd`, `bodvcd`), local
+solar time (`et2lst`) and the longitude of the Sun (`lspcn`). These two files have no
+cross-file interface beyond the public API: later files call the forms on a
+`KernelSet`, for example `frinfo(ks, frcode)`, which returns `(center, class, classid)`
+or `nothing`.
+
+## `geometry/`
+
+The geometry calls of CSPICE N0067. `methods.jl` is the shared part, and the other
+files hold one family each. The rule for the split of each call is the same: a public
+function makes the checks of CSPICE in the order of CSPICE, and a private function
+does the computation after the checks, which the geometry finder calls at many epochs.
+
+| File | Public calls | Main functions that other files call |
+|---|---|---|
+| `methods.jl` | none | `_geo_method`, `_geo_abcorr`, `_geo_body`, `_geo_namfrm`, `_geo_frinfo`, `_geo_fixfid`, `_geo_radii`, `_geo_shape`, `_geo_rayx`, `_geo_spkezp` |
+| `constobs.jl` | `spkcpo`, `spkcpt`, `spkcvo`, `spkcvt` | `_GeoFixed`, `_geo_cvo`, `_geo_cvt`, `_geo_pos` |
+| `subpoints.jl` | `subpnt`, `subslr` | `_geo_subpnt`, `_geo_same_bodies` |
+| `intercept.jl` | `sincpt`, `srfrec` | `_geo_sincpt`, `_geo_sfxcor`, `_geo_sub_in_method` |
+| `illumination.jl` | `ilumin`, `illumg`, `illumf`, `phaseq` | `_geo_illum_states` |
+| `occultation.jl` | `occult` | `_GeoOccBody`, `_geo_occ_parse`, `_geo_occ_eval`, `_geo_occed` |
+| `limbterm.jl` | `limbpt`, `termpt`, `tangpt` | none |
+| `fov.jl` | `getfov`, `getfvn`, `fovray`, `fovtrg` | `_geo_getfov`, `_geo_fovaxi`, `_geo_elvupy`, `_geo_wind2d` |
+| `azel.jl` | `azlrec`, `recazl`, `dazldr`, `drdazl`, `azlcpo` | none |
+
+- `_geo_method(ks, bodyid, method) -> _GeoMethod` mirrors `zzprsmet`: the common
+  spellings are compared as they are and do not allocate, and every other string goes
+  through the lexer and the parser of `surfaces.jl`.
+- Error kinds are those of the geometry calls of CSPICE. `_geo_abcorr` (`zzvalcor`)
+  throws `:invalidoption` where `Aberration(s)` throws `:badarg`; `_geo_body` throws
+  `:idcodenotfound`; `_geo_fixfid` throws `:noframe` (unknown frame) or `:invalidframe`
+  (center is not the target); `_geo_radii` (`zzgftreb`) returns three positive values
+  and throws `:kernelvarnotfound`, `:typemismatch`, `:invalidcount` or `:badaxislength`.
+- Number types: `constobs.jl`, `subpoints.jl`, `intercept.jl` and `illumination.jl` are
+  generic over the epoch type for an ellipsoid, while `occultation.jl`, `limbterm.jl`
+  and `fov.jl` take a plain epoch because their decisions are discrete. The
+  illumination angles need the arcsine, which `Taylor` does not have, so a dual number
+  passes through and a `Taylor` epoch does not.
+
+## `gf/`
+
+The geometry finder: the search for the time windows on which a geometric condition
+holds. `solver.jl` is the core and knows nothing about geometry; a search is described
+by two functions of the epoch, the value of a quantity and the test "is the quantity
+decreasing".
+
+- `_GFRun{S,R,B,P}` holds the controls of one search (step, refinement function, `bail`
+  and `report` callbacks, tolerance, `threads`), which CSPICE keeps in saved variables.
+  `_gf_run(step, tol; refine=gfrefn, bail=nothing, report=nothing, threads=false)`
+  builds it and throws `SpiceError(:invalidstep)` or `SpiceError(:invalidtolerance)`.
+- `_gf_relx(value, decreasing, relate, refval, adjust, cnfine, run, prefix, suffix) ->
+  Window` is the relation driver `zzgfrelx` for `"<"`, `"="`, `">"`, `"LOCMIN"`,
+  `"LOCMAX"`, `"ABSMIN"`, `"ABSMAX"`; it throws `:notrecognized`, `:valueoutofrange` or
+  `:invalidvalue`. `_gf_scan!(result, cond, w, run, cstep)` is the step-and-bracket
+  search (`zzgfsolv`) on each interval of the window `w`; with `run.threads` each
+  interval has its own task and the results are inserted in the order of `w`.
+- A quantity is a small immutable subtype of `GFQuantity` that holds the snapshot and
+  the checked inputs; its constructor is the initializer `zzgf**in` of CSPICE and makes
+  the checks in that order. Three methods make it usable by the solver: `_gf_value(q,
+  et::Float64) -> Float64`, `_gf_decreasing(q, et::Float64) -> Bool` and `_gf_label(q)`.
+  A new quantity is a new type with these methods, and `solver.jl` does not change.
+
+| Type | File | Quantity |
+|---|---|---|
+| `GFDistance`, `GFSeparation`, `GFRangeRate`, `GFPhase` | `quantities.jl` | distance, angular separation, range rate, phase angle |
+| `GFCoordinate{V<:GFVector}` | `quantities.jl` | one coordinate of a position (`GFPositionVector`), of a sub-observer point (`GFSubObserverVector`) or of a surface intercept (`GFInterceptVector`, both in `surface.jl`) |
+| `GFIllumination` | `illumination.jl` | phase, incidence or emission angle at a surface point |
+| `GFFunction{F,D}` | `quantities.jl` | two functions of the caller (`gfuds`) |
+
+- `_gf_search(q, relate, refval, adjust, cnfine, run) -> Window` is the call of
+  `zzgfrelx` that `gfevnt` makes. The method for a `GFCoordinate` (`longitude.jl`)
+  confines the search to the window on which the vector exists and solves longitude
+  and right ascension with proxy functions, because their values jump at a branch cut.
+- The test "is decreasing" is the formula of CSPICE and not the exact derivative of
+  the value (range rate by a difference quotient, illumination by `zzilusta`, surface
+  points by `zzgfssob` and `zzgfssin`), so that the brackets of the extrema are those of
+  CSPICE. Occultation and field-of-view searches have no scalar quantity: each is one
+  step-and-bracket search for a binary state.
+- Deviations from CSPICE (`api.jl`): the result is a new `Window`, so there is no
+  result cell, no workspace and no interval count; the step is an argument, and the
+  tolerance, `bail` and `report` are keywords. `gfstol` sets the default tolerance of
+  one `SpiceContext` (the atomic field `gftol`, which `kclear` does not change), and a
+  search on a `KernelSet` uses `_GF_CNVTOL`, the default of CSPICE.
+- Thread safety: a search reads the snapshot once, at its start, so many searches can
+  run at the same time and a `furnsh` on another thread does not disturb them.
+
+## `table.jl`, `ext/NeoSpiceAdaptExt.jl`, `ext/NeoSpiceForwardDiffExt.jl`
+
+An ephemeris table holds the position of one body relative to another on a fixed
+interval of time, as one flat array of Chebyshev coefficients on intervals of equal
+length. A query needs no kernel set, so it suits the inner loop of an optimizer.
+
+- `EphemerisTable{T<:AbstractFloat,A<:AbstractVector{T}}` with the fields `coef`, `t0`,
+  `dt`, `nint`, `ncoef`, `target`, `observer`, `frame`, `maxerr`. Invariants, which the
+  constructor checks (`SpiceError(:badarg)`): `dt > 0`, `nint >= 1`, `ncoef >= 1`,
+  `length(coef) == 3 ncoef nint`. The table is an `isbits` value when its array is one.
+- `ephemeris_table(targ, t0, t1, ref, abcorr, obs; tol, ncoef, maxintervals)` builds a
+  table; `table_jet(tab, et, Val(N)) -> NTuple{N+1,SVector{3}}`, `table_position`,
+  `table_state` and `table_span` read it without allocation and without kernel access.
+  The range check throws `SpiceError(:nocoverage)` and is a bounds check: under
+  `@inbounds` it is removed, and an epoch outside the table is then extrapolated.
+- `NeoSpiceAdaptExt` defines `Adapt.adapt_structure(to, tab::EphemerisTable)`, which
+  moves `coef` to another array type. `NeoSpiceForwardDiffExt` adds methods for a
+  dual-number epoch to `primal`, `spk_jet`, `frame_rotation`, `frame_jet`, `abcorr_jet`,
+  `abcorr_position`, `abcorr_state`, `_ad_order` and `_with_primal`: a query takes the
+  jet at the plain epoch and assembles the dual result by the chain rule, so the
+  partial of a result is the next order of `spkder` or `pxder`.
+
+## `ek/`
+
+The E-kernel (EK) subsystem: a kernel of tables that a query language reads. An EK
+file is a DAS file with the ID word `DAS/EK` whose address spaces are divided into
+pages; a segment holds rows of one table, and a row has one entry for each column.
+
+| File | Content | Main functions that other files call |
+|---|---|---|
+| `file.jl` | pages, trees, segment and column descriptors | `open_ek`, `_ek_check`, `_ek_nseg`, `_ek_sdsc`, `_ek_find_column` |
+| `columns.jl` | entries of the nine column classes | `_ek_nelt`, `_ek_elt_c`, `_ek_elt_d`, `_ek_elt_i`, `_ek_entry_c`, `_ek_entry_d`, `_ek_entry_i` |
+| `query_parse.jl` | scan, parse, normalize, resolve names and times, check | `_ek_encode_query`, `_ek_psel` |
+| `query_run.jl` | key selection, joins, union, ORDER BY | `EKResult`, `_ek_search`, `_ek_empty_result` |
+| `api.jl` | public read and query calls | `_ek_check_read` |
+| `write_tree.jl`, `write_columns.jl` | page allocator, trees, data pages, column entries, indexes | `_ekw_check`, `_ekw_pgan`, `_ekw_trin`, `_ekw_trdl`, the `_ekw_ac*`, `_ekw_ad*` and `_ekw_de*` routines |
+| `write.jl` | public write calls, `EKFastLoad` | none |
+
+- The read functions take a "store": any object with the fields `chars`, `dps` and
+  `ints` (a `DASHandle` or an `EKFile`). They hold no state, so many tasks can read one
+  store at the same time. `open_ek(path) -> EKFile` throws the kinds of `dasopr`,
+  `:wrongarchitecture`, `:invalidformat`, `:eknosegments` or `:ekcolnummismatch`.
+- `_ek_encode_query(tables, ks, td::TimeDefaults, query) -> (q, error, errmsg)` is a
+  pure function that returns the message of `ekfind_c` for a query that is not valid,
+  and throws `SpiceError` only where CSPICE signals a SPICE error. Its docstring lists
+  the known differences from CSPICE.
+- `_ek_search(ks, q; compat=false) -> EKResult` mirrors `eksrch` and is a pure function
+  of the snapshot and the query, so it runs on many threads. Three defects of CSPICE
+  N0067 change results (`zzekweed`, `zzekillt`/`zzekille`, `zzekjsqz`; see the header of
+  `query_run.jl`); `compat = true` reproduces them for the tests, and the public calls
+  use `compat = false`.
+- Deviation from CSPICE: `ekfind` returns an `EKResult` that the fetch calls (`ekgc`,
+  `ekgd`, `ekgi`, `eknelt`) take as first argument. The object owns its row vectors and
+  keeps the data that it points to, so it stays valid after an `unload`.
+- The writers follow the C source statement by statement, because the words of a file
+  after a sequence of calls must be the words that CSPICE writes. `EKFastLoad` holds
+  the state of one fast load, so several loads can be open at once.
+
+## `precompile.jl`
+
+Precompile directives for the common call signatures. The file reads no kernel, since
+the directives name argument types only, and it has no cross-file interface.
+
+## Test layout
+
+CSPICE, through SPICE.jl, is the oracle. It has one process-wide kernel state and is
+not thread safe, so each group calls `oracle_load` once at its start and never calls
+SPICE.jl from a spawned task.
+
+| Item | File | Rule |
+|---|---|---|
+| Groups | `test/runtests.jl` | `GROUPS` lists 48 names; group `g` is the file `test/test_g.jl`. Run with `julia --startup-file=no --threads=8 --project=test test/runtests.jl [groups]`; an unknown name is an error. |
+| Several processes | `test/parallel.jl` | `julia --startup-file=no --threads=8 test/parallel.jl [groups]`; `NEOSPICE_TEST_JOBS` processes (default a quarter of the CPU threads, 8 at most), balanced with the times of the last run in `test/.group_seconds`; exit status 1 if a process failed. |
+| Exhaustive tier | `test/helpers.jl` | `NEOSPICE_TEST_FULL=1` sets `FULL`; `nsample(fast, full)` gives `fast` in the default run and `full` in the exhaustive run, and requires `0 <= fast <= full`. |
+| Seed | `test/helpers.jl` | `NEOSPICE_TEST_SEED` sets `SEED` (default 20261011), the seed of every random sample. |
+| Kernels | `test/kernels.jl` | `NEOSPICE_KERNEL_DIR`, `NEOSPICE_DE440S`, `NEOSPICE_DE405` override the paths; a group whose kernels are missing is skipped with a visible notice. |
+| Coverage | `test/coverage_summary.jl` | Run the tests with `--code-coverage=@src`, then `julia --startup-file=no test/coverage_summary.jl [--keep] [output file]`; it adds the `.cov` files of all processes, prints one line for each file of `src/` and `ext/` and the total, and deletes the `.cov` files unless `--keep` is given. |
+| Behaviour | `test/features/*.feature` | Given / When / Then specifications. |
+
+- Time budget: the default run of all groups together has a budget of 120 s, and
+  `runtests.jl` prints the time of each group, longest first, at the end of a run. A
+  group keeps its large samples, long search spans and large files for the exhaustive
+  tier.
+- Each group must run alone, because `parallel.jl` gives the groups to the processes in
+  any division. A group file therefore includes what it needs with a guard of the form
+  `isdefined(@__MODULE__, :NAME) || include(...)`: the fixtures (`ckfixtures.jl`,
+  `dskfixtures.jl`, `dynfixtures.jl`, `ekfixtures.jl`, `geomfixtures.jl`), the oracles
+  (`gforacle.jl`, `mathoracle.jl`) and `apart.jl`, whose macro `@apart` makes the
+  compiler handle each test set on its own.
+- The groups `threads`, `gf_threads` and `ek_threads` skip their thread-safety tests
+  with one thread and print a notice, so run the suite with `--threads=8`.
 
 ## Test kernels on this machine
 
 - `/home/alex/data/ephemerides/de440s.bsp`
 - `/home/alex/.tudat/resource/spice_kernels/`: `naif0012.tls`, `pck00011.tpc`,
-  `pck00010.tpc`, `moon_pa_de440_200625.bpc`, `moon_de440_200625.tf`, `moon_080317.tf`
+  `pck00010.tpc`, `moon_pa_de440_200625.bpc`, `moon_de440_200625.tf`, `moon_080317.tf`,
+  and the optional `gm_de431.tpc` (the GM checks are skipped if it is absent)
 - `/home/alex/malto/data/de405.bsp`
