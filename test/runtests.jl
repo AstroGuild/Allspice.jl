@@ -31,7 +31,7 @@ const GROUPS = ["states", "rotations", "derivatives", "identities", "pool", "man
     "gf_fov",
     "geom_subpoints", "geom_illum", "geom_occult", "geom_limbterm", "geom_fov", "geom_constobs",
     "geom_azel", "table",
-    "ek_file", "ek_parse", "ek_query", "ek_threads", "ek_write"]
+    "ek_file", "ek_parse", "ek_query", "ek_threads", "ek_write", "alloccheck"]
 
 "Wall time of each group of this run, in the order of the run."
 const GROUP_SECONDS = Pair{String,Float64}[]
