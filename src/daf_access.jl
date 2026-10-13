@@ -23,16 +23,21 @@ const _DAF_EOL = 0x00                     # end of a comment line
 """
     DAFHandle
 
-One DAF file opened for access with `dafopr`, `dafopw`, `dafonw`, `spkopn`, `spkopa`
-or `ckopn`. It replaces the integer handle of CSPICE and holds what CSPICE keeps in
-global tables: the open file, the state of the array search (`dafbfs`, `daffna`,
-`dafbbs`, `daffpa`) and the state of the array that is being added (`dafbna`,
-`dafada`, `dafena`).
+An open DAF file. It replaces the integer handle of CSPICE.
 
-Invariants: `nd`, `ni` are the summary format of the file; while `isopen`, `io` is
-open for reading and, if `writable`, for writing; a writable handle has the native
-byte order (`swap == false`). A handle must not be used by two tasks at the same time
-without a lock that the caller holds; different handles are independent.
+[`dafopr`](@ref), [`dafopw`](@ref), [`dafonw`](@ref), [`spkopn`](@ref), [`spkopa`](@ref)
+and [`ckopn`](@ref) return a handle. Close it with [`dafcls`](@ref), [`spkcls`](@ref),
+[`ckcls`](@ref) or `close`; `isopen(handle)` tells whether it is open.
+
+The handle holds the state that CSPICE keeps in global tables: the array search
+(`dafbfs`, `daffna`, `dafbbs`, `daffpa`) and the array that is being added (`dafbna`,
+`dafada`, `dafena`). Two handles are independent, so two tasks can work on two handles at
+the same time. One handle is not safe for concurrent use: tasks that share a handle must
+hold a lock around every call.
+
+A call on a closed handle throws `SpiceError(:dafnosuchhandle)`; the close calls do
+nothing instead. A write call on a handle that is open for reading throws
+`SpiceError(:dafinvalidaccess)`.
 """
 mutable struct DAFHandle
     const path::String
@@ -68,13 +73,11 @@ Base.close(h::DAFHandle) = dafcls(h)
 "Doubles in one summary of a DAF with the format `nd`, `ni`."
 _daf_sumsize(nd::Integer, ni::Integer) = Int(nd) + (Int(ni) + 1) ÷ 2
 
-"Throws `SpiceError(:dafnosuchhandle)` unless `h` is open."
 @inline function _daf_check_open(h::DAFHandle, who::AbstractString)
     h.isopen || throw(SpiceError(:dafnosuchhandle, "$who: the DAF $(h.path) is closed"))
     return nothing
 end
 
-"Throws unless `h` is open for writing (`:dafnosuchhandle`, `:dafinvalidaccess`)."
 @inline function _daf_check_write(h::DAFHandle, who::AbstractString)
     _daf_check_open(h, who)
     h.writable || throw(SpiceError(:dafinvalidaccess,
@@ -245,7 +248,6 @@ function _daf_probe(path::AbstractString, who::AbstractString)
     return nd, ni, swap
 end
 
-"New handle on the open stream `io` of the DAF `path`."
 function _daf_handle(path::AbstractString, io::IOStream, writable::Bool, swap::Bool,
         nd::Int, ni::Int)
     return DAFHandle(String(path), io, writable, swap, nd, ni, true,
@@ -256,12 +258,59 @@ end
 """
     dafopr(path) -> DAFHandle
 
-Open the DAF file `path` for read access, as `dafopr_c`. A file of the other byte
-order can be read. Contract: `path` names an existing DAF; the result is an open
-handle with no search begun. Throws `SpiceError` (`:blankfilename`, `:filenotfound`,
-`:filereadfailed`, `:unknownfilarc`, `:filarchmismatch`, `:ftpxfererror`,
-`:unknownbff`). The handle belongs to the caller: close it with `dafcls`, and do not
-share it between tasks without a lock.
+Open the DAF file `path` for reading and return its handle, as `dafopr_c`.
+
+The file can have either byte order. No array search is begun. Close the handle with
+[`dafcls`](@ref).
+
+Throws `SpiceError`:
+- `:blankfilename` if `path` is blank, `:filenotfound` if the file does not exist;
+- `:filereadfailed` if the file is shorter than one record (1024 bytes);
+- `:unknownfilarc` or `:filarchmismatch` if the file is not a DAF;
+- `:ftpxfererror` if the file was damaged by a transfer in text mode;
+- `:unknownbff` if the byte order of the file is not known;
+- `:dafinvalidparams` if the summary format in the file record is not valid;
+- `:fileopenfailed` if the system cannot open the file.
+
+# Examples
+Write an SPK file with one segment, then search it as a DAF:
+```jldoctest
+julia> path = joinpath(mktempdir(), "example.bsp");
+
+julia> h = spkopn(path, "example SPK");
+
+julia> cdata = [[1.0, 0.5, 2.0, 0.0, 3.0, 0.0]];
+
+julia> spkw02(h, 499, 4, "J2000", 0.0, 100.0, "mars", 100.0, cdata, 0.0)
+
+julia> spkcls(h)
+
+julia> h = dafopr(path);
+
+julia> dafbfs(h)
+
+julia> daffna(h)
+true
+
+julia> dc, ic = dafus(dafgs(h), 2, 6)
+([0.0, 100.0], [499, 4, 1, 2, 385, 396])
+
+julia> dafgn(h)
+"mars"
+
+julia> dafgda(h, ic[5], ic[5] + 1)
+2-element Vector{Float64}:
+ 50.0
+ 50.0
+
+julia> daffna(h)
+false
+
+julia> dafcls(h)
+```
+
+See also [`dafopw`](@ref), [`dafbfs`](@ref), [`dafgda`](@ref), [`dafec`](@ref),
+[`getfat`](@ref).
 """
 function dafopr(path::AbstractString)
     nd, ni, swap = _daf_probe(path, "dafopr")
@@ -276,9 +325,11 @@ end
 """
     dafcls(handle) -> Nothing
 
-Close the DAF of `handle`, as `dafcls_c`. All data are on disk when the call returns.
-Closing a handle that is already closed does nothing. An array that was begun with
-`dafbna` and not ended with `dafena` is not in the file.
+Close the DAF file of `handle`, as `dafcls_c`.
+
+All data are on disk when the call returns. An array that `dafbna` began and `dafena` did
+not end has no summary in the file, so a search does not find it. The call does nothing if
+the handle is closed already.
 """
 function dafcls(h::DAFHandle)
     h.isopen || return nothing
@@ -292,8 +343,8 @@ end
 """
     dafhsf(handle) -> (nd, ni)
 
-Summary format of the DAF: the number of double precision and of integer components of
-a summary, as `dafhsf`.
+Return the summary format of the DAF file, as `dafhsf` of SPICELIB: the number of double
+precision components `nd` and of integer components `ni` of an array summary.
 """
 function dafhsf(h::DAFHandle)
     _daf_check_open(h, "dafhsf")
@@ -311,9 +362,11 @@ end
 """
     dafrfr(handle) -> (nd, ni, ifname, fward, bward, free)
 
-Contents of the file record, as `dafrfr_c`: the summary format, the internal file
-name (trailing blanks removed), the record numbers of the first and of the last
-summary record, and the first free address.
+Return the contents of the file record, as `dafrfr_c`: the summary format `nd`, `ni`, the
+internal file name without trailing blanks, the record numbers of the first and of the
+last summary record, and the first free address.
+
+Throws `SpiceError(:daffrnotfound)` if the file record cannot be read.
 """
 function dafrfr(h::DAFHandle)
     _daf_check_open(h, "dafrfr")
@@ -325,12 +378,15 @@ end
 """
     getfat(path) -> (arch, kind)
 
-File architecture and kernel type of the file `path`, as `getfat_c`: for example
-`("DAF", "SPK")`, `("DAF", "CK")`, `("DAF", "PCK")`, `("KPL", "LSK")`, and
-`("?", "?")` for a file that is not recognized (a text kernel without the `KPL/…`
-first line is one). For an old `NAIF/DAF` file the type follows from the summary
-format and the first array, as `zzckspk` decides it. Throws `SpiceError`
-(`:blankfilename`, `:filenotfound`).
+Return the file architecture and the kernel type of the file `path`, as `getfat_c`.
+
+Results are, for example, `("DAF", "SPK")`, `("DAF", "CK")`, `("DAF", "PCK")`,
+`("DAS", "DSK")` and `("KPL", "LSK")`. The result is `("?", "?")` for a file that is not
+recognized; a text kernel without the `KPL/<type>` first line is one. For an old
+`NAIF/DAF` file the type follows from the summary format and the first array.
+
+Throws `SpiceError(:blankfilename)` if `path` is blank, `:filenotfound` if the file does
+not exist, and `:filereadfailed` if the file has fewer than 12 bytes and no complete line.
 """
 function getfat(path::AbstractString)
     isempty(strip(path)) && throw(SpiceError(:blankfilename, "getfat: the file name is blank"))
@@ -401,10 +457,23 @@ end
     dafps(dc, ic) -> Vector{Float64}
 
 Pack the double precision components `dc` and the integer components `ic` of an array
-summary into `length(dc) + (length(ic) + 1) ÷ 2` doubles, as `dafps_c`: the integers
-are stored as 32-bit values, two in the space of one double, in native byte order.
-Precondition: every integer fits in 32 bits, else `SpiceError(:dafinvalidparams)`.
-Postcondition: `dafus(dafps(dc, ic), length(dc), length(ic)) == (dc, ic)`.
+summary into `length(dc) + (length(ic) + 1) ÷ 2` doubles, as `dafps_c`.
+
+The integers are stored as 32-bit values, two in the space of one double, in native byte
+order. [`dafus`](@ref) is the inverse.
+
+Throws `SpiceError(:dafinvalidparams)` if an integer does not fit in 32 bits.
+
+# Examples
+```jldoctest
+julia> sum = dafps([0.0, 100.0], [499, 4, 1, 2, 385, 396]);
+
+julia> length(sum)
+5
+
+julia> dafus(sum, 2, 6)
+([0.0, 100.0], [499, 4, 1, 2, 385, 396])
+```
 """
 function dafps(dc::AbstractVector{<:Real}, ic::AbstractVector{<:Integer})
     nd = length(dc)
@@ -425,9 +494,13 @@ end
 """
     dafus(sum, nd, ni) -> (dc::Vector{Float64}, ic::Vector{Int})
 
-Unpack an array summary into its `nd` double precision and `ni` integer components,
-as `dafus_c`. Precondition: `sum` holds at least `nd + (ni + 1) ÷ 2` doubles, else
-`SpiceError(:dafinvalidparams)`.
+Unpack the array summary `sum` into its `nd` double precision components and its `ni`
+integer components, as `dafus_c`.
+
+Throws `SpiceError(:dafinvalidparams)` if `sum` has fewer than `nd + (ni + 1) ÷ 2`
+doubles.
+
+See also [`dafps`](@ref), [`dafgs`](@ref).
 """
 function dafus(sum::AbstractVector{<:Real}, nd::Integer, ni::Integer)
     (nd >= 0 && ni >= 0 && length(sum) >= _daf_sumsize(nd, ni)) || throw(SpiceError(
@@ -465,8 +538,12 @@ end
 """
     dafbfs(handle) -> Nothing
 
-Begin a forward search for arrays in the DAF, as `dafbfs_c`. Postcondition: no array is
-current; the first `daffna(handle)` moves to the first array.
+Begin a forward search for the arrays of the DAF file, as `dafbfs_c`.
+
+No array is current after the call; the first [`daffna`](@ref) moves to the first array.
+The state of the search is in the handle, so searches on two handles do not interfere.
+
+See also [`dafbbs`](@ref), and [`dafopr`](@ref) for an example.
 """
 function dafbfs(h::DAFHandle)
     _daf_check_open(h, "dafbfs")
@@ -483,8 +560,11 @@ end
 """
     dafbbs(handle) -> Nothing
 
-Begin a backward search for arrays in the DAF, as `dafbbs_c`. Postcondition: no array
-is current; the first `daffpa(handle)` moves to the last array.
+Begin a backward search for the arrays of the DAF file, as `dafbbs_c`.
+
+No array is current after the call; the first [`daffpa`](@ref) moves to the last array.
+
+See also [`dafbfs`](@ref).
 """
 function dafbbs(h::DAFHandle)
     _daf_check_open(h, "dafbbs")
@@ -498,7 +578,6 @@ function dafbbs(h::DAFHandle)
     return nothing
 end
 
-"Throws `SpiceError(:dafnosearch)` unless a search was begun on `h`."
 function _daf_check_search(h::DAFHandle, who::AbstractString)
     _daf_check_open(h, who)
     h.searching || throw(SpiceError(:dafnosearch,
@@ -509,10 +588,16 @@ end
 """
     daffna(handle) -> Bool
 
-Move to the next array of the search on `handle` and return true, or return false if
-there is no next array, as `daffna_c` (which has no handle argument and works on the
-hidden current DAF). Precondition: `dafbfs` or `dafbbs` was called, else
-`SpiceError(:dafnosearch)`.
+Move to the next array of the search on `handle`, as `daffna_c`. Return `true` if there
+is one and `false` if the search is past the last array.
+
+`daffna_c` has no handle argument and works on the hidden current DAF; here the search
+belongs to the handle.
+
+Throws `SpiceError(:dafnosearch)` if neither `dafbfs` nor `dafbbs` was called on the
+handle, and `:recordnotfound` or `:baddaf` if the chain of summary records is damaged.
+
+See also [`daffpa`](@ref), [`dafgs`](@ref), [`dafgn`](@ref).
 """
 function daffna(h::DAFHandle)
     _daf_check_search(h, "daffna")
@@ -536,9 +621,13 @@ end
 """
     daffpa(handle) -> Bool
 
-Move to the previous array of the search on `handle` and return true, or return false
-if there is none, as `daffpa_c`. Precondition: `dafbfs` or `dafbbs` was called, else
-`SpiceError(:dafnosearch)`.
+Move to the previous array of the search on `handle`, as `daffpa_c`. Return `true` if
+there is one and `false` if the search is before the first array.
+
+Throws `SpiceError(:dafnosearch)` if neither `dafbfs` nor `dafbbs` was called on the
+handle, and `:recordnotfound` or `:baddaf` if the chain of summary records is damaged.
+
+See also [`daffna`](@ref).
 """
 function daffpa(h::DAFHandle)
     _daf_check_search(h, "daffpa")
@@ -559,7 +648,6 @@ function daffpa(h::DAFHandle)
     return true
 end
 
-"Throws `SpiceError(:nocurrentarray)` unless the search on `h` has a current array."
 function _daf_check_current(h::DAFHandle, who::AbstractString)
     _daf_check_search(h, who)
     (h.sthis != 0 && 1 <= h.scurr <= h.snsum) || throw(SpiceError(:nocurrentarray,
@@ -570,9 +658,15 @@ end
 """
     dafgs(handle) -> Vector{Float64}
 
-Packed summary of the current array of the search on `handle`
-(`nd + (ni + 1) ÷ 2` doubles), as `dafgs_c`; unpack it with `dafus`. Precondition: the
-last `daffna` or `daffpa` returned true, else `SpiceError(:nocurrentarray)`.
+Return the packed summary of the current array of the search on `handle`, as `dafgs_c`.
+
+The result has `nd + (ni + 1) ÷ 2` doubles; unpack it with [`dafus`](@ref). An SPK file
+and a CK file have `nd = 2` and `ni = 6`.
+
+Throws `SpiceError(:dafnosearch)` if no search was begun, and `:nocurrentarray` unless the
+last `daffna` or `daffpa` returned `true`.
+
+See also [`dafgn`](@ref), and [`dafopr`](@ref) for an example.
 """
 function dafgs(h::DAFHandle)
     _daf_check_current(h, "dafgs")
@@ -584,9 +678,11 @@ end
 """
     dafgn(handle) -> String
 
-Name of the current array of the search on `handle`, trailing blanks removed, as
-`dafgn_c`. Precondition: the last `daffna` or `daffpa` returned true, else
-`SpiceError(:nocurrentarray)`.
+Return the name of the current array of the search on `handle`, without trailing blanks,
+as `dafgn_c`.
+
+Throws `SpiceError(:dafnosearch)` if no search was begun, and `:nocurrentarray` unless the
+last `daffna` or `daffpa` returned `true`.
 """
 function dafgn(h::DAFHandle)
     _daf_check_current(h, "dafgn")
@@ -603,12 +699,15 @@ end
 """
     dafgda(handle, first, last) -> Vector{Float64}
 
-The doubles at the DAF addresses `first:last`, as `dafgda_c`. Preconditions:
-`first >= 1` (else `SpiceError(:dafnegaddr)`), `first <= last` (else
-`SpiceError(:dafbeggtend)`), and the range is inside the file (else
-`SpiceError(:filereadfailed)`; CSPICE returns zeros without an error in that case). By
-design the words of a last record that the file holds in part are returned as they are,
-where CSPICE gives zeros for the whole record.
+Return the doubles at the DAF addresses `first:last`, as `dafgda_c`. Addresses start at 1,
+as in CSPICE.
+
+Two results differ from CSPICE. A range that is not inside the file throws, where CSPICE
+returns zeros without an error. The words of a last record that the file holds only in
+part are returned as they are, where CSPICE gives zeros for the whole record.
+
+Throws `SpiceError(:dafnegaddr)` if `first < 1`, `:dafbeggtend` if `first > last`, and
+`:filereadfailed` if the range is not inside the file.
 """
 function dafgda(h::DAFHandle, first::Integer, last::Integer)
     _daf_check_open(h, "dafgda")
@@ -630,9 +729,12 @@ end
 """
     dafgsr(handle, recno, first, last) -> Union{Vector{Float64},Nothing}
 
-Words `first:last` (1 to 128) of summary record `recno`, in native byte order, or
-`nothing` if the record is not in the file, as `dafgsr_c`. Precondition:
-`1 <= first <= last <= 128`, else `SpiceError(:dafinvalidparams)`.
+Return the words `first:last` of summary record `recno`, in native byte order, as
+`dafgsr_c`, or `nothing` if the record is not in the file.
+
+A record has 128 words, numbered from 1. `nothing` replaces the `found` flag of CSPICE.
+
+Throws `SpiceError(:dafinvalidparams)` unless `1 <= first <= last <= 128`.
 """
 function dafgsr(h::DAFHandle, recno::Integer, first::Integer, last::Integer)
     _daf_check_open(h, "dafgsr")
@@ -675,9 +777,15 @@ end
 """
     dafec(handle) -> Vector{String}
 
-All lines of the comment area of the DAF, in order, as repeated calls of `dafec_c`
-give them (trailing blanks are not stored). The result is empty if the file has no
-comments. Throws `SpiceError(:badcommentarea)` if the comment area is damaged.
+Return all lines of the comment area of the DAF file, in order.
+
+One call returns the whole comment area, where `dafec_c` returns one buffer of lines on
+each call. Trailing blanks of a line are not stored in the file. The result is empty if
+the file has no comments.
+
+Throws `SpiceError(:badcommentarea)` if the comment area is damaged.
+
+See also [`dafac`](@ref), [`dafdc`](@ref).
 """
 function dafec(h::DAFHandle)
     _daf_check_open(h, "dafec")

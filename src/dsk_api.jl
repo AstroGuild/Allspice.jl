@@ -19,13 +19,25 @@ never changes.
 dsktolerances(ctx::SpiceContext) = @atomic ctx.dsktols
 
 """
-    dskgtl([ctx], keywrd) -> Float64
+    dskgtl([ctx,] keywrd) -> Float64
 
-The DSK tolerance or margin with the keyword `keywrd`, as `dskgtl_c`: 1 plate expansion
-fraction (`XFRACT`), 2 segment boundary margin (`SGREED`), 3 segment pad margin
-(`SGPADM`), 4 surface point membership margin (`PTMEMM`), 5 angular rounding margin
-(`ANGMRG`), 6 longitude alias margin (`LONALI`). The values belong to the context.
-Throws `SpiceError(:indexoutofrange)` for another keyword.
+Return the DSK tolerance or margin with the keyword `keywrd`, as `dskgtl_c`.
+
+| `keywrd` | CSPICE name | Meaning                          | Value at start |
+|:---------|:------------|:---------------------------------|:---------------|
+| 1        | `XFRACT`    | plate expansion fraction         | 1e-10          |
+| 2        | `SGREED`    | segment boundary margin          | 1e-8           |
+| 3        | `SGPADM`    | segment pad margin               | 1e-10          |
+| 4        | `PTMEMM`    | surface point membership margin  | 1e-7           |
+| 5        | `ANGMRG`    | angular rounding margin (fixed)  | 1e-12          |
+| 6        | `LONALI`    | longitude alias margin (fixed)   | 1e-12          |
+
+The values belong to the context `ctx` (default: the default context), not to the
+process.
+
+Throws `SpiceError(:indexoutofrange)` if `keywrd` is not in `1:6`.
+
+See also [`dskstl`](@ref).
 """
 function dskgtl(ctx::SpiceContext, keywrd::Integer)
     (1 <= keywrd <= 6) || throw(SpiceError(:indexoutofrange,
@@ -35,14 +47,17 @@ end
 dskgtl(keywrd::Integer) = dskgtl(default_context(), keywrd)
 
 """
-    dskstl([ctx], keywrd, dpval) -> Nothing
+    dskstl([ctx,] keywrd, dpval) -> Nothing
 
-Set the DSK tolerance or margin with the keyword `keywrd` (see [`dskgtl`](@ref)) to
-`dpval`, as `dskstl_c`. Precondition: `keywrd` in 1:4 (`SpiceError(:indexoutofrange)`
-outside 1:6, `SpiceError(:immutablevalue)` for 5 and 6). As CSPICE, the value is not
-checked. Postcondition: a new immutable snapshot is stored under the lock of the
-context; a query that runs on another thread uses the old or the new set, never a
-mixture.
+Set the DSK tolerance or margin with the keyword `keywrd` to `dpval`, as `dskstl_c`. See
+[`dskgtl`](@ref) for the keywords.
+
+Only the keywords 1 to 4 can be set. As in CSPICE, the value is not checked. The change
+holds for the context `ctx` (default: the default context). A query that runs on another
+thread uses the old or the new set of values, never a mixture.
+
+Throws `SpiceError(:indexoutofrange)` if `keywrd` is not in `1:6`, and `:immutablevalue`
+if it is 5 or 6.
 """
 function dskstl(ctx::SpiceContext, keywrd::Integer, dpval::Real)
     (1 <= keywrd <= 6) || throw(SpiceError(:indexoutofrange,
@@ -64,7 +79,6 @@ dskstl(keywrd::Integer, dpval::Real) = dskstl(default_context(), keywrd, dpval)
 # Input conversion
 # ---------------------------------------------------------------------------------------
 
-"A 3-vector as `Vec3{Float64}`; throws `ArgumentError` unless `v` has three elements."
 @inline _dsk_vec3(v::Vec3{Float64}) = v
 function _dsk_vec3(v)
     length(v) == 3 || throw(ArgumentError("a vector of 3 elements is required, got $(length(v))"))
@@ -78,7 +92,6 @@ function _dsk_count3(a::AbstractMatrix)
 end
 _dsk_count3(a::AbstractVector) = length(a)
 
-"Element `i` of a list of 3-vectors (see `_dsk_count3`) as `Vec3{Float64}`."
 @inline _dsk_get3(a::AbstractMatrix, i::Int) = Vec3{Float64}(a[1, i], a[2, i], a[3, i])
 @inline _dsk_get3(a::AbstractVector, i::Int) = _dsk_vec3(a[begin+i-1])
 @inline _dsk_get3(a::AbstractVector{Vec3{Float64}}, i::Int) = a[begin+i-1]
@@ -107,7 +120,6 @@ end
 # Segments: the file form and the loaded form
 # ---------------------------------------------------------------------------------------
 
-"The arrays and the `DSKSegment` of the segment `d` of the open DSK file `h`."
 function _dsk_open_segment(h::DASHandle, d::DLADescr, who::AbstractString)
     _das_check_open(h, who)
     return h.ints, h.dps, _dsk_segment(h.ints, h.dps, d, 0, h.path)
@@ -130,7 +142,6 @@ function _dsk_file(ks::KernelSet, seg::DSKSegment)
         "kernel set; its file was unloaded or the set is another one"))
 end
 
-"Throws `SpiceError(:typenotsupported)` unless the segment has the data type 2."
 @inline function _dsk_need02(seg::DSKSegment, who::AbstractString)
     seg.dskdsc.dtype == 2 || throw(SpiceError(:typenotsupported,
         "$who: the DSK segment has the data type $(seg.dskdsc.dtype), not 2"))
@@ -141,8 +152,11 @@ end
     dskgd(handle, dladsc) -> DSKDescr
     dskgd(segment::DSKSegment) -> DSKDescr
 
-The DSK descriptor of a segment, as `dskgd_c`. Throws `SpiceError(:invalidformat)` if
-the segment has fewer than 24 doubles.
+Return the DSK descriptor of a segment, as `dskgd_c`.
+
+Throws `SpiceError(:invalidformat)` if the segment has fewer than 24 doubles.
+
+See also [`DSKDescr`](@ref), [`dlabfs`](@ref).
 """
 function dskgd(h::DASHandle, d::DLADescr)
     _das_check_open(h, "dskgd")
@@ -156,14 +170,24 @@ _dsk_b02(hdr::DSK02Header) = (hdr.nv, hdr.np, hdr.nvxtot,
     hdr.voxsiz, hdr.voxori, collect(hdr.vgrext), hdr.cgscal, hdr.vtxnpl, hdr.voxnpt, hdr.voxnpl)
 
 """
-    dskb02(handle, dladsc) -> (nv, np, nvxtot, vtxbds, voxsiz, voxori, vgrext, cgscal, vtxnpl, voxnpt, voxnpl)
-    dskb02(segment::DSKSegment) -> the same
+    dskb02(handle, dladsc) -> (nv, np, nvxtot, vtxbds, voxsiz, voxori, vgrext, cgscal,
+                               vtxnpl, voxnpt, voxnpl)
+    dskb02(segment::DSKSegment)
 
-The bookkeeping items of a type 2 segment, as `dskb02_c`: vertex count, plate count,
-voxel count, vertex bounds (2 x 3: row 1 the lower bounds, row 2 the upper bounds of x,
-y, z), voxel size, voxel grid origin, voxel grid extents, coarse voxel scale, and the
-sizes of the vertex-plate list, of the voxel-plate pointer array and of the voxel-plate
-list.
+Return the bookkeeping items of a type 2 segment, as `dskb02_c`.
+
+- `nv`, `np`, `nvxtot`: the numbers of vertices, of plates and of voxels.
+- `vtxbds`: the vertex bounds (km), a 2 x 3 matrix; row 1 holds the lower bounds and row 2
+  the upper bounds of x, y, z.
+- `voxsiz`, `voxori`, `vgrext`: the voxel edge length (km), the origin of the voxel grid
+  (km) and the numbers of voxels along x, y, z.
+- `cgscal`: the coarse voxel scale.
+- `vtxnpl`, `voxnpt`, `voxnpl`: the sizes of the vertex-plate list, of the voxel-plate
+  pointer array and of the voxel-plate list.
+
+Throws `SpiceError(:typenotsupported)` if the segment does not have the data type 2.
+
+See also [`dskz02`](@ref).
 """
 function dskb02(h::DASHandle, d::DLADescr)
     _, _, seg = _dsk_open_segment(h, d, "dskb02")
@@ -179,7 +203,10 @@ end
     dskz02(handle, dladsc) -> (nv, np)
     dskz02(segment::DSKSegment) -> (nv, np)
 
-Vertex count and plate count of a type 2 segment, as `dskz02_c`.
+Return the number of vertices and the number of plates of a type 2 segment, as
+`dskz02_c`.
+
+Throws `SpiceError(:typenotsupported)` if the segment does not have the data type 2.
 """
 function dskz02(h::DASHandle, d::DLADescr)
     _, _, seg = _dsk_open_segment(h, d, "dskz02")
@@ -291,11 +318,17 @@ end
 
 """
     dskp02(handle, dladsc, start, room) -> Vector{SVector{3,Int}}
-    dskp02([ctx | ks], segment::DSKSegment, start, room) -> the same
+    dskp02([ctx | ks,] segment::DSKSegment, start, room)
 
-At most `room` plates of a type 2 segment from plate `start` (1 is the first), as
-`dskp02_c`; a plate is three vertex numbers that start at 1. Throws `SpiceError`
-(`:valueoutofrange` for `room <= 0`, `:indexoutofrange` for `start` outside `1:np`).
+Return at most `room` plates of a type 2 segment, from plate `start` on, as `dskp02_c`.
+
+A plate is three vertex numbers. Plate numbers and vertex numbers start at 1, as in
+CSPICE. The result has fewer than `room` plates if the segment has no more.
+
+Throws `SpiceError(:valueoutofrange)` if `room <= 0`, `:indexoutofrange` if `start` is
+not in `1:np`, and `:typenotsupported` if the segment does not have the data type 2.
+
+See also [`dskv02`](@ref), [`dskz02`](@ref), and [`dskw02`](@ref) for an example.
 """
 function dskp02(h::DASHandle, d::DLADescr, start::Integer, room::Integer)
     ints, _, seg = _dsk_open_segment(h, d, "dskp02")
@@ -306,11 +339,13 @@ dskp02(ks::KernelSet, seg::DSKSegment, start::Integer, room::Integer) =
 
 """
     dskv02(handle, dladsc, start, room) -> Vector{SVector{3,Float64}}
-    dskv02([ctx | ks], segment::DSKSegment, start, room) -> the same
+    dskv02([ctx | ks,] segment::DSKSegment, start, room)
 
-At most `room` vertices of a type 2 segment from vertex `start` (1 is the first), as
-`dskv02_c`. Throws `SpiceError` (`:valueoutofrange` for `room <= 0`, `:indexoutofrange`
-for `start` outside `1:nv`).
+Return at most `room` vertices of a type 2 segment (km, in the frame of the segment), from
+vertex `start` on, as `dskv02_c`. Vertex numbers start at 1, as in CSPICE.
+
+Throws `SpiceError(:valueoutofrange)` if `room <= 0`, `:indexoutofrange` if `start` is
+not in `1:nv`, and `:typenotsupported` if the segment does not have the data type 2.
 """
 function dskv02(h::DASHandle, d::DLADescr, start::Integer, room::Integer)
     _, dps, seg = _dsk_open_segment(h, d, "dskv02")
@@ -321,11 +356,13 @@ dskv02(ks::KernelSet, seg::DSKSegment, start::Integer, room::Integer) =
 
 """
     dskn02(handle, dladsc, plid) -> SVector{3,Float64}
-    dskn02([ctx | ks], segment::DSKSegment, plid) -> the same
+    dskn02([ctx | ks,] segment::DSKSegment, plid)
 
-The outward unit normal of plate `plid` of a type 2 segment, as `dskn02_c`: the unit
-vector of `(v2 - v1) x (v3 - v1)`. Throws `SpiceError(:indexoutofrange)` for `plid`
-outside `1:np`.
+Return the outward unit normal of plate `plid` of a type 2 segment, as `dskn02_c`: the
+unit vector of `(v2 - v1) x (v3 - v1)` for the vertices `v1`, `v2`, `v3` of the plate.
+
+Throws `SpiceError(:indexoutofrange)` if `plid` is not in `1:np`, and `:typenotsupported`
+if the segment does not have the data type 2.
 """
 function dskn02(h::DASHandle, d::DLADescr, plid::Integer)
     ints, dps, seg = _dsk_open_segment(h, d, "dskn02")
@@ -338,14 +375,25 @@ end
 
 """
     dski02(handle, dladsc, item, start, room) -> Vector{Int}
-    dski02([ctx | ks], segment::DSKSegment, item, start, room) -> the same
+    dski02([ctx | ks,] segment::DSKSegment, item, start, room)
 
-At most `room` integers of the item `item` of a type 2 segment from element `start`
-(1 is the first), as `dski02_c`. The items: 1 `NV`, 2 `NP`, 3 `NVXTOT`, 4 `VGREXT`,
-5 `CGSCAL`, 6 `VOXNPT`, 7 `VOXNPL`, 8 `VTXNPL`, 9 plates, 10 voxel-plate pointers,
-11 voxel-plate list, 12 vertex-plate pointers, 13 vertex-plate list, 14 coarse voxel
-grid. Throws `SpiceError` (`:valueoutofrange` for `room <= 0`, `:notsupported` for
-another item, `:indexoutofrange` for a bad `start`).
+Return at most `room` integers of the item `item` of a type 2 segment, from element
+`start` on (1 is the first), as `dski02_c`.
+
+| `item` | Content                      | `item` | Content                  |
+|:-------|:-----------------------------|:-------|:-------------------------|
+| 1      | `NV`, vertex count           | 8      | `VTXNPL`                 |
+| 2      | `NP`, plate count            | 9      | plates                   |
+| 3      | `NVXTOT`, voxel count        | 10     | voxel-plate pointers     |
+| 4      | `VGREXT`, voxel grid extents | 11     | voxel-plate list         |
+| 5      | `CGSCAL`, coarse voxel scale | 12     | vertex-plate pointers    |
+| 6      | `VOXNPT`                     | 13     | vertex-plate list        |
+| 7      | `VOXNPL`                     | 14     | coarse voxel grid        |
+
+Throws `SpiceError(:valueoutofrange)` if `room <= 0`, `:notsupported` if `item` is not in
+the table, and `:indexoutofrange` if `start` is not an element of the item.
+
+See also [`dskd02`](@ref), [`dskb02`](@ref).
 """
 function dski02(h::DASHandle, d::DLADescr, item::Integer, start::Integer, room::Integer)
     ints, _, seg = _dsk_open_segment(h, d, "dski02")
@@ -356,13 +404,18 @@ dski02(ks::KernelSet, seg::DSKSegment, item::Integer, start::Integer, room::Inte
 
 """
     dskd02(handle, dladsc, item, start, room) -> Vector{Float64}
-    dskd02([ctx | ks], segment::DSKSegment, item, start, room) -> the same
+    dskd02([ctx | ks,] segment::DSKSegment, item, start, room)
 
-At most `room` doubles of the item `item` of a type 2 segment from element `start`
-(1 is the first), as `dskd02_c`. The items: 15 DSK descriptor, 16 vertex bounds,
-17 voxel grid origin, 18 voxel size, 19 vertices. Throws `SpiceError`
-(`:valueoutofrange` for `room <= 0`, `:notsupported` for another item,
-`:indexoutofrange` for a bad `start`).
+Return at most `room` doubles of the item `item` of a type 2 segment, from element `start`
+on (1 is the first), as `dskd02_c`.
+
+The items are: 15 the DSK descriptor (24 doubles), 16 the vertex bounds (6), 17 the voxel
+grid origin (3), 18 the voxel size (1), 19 the vertices (3 for each vertex).
+
+Throws `SpiceError(:valueoutofrange)` if `room <= 0`, `:notsupported` if `item` is not in
+`15:19`, and `:indexoutofrange` if `start` is not an element of the item.
+
+See also [`dski02`](@ref).
 """
 function dskd02(h::DASHandle, d::DLADescr, item::Integer, start::Integer, room::Integer)
     _, dps, seg = _dsk_open_segment(h, d, "dskd02")
@@ -391,13 +444,22 @@ dskn02(seg::DSKSegment, plid::Integer) = dskn02(default_context(), seg, plid)
 
 """
     dskx02(handle, dladsc, vertex, raydir) -> Union{Nothing,Tuple{Int,SVector{3,Float64}}}
-    dskx02([ctx | ks], segment::DSKSegment, vertex, raydir) -> the same
+    dskx02([ctx | ks,] segment::DSKSegment, vertex, raydir)
 
-The plate number and the point where the ray from `vertex` along `raydir` first meets
-the plates of one type 2 segment, as `dskx02_c`; `nothing` if there is no intercept.
-The ray is in the frame of the segment, relative to the centre of that frame. The file
-form uses the default tolerances, and the form with a context uses the tolerances of
-the context. Throws `SpiceError(:rayiszerovector)` for a zero `raydir`.
+Return `(plid, xpt)`, the plate number and the point where the ray from `vertex` along
+`raydir` first meets the plates of one type 2 segment, as `dskx02_c`, or `nothing` if
+the ray meets no plate.
+
+`vertex` (km) and `raydir` are in the frame of the segment, relative to the centre of that
+frame, and so is `xpt`. `nothing` replaces the `found` flag of CSPICE. The form with a
+context uses the tolerances of the context ([`dskstl`](@ref)); the forms with a handle or
+with a `KernelSet` use the values of CSPICE at start.
+
+Throws `SpiceError(:rayiszerovector)` if `raydir` is zero, `:typenotsupported` if the
+segment does not have the data type 2, and `:arraytoosmall` if a ray that meets no plate
+crosses more than 50000 voxels.
+
+See also [`dskxsi`](@ref), and [`dskw02`](@ref) for an example.
 """
 function dskx02(h::DASHandle, d::DLADescr, vertex, raydir)
     ints, dps, seg = _dsk_open_segment(h, d, "dskx02")
@@ -443,18 +505,27 @@ end
 """
     dskobj(path) -> Vector{Int}
 
-The ID codes of the bodies that the segments of the DSK file `path` belong to, sorted
-and without repetition, as the set that `dskobj_c` returns. Throws `SpiceError`
-(`:invalidformat` for a transfer file, `:invalidarchtype`, `:invalidfiletype`, and the
-kinds of `getfat` and `dasopr`).
+Return the ID codes of the bodies that have a segment in the DSK file `path`, sorted and
+without repetition, as `dskobj_c`.
+
+The result is a new vector, where `dskobj_c` adds the codes to a set of the caller.
+
+Throws `SpiceError(:invalidformat)` if the file is a transfer file, `:invalidarchtype` if
+it is not a DAS file, `:invalidfiletype` if it is not a DSK file, and the kinds of
+[`getfat`](@ref) and [`dasopr`](@ref).
+
+See also [`dsksrf`](@ref).
 """
 dskobj(path::AbstractString) = sort!(unique!(Int[d.center for d in _dsk_file_descrs(path, "dskobj")]))
 
 """
     dsksrf(path, bodyid) -> Vector{Int}
 
-The ID codes of the surfaces of the body `bodyid` in the DSK file `path`, sorted and
-without repetition, as the set that `dsksrf_c` returns. Errors as [`dskobj`](@ref).
+Return the ID codes of the surfaces of the body `bodyid` that have a segment in the DSK
+file `path`, sorted and without repetition, as `dsksrf_c`.
+
+The result is a new vector, where `dsksrf_c` adds the codes to a set of the caller. The
+errors are those of [`dskobj`](@ref).
 """
 dsksrf(path::AbstractString, bodyid::Integer) = sort!(unique!(Int[d.surfce
     for d in _dsk_file_descrs(path, "dsksrf") if d.center == bodyid]))
@@ -509,32 +580,46 @@ _dsk_frame_code(ks::KernelSet, fixref::AbstractString) = Int32(namfrm(ks, fixref
     "true; prioritized searches are not supported, as in this version of CSPICE"))
 
 """
-    dskxsi([ctx | ks], pri, target, srflst, et, fixref, vertex, raydir)
+    dskxsi([ctx | ks,] pri, target, srflst, et, fixref, vertex, raydir)
         -> Union{Nothing,Tuple{SVector{3,Float64},DSKSegment,Int}}
 
-The first point where the ray from `vertex` along `raydir` meets the surface that the
-loaded DSK segments of `target` define, as `dskxsi_c`: `(xpt, segment, plid)`, or
-`nothing` if there is no intercept.
+Return `(xpt, segment, plid)` for the first point where the ray from `vertex` along
+`raydir` meets the surface that the loaded DSK segments of `target` define, as
+`dskxsi_c`, or `nothing` if there is no intercept.
 
-- `pri` must be `false`: all segments have the same priority and the nearest intercept
-  wins (`SpiceError(:badpriorityspec)` otherwise, as CSPICE).
-- `target` is a body name or ID; `srflst` holds surface IDs (a vector or a tuple), and
-  an empty list accepts every surface of the body.
-- `et` is the epoch (seconds past J2000 TDB) that selects the segments by coverage and
-  at which the frames are evaluated.
-- `fixref` is the name or the ID of a body-fixed frame centred on the target; `vertex`
-  and `raydir` are in that frame, `vertex` relative to the target centre, and so is
-  `xpt`.
+# Arguments
+- `pri`: must be `false`. All segments have the same priority and the nearest intercept
+  wins.
+- `target`: body name or body ID.
+- `srflst`: surface IDs (a vector or a tuple); an empty list accepts every surface of the
+  body.
+- `et`: epoch, seconds past J2000 TDB. It selects the segments by coverage, and the frames
+  are evaluated at it.
+- `fixref`: name or ID of a body-fixed frame that is centred on the target.
+- `vertex`, `raydir`: the ray in the frame `fixref`; `vertex` is in km, relative to the
+  centre of the target.
 
-`segment` is a [`DSKSegment`](@ref): it replaces the handle, the DLA descriptor and the
-DSK descriptor of CSPICE (`segment.dladsc`, `segment.dskdsc`), and `plid` replaces
-`ic[1]`; `dc` of CSPICE has no content for type 2. The access calls take the segment.
+`xpt` is in the frame `fixref` (km). `segment` is a [`DSKSegment`](@ref) and `plid` is the
+plate number, from 1. They replace the handle, the DLA descriptor, the DSK descriptor and
+the first element of `ic` of CSPICE; `dc` of CSPICE has no content for the data type 2.
+`nothing` replaces the `found` flag.
 
-Contract: the call reads one `KernelSet` snapshot and one tolerance snapshot and writes
-nothing, so that many threads can call it while another thread loads kernels. With an
-integer `target`, an integer `fixref` and `SVector` arguments it does not allocate.
-Throws `SpiceError` (`:badpriorityspec`, `:idcodenotfound`, `:noframeinfo`,
-`:invalidframe`, `:nodsksegments`, `:dskdatanotfound`, `:rayiszerovector`).
+The form with a context uses the tolerances of the context ([`dskstl`](@ref)); the form
+with a `KernelSet` uses the values of CSPICE at start. The call reads one snapshot of the
+loaded kernels and writes nothing, so many threads can call it while another thread loads
+kernels. With an integer `target`, an integer `fixref` and `SVector` arguments it does not
+allocate.
+
+Throws `SpiceError`:
+- `:badpriorityspec` if `pri` is `true`, as CSPICE;
+- `:idcodenotfound` if the target or the frame is not known, `:noframeinfo` if the centre
+  of the frame is not known, `:invalidframe` if the frame is not centred on the target;
+- `:nodsksegments` if no DSK segment of the target is loaded, `:dskdatanotfound` if no
+  loaded segment has a surface of `srflst`;
+- `:rayiszerovector` if `raydir` is zero.
+
+See also [`dskxv`](@ref), [`dskx02`](@ref), [`latsrf`](@ref), and [`dskw02`](@ref) for an
+example.
 """
 function dskxsi(ks::KernelSet, pri::Bool, target::NameOrID, srflst, et::Real, fixref::NameOrID,
         vertex, raydir)
@@ -560,12 +645,17 @@ dskxsi(pri::Bool, target::NameOrID, srflst, et::Real, fixref::NameOrID, vertex, 
 end
 
 """
-    dskxv!(xptarr, fndarr, [ctx | ks], pri, target, srflst, et, fixref, vtxarr, dirarr) -> (xptarr, fndarr)
+    dskxv!(xptarr, fndarr, [ctx | ks,] pri, target, srflst, et, fixref, vtxarr, dirarr)
+        -> (xptarr, fndarr)
 
-As [`dskxv`](@ref), with the results stored in `xptarr` (a vector of `SVector{3,Float64}`)
-and `fndarr` (a vector of `Bool`). Precondition: both have one element for each ray.
-With integer `target` and `fixref` and vectors of `SVector{3,Float64}` the call does
-not allocate.
+Compute the intercepts of a set of rays as [`dskxv`](@ref) does, and store them in
+`xptarr` (a vector of `SVector{3,Float64}`) and `fndarr` (a vector of `Bool`).
+
+With an integer `target`, an integer `fixref` and vectors of `SVector{3,Float64}` the call
+does not allocate.
+
+Throws `ArgumentError` unless `dirarr`, `xptarr` and `fndarr` have one element for each
+ray of `vtxarr`, and the `SpiceError` kinds of [`dskxv`](@ref).
 """
 function dskxv!(xptarr::AbstractVector{Vec3{Float64}}, fndarr::AbstractVector{Bool},
         ks::KernelSet, pri::Bool, target::NameOrID, srflst, et::Real, fixref::NameOrID, vtxarr,
@@ -604,13 +694,19 @@ function _dsk_xv!(xptarr::AbstractVector{Vec3{Float64}}, fndarr::AbstractVector{
 end
 
 """
-    dskxv([ctx | ks], pri, target, srflst, et, fixref, vtxarr, dirarr) -> (xptarr, fndarr)
+    dskxv([ctx | ks,] pri, target, srflst, et, fixref, vtxarr, dirarr) -> (xptarr, fndarr)
 
-The ray-surface intercepts of a set of rays on the loaded DSK segments of `target`, as
-`dskxv_c`. `vtxarr` and `dirarr` are 3 x n matrices or vectors of n 3-vectors.
-`xptarr[i]` is the intercept of ray `i` (an `SVector{3,Float64}`, zero if there is
-none) and `fndarr[i]` tells whether it exists. The other arguments and the errors are
-those of [`dskxsi`](@ref); `SpiceError(:invalidcount)` for no ray.
+Return the intercepts of a set of rays with the surface that the loaded DSK segments of
+`target` define, as `dskxv_c`.
+
+`vtxarr` and `dirarr` hold the vertices (km) and the directions of the n rays: 3 x n
+matrices, or vectors of n 3-vectors. `xptarr[i]` is the intercept of ray `i` (an
+`SVector{3,Float64}`, km; zero if there is none) and `fndarr[i]` tells whether it exists.
+The other arguments are those of [`dskxsi`](@ref).
+
+Throws `SpiceError(:invalidcount)` if there is no ray, and the kinds of [`dskxsi`](@ref).
+
+See also [`dskxv!`](@ref).
 """
 function dskxv(ks::Union{KernelSet,SpiceContext}, pri::Bool, target::NameOrID, srflst, et::Real,
         fixref::NameOrID, vtxarr, dirarr)
@@ -628,9 +724,14 @@ dskxv(pri::Bool, target::NameOrID, srflst, et::Real, fixref::NameOrID, vtxarr, d
 """
     pltexp(iverts, delta) -> SVector{3,SVector{3,Float64}}
 
-Expand the plate with the three vertices `iverts` (three 3-vectors, or the columns of
-a 3 x 3 matrix) about its centroid by the fraction `delta`, as `pltexp_c`. The result
-is in the same plane and has the same orientation.
+Return the vertices of the plate `iverts` after an expansion about its centroid by the
+fraction `delta`, as `pltexp_c`.
+
+`iverts` holds the three vertices: three 3-vectors, or the columns of a 3 x 3 matrix. The
+distance of each vertex from the centroid is multiplied by `1 + delta`, so the result is
+in the same plane and has the same orientation.
+
+Throws `ArgumentError` unless `iverts` holds three vertices.
 """
 function pltexp(iverts, delta::Real)
     _dsk_count3(iverts) == 3 || throw(ArgumentError("pltexp: three vertices are required"))
@@ -642,18 +743,19 @@ end
 """
     pltnrm(v1, v2, v3) -> SVector{3,Float64}
 
-The outward normal `(v2 - v1) x (v3 - v2)` of the plate with the vertices `v1`, `v2`,
-`v3`, as `pltnrm_c`. The result does not have unit length; it is zero for a degenerate
-plate.
+Return the outward normal `(v2 - v1) x (v3 - v2)` of the plate with the vertices `v1`,
+`v2`, `v3`, as `pltnrm_c`.
+
+The result does not have unit length. It is zero for a degenerate plate.
 """
 pltnrm(v1, v2, v3) = _dsk_pltnrm(_dsk_vec3(v1), _dsk_vec3(v2), _dsk_vec3(v3))
 
 """
     pltnp(point, v1, v2, v3) -> (pnear, dist)
 
-The point of the plate with the vertices `v1`, `v2`, `v3` that is nearest to `point`,
-and its distance from `point`, as `pltnp_c`. A degenerate plate (a segment or a point)
-is accepted.
+Return the point of the plate with the vertices `v1`, `v2`, `v3` that is nearest to
+`point`, and its distance from `point`, as `pltnp_c`. A degenerate plate (a line segment
+or a point) is accepted.
 """
 pltnp(point, v1, v2, v3) = _dsk_pltnp(_dsk_vec3(point), _dsk_vec3(v1), _dsk_vec3(v2), _dsk_vec3(v3))
 
@@ -670,7 +772,6 @@ function _dsk_check_plates(who::AbstractString, plates, np::Int, nv::Int)
     return nothing
 end
 
-"The three vertex numbers of plate `i` of a list of plates."
 @inline _dsk_plate3(plates::AbstractMatrix, i::Int) = (Int(plates[1, i]), Int(plates[2, i]), Int(plates[3, i]))
 @inline function _dsk_plate3(plates::AbstractVector, i::Int)
     p = plates[begin+i-1]
@@ -680,10 +781,15 @@ end
 """
     pltar(vrtces, plates) -> Float64
 
-The total area of the plates, as `pltar_c`. `vrtces` and `plates` are 3 x n matrices or
-vectors of 3-vectors; vertex numbers start at 1. No plate gives 0. Throws `SpiceError`
-(`:toofewvertices` for fewer than 3 vertices when there is a plate, `:indexoutofrange`
-for a vertex number outside `1:nv`).
+Return the total area of a set of plates, as `pltar_c`.
+
+`vrtces` and `plates` are 3 x n matrices or vectors of 3-vectors. A plate is three vertex
+numbers, which start at 1. An empty set of plates gives 0.
+
+Throws `SpiceError(:toofewvertices)` if there is a plate and fewer than 3 vertices, and
+`:indexoutofrange` if a vertex number is not in `1:nv`.
+
+See also [`pltvol`](@ref).
 """
 function pltar(vrtces, plates)
     nv = _dsk_count3(vrtces)
@@ -706,10 +812,15 @@ end
 """
     pltvol(vrtces, plates) -> Float64
 
-The volume of the region that the plates enclose, as `pltvol_c`. Precondition: the
-plates form a closed surface with outward normals; the function does not check it.
-Throws `SpiceError` (`:toofewvertices` for fewer than 4 vertices, `:toofewplates` for
-fewer than 4 plates, `:indexoutofrange` for a vertex number outside `1:nv`).
+Return the volume of the region that a set of plates encloses, as `pltvol_c`.
+
+`vrtces` and `plates` are 3 x n matrices or vectors of 3-vectors. A plate is three vertex
+numbers, which start at 1. The plates must form a closed surface with outward normals;
+the call does not check this.
+
+Throws `SpiceError(:toofewvertices)` if there are fewer than 4 vertices, `:toofewplates`
+if there are fewer than 4 plates, and `:indexoutofrange` if a vertex number is not in
+`1:nv`.
 """
 function pltvol(vrtces, plates)
     nv = _dsk_count3(vrtces)

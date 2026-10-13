@@ -5,13 +5,16 @@
 """
     DLADescr
 
-Descriptor of one DLA segment (a segment of a DSK file), as `SpiceDLADescr` of CSPICE
-and `DLADescr` of SPICE.jl: the backward and forward pointers of the doubly linked
-segment list (`-1` at the ends), and for each of the three DAS address spaces the base
-address (the address before the first element of the segment) and the element count.
+Descriptor of one DLA segment (a segment of a DSK file), as `SpiceDLADescr` of CSPICE.
 
-Invariant of a descriptor that was read from a valid file: `ibase >= 3`, and all sizes
-are non-negative.
+- `bwdptr`, `fwdptr`: addresses of the descriptors of the segment before and of the
+  segment after in the list, `-1` at the ends.
+- `ibase`, `isize`: base address and element count of the segment in the integer address
+  space; `dbase`, `dsize` and `cbase`, `csize` are those of the double and of the
+  character address space. A base address is the address before the first element.
+
+[`dlabfs`](@ref), [`dlafns`](@ref), [`dlabbs`](@ref) and [`dlafps`](@ref) return a
+descriptor.
 """
 struct DLADescr
     bwdptr::Int
@@ -27,12 +30,21 @@ end
 """
     DSKDescr
 
-Descriptor of one DSK segment, as `SpiceDSKDescr` of CSPICE and `DSKDescr` of SPICE.jl:
-surface ID, centre body ID, data class (1 single-valued surface, 2 general surface),
-data type (2 for triangular plates), frame ID, coordinate system (1 latitudinal,
-2 cylindrical, 3 rectangular, 4 planetodetic), the ten coordinate system parameters
-(equatorial radius and flattening for system 4), the bounds of the three coordinates,
-and the coverage start and stop (seconds past J2000 TDB).
+Descriptor of one DSK segment, as `SpiceDSKDescr` of CSPICE.
+
+- `surfce`, `center`: surface ID and body ID.
+- `dclass`: data class, 1 for a single-valued surface and 2 for a general surface.
+- `dtype`: data type, 2 for triangular plates.
+- `frmcde`: frame ID.
+- `corsys`: coordinate system, 1 latitudinal, 2 cylindrical, 3 rectangular,
+  4 planetodetic.
+- `corpar`: the ten coordinate system parameters; for system 4 the first two are the
+  equatorial radius (km) and the flattening.
+- `co1min`, `co1max`, `co2min`, `co2max`, `co3min`, `co3max`: bounds of the three
+  coordinates (radians and km).
+- `start`, `stop`: coverage, seconds past J2000 TDB.
+
+[`dskgd`](@ref) returns a descriptor.
 """
 struct DSKDescr
     surfce::Int
@@ -77,16 +89,19 @@ end
 """
     DSKSegment
 
-Plain-bits descriptor of one segment of a loaded DSK file. `file` indexes
-`KernelSet.dskfiles` (0 for a segment that is not in a set); `dladsc` and `dskdsc` are
-the DLA and DSK descriptors; `boxctr` and `boxrad` are the centre and the radius of the
-bounding sphere of the volume element of the segment, in the frame of the segment (as
-`zzsegbox` of CSPICE; `boxrad` is NaN for a coordinate system that is not supported);
-`hdr` holds the fixed-size type 2 items (all zero for another data type).
+One segment of a loaded DSK file. [`dskxsi`](@ref) returns it in place of the handle, the
+DLA descriptor and the DSK descriptor that `dskxsi_c` returns.
 
-A `DSKSegment` replaces the triple (handle, DLA descriptor, DSK descriptor) that
-`dskxsi_c` returns, and the access calls (`dskz02`, `dskp02`, `dskv02`, `dskn02`, ...)
-take it together with a `KernelSet` or a `SpiceContext`.
+The access calls (`dskgd`, `dskb02`, `dskz02`, `dskp02`, `dskv02`, `dskn02`, `dski02`,
+`dskd02`, `dskx02`) take the segment. The calls that read data of the file also take the
+`KernelSet` or the `SpiceContext` that holds the file, and throw
+`SpiceError(:nosuchhandle)` if the file is not loaded there any more.
+
+- `dladsc`, `dskdsc`: the [`DLADescr`](@ref) and the [`DSKDescr`](@ref) of the segment.
+- `file`: index of the file in the kernel set, 0 for a segment that is not in a set.
+- `boxctr`, `boxrad`: centre and radius (km) of the bounding sphere of the segment, in the
+  frame of the segment. `boxrad` is NaN for a coordinate system that is not supported.
+- `hdr`: the fixed-size items of a type 2 segment (all zero for another data type).
 """
 struct DSKSegment
     file::Int32
@@ -136,7 +151,6 @@ end
 "The tolerances of CSPICE at start."
 DSKTolerances() = DSKTolerances(1e-10, 1e-8, 1e-10, 1e-7, 1e-12, 1e-12)
 
-"Copy of `s` that belongs to file number `file` of a `KernelSet`."
 _dsk_withfile(s::DSKSegment, file::Integer) = DSKSegment(Int32(file), s.dladsc, s.dskdsc, s.boxctr,
     s.boxrad, s.hdr)
 

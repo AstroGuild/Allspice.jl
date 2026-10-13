@@ -13,10 +13,17 @@ const _DSK_IXIFIX = _DSK_MAXCGR + 7       # size of the fixed part of the intege
 """
     dskopn(fname, ifname, ncomch) -> DASHandle
 
-Create the new DSK file `fname` with the internal file name `ifname` and room for
-`ncomch` comment characters, and open it for write, as `dskopn_c`. Preconditions:
-those of [`dlaopn`](@ref); the file does not exist. Postcondition: the file has no
-segment; nothing is on disk until [`dskcls`](@ref).
+Create the DSK file `fname` and open it for writing, as `dskopn_c`.
+
+`ifname` is the internal file name and `ncomch` is the number of comment characters to
+make room for. The new file has no segment. Segments that [`dskw02`](@ref) adds are in
+memory, and the file on disk is not a complete DSK file, until [`dskcls`](@ref) runs. An
+existing file is never replaced.
+
+Throws `SpiceError(:badrecordcount)` if `ncomch < 0`, `:fileopenfailed` if `fname` exists
+or cannot be created, and the other kinds of [`dasonw`](@ref).
+
+See also [`dskw02`](@ref) for an example, [`dasac`](@ref) to add comments.
 """
 dskopn(fname::AbstractString, ifname::AbstractString, ncomch::Integer) =
     dlaopn(fname, "DSK", ifname, ncomch)
@@ -24,9 +31,13 @@ dskopn(fname::AbstractString, ifname::AbstractString, ncomch::Integer) =
 """
     dskcls(handle, optmiz=true) -> Nothing
 
-Close the DSK file, as `dskcls_c`; a file that is open for write is written to disk.
-The file is always written segregated (all records of one data type together), which
-is what `optmiz = true` gives in CSPICE, so the flag has no effect here.
+Close the DSK file of `handle`, as `dskcls_c`. A file that is open for writing is written
+to disk by this call.
+
+`optmiz` has no effect. The file is always written segregated (all records of one data
+type together), which is what `optmiz = true` gives in CSPICE.
+
+Throws `SpiceError(:daswritefail)` if the file cannot be written.
 """
 dskcls(h::DASHandle, optmiz::Bool=true) = dascls(h)
 
@@ -243,30 +254,39 @@ function _dsk_mkspin!(spaixd::Vector{Float64}, spaixi::Vector{Int}, vf::Vector{F
 end
 
 """
-    dskmi2(vrtces, plates, finscl, corscl, worksz, voxpsz, voxlsz, makvtl, spxisz) -> (spaixd, spaixi)
+    dskmi2(vrtces, plates, finscl, corscl, worksz, voxpsz, voxlsz, makvtl, spxisz)
+        -> (spaixd, spaixi)
 
-Make the spatial index of a type 2 segment, as `dskmi2_c`.
+Return the spatial index of a type 2 segment, as `dskmi2_c`: the double part `spaixd` (10
+elements) and the integer part `spaixi` (`spxisz` elements). [`dskw02`](@ref) takes both.
 
-- `vrtces`, `plates`: the vertices and the plates, each a 3 x n matrix or a vector of
-  3-vectors; a plate is three vertex numbers that start at 1.
-- `finscl`: the fine voxel edge length in units of the mean plate extent; `corscl`: the
-  number of fine voxels along one edge of a coarse voxel.
+# Arguments
+- `vrtces`, `plates`: the vertices (km) and the plates, each a 3 x n matrix or a vector of
+  3-vectors. A plate is three vertex numbers, which start at 1.
+- `finscl`: the edge length of a fine voxel, in units of the mean extent of the plates.
+- `corscl`: the number of fine voxels along one edge of a coarse voxel.
 - `worksz`, `voxpsz`, `voxlsz`: the sizes of the workspace, of the voxel-plate pointer
   array and of the voxel-plate list, with the meaning and the limits of CSPICE.
-- `makvtl`: true to make the vertex-plate list; `spxisz`: the size of `spaixi`.
+- `makvtl`: `true` to make the vertex-plate list.
+- `spxisz`: the size of `spaixi`, at least `100007 + voxpsz + voxlsz`, plus `2nv + 3np`
+  if `makvtl` is `true`.
 
-`spaixd` has 10 elements and `spaixi` has `spxisz`; their layout is that of CSPICE (see
-the head of this file), and [`dskw02`](@ref) takes them. Every element is equal to the
-one that CSPICE gives for an output array that is zero at entry; this includes the
-elements after the lists, which keep values of the workspace (and which `dskw02` writes
-as vertex-plate pointers when `makvtl` is false).
+The index has the layout of CSPICE. Every element is equal to the one that CSPICE gives
+for an output array that is zero at entry. This includes the elements after the lists,
+which keep values of the workspace.
 
-Throws `SpiceError` with the kinds of `dskmi2` and of the routines it calls:
-`:badfinevoxelscale`, `:badcoarsevoxscale`, `:badvertexcount`, `:badplatecount`,
-`:workspacetoosmall`, `:ptrarraytoosmall`, `:platelisttoosmall`, `:intindextoosmall`,
-`:valueoutofrange`, `:incompatiblescale`, `:coarsegridoverflow`, `:avaloutofrange`,
-`:cellarraytoosmall`, `:barraytoosmall`; and `:badvertexindex` for a vertex number
-outside `1:nv`, which CSPICE does not check here.
+Throws `SpiceError`:
+- `:badfinevoxelscale` unless `finscl > 0`, `:badcoarsevoxscale` unless `corscl >= 1`;
+- `:badvertexcount` or `:badplatecount` if the number of vertices or of plates is out of
+  range;
+- `:workspacetoosmall`, `:ptrarraytoosmall`, `:platelisttoosmall`, `:intindextoosmall`,
+  `:cellarraytoosmall` or `:barraytoosmall` if a size is too small;
+- `:valueoutofrange`, `:incompatiblescale` or `:coarsegridoverflow` if the voxel grid that
+  follows from the scales is not valid;
+- `:badvertexindex` if a vertex number is not in `1:nv`, which CSPICE does not check
+  here.
+
+See also [`dskrb2`](@ref), and [`dskw02`](@ref) for an example.
 """
 function dskmi2(vrtces, plates, finscl::Real, corscl::Integer, worksz::Integer,
         voxpsz::Integer, voxlsz::Integer, makvtl::Bool, spxisz::Integer)
@@ -341,12 +361,20 @@ end
 """
     dskrb2(vrtces, plates, corsys, corpar) -> (mncor3, mxcor3)
 
-Bounds of the third coordinate of the plates of a type 2 segment, as `dskrb2_c`:
-radius for the latitudinal system (`corsys = 1`), z for the rectangular system (3),
-and altitude for the planetodetic system (4, with the equatorial radius `corpar[1]` and
-the flattening `corpar[2]`). The lower bound of the altitude is a safe bound, not the
-exact minimum, as in CSPICE. Throws `SpiceError(:notsupported)` for another system and
-`:badvertexindex` for a vertex number outside `1:nv`.
+Return the bounds of the third coordinate of the plates of a type 2 segment, as
+`dskrb2_c`, in the unit of the vertices (km).
+
+- `corsys = 1`, latitudinal: the radius.
+- `corsys = 3`, rectangular: z.
+- `corsys = 4`, planetodetic: the altitude above the spheroid with the equatorial radius
+  `corpar[1]` and the flattening `corpar[2]`.
+
+`vrtces` and `plates` are as for [`dskmi2`](@ref). For the planetodetic system the lower
+bound is a safe bound, not the exact minimum, as in CSPICE.
+
+Throws `SpiceError(:notsupported)` if `corsys` is not 1, 3 or 4, `:badvertexindex` if
+a vertex number is not in `1:nv`, and for the planetodetic system `:valueoutofrange`
+unless the radius is positive and the flattening is less than 1.
 """
 function dskrb2(vrtces, plates, corsys::Integer, corpar)
     nv = _dsk_count3(vrtces)
@@ -405,31 +433,92 @@ end
 # ---------------------------------------------------------------------------------------
 
 """
-    dskw02([ctx], handle, center, surfid, dclass, frame, corsys, corpar, mncor1, mxcor1,
-           mncor2, mxcor2, mncor3, mxcor3, first, last, vrtces, plates, spaixd, spaixi) -> Nothing
+    dskw02([ctx,] handle, center, surfid, dclass, frame, corsys, corpar, mncor1, mxcor1,
+           mncor2, mxcor2, mncor3, mxcor3, first, last, vrtces, plates, spaixd, spaixi)
+        -> Nothing
 
-Write a type 2 segment to the DSK file `handle`, as `dskw02_c`.
+Write a type 2 segment (triangular plates) to the DSK file of `handle`, as `dskw02_c`.
 
-- `center`, `surfid`: the body ID and the surface ID; `dclass`: 1 for a surface that
-  each ray from the centre meets once, 2 for a general surface.
-- `frame`: the name or the ID of the frame of the vertices. A name that is not built in
-  is looked up in the kernel pool of `ctx` (the default context if it is not given).
+# Arguments
+- `handle`: a [`DASHandle`](@ref) from [`dskopn`](@ref).
+- `center`, `surfid`: the body ID and the surface ID.
+- `dclass`: the data class, 1 for a surface that each ray from the centre meets one time,
+  2 for a general surface.
+- `frame`: the name or the ID of the frame of the vertices. A name that is not built in is
+  looked up in the kernel pool of `ctx` (default: the default context).
 - `corsys`, `corpar`: the coordinate system of the bounds (1 latitudinal, 3 rectangular,
-  4 planetodetic) and its parameters (for system 4 the equatorial radius and the
-  flattening); `corpar` can have fewer than 10 elements, and the rest is 0.
-- `mncor1` ... `mxcor3`: the bounds of the three coordinates (radians and km);
+  4 planetodetic) and its parameters; for system 4 these are the equatorial radius (km)
+  and the flattening. `corpar` can have fewer than 10 elements; the rest is 0.
+- `mncor1`, `mxcor1`, `mncor2`, `mxcor2`, `mncor3`, `mxcor3`: the bounds of the three
+  coordinates, radians for longitude and latitude and km for the others.
   [`dskrb2`](@ref) gives those of the third coordinate.
-- `first`, `last`: the coverage (seconds past J2000 TDB).
-- `vrtces`, `plates`: as for [`dskmi2`](@ref), which gives `spaixd` and `spaixi`.
+- `first`, `last`: the coverage, seconds past J2000 TDB.
+- `vrtces`, `plates`: the vertices (km) and the plates, as for [`dskmi2`](@ref), which
+  gives `spaixd` and `spaixi`.
 
-Preconditions (each is a `SpiceError` with the kind of CSPICE): the frame is known
-(`:frameidnotfound`); `first < last` (`:timesoutoforder`); the bounds are in range, in
-order and of non-zero extent (`:valueoutofrange`, `:invalidlonextent`,
-`:boundsoutoforder`, `:zeroboundsextent`, `:degeneratesurface`); `corsys` is 1, 3 or 4
-and `dclass` is 1 or 2 (`:notsupported`); the counts and the index parameters are in
-range (`:valueoutofrange`, `:incompatiblescale`); every vertex number is in `1:nv`
-(`:badvertexindex`). Postcondition: the segment is the last one of the file, and the
-file is unchanged if a precondition fails.
+The segment becomes the last one of the file. It is on disk after [`dskcls`](@ref). A
+call that throws adds nothing to the file.
+
+Throws `SpiceError`, with the kinds of CSPICE:
+- `:frameidnotfound` if the frame is not known;
+- `:timesoutoforder` unless `first < last`;
+- `:valueoutofrange`, `:invalidlonextent`, `:boundsoutoforder`, `:zeroboundsextent` or
+  `:degeneratesurface` if the bounds are out of range, out of order or of zero extent;
+- `:notsupported` unless `corsys` is 1, 3 or 4 and `dclass` is 1 or 2;
+- `:valueoutofrange` or `:incompatiblescale` if a count or a parameter of the spatial
+  index is out of range;
+- `:badvertexindex` if a vertex number is not in `1:nv`.
+
+Throws `ArgumentError` if `corpar` has more than 10 elements or `spaixd` or `spaixi` is
+too short.
+
+# Examples
+Write a tetrahedron, then read it back from the file and as a loaded kernel:
+```jldoctest
+julia> vrtces = [[0.0, 0.0, 1.0], [1.0, 0.0, -0.5], [-0.5, 0.8, -0.5], [-0.5, -0.8, -0.5]];
+
+julia> plates = [[1, 2, 3], [1, 3, 4], [1, 4, 2], [2, 4, 3]];
+
+julia> spaixd, spaixi = dskmi2(vrtces, plates, 1.0, 1, 1000, 1000, 1000, true, 103000);
+
+julia> mncor3, mxcor3 = dskrb2(vrtces, plates, 1, zeros(10));
+
+julia> path = joinpath(mktempdir(), "tetrahedron.bds");
+
+julia> h = dskopn(path, "tetrahedron", 0);
+
+julia> dskw02(h, 499, 1, 2, "IAU_MARS", 1, zeros(10), -pi, pi, -pi / 2, pi / 2, mncor3,
+              mxcor3, -1.0e9, 1.0e9, vrtces, plates, spaixd, spaixi)
+
+julia> dskcls(h)
+
+julia> h = dasopr(path);
+
+julia> dladsc = dlabfs(h);
+
+julia> dskz02(h, dladsc)
+(4, 4)
+
+julia> dskx02(h, dladsc, [0.0, 0.0, -5.0], [0.0, 0.0, 1.0])
+(4, [0.0, 0.0, -0.5])
+
+julia> dascls(h)
+
+julia> ctx = SpiceContext();
+
+julia> furnsh(ctx, path)
+
+julia> xpt, segment, plid = dskxsi(ctx, false, 499, Int[], 0.0, "IAU_MARS", [0.0, 0.0, -5.0],
+                                   [0.0, 0.0, 1.0]);
+
+julia> xpt ≈ [0.0, 0.0, -0.5], plid
+(true, 4)
+
+julia> dskp02(ctx, segment, plid, 1)[1] == plates[plid]
+true
+```
+
+See also [`dskopn`](@ref), [`dskmi2`](@ref), [`dskrb2`](@ref), [`dskcls`](@ref).
 """
 function dskw02(ctx::SpiceContext, h::DASHandle, center::Integer, surfid::Integer,
         dclass::Integer, frame::NameOrID, corsys::Integer, corpar, mncor1::Real, mxcor1::Real,

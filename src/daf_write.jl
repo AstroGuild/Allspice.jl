@@ -114,17 +114,26 @@ end
 """
     dafonw(path, ftype, nd, ni, ifname, resv) -> DAFHandle
 
-Create the new DAF `path` of type `ftype` (for example `"SPK"`) with the summary
-format `nd`, `ni`, the internal file name `ifname` and `resv` reserved (comment)
-records, and open it for write, as `dafonw` of SPICELIB.
+Create the DAF file `path` and open it for writing, as `dafonw` of SPICELIB.
 
-Preconditions (each throws `SpiceError`): `path` is not blank (`:blankfilename`) and
-does not exist (`:fileopenfailed`); `ftype` is not blank (`:blankfiletype`) and
-printable (`:illegalcharacter`); `0 <= nd <= 124`, `2 <= ni <= 250`,
-`nd + (ni + 1) ÷ 2 <= 125` (`:dafinvalidparams`); `resv >= 0` (`:dafnoresv`).
-Postcondition: the file holds the file record, `resv` comment records with an empty
-comment area, one empty summary record and one name record, byte for byte as CSPICE
-writes them. The handle belongs to the caller; see `DAFHandle` for the rule on tasks.
+`ftype` is the file type (for example `"SPK"`; four characters are stored), `nd` and `ni`
+are the summary format, `ifname` is the internal file name (60 characters are stored) and
+`resv` is the number of reserved (comment) records.
+
+The file is on disk when the call returns: the file record, `resv` comment records with an
+empty comment area, one empty summary record and one name record, byte for byte as CSPICE
+writes them. The byte order is the native one. An existing file is never replaced.
+
+Throws `SpiceError`:
+- `:blankfilename` if `path` is blank;
+- `:fileopenfailed` if the file exists or cannot be created;
+- `:blankfiletype` if `ftype` is blank, `:illegalcharacter` if it has a character that is
+  not printable;
+- `:dafinvalidparams` unless `0 <= nd <= 124`, `2 <= ni <= 250` and
+  `nd + (ni + 1) ÷ 2 <= 125`;
+- `:dafnoresv` if `resv < 0`.
+
+See also [`spkopn`](@ref), [`ckopn`](@ref), [`dafbna`](@ref), [`dafcls`](@ref).
 """
 function dafonw(path::AbstractString, ftype::AbstractString, nd::Integer, ni::Integer,
         ifname::AbstractString, resv::Integer)
@@ -177,12 +186,14 @@ end
 """
     dafopw(path) -> DAFHandle
 
-Open the existing DAF `path` for write access (to add arrays or comments), as
-`dafopw_c`. Preconditions: as `dafopr`, and the file has the native byte order
-(`SpiceError(:unsupportedbff)`) and can be opened for update
-(`SpiceError(:fileopenfailed)`). The caller makes sure that no other handle writes
-the same file and that the file is not loaded with `furnsh` (unload it first). The
-handle belongs to the caller; see `DAFHandle` for the rule on tasks.
+Open the existing DAF file `path` for writing, as `dafopw_c`, to add arrays or comments.
+
+The file must have the native byte order. Make sure that no other handle writes the same
+file. Unload the file from every context before the call and load it again after the
+close: a kernel that is loaded does not see arrays that are added later.
+
+Throws the `SpiceError` kinds of [`dafopr`](@ref), `:unsupportedbff` if the file has the
+other byte order, and `:fileopenfailed` if the file cannot be opened for update.
 """
 function dafopw(path::AbstractString)
     nd, ni, swap = _daf_probe(path, "dafopw")
@@ -203,12 +214,37 @@ end
 """
     dafbna(handle, sum, name) -> Nothing
 
-Begin a new array in the DAF of `handle`, as `dafbna_c`: `sum` is the packed summary
-(`dafps`; the two address components are set by `dafena`) and `name` the array name
-(cut or padded to `8 * (nd + (ni + 1) ÷ 2)` characters). Preconditions: the handle is
-open for write (`SpiceError(:dafinvalidaccess)`), `sum` has the summary size
-(`SpiceError(:dafinvalidparams)`). An array that was begun before and not ended is
-abandoned, as in CSPICE.
+Begin a new array in the DAF file of `handle`, as `dafbna_c`.
+
+`sum` is the packed summary ([`dafps`](@ref)); [`dafena`](@ref) sets its two address
+components. `name` is the array name, cut or padded to `8 * (nd + (ni + 1) ÷ 2)`
+characters (40 for an SPK or a CK file). Add the data with [`dafada`](@ref) and end the
+array with `dafena`. An array that was begun before and not ended is abandoned, as in
+CSPICE.
+
+Throws `SpiceError(:dafinvalidparams)` if `sum` has fewer doubles than a summary of the
+file.
+
+# Examples
+```jldoctest
+julia> h = dafonw(joinpath(mktempdir(), "example.daf"), "TEST", 2, 6, "example", 0);
+
+julia> dafbna(h, dafps([0.0, 1.0], [1, 2, 3, 4, 0, 0]), "first array")
+
+julia> dafada(h, [10.0, 20.0, 30.0])
+
+julia> dafena(h)
+
+julia> dafbfs(h)
+
+julia> daffna(h)
+true
+
+julia> dafus(dafgs(h), 2, 6)
+([0.0, 1.0], [1, 2, 3, 4, 385, 387])
+
+julia> dafcls(h)
+```
 """
 function dafbna(h::DAFHandle, sum::AbstractVector{<:Real}, name::AbstractString)
     _daf_check_write(h, "dafbna")
@@ -227,9 +263,15 @@ end
 """
     dafada(handle, data) -> Nothing
 
-Add the doubles `data` to the array that was begun with `dafbna`, as `dafada_c`
-(which works on the hidden current DAF). Precondition: an array was begun on this
-handle, else `SpiceError(:dafnewconflict)`.
+Append the doubles `data` to the array that [`dafbna`](@ref) began on `handle`, as
+`dafada_c`. The data are written to the file at once.
+
+`dafada_c` has no handle argument and works on the hidden current DAF; here the array
+belongs to the handle.
+
+Throws `SpiceError(:dafnewconflict)` if no array is begun on the handle, and
+`:dafwritefail` if the array would pass the largest address of a DAF or the system reports
+a write error.
 """
 function dafada(h::DAFHandle, data::AbstractVector{<:Real})
     _daf_check_write(h, "dafada")
@@ -248,11 +290,14 @@ end
 """
     dafena(handle) -> Nothing
 
-End the array that was begun with `dafbna`, as `dafena_c`: its summary and name go
-into the last summary record, a new pair of summary and name records is added after
-the data if that record is now full, and the file record gets the new free address.
-Precondition: an array was begun on this handle, else `SpiceError(:dafnewconflict)`.
-Postcondition: the array is found by a search that is begun after the call.
+End the array that [`dafbna`](@ref) began on `handle`, as `dafena_c`.
+
+The call writes the summary and the name of the array and the new free address of the
+file. A search that is begun after the call finds the array. Before the call the file on
+disk is a valid DAF without the array.
+
+Throws `SpiceError(:dafnewconflict)` if no array is begun on the handle, and `:baddaf` if
+the last summary record of the file is damaged.
 """
 function dafena(h::DAFHandle)
     _daf_check_write(h, "dafena")
@@ -306,12 +351,6 @@ function dafena(h::DAFHandle)
     return nothing
 end
 
-"""
-    _daf_add_array!(h, dc, ic, name, data) -> Nothing
-
-Add one complete array: `dafbna` with the packed summary of `dc`, `ic`, one `dafada`
-of `data`, and `dafena`. The segment writers call this after all input checks.
-"""
 function _daf_add_array!(h::DAFHandle, dc, ic, name::AbstractString, data::Vector{Float64})
     dafbna(h, dafps(dc, ic), name)
     dafada(h, data)
@@ -326,9 +365,11 @@ end
 """
     dafws(handle, sum) -> Nothing
 
-Replace the whole packed summary of the current array of the search on `handle` with
-`sum`, as `dafws_c`. Preconditions: write access, a current array
-(`SpiceError(:nocurrentarray)`), and `sum` of the summary size.
+Replace the packed summary of the current array of the search on `handle` with `sum`, as
+`dafws_c`. The two address components are replaced too; [`dafrs`](@ref) keeps them.
+
+Throws `SpiceError(:nocurrentarray)` if the search has no current array, and
+`:dafinvalidparams` if `sum` has fewer doubles than a summary of the file.
 """
 function dafws(h::DAFHandle, sum::AbstractVector{<:Real})
     _daf_check_write(h, "dafws")
@@ -347,8 +388,11 @@ end
 """
     dafrs(handle, sum) -> Nothing
 
-Replace the summary of the current array of the search on `handle` with `sum`, but
-keep the two address components (the last two integers), as `dafrs_c`.
+Replace the summary of the current array of the search on `handle` with `sum`, as
+`dafrs_c`, but keep its two address components (the last two integers).
+
+Throws `SpiceError(:nocurrentarray)` if the search has no current array, and
+`:dafinvalidparams` if `sum` has fewer doubles than a summary of the file.
 """
 function dafrs(h::DAFHandle, sum::AbstractVector{<:Real})
     _daf_check_write(h, "dafrs")
@@ -364,8 +408,10 @@ end
 """
     dafrn(handle, name) -> Nothing
 
-Replace the name of the current array of the search on `handle` with `name` (cut or
-padded to the name size of the file), as `dafrn_c`.
+Replace the name of the current array of the search on `handle` with `name`, as
+`dafrn_c`. `name` is cut or padded to the name size of the file.
+
+Throws `SpiceError(:nocurrentarray)` if the search has no current array.
 """
 function dafrn(h::DAFHandle, name::AbstractString)
     _daf_check_write(h, "dafrn")
@@ -445,16 +491,33 @@ end
 """
     dafac(handle, lines) -> Nothing
 
-Append the comment lines `lines` to the comment area of the DAF, as `dafac_c`.
-Trailing blanks of a line are not stored. If the reserved records do not have room,
-records are added and the data of the file move (`dafarr`), so every address that was
-read from a summary before the call is stale afterwards.
+Append the comment lines `lines` to the comment area of the DAF file, as `dafac_c`.
 
-Preconditions (each throws `SpiceError`): write access (`:dafinvalidaccess`); at
-least one line (`:invalidargument`); only printable ASCII characters, codes 32 to 126
-(`:illegalcharacter`); no array begun and not ended on this handle
-(`:dafnewconflict`). Postcondition: `dafec(handle)` gives the old lines and then
-`lines` without trailing blanks.
+Trailing blanks of a line are not stored. If the reserved records do not have room,
+records are added and the data of the file move. Every address that was read from a
+summary before the call is then stale, so read the summaries again.
+
+Throws `SpiceError`:
+- `:invalidargument` if `lines` is empty;
+- `:illegalcharacter` if a line has a character outside the printable ASCII codes 32 to
+  126;
+- `:dafnewconflict` if an array is begun and not ended on the handle.
+
+# Examples
+```jldoctest
+julia> h = dafonw(joinpath(mktempdir(), "example.daf"), "TEST", 2, 6, "example", 0);
+
+julia> dafac(h, ["first line", "second line   "])
+
+julia> dafec(h)
+2-element Vector{String}:
+ "first line"
+ "second line"
+
+julia> dafcls(h)
+```
+
+See also [`dafec`](@ref), [`dafdc`](@ref).
 """
 function dafac(h::DAFHandle, lines::AbstractVector{<:AbstractString})
     _daf_check_write(h, "dafac")
@@ -525,11 +588,13 @@ end
 """
     dafdc(handle) -> Nothing
 
-Delete the whole comment area of the DAF, as `dafdc_c`: all reserved records are
-removed and the data move up (`dafrrr`), so addresses that were read from a summary
-before the call are stale afterwards. The file does not get shorter, as in CSPICE.
-Preconditions: write access, and no array begun and not ended
-(`SpiceError(:dafnewconflict)`).
+Delete the comment area of the DAF file, as `dafdc_c`.
+
+All reserved records are removed and the data of the file move up. Every address that was
+read from a summary before the call is then stale. The file does not get shorter on disk,
+as in CSPICE.
+
+Throws `SpiceError(:dafnewconflict)` if an array is begun and not ended on the handle.
 """
 function dafdc(h::DAFHandle)
     _daf_check_write(h, "dafdc")

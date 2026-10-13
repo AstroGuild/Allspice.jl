@@ -107,12 +107,18 @@ function _dsk_parse_int(s::AbstractString)
 end
 
 """
-    srfc2s([ctx | ks], code, bodyid) -> (srfstr, isname)
+    srfc2s([ctx | ks,] code, bodyid) -> (srfstr, isname)
 
-The name of the surface `code` of the body `bodyid`, as `srfc2s_c`. `isname` is true if
-the kernel pool assigns a name; otherwise `srfstr` is the code as a decimal string.
-Throws the `SpiceError` kinds of a bad surface name map (`:badsurfacemap`,
-`:badvariabletype`, `:toomanysurfaces`, `:arraysizemismatch`, `:blanknameassigned`).
+Return the name of the surface `code` of the body `bodyid`, as `srfc2s_c`.
+
+`isname` is `true` if the kernel pool assigns a name to the surface, with the variables
+`NAIF_SURFACE_NAME`, `NAIF_SURFACE_CODE` and `NAIF_SURFACE_BODY`. Otherwise `srfstr` is
+the code as a decimal string and `isname` is `false`.
+
+Throws `SpiceError` if the three kernel variables are not consistent: `:badsurfacemap`,
+`:badvariabletype`, `:toomanysurfaces`, `:arraysizemismatch` or `:blanknameassigned`.
+
+See also [`srfcss`](@ref), [`srfscc`](@ref), [`srfs2c`](@ref).
 """
 function srfc2s(ks::KernelSet, code::Integer, bodyid::Integer)
     name = _dsk_surface_c2n(ks, code, bodyid)
@@ -120,10 +126,15 @@ function srfc2s(ks::KernelSet, code::Integer, bodyid::Integer)
 end
 
 """
-    srfcss([ctx | ks], code, bodstr) -> (srfstr, isname)
+    srfcss([ctx | ks,] code, bodstr) -> (srfstr, isname)
 
-As [`srfc2s`](@ref), with the body given as a name or as a string that holds its ID, as
-`srfcss_c`. An unknown body gives the code as a string and `isname = false`.
+Return the name of the surface `code` of the body `bodstr`, as `srfcss_c`. `bodstr` is a
+body name or a string that holds a body ID; the result is that of [`srfc2s`](@ref).
+
+A body that is not known gives the code as a decimal string and `isname = false`.
+
+Throws `SpiceError(:emptystring)` if `bodstr` is empty, and the kinds of
+[`srfc2s`](@ref).
 """
 function srfcss(ks::KernelSet, code::Integer, bodstr::AbstractString)
     _dsk_nonempty("srfcss", "bodstr", bodstr)
@@ -133,11 +144,17 @@ function srfcss(ks::KernelSet, code::Integer, bodstr::AbstractString)
 end
 
 """
-    srfscc([ctx | ks], srfstr, bodyid) -> Union{Int,Nothing}
+    srfscc([ctx | ks,] srfstr, bodyid) -> Union{Int,Nothing}
 
-The code of the surface `srfstr` of the body `bodyid`, as `srfscc_c`: the code that the
-kernel pool assigns to the name, or else the integer that the string holds, or else
-`nothing`. Errors as [`srfc2s`](@ref).
+Return the code of the surface `srfstr` of the body `bodyid`, as `srfscc_c`, or `nothing`
+if the string is not a surface name and does not hold an integer.
+
+A name that the kernel pool assigns has priority; case and extra blanks do not matter.
+Otherwise the result is the integer that the string holds. `nothing` replaces the `found`
+flag of CSPICE.
+
+Throws `SpiceError(:emptystring)` if `srfstr` is empty, and the kinds of
+[`srfc2s`](@ref).
 """
 function srfscc(ks::KernelSet, srfstr::AbstractString, bodyid::Integer)
     _dsk_nonempty("srfscc", "srfstr", srfstr)
@@ -146,10 +163,15 @@ function srfscc(ks::KernelSet, srfstr::AbstractString, bodyid::Integer)
 end
 
 """
-    srfs2c([ctx | ks], srfstr, bodstr) -> Union{Int,Nothing}
+    srfs2c([ctx | ks,] srfstr, bodstr) -> Union{Int,Nothing}
 
-As [`srfscc`](@ref), with the body given as a name or as a string that holds its ID, as
-`srfs2c_c`. An unknown body gives `nothing`.
+Return the code of the surface `srfstr` of the body `bodstr`, as `srfs2c_c`. `bodstr` is
+a body name or a string that holds a body ID; the result is that of [`srfscc`](@ref).
+
+A body that is not known gives `nothing`.
+
+Throws `SpiceError(:emptystring)` if `srfstr` or `bodstr` is empty, and the kinds of
+[`srfc2s`](@ref).
 """
 function srfs2c(ks::KernelSet, srfstr::AbstractString, bodstr::AbstractString)
     _dsk_nonempty("srfs2c", "srfstr", srfstr)
@@ -379,7 +401,6 @@ function _dsk_radii(ks::KernelSet, code::Integer)
     return radii[1], radii[2], radii[3]
 end
 
-"Element `i` of a list of 2-vectors (the columns of a 2 x n matrix or a vector of 2-vectors)."
 @inline _dsk_get2(a::AbstractMatrix, i::Int) = (Float64(a[1, i]), Float64(a[2, i]))
 @inline function _dsk_get2(a::AbstractVector, i::Int)
     e = a[begin+i-1]
@@ -393,21 +414,38 @@ end
 _dsk_count2(a::AbstractVector) = length(a)
 
 """
-    latsrf([ctx | ks], method, target, et, fixref, lonlat) -> Vector{SVector{3,Float64}}
+    latsrf([ctx | ks,] method, target, et, fixref, lonlat) -> Vector{SVector{3,Float64}}
 
-The surface points of `target` at the planetocentric longitudes and latitudes `lonlat`
-(radians; a 2 x n matrix or a vector of pairs), in the body-fixed frame `fixref`, as
-`latsrf_c`.
+Return the surface points of `target` (km, in the body-fixed frame `fixref`) at the
+planetocentric longitudes and latitudes `lonlat`, as `latsrf_c`.
 
-- `method = "ELLIPSOID"`: the points are on the ellipsoid of `BODY<id>_RADII`.
-- `method = "DSK/UNPRIORITIZED[/SURFACES = <list>]"`: each point is the first intercept
-  of the ray that starts outside of the body at the given direction and goes to the
-  centre, on the loaded DSK segments at the epoch `et`.
+`lonlat` holds the pairs (longitude, latitude) in radians: a 2 x n matrix, or a vector of
+n pairs. `target` and `fixref` are names or IDs; the frame must be centred on the target.
+`method` selects the surface:
 
-Throws `SpiceError`: `:idcodenotfound`, `:noframe`, `:invalidframe`, the kinds of the
-method string (`:badmethodsyntax`, `:badpriorityspec`, `:invalidmethod`),
-`:badaxislength`, `:pointnotfound` if a ray meets no surface, and the kinds of
-[`dskxsi`](@ref).
+- `"ELLIPSOID"`: the points are on the ellipsoid of the radii `BODY<id>_RADII` of the
+  kernel pool. `et` is not used.
+- `"DSK/UNPRIORITIZED[/SURFACES = <list>]"`: each point is the first intercept, on the
+  loaded DSK segments at the epoch `et` (seconds past J2000 TDB), of the ray that starts
+  outside of the body in the given direction and goes to the centre. The list names
+  surfaces by name or by ID; without it every surface of the body is used.
+
+The form with a context uses the DSK tolerances of the context ([`dskstl`](@ref)); the
+form with a `KernelSet` uses the values of CSPICE at start.
+
+Throws `SpiceError`:
+- `:emptystring` if `method`, `target` or `fixref` is an empty string;
+- `:idcodenotfound` if the target or a surface of the list is not known;
+- `:noframe` if the frame is not known, `:invalidframe` if it is not centred on the
+  target;
+- `:badmethodsyntax` if `method` is not valid, `:badpriorityspec` if a DSK method does not
+  have `UNPRIORITIZED`, `:invalidmethod` if `method` has a sub-observer point type;
+- `:badaxislength` if the radii are not three positive values (ellipsoid);
+- `:dskdatanotfound` if no DSK segment of the target with a listed surface is loaded,
+  `:pointnotfound` if a ray meets no surface, `:shapenotsupported` if an intercept is on
+  the far side of the centre (DSK).
+
+See also [`srfnrm`](@ref), [`dskxsi`](@ref).
 """
 function latsrf(ks::KernelSet, method::AbstractString, target::NameOrID, et::Real,
         fixref::NameOrID, lonlat)
@@ -456,16 +494,22 @@ function _dsk_latsrf(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
 end
 
 """
-    srfnrm([ctx | ks], method, target, et, fixref, srfpts) -> Vector{SVector{3,Float64}}
+    srfnrm([ctx | ks,] method, target, et, fixref, srfpts) -> Vector{SVector{3,Float64}}
 
-The outward unit normals of `target` at the surface points `srfpts` (a 3 x n matrix or
-a vector of 3-vectors, in the body-fixed frame `fixref`), as `srfnrm_c`. The methods
-are those of [`latsrf`](@ref). For a DSK method the normal is that of the plate on
-which the point lies.
+Return the outward unit normals of `target` at the surface points `srfpts`, in the
+body-fixed frame `fixref`, as `srfnrm_c`.
 
-Throws `SpiceError`: the kinds of [`latsrf`](@ref), `:pointnotonsurface` for a point
-that is not on the ellipsoid within the tolerance `PTMEMM` (see [`dskgtl`](@ref)),
-and for a DSK method `:nodsksegments`, `:pointnotinsegment` and `:pointoffsurface`.
+`srfpts` holds the points (km, in the frame `fixref`): a 3 x n matrix, or a vector of n
+3-vectors. `method`, `target`, `et` and `fixref` are as for [`latsrf`](@ref). For a DSK
+method the normal is that of the plate on which the point lies.
+
+Throws `SpiceError`:
+- the kinds of [`latsrf`](@ref) for `method`, `target` and `fixref`;
+- `:badaxislength` if the radii are not three positive values, `:pointnotonsurface` if a
+  point is not on the ellipsoid within the margin `PTMEMM` of [`dskgtl`](@ref)
+  (ellipsoid);
+- `:nodsksegments` if no DSK segment of the target is loaded, `:pointnotinsegment` if no
+  segment holds a point, `:pointoffsurface` if a point is not on a plate (DSK).
 """
 function srfnrm(ks::KernelSet, method::AbstractString, target::NameOrID, et::Real,
         fixref::NameOrID, srfpts)

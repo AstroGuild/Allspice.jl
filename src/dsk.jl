@@ -30,10 +30,8 @@ const _DSK_DEFAULT_TOLS = DSKTolerances()
 # Vector arithmetic in the operation order of CSPICE
 # ---------------------------------------------------------------------------------------
 
-"`vdot`: `a[1]*b[1] + a[2]*b[2] + a[3]*b[3]`, summed from the left."
 @inline _dsk_vdot(a::Vec3{Float64}, b::Vec3{Float64}) = a[1] * b[1] + a[2] * b[2] + a[3] * b[3]
 
-"`vcrss`: the cross product `a x b`."
 @inline _dsk_vcrss(a::Vec3{Float64}, b::Vec3{Float64}) = Vec3{Float64}(
     a[2] * b[3] - a[3] * b[2], a[3] * b[1] - a[1] * b[3], a[1] * b[2] - a[2] * b[1])
 
@@ -54,7 +52,6 @@ end
     return Vec3{Float64}(v[1] / m, v[2] / m, v[3] / m), m
 end
 
-"`vhat`: the unit vector of `v`, or the zero vector."
 @inline _dsk_vhat(v::Vec3{Float64}) = _dsk_unorm(v)[1]
 
 @inline _dsk_vsub(a::Vec3{Float64}, b::Vec3{Float64}) = Vec3{Float64}(a[1] - b[1], a[2] - b[2], a[3] - b[3])
@@ -62,25 +59,20 @@ end
 @inline _dsk_vscl(s::Float64, a::Vec3{Float64}) = Vec3{Float64}(s * a[1], s * a[2], s * a[3])
 @inline _dsk_vminus(a::Vec3{Float64}) = Vec3{Float64}(-a[1], -a[2], -a[3])
 @inline _dsk_vzero(a::Vec3{Float64}) = a[1] == 0.0 && a[2] == 0.0 && a[3] == 0.0
-"`vdist`: the distance of two points."
 @inline _dsk_vdist(a::Vec3{Float64}, b::Vec3{Float64}) = _dsk_vnorm(_dsk_vsub(a, b))
 
-"`vlcom`: `a*v1 + b*v2`."
 @inline _dsk_vlcom(a::Float64, v1::Vec3{Float64}, b::Float64, v2::Vec3{Float64}) = Vec3{Float64}(
     a * v1[1] + b * v2[1], a * v1[2] + b * v2[2], a * v1[3] + b * v2[3])
 
-"`vlcom3`: `a*v1 + b*v2 + c*v3`."
 @inline _dsk_vlcom3(a::Float64, v1::Vec3{Float64}, b::Float64, v2::Vec3{Float64}, c::Float64,
     v3::Vec3{Float64}) = Vec3{Float64}(a * v1[1] + b * v2[1] + c * v3[1],
     a * v1[2] + b * v2[2] + c * v3[2], a * v1[3] + b * v2[3] + c * v3[3])
 
-"`mxv`: the matrix `m` times `v`."
 @inline _dsk_mxv(m::Mat3{Float64}, v::Vec3{Float64}) = Vec3{Float64}(
     m[1, 1] * v[1] + m[1, 2] * v[2] + m[1, 3] * v[3],
     m[2, 1] * v[1] + m[2, 2] * v[2] + m[2, 3] * v[3],
     m[3, 1] * v[1] + m[3, 2] * v[2] + m[3, 3] * v[3])
 
-"`mtxv`: the transpose of `m` times `v`."
 @inline _dsk_mtxv(m::Mat3{Float64}, v::Vec3{Float64}) = Vec3{Float64}(
     m[1, 1] * v[1] + m[2, 1] * v[2] + m[3, 1] * v[3],
     m[1, 2] * v[1] + m[2, 2] * v[2] + m[3, 2] * v[3],
@@ -132,7 +124,6 @@ end
     return _DSK_PI / 2.0
 end
 
-"`brcktd`: `x` bracketed between the two ends."
 @inline _dsk_brcktd(x::Float64, e1::Float64, e2::Float64) =
     e1 < e2 ? max(e1, min(e2, x)) : max(e2, min(e1, x))
 
@@ -149,11 +140,9 @@ end
     return radius, lon, lat
 end
 
-"`latrec`: the rectangular point of radius, longitude and latitude."
 @inline _dsk_latrec(r::Float64, lon::Float64, lat::Float64) = Vec3{Float64}(
     r * cos(lon) * cos(lat), r * sin(lon) * cos(lat), r * sin(lat))
 
-"`cylrec`: the rectangular point of cylindrical radius, longitude and height."
 @inline _dsk_cylrec(r::Float64, lon::Float64, z::Float64) = Vec3{Float64}(r * cos(lon), r * sin(lon), z)
 
 @noinline _dsk_throw(kind::Symbol, msg::String) = throw(SpiceError(kind, msg))
@@ -1293,7 +1282,6 @@ function _dsk_rytpdt(vertex::Vec3{Float64}, raydir::Vec3{Float64}, b::NTuple{6,F
     return nxpts, xpt
 end
 
-"The six coordinate bounds of a DSK descriptor as one tuple."
 @inline _dsk_bounds(d::DSKDescr) = (d.co1min, d.co1max, d.co2min, d.co2max, d.co3min, d.co3max)
 
 "`zzrytelt`: the nearest point of the ray on the volume element of the segment descriptor `d`, with `margin`."
@@ -1429,7 +1417,6 @@ end
         Vec3{Float64}(s * v3[1] - c1, s * v3[2] - c2, s * v3[3] - c3)
 end
 
-"`pltnrm`: the normal `(v2 - v1) x (v3 - v2)` of a plate, not of unit length."
 @inline _dsk_pltnrm(v1::Vec3{Float64}, v2::Vec3{Float64}, v3::Vec3{Float64}) =
     _dsk_vcrss(_dsk_vsub(v2, v1), _dsk_vsub(v3, v2))
 
@@ -1843,7 +1830,6 @@ end
     return false
 end
 
-"True if the segment is for `bodyid`, for a surface of `srflst` and covers `et`."
 @inline _dsk_eligible(seg::DSKSegment, bodyid::Int32, srflst, et::Float64) =
     seg.dskdsc.center == bodyid && _dsk_surfok(srflst, seg.dskdsc.surfce) &&
     et >= seg.dskdsc.start && et <= seg.dskdsc.stop

@@ -57,23 +57,49 @@ function _tle_number(text::AbstractString, term::Int, integer::Bool)
 end
 
 """
-    getelm([ctx], frstyr, lines) -> (epoch::Float64, elems::SVector{10,Float64})
+    getelm([ctx | ks,] frstyr, lines) -> (epoch::Float64, elems::SVector{10,Float64})
 
-Parse the two lines `lines` of a two-line element set, as `getelm_c`. `epoch` is the
-epoch of the elements in TDB seconds past J2000 and `elems` holds, in the units of
-`evsgp4` and `spkw10`: NDT20 (radians/minute²), NDD60 (radians/minute³), BSTAR, INCL,
-NODE0 (radians), ECC, OMEGA, M0 (radians), N0 (radians/minute) and the epoch.
-`frstyr` is the first year of the 100-year interval in which the two-digit year of
-the set is placed.
+Parse the two lines `lines` of a two-line element set, as `getelm_c`, and return the epoch
+of the elements (seconds past J2000 TDB) and the ten elements.
 
-Contract: `lines` has two strings; `ctx` (default: the default context) or a
-`KernelSet` holds a leap-second kernel, else `SpiceError(:nolsk)`. Throws
-`SpiceError(:badtle)`, as CSPICE signals SPICE(BADTLE), if the satellite numbers of
-the two lines differ, if a line does not have 68 or 69 characters (blanks at the end
-are not counted), if a term is not a number, if an exponent has more than one digit,
-or if NODE0, OMEGA or M0 is not in [0, 360), INCL not in [0, 180] or N0 not in
-[0, 20] revolutions per day. As in CSPICE N0067 the checksum in column 69 and the
-line numbers in column 1 are not read. Postcondition: `elems[10] == epoch`.
+`frstyr` is the first year of the 100-year interval in which the two-digit year of the
+set is placed. `elems` has the order and the units that [`evsgp4`](@ref) and
+[`spkw10`](@ref) take:
+
+| Index | Element | Unit            | Index | Element | Unit                    |
+|:------|:--------|:----------------|:------|:--------|:------------------------|
+| 1     | NDT20   | radians/minute² | 6     | ECC     |                         |
+| 2     | NDD60   | radians/minute³ | 7     | OMEGA   | radians                 |
+| 3     | BSTAR   |                 | 8     | M0      | radians                 |
+| 4     | INCL    | radians         | 9     | N0      | radians/minute          |
+| 5     | NODE0   | radians         | 10    | EPOCH   | seconds past J2000 TDB  |
+
+The context `ctx` (default: the default context) or the kernel set `ks` must hold a
+leap-second kernel. As in CSPICE N0067, the checksum in column 69 and the line numbers in
+column 1 are not read.
+
+Throws `SpiceError`:
+- `:badarg` unless `lines` holds two lines;
+- `:nolsk` if no leap-second kernel is loaded;
+- `:badtle`, as CSPICE, if the satellite numbers of the two lines differ, if a line does
+  not have 68 or 69 characters (blanks at the end are not counted), if a term is not a
+  number, if an exponent has more than one digit, or if a value is out of range: NODE0,
+  OMEGA and M0 in [0, 360) degrees, INCL in [0, 180] degrees, N0 in [0, 20] revolutions
+  per day.
+
+# Examples
+The file names are those of the generic kernels of NAIF; `geophs` holds the constants of
+WGS-72 that the kernel `geophysical.ker` gives.
+```julia
+furnsh("naif0012.tls")
+lines = ["1 18123U 87 53  A 87324.61041692 -.00000023  00000-0 -75103-5 0 00675",
+         "2 18123  98.8296 152.0074 0014950 168.7820 191.3688 14.12912554 21686"]
+epoch, elems = getelm(1950, lines)
+geophs = [1.082616e-3, -2.53881e-6, -1.65597e-6, 7.43669161e-2, 120.0, 78.0, 6378.135, 1.0]
+state = evsgp4(epoch + 3600.0, geophs, elems)      # km and km/s, TEME frame
+```
+
+See also [`evsgp4`](@ref), [`spkw10`](@ref).
 """
 function getelm(ks::KernelSet, frstyr::Integer, lines)
     length(lines) == 2 || throw(SpiceError(:badarg,
@@ -133,7 +159,6 @@ end
 getelm(ctx::SpiceContext, frstyr::Integer, lines) = getelm(kernelset(ctx), frstyr, lines)
 getelm(frstyr::Integer, lines) = getelm(default_context(), frstyr, lines)
 
-"The `n` numbers of `x` as a tuple of doubles; throws `SpiceError(:badarg)` unless `x` has `n` elements."
 @inline function _tle_tuple(who::String, what::String, x, ::Val{N}) where {N}
     length(x) == N || throw(SpiceError(:badarg,
         "$who: `$what` must have $N elements but has $(length(x))"))
@@ -141,20 +166,29 @@ getelm(frstyr::Integer, lines) = getelm(default_context(), frstyr, lines)
 end
 
 """
-    evsgp4([ctx], et, geophs, elems) -> SVector{6}
+    evsgp4([ctx | ks,] et, geophs, elems) -> SVector{6}
 
-State (km, km/s) in the TEME frame at `et` (TDB seconds past J2000) of the two-line
-element set `elems` (the ten numbers of `getelm`) with the eight geophysical
-constants `geophs` (J2, J3, J4, KE, QO, SO, ER, AE), by SGP4 or, for a period of 225
-minutes or more, SDP4, as `evsgp4_c`.
+Return the state (km, km/s) in the TEME frame, at the epoch `et` (seconds past J2000 TDB),
+of the two-line element set `elems`, as `evsgp4_c`.
 
-Contract: `geophs` has 8 and `elems` has 10 elements, else `SpiceError(:badarg)`;
-`ctx` (default: the default context) or a `KernelSet` holds a leap-second kernel, else
-`SpiceError(:nolsk)`. `et` can have any real number type: a `Taylor` epoch gives the
-time derivatives of the state. Throws the errors of CSPICE for elements that cannot
-be propagated: `:suborbital`, `:badmeanmotion`, `:badmeccentricity`, `:badmsemimajor`,
-`:badpeccentricity`, `:badsemilatus`, `:orbitdecay`. As in CSPICE, QO, SO and AE are
-not used. No allocation for arguments that are tuples, static vectors or vectors.
+`elems` holds the ten elements that [`getelm`](@ref) returns. `geophs` holds the eight
+geophysical constants in the order J2, J3, J4, KE, QO, SO, ER, AE; as in CSPICE, QO, SO
+and AE are not used. The propagator is SGP4, or SDP4 for an orbital period of 225 minutes
+or more.
+
+The context `ctx` (default: the default context) or the kernel set `ks` must hold a
+leap-second kernel. `et` can have any real number type; an `Allspice.Taylor` epoch gives
+the time derivatives of the state. The call does not allocate for arguments that are
+tuples, static vectors or vectors.
+
+Throws `SpiceError`:
+- `:badarg` unless `geophs` has 8 elements and `elems` has 10;
+- `:nolsk` if no leap-second kernel is loaded;
+- `:suborbital`, `:badmeanmotion`, `:badmeccentricity`, `:badmsemimajor`,
+  `:badpeccentricity`, `:badsemilatus` or `:orbitdecay`, as CSPICE, for elements that
+  cannot be propagated.
+
+See [`getelm`](@ref) for an example.
 """
 function evsgp4(ks::KernelSet, et::Real, geophs, elems)
     g = _tle_tuple("evsgp4", "geophs", geophs, Val(8))
@@ -166,22 +200,25 @@ evsgp4(ctx::SpiceContext, et::Real, geophs, elems) = evsgp4(kernelset(ctx), et, 
 evsgp4(et::Real, geophs, elems) = evsgp4(default_context(), et, geophs, elems)
 
 """
-    spkw10(handle, body, center, frame, first, last, segid, consts, elems, epochs; ctx=default_context())
+    spkw10(handle, body, center, frame, first, last, segid, consts, elems, epochs;
+           ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 10 (two-line element sets), as `spkw10_c`. `consts`
-holds the eight geophysical constants (J2, J3, J4, KE, QO, SO, ER, AE), `elems` the
-`n` element sets of ten numbers each (the form of `getelm`), and `epochs` their `n`
-epochs, which must be equal to the tenth number of each set.
+Write an SPK segment of type 10 (two-line element sets), as `spkw10_c`.
 
-The segment is a generic segment: the constants, then for each set its epoch and a
-packet of 14 doubles (the ten elements, the nutation in obliquity and in longitude of
-the IAU 1980 series at the epoch, and the two rates), then the epochs, every 100th
-epoch if there are more than 100, and 17 meta items.
+`consts` holds the eight geophysical constants (J2, J3, J4, KE, QO, SO, ER, AE). `elems`
+holds `n` element sets of ten numbers each, in the form that [`getelm`](@ref) returns, and
+`epochs` holds their `n` epochs (seconds past J2000 TDB). Each epoch must be equal to the
+tenth number of its set; the call does not check this. See [`spkw02`](@ref) for the other
+arguments and for the errors of every writer.
 
-Preconditions (each throws `SpiceError`): the checks of `spkpds` (`:barycenterephem`,
-`:bodyandcentersame`, `:invalidrefframe`, `:baddescrtimes`), a valid `segid`
-(`:segidtoolong`, `:nonprintingchars`), `n > 0` (`:numpacketsnotpos`), strictly
-increasing epochs (`:unorderedrefs`).
+The call adds to each element set the nutation angles of the IAU 1980 series at its epoch
+and their rates, as `spkw10_c` does, so a packet of the segment has 14 doubles.
+
+Throws `SpiceError`:
+- the kinds of [`spkpds`](@ref);
+- `:segidtoolong` or `:nonprintingchars` if `segid` is not valid;
+- `:numpacketsnotpos` if there is no element set;
+- `:unorderedrefs` unless the epochs are strictly increasing.
 """
 function spkw10(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, consts, elems, epochs;

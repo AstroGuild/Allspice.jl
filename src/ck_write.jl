@@ -14,12 +14,35 @@
 """
     ckopn(path, ifname="CK_file", ncomch=0) -> DAFHandle
 
-Create the new CK file `path` with the internal file name `ifname` and room for
-`ncomch` comment characters, and open it for write, as `ckopn_c`. Preconditions (each
-throws `SpiceError`): `path` and `ifname` are not empty (`:emptystring`), `path` does
-not exist (`:fileopenfailed`). Close the handle with `ckcls` (after at least one
-segment) or `dafcls`. The handle belongs to the caller and must not be shared between
-tasks without a lock.
+Create the CK file `path` and open it for writing, as `ckopn_c`.
+
+`ifname` is the internal file name and `ncomch` is the number of comment characters to
+make room for. The file is on disk when the call returns. An existing file is never
+replaced. Add segments with the `ckwNN` writers and close the handle with
+[`ckcls`](@ref). Load the file with `furnsh` only after the close.
+
+Throws `SpiceError(:emptystring)` if `path` or `ifname` is empty, and `:fileopenfailed` if
+the file exists or cannot be created.
+
+# Examples
+Write a type 3 segment with two pointing records and one interpolation interval:
+```jldoctest
+julia> path = joinpath(mktempdir(), "example.bc");
+
+julia> h = ckopn(path, "example CK");
+
+julia> quats = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]];
+
+julia> ckw03(h, 0.0, 10.0, -77000, "J2000", "attitude", [0.0, 10.0], quats, [0.0])
+
+julia> ckcls(h)
+
+julia> getfat(path)
+("DAF", "CK")
+```
+
+See also [`ckw01`](@ref), [`ckw02`](@ref), [`ckw03`](@ref), [`ckw05`](@ref),
+[`ckw06`](@ref), [`dafac`](@ref) to add comments.
 """
 function ckopn(path::AbstractString, ifname::AbstractString="CK_file", ncomch::Integer=0)
     _seg_chkfstr("ckopn", "path", path)
@@ -31,13 +54,14 @@ end
 """
     ckcls(handle) -> Nothing
 
-Close the CK file of `handle`, as `ckcls_c`. Precondition: a file that is open for
-write holds at least one segment, else `SpiceError(:nosegmentsfound)` and the handle
-stays open (close it with `dafcls`).
+Close the CK file of `handle`, as `ckcls_c`. The file is then complete on disk and can be
+loaded with `furnsh`. The call does nothing if the handle is closed already.
+
+Throws `SpiceError(:nosegmentsfound)` if the file is open for writing and holds no
+segment. The handle then stays open; close it with [`dafcls`](@ref).
 """
 ckcls(h::DAFHandle) = _seg_close(h, "CK")
 
-"Add a CK segment of type `dtype` with the checked descriptor values and the complete `data`."
 function _ck_add!(h::DAFHandle, inst::Integer, refcod::Int, dtype::Int, avflag::Bool,
         begtim::Real, endtim::Real, segid::AbstractString, data::Vector{Float64})
     _daf_add_array!(h, Float64[begtim, endtim], Int[inst, refcod, dtype, avflag ? 1 : 0, 0, 0],
@@ -73,7 +97,6 @@ function _ck_nonzero_quats(who::AbstractString, flat::Vector{Float64}, n::Int, s
     return nothing
 end
 
-"Throws `SpiceError(:timesoutoforder)` unless `t` is strictly increasing; `what` names the array."
 function _ck_increasing(who::AbstractString, what::AbstractString, t::Vector{Float64})
     for i in 2:length(t)
         t[i] <= t[i-1] && throw(SpiceError(:timesoutoforder, "$who: the $what times are " *
@@ -94,16 +117,52 @@ function _ck_pointing(q::Vector{Float64}, av::Vector{Float64}, nrec::Int, avflag
 end
 
 """
-    ckw01(handle, begtim, endtim, inst, ref, segid, sclkdp, quats, avvs=[zeros(3)]; ctx=default_context())
+    ckw01(handle, begtim, endtim, inst, ref, segid, sclkdp, quats, avvs=[zeros(3)];
+          ctx=default_context()) -> Nothing
 
-Write a CK segment of type 1 (discrete pointing), as `ckw01_c`. The segment has
-angular velocity if `avvs` holds one vector for each record.
+Write a CK segment of type 1 (discrete pointing) to the file of `handle`, as `ckw01_c`.
 
-Preconditions (each throws `SpiceError`): at least one record (`:invalidnumrec`),
-`begtim <= sclkdp[1]` and `endtim >= sclkdp[end]` (`:invaliddescrtime`), a known frame
-(`:invalidrefframe`), a valid `segid` (`:nonprintablechars`, `:segidtoolong`),
-`sclkdp[1] >= 0` (`:invalidsclktime`), strictly increasing times
-(`:timesoutoforder`), no zero quaternion (`:zeroquaternion`).
+# Arguments
+The arguments `handle`, `begtim`, `endtim`, `inst`, `ref`, `segid` and `ctx` have the same
+meaning in every `ckwNN` writer.
+- `handle`: a [`DAFHandle`](@ref) from [`ckopn`](@ref).
+- `begtim`, `endtim`: the coverage of the segment, encoded spacecraft clock ticks.
+- `inst`: the NAIF ID of the instrument or structure.
+- `ref`: the reference frame, a name or a frame ID. A name is resolved in `ctx` (a
+  `SpiceContext` or a `KernelSet`); built-in frames need no kernel.
+- `segid`: the segment identifier, at most 40 printable characters.
+- `sclkdp`: the times of the pointing records, encoded spacecraft clock ticks.
+- `quats`: one SPICE quaternion (scalar first) for each record.
+- `avvs`: the angular velocity vectors (rad/s).
+
+The number of records is `length(sclkdp)`. A table such as `quats` is a vector of vectors
+(the form of SPICE.jl), a matrix with one record in each column, or a flat vector.
+
+The segment has angular velocity if `avvs` holds one vector for each record. `nothing`,
+or one vector for more than one record (the default), gives a segment without angular
+velocity. With exactly one record the default is one vector for one record, so the segment
+has the angular velocity zero; pass `nothing` to have none.
+
+The segment is in the file when the call returns, with the data area that `ckw01_c`
+writes. A call that throws writes nothing.
+
+Throws `SpiceError`. Every `ckwNN` writer throws:
+- `:dafnosuchhandle` if the handle is closed, `:dafinvalidaccess` if it is open for
+  reading;
+- `:emptystring` if `ref` or `segid` is empty;
+- `:badarg` if the shape of an input does not fit;
+- `:invalidrefframe` if the frame is not known;
+- `:nonprintablechars` or `:segidtoolong` if `segid` is not valid.
+
+`ckw01` also throws:
+- `:invalidnumrec` if there is no record;
+- `:invaliddescrtime` unless `begtim <= sclkdp[1]` and `endtim >= sclkdp[end]`;
+- `:invalidsclktime` if `sclkdp[1] < 0`;
+- `:timesoutoforder` unless `sclkdp` is strictly increasing;
+- `:zeroquaternion` if a quaternion is zero.
+
+See also [`ckw02`](@ref), [`ckw03`](@ref), [`ckw05`](@ref), [`ckw06`](@ref), and
+[`ckopn`](@ref) for an example.
 """
 function ckw01(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::SegFrame,
         segid::AbstractString, sclkdp, quats, avvs=[zeros(3)]; ctx::SegContext=default_context())
@@ -139,18 +198,26 @@ function ckw01(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::Seg
 end
 
 """
-    ckw02(handle, begtim, endtim, inst, ref, segid, start, stop, quats, avvs, rates; ctx=default_context())
+    ckw02(handle, begtim, endtim, inst, ref, segid, start, stop, quats, avvs, rates;
+          ctx=default_context()) -> Nothing
 
-Write a CK segment of type 2 (pointing with constant angular velocity on intervals),
-as `ckw02_c`. Record `i` is valid from `start[i]` to `stop[i]`; `rates[i]` is its
-number of seconds per tick.
+Write a CK segment of type 2 (pointing with a constant angular velocity on intervals), as
+`ckw02_c`.
 
-Preconditions (each throws `SpiceError`): at least one record (`:invalidnumrec`),
-`begtim <= start[1]` and `endtim >= stop[end]` (`:invaliddescrtime`), a known frame
-(`:invalidrefframe`), a valid `segid` (`:nonprintablechars`, `:segidtoolong`),
-`start[1] >= 0` (`:invalidsclktime`), `stop[i] > start[i]` (`:degenerateinterval`),
-strictly increasing start times (`:timesoutoforder`), `stop[i-1] <= start[i]`
-(`:badstoptime`), no zero quaternion (`:zeroquaternion`).
+Record `i` is valid from `start[i]` to `stop[i]` (encoded spacecraft clock ticks).
+`quats[i]` is its quaternion, `avvs[i]` its angular velocity (rad/s) and `rates[i]` its
+number of seconds per tick. The number of records is `length(start)`; SPICE.jl 0.2.5
+passes one record less to `ckw02_c`. See [`ckw01`](@ref) for the other arguments and for
+the errors of every writer.
+
+Throws `SpiceError`:
+- `:invalidnumrec` if there is no record;
+- `:invaliddescrtime` unless `begtim <= start[1]` and `endtim >= stop[end]`;
+- `:invalidsclktime` if `start[1] < 0`;
+- `:degenerateinterval` unless `stop[i] > start[i]`;
+- `:timesoutoforder` unless `start` is strictly increasing;
+- `:badstoptime` if `stop[i-1] > start[i]`;
+- `:zeroquaternion` if a quaternion is zero.
 """
 function ckw02(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::SegFrame,
         segid::AbstractString, start, stop, quats, avvs, rates; ctx::SegContext=default_context())
@@ -202,28 +269,27 @@ function ckw02(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::Seg
 end
 
 """
-    ckw03(handle, begtim, endtim, inst, ref, segid, sclkdp, quats, starts, avvs=[zeros(3)]; ctx=default_context())
+    ckw03(handle, begtim, endtim, inst, ref, segid, sclkdp, quats, starts, avvs=[zeros(3)];
+          ctx=default_context()) -> Nothing
 
-Write a CK segment of type 3 (pointing with linear interpolation inside intervals),
-as `ckw03_c`. `sclkdp` holds the `nrec` encoded clock times, `quats` the `nrec`
-quaternions, `starts` the start times of the interpolation intervals, and `avvs` the
-`nrec` angular velocity vectors; the segment has angular velocity if `avvs` holds one
-vector for each record. All `nrec` records are written (SPICE.jl 0.2.5 drops the last
-one).
+Write a CK segment of type 3 (pointing with linear interpolation inside intervals), as
+`ckw03_c`.
 
-Preconditions (each throws `SpiceError`, in the order of SPICELIB): at least one
-record (`:invalidnumrec`) and one interval (`:invalidnumint`), `begtim <= sclkdp[1]`
-and `endtim >= sclkdp[end]` (`:invaliddescrtime`), a known frame
-(`:invalidrefframe`), a `segid` of printable characters (`:nonprintablechars`) and at
-most 40 of them (`:segidtoolong`), `sclkdp[1] >= 0` (`:invalidsclktime`), strictly
-increasing `sclkdp` (`:timesoutoforder`), `starts[1] == sclkdp[1]`
-(`:timesdontmatch`), strictly increasing `starts` (`:timesoutoforder`), every start
-time equal to one of the `sclkdp` (`:invalidstarttime`), no zero quaternion
-(`:zeroquaternion`). An empty `ref` or `segid` throws `:emptystring`.
+`sclkdp` holds the times of the `nrec` records (encoded spacecraft clock ticks), `quats`
+their quaternions and `starts` the start times of the interpolation intervals. `avvs`
+is as for [`ckw01`](@ref), which also gives the other arguments and the errors of every
+writer. All `nrec` records are written; SPICE.jl 0.2.5 drops the last one.
 
-Postcondition: the file has one more segment with the data area of `ckw03_c`: the
-pointing records, the times, every 100th time, the interval starts, every 100th
-start, the interval count and the record count.
+Throws `SpiceError`:
+- `:invalidnumrec` if there is no record, `:invalidnumint` if there is no interval;
+- `:invaliddescrtime` unless `begtim <= sclkdp[1]` and `endtim >= sclkdp[end]`;
+- `:invalidsclktime` if `sclkdp[1] < 0`;
+- `:timesoutoforder` unless `sclkdp` and `starts` are strictly increasing;
+- `:timesdontmatch` unless `starts[1] == sclkdp[1]`;
+- `:invalidstarttime` unless every start time is equal to one of the `sclkdp`;
+- `:zeroquaternion` if a quaternion is zero.
+
+See [`ckopn`](@ref) for an example.
 """
 function ckw03(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::SegFrame,
         segid::AbstractString, sclkdp, quats, starts, avvs=[zeros(3)];
@@ -280,21 +346,30 @@ end
 
 """
     ckw05(handle, subtyp, degree, begtim, endtim, inst, ref, avflag, segid, sclkdp, packts,
-          rate, nints, starts; ctx=default_context())
+          rate, nints, starts; ctx=default_context()) -> Nothing
 
 Write a CK segment of type 5 (ESOC/DDID interpolation of quaternions), as `ckw05_c`.
-`subtyp` is 0 (Hermite, 8 values in a packet), 1 (Lagrange, 4), 2 (Hermite, 14) or 3
-(Lagrange, 7); `rate` is the nominal clock rate in seconds per tick; the first
-`nints` elements of `starts` are the interval start times.
 
-Preconditions (each throws `SpiceError`): at least one packet (`:toofewpackets`) and
-one interval (`:invalidnumints`), a known frame (`:invalidrefframe`), a valid `segid`
-(`:segidtoolong`, `:nonprintablechars`), `sclkdp[1] >= 0` (`:invalidsclktime`),
-strictly increasing `sclkdp` and `starts` (`:timesoutoforder`), every start time
-equal to one of the `sclkdp` (`:invalidstarttime`), a subtype in 0:3
-(`:notsupported`), no zero quaternion (`:zeroquaternion`), `1 <= degree <= 23` and an
-even window size (`:invaliddegree`), `begtim <= endtim` (`:baddescrtimes`), a time
-tag inside [`begtim`, `endtim`] (`:emptysegment`), `rate != 0` (`:invalidvalue`).
+`subtyp` gives the interpolation and the packet size: 0 Hermite with packets of 8 values,
+1 Lagrange with 4, 2 Hermite with 14, 3 Lagrange with 7. `degree` is the degree of the
+interpolating polynomial. `avflag` tells whether the segment has angular velocity.
+`sclkdp` holds the times of the packets `packts` (encoded spacecraft clock ticks), `rate`
+is the nominal clock rate in seconds per tick, and the first `nints` elements of `starts`
+are the start times of the interpolation intervals. See [`ckw01`](@ref) for the other
+arguments and for the errors of every writer.
+
+Throws `SpiceError`:
+- `:toofewpackets` if there is no packet, `:invalidnumints` unless `nints > 0`;
+- `:invalidsclktime` if `sclkdp[1] < 0`;
+- `:timesoutoforder` unless `sclkdp` and `starts` are strictly increasing;
+- `:invalidstarttime` unless every start time is equal to one of the `sclkdp`;
+- `:notsupported` if `subtyp` is not in `0:3`;
+- `:zeroquaternion` if a quaternion is zero;
+- `:invaliddegree` unless `1 <= degree <= 23` and the window size is even: the degree is
+  3 modulo 4 for a Hermite subtype, and odd for a Lagrange subtype;
+- `:baddescrtimes` if `endtim < begtim`;
+- `:emptysegment` if no time of `sclkdp` is inside [`begtim`, `endtim`];
+- `:invalidvalue` if `rate` is zero.
 """
 function ckw05(h::DAFHandle, subtyp::Integer, degree::Integer, begtim::Real, endtim::Real,
         inst::Integer, ref::SegFrame, avflag::Bool, segid::AbstractString, sclkdp, packts,
@@ -356,26 +431,34 @@ const _CK06_PKTSZS = (8, 4, 14, 7)
 
 """
     ckw06(handle, inst, ref, avflag, first, last, segid, npkts, subtps, degres, packts,
-          rates, sclkdp, ivlbds, sellst; ctx=default_context())
+          rates, sclkdp, ivlbds, sellst; ctx=default_context()) -> Nothing
 
 Write a CK segment of type 6 (mini-segments of the ESOC/DDID types), as `ckw06` of
-SPICELIB (CSPICE has no C wrapper; the mini-segment count is `length(npkts)`). For
-mini-segment `i`, `npkts[i]` is the packet count, `subtps[i]` the subtype (0:3, packet
-sizes 8, 4, 14, 7), `degres[i]` the degree and `rates[i]` the clock rate in seconds
-per tick. `packts` is the flat vector of all packets and `sclkdp` of all time tags,
-in order; `ivlbds` holds the `nmini + 1` interval bounds.
+SPICELIB. CSPICE has no C wrapper for it.
 
-Preconditions (each throws `SpiceError`): `first <= last` (`:baddescrtimes`), a known
-frame (`:invalidrefframe`), a valid `segid` (`:segidtoolong`, `:nonprintablechars`),
-at least one mini-segment (`:invalidcount`), strictly increasing bounds
-(`:boundsoutoforder`), [`first`, `last`] inside the bounds (`:coveragegap`); for each
-mini-segment at least two packets (`:toofewpackets`), a subtype in 0:3
-(`:invalidsubtype`), a positive rate (`:invalidsclkrate`), a degree in 1:23
-(`:invaliddegree`), an even window size (`:badwindowsize`), strictly increasing time
-tags (`:timesoutoforder`), a first time tag not after the interval start
-(`:boundsdisagree`), no zero quaternion (`:zeroquaternion`), and for the Hermite
-subtypes no quaternion that is farther from its predecessor than its negative
-(`:badquatsign`).
+`first` and `last` are the coverage of the segment (encoded spacecraft clock ticks), and
+`avflag` tells whether the segment has angular velocity. The number of mini-segments is
+`length(npkts)`. For mini-segment `i`, `npkts[i]` is the number of packets, `subtps[i]`
+the subtype (0, 1, 2, 3 with packets of 8, 4, 14, 7 values), `degres[i]` the degree and
+`rates[i]` the clock rate in seconds per tick. `packts` is the flat vector of all packets
+and `sclkdp` that of all their times, in order. `ivlbds` holds the `length(npkts) + 1`
+bounds of the intervals of the mini-segments. If `sellst` is `true`, the later interval is
+used for a time that is on a bound of two intervals; else the earlier one is used. See
+[`ckw01`](@ref) for the other arguments and for the errors of every writer.
+
+Throws `SpiceError`:
+- `:baddescrtimes` if `first > last`;
+- `:invalidcount` if there is no mini-segment;
+- `:boundsoutoforder` unless `ivlbds` is strictly increasing;
+- `:coveragegap` unless [`first`, `last`] is inside [`ivlbds[1]`, `ivlbds[end]`];
+- for a mini-segment: `:toofewpackets` if it has fewer than two packets,
+  `:invalidsubtype` if its subtype is not in `0:3`, `:invalidsclkrate` unless its rate is
+  positive, `:invaliddegree` if its degree is not in `1:23`, `:badwindowsize` if its
+  window size is odd, `:timesoutoforder` unless its times are strictly increasing,
+  `:boundsdisagree` if its first time is after the start of its interval or its last time
+  is before that start, `:zeroquaternion` if a quaternion is zero, and for a Hermite
+  subtype `:badquatsign` if a quaternion is farther from its predecessor than its
+  negative is.
 """
 function ckw06(h::DAFHandle, inst::Integer, ref::SegFrame, avflag::Bool, first::Real,
         last::Real, segid::AbstractString, npkts::AbstractVector{<:Integer},

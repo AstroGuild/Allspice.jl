@@ -27,16 +27,23 @@ const _DAS_NATIVE_BFF = _DAS_NATIVE_LITTLE ? "LTL-IEEE" : "BIG-IEEE"
 """
     DASHandle
 
-One DAS file opened with `dasopr`, `dasopw`, `dasonw` or `dskopn`. It replaces the
-integer handle of CSPICE and holds what CSPICE keeps in global tables.
+An open DAS file. It replaces the integer handle of CSPICE.
 
-Invariants: `chars`, `dps` and `ints` are the three address spaces (`ints[a]` is the
-integer at DAS address `a`); `length(comments) == 1024 * ncomr` and
-`0 <= ncomc <= length(comments)`; the arrays of a handle that is not `writable` are
-never modified (they can be memory-mapped). For a read handle `free`, `lastrc` and
-`lastwd` describe the file as it is on disk; for a write handle they describe the
-segregated file that `dascls` will write. A handle must not be used by two tasks at
-the same time without a lock that the caller holds; different handles are independent.
+[`dasopr`](@ref), [`dasopw`](@ref), [`dasonw`](@ref), [`dasops`](@ref), [`dlaopn`](@ref)
+and [`dskopn`](@ref) return a handle. Close it with [`dascls`](@ref), [`dskcls`](@ref) or
+`close`; `isopen(handle)` tells whether it is open.
+
+The handle holds the three address spaces of the file in memory: characters, doubles and
+32-bit integers, each numbered from 1. A handle that is open for writing changes this
+memory only, and the file on disk changes when `dascls` runs. The data of a handle that is
+open for reading are never modified.
+
+Two handles are independent. One handle is not safe for concurrent use: tasks that share a
+handle must hold a lock around every call.
+
+A call on a closed handle throws `SpiceError(:dasnosuchhandle)`; the close calls do
+nothing instead. A write call on a handle that is open for reading throws
+`SpiceError(:dasinvalidaccess)`.
 """
 mutable struct DASHandle
     const path::String
@@ -65,13 +72,11 @@ end
 Base.isopen(h::DASHandle) = h.isopen
 Base.close(h::DASHandle) = dascls(h)
 
-"Throws `SpiceError(:dasnosuchhandle)` unless `h` is open."
 @inline function _das_check_open(h::DASHandle, who::AbstractString)
     h.isopen || throw(SpiceError(:dasnosuchhandle, "$who: the DAS file $(h.path) is closed"))
     return nothing
 end
 
-"Throws unless `h` is open for writing (`:dasnosuchhandle`, `:dasinvalidaccess`)."
 @inline function _das_check_write(h::DASHandle, who::AbstractString)
     _das_check_open(h, who)
     h.writable || throw(SpiceError(:dasinvalidaccess,
@@ -330,7 +335,6 @@ function _das_directory_record(h::DASHandle)
     return dir
 end
 
-"Write `data` to `io` and then `fillbyte` up to the next multiple of 1024 bytes."
 function _das_write_padded(io::IO, data::Vector, fillbyte::UInt8)
     write(io, data)
     pad = mod(-sizeof(data), _DAS_RECLEN)
@@ -375,22 +379,33 @@ end
 """
     dasopr(path) -> DASHandle
 
-Open the DAS file `path` for read access, as `dasopr_c`. A file of the other byte
-order and a file that is not segregated can be read. Contract: `path` names an
-existing DAS file; the result is an open read handle. Throws `SpiceError`
-(`:blankfilename`, `:filenotfound`, `:filereadfailed`, `:unknownfilarc`,
-`:filarchmismatch`, `:ftpxfererror`, `:unknownbff`, `:baddasdirectory`). The handle
-belongs to the caller: close it with `dascls`, and do not share it between tasks
-without a lock.
+Open the DAS file `path` for reading and return its handle, as `dasopr_c`.
+
+The file can have either byte order, and it need not be segregated. Close the handle with
+[`dascls`](@ref).
+
+Throws `SpiceError`:
+- `:blankfilename` if `path` is blank, `:filenotfound` if the file does not exist;
+- `:filereadfailed` if the file is shorter than one record (1024 bytes);
+- `:unknownfilarc` or `:filarchmismatch` if the file is not a DAS file;
+- `:ftpxfererror` if the file was damaged by a transfer in text mode;
+- `:unknownbff` if the byte order of the file is not known;
+- `:baddasdirectory` if the directory records do not agree with the file.
+
+See also [`dasopw`](@ref), [`dlabfs`](@ref), [`dasrdd`](@ref).
 """
 dasopr(path::AbstractString) = _das_load(path, "dasopr", false)
 
 """
     dasopw(path) -> DASHandle
 
-Open the existing DAS file `path` for write access, as `dasopw_c`. The file is read
-into memory; all changes are on disk when `dascls` returns. Contract and errors as
-[`dasopr`](@ref); in addition the file must be writable (`:fileopenfailed`).
+Open the existing DAS file `path` for writing, as `dasopw_c`.
+
+The file is read into memory. The file on disk does not change until [`dascls`](@ref),
+which writes the complete file.
+
+Throws the `SpiceError` kinds of [`dasopr`](@ref), and `:fileopenfailed` if the file is
+not writable.
 """
 function dasopw(path::AbstractString)
     h = _das_load(path, "dasopw", true)
@@ -402,15 +417,23 @@ end
 """
     dasonw(path, ftype, ifname, ncomr) -> DASHandle
 
-Create the new DAS file `path` of type `ftype` (for example `"DSK"`) with the internal
-file name `ifname` and `ncomr` comment records, and open it for write, as `dasonw` of
-SPICELIB.
+Create the DAS file `path` and open it for writing, as `dasonw` of SPICELIB.
 
-Preconditions (each throws `SpiceError`): `path` is not blank (`:blankfilename`) and
-does not exist (`:fileopenfailed`); `ftype` is not blank (`:blankfiletype`) and
-printable (`:illegalcharacter`); `ncomr >= 0` (`:invalidcount`). Postcondition: the
-file exists and holds the file record, `ncomr` comment records and an empty directory
-record; the handle has no data.
+`ftype` is the file type (for example `"DSK"`; four characters are stored), `ifname` is
+the internal file name and `ncomr` is the number of comment records.
+
+The file is on disk when the call returns, with the file record, `ncomr` comment records
+and an empty directory record. Data that are added afterwards are in memory until
+[`dascls`](@ref) writes them. An existing file is never replaced.
+
+Throws `SpiceError`:
+- `:blankfilename` if `path` is blank;
+- `:fileopenfailed` if `path` exists or the file cannot be created;
+- `:blankfiletype` if `ftype` is blank, `:illegalcharacter` if it has a character that is
+  not printable;
+- `:invalidcount` if `ncomr < 0`.
+
+See also [`dlaopn`](@ref), [`dskopn`](@ref), [`dasops`](@ref).
 """
 function dasonw(path::AbstractString, ftype::AbstractString, ifname::AbstractString,
         ncomr::Integer)
@@ -444,11 +467,34 @@ end
 """
     dasops() -> DASHandle
 
-Open a scratch DAS file for write, as `dasops` of SPICELIB: a DAS file that exists
-only while its handle is open. CSPICE makes a temporary file that the close deletes;
-here the data of a write handle are in memory, so no file exists at any time and
-[`dascls`](@ref) writes nothing. Postcondition: the handle has no data, an empty path
-and the type `SCR`.
+Open a scratch DAS file for writing, as `dasops` of SPICELIB: a DAS file that exists only
+while its handle is open.
+
+CSPICE makes a temporary file and deletes it at the close. Here the data are in memory, so
+no file exists at any time and [`dascls`](@ref) writes nothing. The handle has no data, the
+file name `""` and the file type `SCR`.
+
+# Examples
+```jldoctest
+julia> h = dasops();
+
+julia> dasadd(h, [1.0, 2.0, 3.0])
+
+julia> dasadi(h, [7, 8])
+
+julia> daslla(h)
+(0, 3, 2)
+
+julia> dasudd(h, 2, 2, [20.0])
+
+julia> dasrdd(h, 1, 3)
+3-element Vector{Float64}:
+  1.0
+ 20.0
+  3.0
+
+julia> dascls(h)
+```
 """
 function dasops()
     h = DASHandle("", true, true, rpad("DAS/SCR", 8), "", 0, 0, 0, 0, UInt8[], UInt8[], UInt8[],
@@ -460,9 +506,15 @@ end
 """
     dascls(handle) -> Nothing
 
-Close the DAS file of `handle`, as `dascls_c`. For a write handle the complete file is
-written in segregated form and moved into place; all data are on disk when the call
-returns. Closing a handle that is already closed does nothing.
+Close the DAS file of `handle`, as `dascls_c`.
+
+For a handle that is open for writing, the complete file is written in segregated form
+(all records of one data type together) to a temporary file beside it and moved into
+place in one step. All data are on disk when the call returns. A scratch file
+([`dasops`](@ref)) is not written. The call does nothing if the handle is closed already.
+
+Throws `SpiceError(:daswritefail)` if the file cannot be written; the handle then stays
+open.
 """
 function dascls(h::DASHandle)
     h.isopen || return nothing
@@ -477,9 +529,11 @@ end
 """
     dasllc(handle) -> Nothing
 
-Close the DAS file of `handle`, as `dasllc` of SPICELIB. CSPICE does not segregate the
-file in this call; here the data of a write handle exist only in memory before the
-close, so the call does what [`dascls`](@ref) does and the file is segregated.
+Close the DAS file of `handle`, as `dasllc` of SPICELIB.
+
+The call does what [`dascls`](@ref) does. CSPICE does not segregate the file in `dasllc`;
+here the data of a write handle are only in memory before the close, so the file is
+written and it is segregated.
 """
 dasllc(h::DASHandle) = dascls(h)
 
@@ -490,8 +544,8 @@ dasllc(h::DASHandle) = dascls(h)
 """
     dashfn(handle) -> String
 
-Name of the DAS file of `handle`, as `dashfn_c`. Throws `SpiceError(:dasnosuchhandle)`
-for a closed handle.
+Return the name of the DAS file of `handle`, as `dashfn_c`. A scratch file
+([`dasops`](@ref)) has the name `""`.
 """
 function dashfn(h::DASHandle)
     _das_check_open(h, "dashfn")
@@ -501,9 +555,12 @@ end
 """
     dasrfr(handle) -> (idword, ifname, nresvr, nresvc, ncomr, ncomc)
 
-Contents of the file record, as `dasrfr_c`: the ID word and the internal file name
-(trailing blanks removed), the numbers of reserved records and characters, and the
-numbers of comment records and characters.
+Return the contents of the file record, as `dasrfr_c`: the ID word and the internal file
+name (both without trailing blanks), the numbers of reserved records and of reserved
+characters, and the numbers of comment records and of comment characters.
+
+For a handle that is open for writing, the comment counts include the changes that are not
+on disk yet.
 """
 function dasrfr(h::DASHandle)
     _das_check_open(h, "dasrfr")
@@ -513,8 +570,8 @@ end
 """
     daslla(handle) -> (lastc, lastd, lasti)
 
-Last logical addresses in use of the character, double and integer address spaces, as
-`daslla` of SPICELIB.
+Return the last addresses in use of the character, the double and the integer address
+space, as `daslla` of SPICELIB. An address space without data gives 0.
 """
 function daslla(h::DASHandle)
     _das_check_open(h, "daslla")
@@ -524,11 +581,16 @@ end
 """
     dashfs(handle) -> (nresvr, nresvc, ncomr, ncomc, free, lastla, lastrc, lastwd)
 
-File summary, as `dashfs` of SPICELIB: the counts of the file record, the first free
-record number, and for the three data types (character, double, integer) the last
-logical address, the record number of the last directory record that describes the
-type, and the word of that record that holds its last cluster descriptor. For a write
-handle the last three describe the segregated file that `dascls` will write.
+Return the file summary, as `dashfs` of SPICELIB.
+
+`nresvr`, `nresvc`, `ncomr` and `ncomc` are the counts of the file record, and `free` is
+the first free record number. `lastla`, `lastrc` and `lastwd` are tuples of three values,
+for the character, the double and the integer data: the last address in use, the record
+number of the last directory record that describes the data type, and the word of that
+record that holds its last cluster descriptor.
+
+For a handle that is open for writing, `free`, `lastrc` and `lastwd` describe the
+segregated file that [`dascls`](@ref) will write.
 """
 function dashfs(h::DASHandle)
     _das_check_open(h, "dashfs")
@@ -551,9 +613,12 @@ end
 """
     dasrdd(handle, first, last) -> Vector{Float64}
 
-The doubles at the DAS addresses `first:last`, as `dasrdd` of SPICELIB. The result is
-empty if `first > last`. Throws `SpiceError(:dasnosuchaddress)` for an address outside
-the file.
+Return the doubles at the DAS addresses `first:last`, as `dasrdd` of SPICELIB. Addresses
+start at 1. The result is empty if `first > last`.
+
+Throws `SpiceError(:dasnosuchaddress)` if the range is not inside the address space.
+
+See also [`dasrdi`](@ref), [`dasrdc`](@ref), [`daslla`](@ref).
 """
 function dasrdd(h::DASHandle, first::Integer, last::Integer)
     _das_check_open(h, "dasrdd")
@@ -565,9 +630,10 @@ end
 """
     dasrdi(handle, first, last) -> Vector{Int}
 
-The integers at the DAS addresses `first:last`, as `dasrdi` of SPICELIB. The result is
-empty if `first > last`. Throws `SpiceError(:dasnosuchaddress)` for an address outside
-the file.
+Return the integers at the DAS addresses `first:last`, as `dasrdi` of SPICELIB. Addresses
+start at 1. The result is empty if `first > last`.
+
+Throws `SpiceError(:dasnosuchaddress)` if the range is not inside the address space.
 """
 function dasrdi(h::DASHandle, first::Integer, last::Integer)
     _das_check_open(h, "dasrdi")
@@ -579,9 +645,10 @@ end
 """
     dasrdc(handle, first, last) -> String
 
-The characters at the DAS addresses `first:last` as one string, as `dasrdc` of SPICELIB
-with one substring. The result is empty if `first > last`. Throws
-`SpiceError(:dasnosuchaddress)` for an address outside the file.
+Return the characters at the DAS addresses `first:last` as one string, as `dasrdc` of
+SPICELIB with one substring. Addresses start at 1. The result is empty if `first > last`.
+
+Throws `SpiceError(:dasnosuchaddress)` if the range is not inside the address space.
 """
 function dasrdc(h::DASHandle, first::Integer, last::Integer)
     _das_check_open(h, "dasrdc")
@@ -593,8 +660,11 @@ end
 """
     dasadd(handle, data) -> Nothing
 
-Append the doubles `data` to the double address space, as `dasadd` of SPICELIB.
-Precondition: write access (`SpiceError(:dasinvalidaccess)`).
+Append the doubles `data` to the double address space, as `dasadd` of SPICELIB. The file
+on disk changes when [`dascls`](@ref) runs.
+
+See also [`dasadi`](@ref), [`dasadc`](@ref), [`dasudd`](@ref), and [`dasops`](@ref) for
+an example.
 """
 function dasadd(h::DASHandle, data::AbstractVector{<:Real})
     _das_check_write(h, "dasadd")
@@ -605,9 +675,11 @@ end
 """
     dasadi(handle, data) -> Nothing
 
-Append the integers `data` to the integer address space, as `dasadi` of SPICELIB.
-Preconditions: write access (`SpiceError(:dasinvalidaccess)`); every value fits in 32
-bits (`InexactError`).
+Append the integers `data` to the integer address space, as `dasadi` of SPICELIB. The file
+on disk changes when [`dascls`](@ref) runs.
+
+Throws `InexactError` if a value does not fit in 32 bits; the values before it are then
+appended already.
 """
 function dasadi(h::DASHandle, data::AbstractVector{<:Integer})
     _das_check_write(h, "dasadi")
@@ -618,8 +690,8 @@ end
 """
     dasadc(handle, data) -> Nothing
 
-Append the characters of the string `data` to the character address space, as `dasadc`
-of SPICELIB with one substring. Precondition: write access.
+Append the code units of the string `data` to the character address space, as `dasadc` of
+SPICELIB with one substring. The file on disk changes when [`dascls`](@ref) runs.
 """
 function dasadc(h::DASHandle, data::AbstractString)
     _das_check_write(h, "dasadc")
@@ -630,9 +702,11 @@ end
 """
     dasudd(handle, first, last, data) -> Nothing
 
-Replace the doubles at the addresses `first:last` with `data`, as `dasudd` of SPICELIB.
-Nothing happens if `first > last`. Preconditions: write access; the range is inside the
-file (`SpiceError(:dasnosuchaddress)`); `length(data) >= last - first + 1`.
+Replace the doubles at the DAS addresses `first:last` with the first `last - first + 1`
+elements of `data`, as `dasudd` of SPICELIB. Nothing happens if `first > last`.
+
+Throws `SpiceError(:dasnosuchaddress)` if the range is not inside the address space, and
+`ArgumentError` if `data` is too short.
 """
 function dasudd(h::DASHandle, first::Integer, last::Integer, data::AbstractVector{<:Real})
     _das_check_write(h, "dasudd")
@@ -646,8 +720,12 @@ end
 """
     dasudi(handle, first, last, data) -> Nothing
 
-Replace the integers at the addresses `first:last` with `data`, as `dasudi` of
-SPICELIB. Nothing happens if `first > last`. Preconditions as [`dasudd`](@ref).
+Replace the integers at the DAS addresses `first:last` with the first `last - first + 1`
+elements of `data`, as `dasudi` of SPICELIB. Nothing happens if `first > last`.
+
+Throws `SpiceError(:dasnosuchaddress)` if the range is not inside the address space,
+`ArgumentError` if `data` is too short, and `InexactError` if a value does not fit in 32
+bits.
 """
 function dasudi(h::DASHandle, first::Integer, last::Integer, data::AbstractVector{<:Integer})
     _das_check_write(h, "dasudi")
@@ -666,13 +744,14 @@ end
     dasac(handle, lines) -> Nothing
 
 Append the comment lines `lines` to the comment area of the DAS file, as `dasac_c`.
-Trailing blanks of a line are not stored. Comment records are added if the area does
-not have room.
 
-Preconditions (each throws `SpiceError`): write access (`:dasinvalidaccess`); at least
-one line (`:invalidargument`); only printable ASCII characters, codes 32 to 126
-(`:illegalcharacter`). Postcondition: `dasec(handle)` gives the old lines and then
-`lines` without trailing blanks.
+Trailing blanks of a line are not stored. Comment records are added if the area does not
+have room. The file on disk changes when [`dascls`](@ref) runs.
+
+Throws `SpiceError(:invalidargument)` if `lines` is empty, and `:illegalcharacter` if a
+line has a character outside the printable ASCII codes 32 to 126.
+
+See also [`dasec`](@ref), [`dasdc`](@ref).
 """
 function dasac(h::DASHandle, lines::AbstractVector{<:AbstractString})
     _das_check_write(h, "dasac")
@@ -719,10 +798,13 @@ end
 """
     dasec(handle) -> Vector{String}
 
-All lines of the comment area of the DAS file, in order, as repeated calls of
-`dasec_c` give them (trailing blanks are not stored). The result is empty if the file
-has no comments. Throws `SpiceError(:baddascommentarea)` if the last line is not
-terminated inside the comment characters that the file record states.
+Return all lines of the comment area of the DAS file, in order.
+
+One call returns the whole comment area, where `dasec_c` returns one buffer of lines on
+each call. The result is empty if the file has no comments.
+
+Throws `SpiceError(:baddascommentarea)` if the last line is not terminated inside the
+count of comment characters that the file record states.
 """
 function dasec(h::DASHandle)
     _das_check_open(h, "dasec")
@@ -743,8 +825,8 @@ end
 """
     dasdc(handle) -> Nothing
 
-Delete the whole comment area of the DAS file, as `dasdc_c`: the comment records are
-removed and the count of comment characters becomes zero. Precondition: write access.
+Delete the comment area of the DAS file, as `dasdc_c`: the file then has no comment
+record and no comment character. The file on disk changes when [`dascls`](@ref) runs.
 """
 function dasdc(h::DASHandle)
     _das_check_write(h, "dasdc")

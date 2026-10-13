@@ -19,7 +19,6 @@ function _dla_descr(ints::Vector{Int32}, addr::Integer, path::AbstractString)
         ints[addr+4], ints[addr+5], ints[addr+6], ints[addr+7])
 end
 
-"Throws `SpiceError(:dasnosuchaddress)` unless `ints` holds the three DLA file pointers."
 function _dla_check(ints::Vector{Int32}, path::AbstractString)
     length(ints) >= 3 || throw(SpiceError(:dasnosuchaddress,
         "the file $path has $(length(ints)) integers; a DLA file has at least 3"))
@@ -51,10 +50,16 @@ end
 """
     dlaopn(path, ftype, ifname, ncomch) -> DASHandle
 
-Create the new DLA file `path` of type `ftype` with the internal file name `ifname`
-and room for `ncomch` comment characters, and open it for write, as `dlaopn` of
-SPICELIB. Preconditions: those of [`dasonw`](@ref), and `ncomch >= 0`
-(`SpiceError(:badrecordcount)`). Postcondition: the file has no segment.
+Create the DLA file `path` and open it for writing, as `dlaopn` of SPICELIB.
+
+A DLA file is a DAS file that holds a doubly linked list of segments; a DSK file is one.
+`ftype` is the file type, `ifname` is the internal file name and `ncomch` is the number of
+comment characters to make room for. The new file has no segment. The file on disk is not
+a complete DLA file until [`dascls`](@ref) runs.
+
+Throws `SpiceError(:badrecordcount)` if `ncomch < 0`, and the kinds of [`dasonw`](@ref).
+
+See also [`dskopn`](@ref), [`dlabns`](@ref).
 """
 function dlaopn(path::AbstractString, ftype::AbstractString, ifname::AbstractString,
         ncomch::Integer)
@@ -69,10 +74,13 @@ end
 """
     dlabns(handle) -> Nothing
 
-Begin a new segment at the end of the DLA file, as `dlabns` of SPICELIB: append its
-descriptor and link it to the list. Precondition: write access. Postcondition: the
-segment is the last one and has the size zero in every address space until
-[`dlaens`](@ref) is called.
+Begin a new segment at the end of the DLA file, as `dlabns` of SPICELIB.
+
+The segment becomes the last one of the list. The data that `dasadd`, `dasadi` and
+`dasadc` append after the call belong to it. Its descriptor gives the size zero in every
+address space until [`dlaens`](@ref) ends it.
+
+Throws `SpiceError(:dasnosuchaddress)` if the file is not a DLA file.
 """
 function dlabns(h::DASHandle)
     _das_check_write(h, "dlabns")
@@ -91,8 +99,10 @@ end
 """
     dlaens(handle) -> Nothing
 
-End the segment that [`dlabns`](@ref) began, as `dlaens` of SPICELIB: store the sizes
-of the segment in its descriptor. Precondition: write access, and a segment exists.
+End the segment that [`dlabns`](@ref) began, as `dlaens` of SPICELIB: store in its
+descriptor the sizes of the data that were appended since `dlabns`.
+
+Throws `SpiceError(:dasnosuchaddress)` if the file has no segment.
 """
 function dlaens(h::DASHandle)
     _das_check_write(h, "dlaens")
@@ -109,9 +119,22 @@ end
 """
     dlabfs(handle) -> Union{DLADescr,Nothing}
 
-Begin a forward segment search: the descriptor of the first segment of the DLA file,
-or `nothing` if the file has no segment, as `dlabfs_c` (and SPICE.jl). The search has
-no hidden state: continue with [`dlafns`](@ref) on the descriptor.
+Return the descriptor of the first segment of the DLA file, as `dlabfs_c`, or `nothing`
+if the file has no segment.
+
+`nothing` replaces the `found` flag of CSPICE. The search has no hidden state: continue
+with [`dlafns`](@ref) on the descriptor.
+
+# Examples
+```julia
+dladsc = dlabfs(handle)
+while dladsc !== nothing
+    nv, np = dskz02(handle, dladsc)     # work on this segment
+    dladsc = dlafns(handle, dladsc)
+end
+```
+
+See also [`dlabbs`](@ref), [`DLADescr`](@ref).
 """
 function dlabfs(h::DASHandle)
     _das_check_open(h, "dlabfs")
@@ -123,8 +146,10 @@ end
 """
     dlafns(handle, dladsc) -> Union{DLADescr,Nothing}
 
-The descriptor of the segment that follows `dladsc`, or `nothing` if `dladsc` is the
-last segment, as `dlafns_c`.
+Return the descriptor of the segment that follows `dladsc`, as `dlafns_c`, or `nothing`
+if `dladsc` is the last segment.
+
+See also [`dlabfs`](@ref).
 """
 function dlafns(h::DASHandle, d::DLADescr)
     _das_check_open(h, "dlafns")
@@ -134,8 +159,8 @@ end
 """
     dlabbs(handle) -> Union{DLADescr,Nothing}
 
-Begin a backward segment search: the descriptor of the last segment of the DLA file,
-or `nothing` if the file has no segment, as `dlabbs_c`.
+Return the descriptor of the last segment of the DLA file, as `dlabbs_c`, or `nothing` if
+the file has no segment. Continue the backward search with [`dlafps`](@ref).
 """
 function dlabbs(h::DASHandle)
     _das_check_open(h, "dlabbs")
@@ -147,8 +172,8 @@ end
 """
     dlafps(handle, dladsc) -> Union{DLADescr,Nothing}
 
-The descriptor of the segment that precedes `dladsc`, or `nothing` if `dladsc` is the
-first segment, as `dlafps_c`.
+Return the descriptor of the segment that precedes `dladsc`, as `dlafps_c`, or `nothing`
+if `dladsc` is the first segment.
 """
 function dlafps(h::DASHandle, d::DLADescr)
     _das_check_open(h, "dlafps")

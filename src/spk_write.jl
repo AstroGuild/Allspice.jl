@@ -38,14 +38,12 @@ function _seg_refcode(who::AbstractString, ctx::SegContext, frame::SegFrame)
     return code
 end
 
-"Throws `SpiceError(:segidtoolong)` if `segid` has more than 40 characters without trailing blanks."
 function _seg_idlen(who::AbstractString, segid::AbstractString)
     _daf_lastnb(segid) > 40 && throw(SpiceError(:segidtoolong,
         "$who: segment identifier contains more than 40 characters"))
     return nothing
 end
 
-"Throws `SpiceError(:nonprintablechars)` if `segid` has a character outside the codes 32 to 126."
 function _seg_idchars(who::AbstractString, segid::AbstractString)
     cu = codeunits(String(segid))
     for i in 1:_daf_lastnb(segid)
@@ -109,17 +107,11 @@ function _seg_vec(who::AbstractString, what::AbstractString, x, n::Int)
     return Float64[Float64(v) for v in x]
 end
 
-"The three doubles of `v`; throws `SpiceError(:badarg)` unless `v` has `n` elements."
 function _seg_fixed(who::AbstractString, what::AbstractString, v, n::Int)
     length(v) == n || throw(SpiceError(:badarg, "$who: `$what` must have $n elements but has $(length(v))"))
     return Float64[Float64(x) for x in v]
 end
 
-"""
-    _seg_increasing(who, epochs) -> Nothing
-
-Throws `SpiceError(:timesoutoforder)` unless `epochs` is strictly increasing.
-"""
 function _seg_increasing(who::AbstractString, epochs::Vector{Float64})
     for i in 2:length(epochs)            # invariant: epochs[1:i-1] is strictly increasing
         epochs[i] <= epochs[i-1] && throw(SpiceError(:timesoutoforder,
@@ -132,11 +124,19 @@ end
 """
     spkpds(body, center, frame, type, first, last; ctx=default_context()) -> Vector{Float64}
 
-Packed descriptor (five doubles) of an SPK segment, as `spkpds_c`; the two address
-components are zero. Preconditions (each throws `SpiceError`): `body != 0`
-(`:barycenterephem`), `body != center` (`:bodyandcentersame`), a known frame
-(`:invalidrefframe`), `first < last` (`:baddescrtimes`), `1 <= type <= 1000`
-(`:unknownspktype`).
+Return the packed descriptor of an SPK segment (five doubles), as `spkpds_c`.
+
+`body` and `center` are NAIF IDs, `frame` is a frame name or a frame ID, `type` is the SPK
+data type, and `first`, `last` are the coverage in seconds past J2000 TDB. A frame name is
+resolved in `ctx` (a `SpiceContext` or a `KernelSet`); built-in frames need no kernel. The
+two address components of the descriptor are zero; [`dafena`](@ref) sets them.
+
+Throws `SpiceError`:
+- `:barycenterephem` if `body == 0`;
+- `:bodyandcentersame` if `body == center`;
+- `:invalidrefframe` if the frame is not known;
+- `:baddescrtimes` unless `first < last`;
+- `:unknownspktype` unless `1 <= type <= 1000`.
 """
 function spkpds(body::Integer, center::Integer, frame::SegFrame, type::Integer, first::Real,
         last::Real; ctx::SegContext=default_context())
@@ -152,14 +152,12 @@ function spkpds(body::Integer, center::Integer, frame::SegFrame, type::Integer, 
     return dafps(Float64[first, last], Int[body, center, refcod, type, 0, 0])
 end
 
-"Add an SPK segment of type `dtype` with the checked descriptor values and the complete `data`."
 function _spk_add!(h::DAFHandle, body::Integer, center::Integer, refcod::Int, dtype::Int,
         first::Real, last::Real, segid::AbstractString, data::Vector{Float64})
     _daf_add_array!(h, Float64[first, last], Int[body, center, refcod, dtype, 0, 0], segid, data)
     return nothing
 end
 
-"Add an SPK segment whose descriptor is packed by `spkpds` (with its checks)."
 function _spk_add_pds!(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame,
         dtype::Int, first::Real, last::Real, segid::AbstractString, data::Vector{Float64},
         ctx::SegContext)
@@ -202,13 +200,42 @@ end
 """
     spkopn(path, ifname, ncomch=0) -> DAFHandle
 
-Create the new SPK file `path` with the internal file name `ifname` and room for
-`ncomch` comment characters, and open it for write, as `spkopn_c`. Preconditions
-(each throws `SpiceError`): `path` and `ifname` are not empty (`:emptystring`), `path`
-does not exist (`:fileopenfailed`). Postcondition: the file is byte for byte the file
-that `spkopn_c` creates. Close the handle with `spkcls` (after at least one segment)
-or `dafcls`; load the file with `furnsh` only after the close. The handle belongs to
-the caller and must not be shared between tasks without a lock.
+Create the SPK file `path` and open it for writing, as `spkopn_c`.
+
+`ifname` is the internal file name and `ncomch` is the number of comment characters to
+make room for. The file is on disk when the call returns, byte for byte the file that
+`spkopn_c` creates. An existing file is never replaced. Add segments with the `spkwNN`
+writers and close the handle with [`spkcls`](@ref). Load the file with `furnsh` only after
+the close.
+
+Throws `SpiceError(:emptystring)` if `path` or `ifname` is empty, and `:fileopenfailed` if
+the file exists or cannot be created.
+
+# Examples
+Write a type 2 segment that has one record of degree 1, then load the file:
+```jldoctest
+julia> path = joinpath(mktempdir(), "example.bsp");
+
+julia> h = spkopn(path, "example SPK");
+
+julia> cdata = [[1.0, 0.5, 2.0, 0.0, 3.0, 0.0]];    # coefficients of x, y, z
+
+julia> spkw02(h, 499, 4, "J2000", 0.0, 100.0, "mars", 100.0, cdata, 0.0)
+
+julia> spkcls(h)
+
+julia> ctx = SpiceContext();
+
+julia> furnsh(ctx, path)
+
+julia> pos, lt = spkpos(ctx, 499, 100.0, "J2000", "NONE", 4);
+
+julia> pos == [1.5, 2.0, 3.0]
+true
+```
+
+See also [`spkopa`](@ref), [`spkw02`](@ref), [`spk14b`](@ref), [`dafac`](@ref) to add
+comments.
 """
 function spkopn(path::AbstractString, ifname::AbstractString, ncomch::Integer=0)
     _seg_chkfstr("spkopn", "path", path)
@@ -220,10 +247,14 @@ end
 """
     spkopa(path) -> DAFHandle
 
-Open the existing SPK file `path` to append segments, as `spkopa_c`. Preconditions
-(each throws `SpiceError`): the file exists (`:filenotfound`), is a DAF of type SPK
-(`:fileisnotspk`) and has the native byte order (`:unsupportedbff`). Unload the file
-from every context before the call, and load it again after `spkcls`.
+Open the existing SPK file `path` for writing, to append segments, as `spkopa_c`.
+
+The file must have the native byte order. Unload the file from every context before the
+call, and load it again after [`spkcls`](@ref).
+
+Throws `SpiceError(:emptystring)` if `path` is empty, `:filenotfound` if the file does not
+exist, `:fileisnotspk` if it is not a DAF file of the type SPK, and `:unsupportedbff` if
+it has the other byte order.
 """
 function spkopa(path::AbstractString)
     _seg_chkfstr("spkopa", "path", path)
@@ -251,10 +282,11 @@ end
 """
     spkcls(handle) -> Nothing
 
-Close the SPK file of `handle`, as `spkcls_c`. Precondition: a file that is open for
-write holds at least one segment, else `SpiceError(:nosegmentsfound)` and the handle
-stays open (close it with `dafcls`). Postcondition: the file is complete on disk and
-can be loaded with `furnsh`.
+Close the SPK file of `handle`, as `spkcls_c`. The file is then complete on disk and can
+be loaded with `furnsh`. The call does nothing if the handle is closed already.
+
+Throws `SpiceError(:nosegmentsfound)` if the file is open for writing and holds no
+segment. The handle then stays open; close it with [`dafcls`](@ref).
 """
 spkcls(h::DAFHandle) = _seg_close(h, "SPK")
 
@@ -302,31 +334,70 @@ function _spk_cheby(who::AbstractString, dtype::Int, per::Int, h::DAFHandle, bod
 end
 
 """
-    spkw02(handle, body, center, frame, first, last, segid, intlen, cdata, btime; ctx=default_context())
+    spkw02(handle, body, center, frame, first, last, segid, intlen, cdata, btime;
+           ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 2 (Chebyshev polynomials for the position on equal
-intervals), as `spkw02_c`. `cdata` holds one record for each interval, each with
-`3 * (polydg + 1)` coefficients (X, then Y, then Z); the number of records `n` and the
-degree `polydg` follow from its shape. `btime` is the start of the first interval and
-`intlen` the length of every interval in seconds.
+Write an SPK segment of type 2 (Chebyshev polynomials for the position, on intervals of
+equal length) to the file of `handle`, as `spkw02_c`.
 
-Preconditions (each throws `SpiceError`): `n > 0` (`:numcoeffsnotpos`),
-`0 <= polydg <= 27` (`:invaliddegree`), `intlen > 0` (`:intlennotpos`), a known frame
-(`:invalidrefframe`), `first <= last` (`:baddescrtimes`), [`first`, `last`] inside
-[`btime`, `btime + n*intlen`] with the relative tolerance 1e-13 (`:coveragegap`), a
-printable `segid` of at most 40 characters (`:idstringtoolong`, `:nonprintablechars`).
-Postcondition: the segment is in the file, with the data area of `spkw02_c`.
+# Arguments
+The first seven arguments and `ctx` have the same meaning in every `spkwNN` writer.
+- `handle`: a [`DAFHandle`](@ref) from [`spkopn`](@ref) or [`spkopa`](@ref).
+- `body`, `center`: NAIF IDs of the body and of its centre of motion.
+- `frame`: the reference frame, a name or a frame ID. A name is resolved in `ctx` (a
+  `SpiceContext` or a `KernelSet`); built-in frames need no kernel.
+- `first`, `last`: the coverage of the segment, seconds past J2000 TDB.
+- `segid`: the segment identifier, at most 40 printable characters.
+- `intlen`, `btime`: the length of every interval (s) and the start of the first interval
+  (seconds past J2000 TDB).
+- `cdata`: one record for each interval, each with `3 * (polydg + 1)` coefficients (km):
+  those of x, then of y, then of z. The number of records `n` and the degree `polydg`
+  follow from its shape.
+
+A table such as `cdata` is a vector of vectors (the form of SPICE.jl) or a matrix with one
+record in each column; a table whose records have a fixed length can also be a flat
+vector. A count that CSPICE takes as an argument follows from the input.
+
+The segment is in the file when the call returns, with the data area that `spkw02_c`
+writes. A call that throws writes nothing.
+
+Throws `SpiceError`. Every `spkwNN` writer throws:
+- `:dafnosuchhandle` if the handle is closed, `:dafinvalidaccess` if it is open for
+  reading;
+- `:emptystring` if `frame` or `segid` is empty;
+- `:badarg` if the shape of an input does not fit;
+- `:invalidrefframe` if the frame is not known.
+
+`spkw02` also throws:
+- `:numcoeffsnotpos` if `cdata` has no record;
+- `:invaliddegree` unless `0 <= polydg <= 27`;
+- `:intlennotpos` unless `intlen > 0`;
+- `:baddescrtimes` if `first > last`;
+- `:coveragegap` unless [`first`, `last`] is inside [`btime`, `btime + n * intlen`], with
+  the tolerance `1e-13 * max(abs(first), abs(last))`;
+- `:idstringtoolong` or `:nonprintablechars` if `segid` is not valid.
+
+See [`spkopn`](@ref) for an example.
+
+See also [`spkw01`](@ref), [`spkw03`](@ref), [`spkw05`](@ref), [`spkw08`](@ref),
+[`spkw09`](@ref), [`spkw10`](@ref), [`spkw12`](@ref), [`spkw13`](@ref), [`spkw15`](@ref),
+[`spkw17`](@ref), [`spkw18`](@ref), [`spkw19`](@ref), [`spkw20`](@ref), [`spkw21`](@ref),
+[`spk14b`](@ref).
 """
 spkw02(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real, last::Real,
     segid::AbstractString, intlen::Real, cdata, btime::Real; ctx::SegContext=default_context()) =
     _spk_cheby("spkw02", 2, 3, h, body, center, frame, first, last, segid, intlen, cdata, btime, ctx)
 
 """
-    spkw03(handle, body, center, frame, first, last, segid, intlen, cdata, btime; ctx=default_context())
+    spkw03(handle, body, center, frame, first, last, segid, intlen, cdata, btime;
+           ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 3 (Chebyshev polynomials for position and velocity on
-equal intervals), as `spkw03_c`. `cdata` holds one record for each interval, each
-with `6 * (polydg + 1)` coefficients. The preconditions are those of [`spkw02`](@ref).
+Write an SPK segment of type 3 (Chebyshev polynomials for the position and the velocity,
+on intervals of equal length), as `spkw03_c`.
+
+`cdata` holds one record for each interval, each with `6 * (polydg + 1)` coefficients:
+those of x, y, z (km) and then of dx, dy, dz (km/s). The other arguments and the errors
+are those of [`spkw02`](@ref).
 """
 spkw03(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real, last::Real,
     segid::AbstractString, intlen::Real, cdata, btime::Real; ctx::SegContext=default_context()) =
@@ -334,19 +405,26 @@ spkw03(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Rea
 
 """
     spkw20(handle, body, center, frame, first, last, segid, intlen, cdata, dscale, tscale,
-           initjd, initfr; ctx=default_context())
+           initjd, initfr; ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 20 (Chebyshev polynomials for the velocity, with the
-position at the interval midpoint), as `spkw20_c`. `cdata` holds one record for each
-interval, each with `3 * (polydg + 2)` values; `intlen` is in days; `dscale` and
-`tscale` are the distance scale (km) and the time scale (s); `initjd + initfr` is the
-TDB Julian date of the start of the first interval.
+Write an SPK segment of type 20 (Chebyshev polynomials for the velocity, with the position
+at the midpoint of each interval), as `spkw20_c`.
 
-Preconditions (each throws `SpiceError`): `n > 0` (`:invalidcount`),
-`0 <= polydg <= 50` (`:invaliddegree`), `intlen > 0` (`:intlennotpos`), a known frame
-(`:invalidrefframe`), `first <= last` (`:baddescrtimes`), positive scales
-(`:nonpositivescale`), the descriptor interval inside the data interval
-(`:coveragegap`), a valid `segid` (`:idstringtoolong`, `:nonprintablechars`).
+`cdata` holds one record for each interval, each with `3 * (polydg + 2)` values.
+`intlen` is the length of every interval in days. `dscale` and `tscale` are the distance
+scale (km) and the time scale (s) of the data. `initjd + initfr` is the TDB Julian date
+of the start of the first interval. See [`spkw02`](@ref) for the other arguments and for
+the errors of every writer.
+
+Throws `SpiceError`:
+- `:invalidcount` if `cdata` has no record;
+- `:invaliddegree` if `polydg > 50`;
+- `:intlennotpos` unless `intlen > 0`;
+- `:baddescrtimes` if `first > last`;
+- `:nonpositivescale` unless `dscale > 0` and `tscale > 0`;
+- `:coveragegap` unless [`first`, `last`] is inside the interval of the data, with a
+  relative tolerance of 1e-13;
+- `:idstringtoolong` or `:nonprintablechars` if `segid` is not valid.
 """
 function spkw20(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, intlen::Real, cdata, dscale::Real, tscale::Real,
@@ -386,16 +464,23 @@ end
 # ---------------------------------------------------------------------------------------
 
 """
-    spkw05(handle, body, center, frame, first, last, segid, gm, states, epochs; ctx=default_context())
+    spkw05(handle, body, center, frame, first, last, segid, gm, states, epochs;
+           ctx=default_context()) -> Nothing
 
 Write an SPK segment of type 5 (two-body propagation between discrete states), as
-`spkw05_c`. `states` holds `n` states (x, y, z, dx, dy, dz) in km and km/s, `epochs`
-their `n` epochs, `gm` the gravitational parameter of the central body.
+`spkw05_c`.
 
-Preconditions (each throws `SpiceError`): `gm > 0` (`:nonpositivemass`), a known frame
-(`:invalidrefframe`), `n > 0` (`:numstatesnotpos`), strictly increasing epochs
-(`:unorderedtimes`), `first <= last` (`:baddescrtimes`), a valid `segid`
-(`:nonprintablechars`, `:segidtoolong`).
+`states` holds `n` states (x, y, z in km; dx, dy, dz in km/s), `epochs` holds their `n`
+epochs (seconds past J2000 TDB) and `gm` is the gravitational parameter of the central
+body (km³/s²). See [`spkw02`](@ref) for the other arguments and for the errors of every
+writer.
+
+Throws `SpiceError`:
+- `:nonpositivemass` unless `gm > 0`;
+- `:numstatesnotpos` if there is no state;
+- `:unorderedtimes` unless the epochs are strictly increasing;
+- `:baddescrtimes` if `first > last`;
+- `:nonprintablechars` or `:segidtoolong` if `segid` is not valid.
 """
 function spkw05(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, gm::Real, states, epochs;
@@ -425,16 +510,25 @@ function spkw05(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
 end
 
 """
-    spkw08(handle, body, center, frame, first, last, segid, degree, states, epoch1, step; ctx=default_context())
+    spkw08(handle, body, center, frame, first, last, segid, degree, states, epoch1, step;
+           ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 8 (Lagrange interpolation of states at equal steps), as
-`spkw08_c`. The state number `k` (from 1) is at `epoch1 + (k-1)*step`.
+Write an SPK segment of type 8 (Lagrange interpolation of states at equal time steps), as
+`spkw08_c`.
 
-Preconditions (each throws `SpiceError`): a known frame (`:invalidrefframe`), a valid
-`segid` (`:segidtoolong`, `:nonprintablechars`), `1 <= degree <= 27`
-(`:invaliddegree`), `n > degree` (`:toofewstates`), `first < last`
-(`:baddescrtimes`), `step > 0` (`:invalidstepsize`), the descriptor interval inside
-the data interval with the relative tolerance 1e-13 (`:coveragegap`).
+`states` holds `n` states (km, km/s). State `k`, counted from 1, is at the epoch
+`epoch1 + (k - 1) * step` (seconds past J2000 TDB; `step` in s). `degree` is the degree
+of the interpolating polynomial. See [`spkw02`](@ref) for the other arguments and for the
+errors of every writer.
+
+Throws `SpiceError`:
+- `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
+- `:invaliddegree` unless `1 <= degree <= 27`;
+- `:toofewstates` unless `n > degree`;
+- `:baddescrtimes` unless `first < last`;
+- `:invalidstepsize` unless `step > 0`;
+- `:coveragegap` unless [`first`, `last`] is inside [`epoch1`, `epoch1 + (n - 1) * step`],
+  with the tolerance `1e-13 * max(abs(first), abs(last))`.
 """
 function spkw08(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, degree::Integer, states, epoch1::Real, step::Real;
@@ -464,16 +558,22 @@ function spkw08(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
 end
 
 """
-    spkw09(handle, body, center, frame, first, last, segid, degree, states, epochs; ctx=default_context())
+    spkw09(handle, body, center, frame, first, last, segid, degree, states, epochs;
+           ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 9 (Lagrange interpolation of states at unequal steps), as
-`spkw09_c`.
+Write an SPK segment of type 9 (Lagrange interpolation of states at unequal time steps),
+as `spkw09_c`.
 
-Preconditions (each throws `SpiceError`): a known frame (`:invalidrefframe`),
-`first < last` (`:baddescrtimes`), a valid `segid` (`:nonprintablechars`,
-`:segidtoolong`), `1 <= degree <= 27` (`:invaliddegree`), `n > degree`
-(`:toofewstates`), strictly increasing epochs (`:timesoutoforder`),
-`epochs[1] <= first` and `epochs[n] >= last` (`:baddescrtimes`).
+`states` holds `n` states (km, km/s) and `epochs` their `n` epochs (seconds past J2000
+TDB). `degree` is the degree of the interpolating polynomial. See [`spkw02`](@ref) for
+the other arguments and for the errors of every writer.
+
+Throws `SpiceError`:
+- `:baddescrtimes` unless `first < last`, `epochs[1] <= first` and `epochs[n] >= last`;
+- `:nonprintablechars` or `:segidtoolong` if `segid` is not valid;
+- `:invaliddegree` unless `1 <= degree <= 27`;
+- `:toofewstates` unless `n > degree`;
+- `:timesoutoforder` unless the epochs are strictly increasing.
 """
 function spkw09(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, degree::Integer, states, epochs;
@@ -506,17 +606,26 @@ function spkw09(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
 end
 
 """
-    spkw12(handle, body, center, frame, first, last, segid, degree, states, epoch1, step; ctx=default_context())
+    spkw12(handle, body, center, frame, first, last, segid, degree, states, epoch1, step;
+           ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 12 (Hermite interpolation of states at equal steps), as
+Write an SPK segment of type 12 (Hermite interpolation of states at equal time steps), as
 `spkw12_c`.
 
-Preconditions (each throws `SpiceError`): a known frame (`:invalidrefframe`), a valid
-`segid` (`:segidtoolong`, `:nonprintablechars`), an odd `degree` in 1:27
-(`:invaliddegree`), `n >= (degree + 1) ÷ 2` (`:toofewstates`), `first < last`
-(`:baddescrtimes`), `step > 0` (`:invalidstepsize`), the descriptor interval inside
-the data interval (`:coveragegap`), and the checks of [`spkpds`](@ref)
-(`:barycenterephem`, `:bodyandcentersame`).
+`states` holds `n` states (km, km/s). State `k`, counted from 1, is at the epoch
+`epoch1 + (k - 1) * step` (seconds past J2000 TDB; `step` in s). `degree` is the degree
+of the interpolating polynomial. See [`spkw02`](@ref) for the other arguments and for the
+errors of every writer.
+
+Throws `SpiceError`:
+- `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
+- `:invaliddegree` unless `degree` is odd and in `1:27`;
+- `:toofewstates` unless `n >= (degree + 1) ÷ 2`;
+- `:baddescrtimes` unless `first < last`;
+- `:invalidstepsize` unless `step > 0`;
+- `:coveragegap` unless [`first`, `last`] is inside [`epoch1`, `epoch1 + (n - 1) * step`],
+  with the tolerance `1e-13 * max(abs(first), abs(last))`;
+- `:barycenterephem` if `body == 0`, `:bodyandcentersame` if `body == center`.
 """
 function spkw12(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, degree::Integer, states, epoch1::Real, step::Real;
@@ -549,24 +658,23 @@ function spkw12(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
 end
 
 """
-    spkw13(handle, body, center, frame, first, last, segid, degree, states, epochs; ctx=default_context())
+    spkw13(handle, body, center, frame, first, last, segid, degree, states, epochs;
+           ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 13 (Hermite interpolation of states at unequal steps),
-as `spkw13_c`. `states` holds `n` states (x, y, z, dx, dy, dz) in km and km/s and
-`epochs` their `n` epochs in seconds past J2000 TDB.
+Write an SPK segment of type 13 (Hermite interpolation of states at unequal time steps),
+as `spkw13_c`.
 
-Preconditions (each throws `SpiceError`, in the order of SPICELIB): a known frame
-(`:invalidrefframe`), a `segid` of at most 40 characters (`:segidtoolong`) that are
-printable (`:nonprintablechars`), `1 <= degree <= 27` and `degree` odd
-(`:invaliddegree`), `n >= (degree + 1) ÷ 2` (`:toofewstates`), `first < last`
-(`:baddescrtimes`), strictly increasing epochs (`:timesoutoforder`),
-`epochs[1] <= first` and `epochs[n] >= last` (`:baddescrtimes`), `body != 0`
-(`:barycenterephem`), `body != center` (`:bodyandcentersame`). An empty `frame` or
-`segid` throws `:emptystring`, as the C wrapper does.
+`states` holds `n` states (x, y, z in km; dx, dy, dz in km/s) and `epochs` their `n`
+epochs (seconds past J2000 TDB). `degree` is the degree of the interpolating polynomial.
+See [`spkw02`](@ref) for the other arguments and for the errors of every writer.
 
-Postcondition: the file has one more segment with the descriptor of `spkpds_c` and
-the data area of `spkw13_c`: the states, the epochs, every 100th epoch for the first
-`(n-1) ÷ 100` hundreds, the window size minus one and `n`.
+Throws `SpiceError`:
+- `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
+- `:invaliddegree` unless `degree` is odd and in `1:27`;
+- `:toofewstates` unless `n >= (degree + 1) ÷ 2`;
+- `:baddescrtimes` unless `first < last`, `epochs[1] <= first` and `epochs[n] >= last`;
+- `:timesoutoforder` unless the epochs are strictly increasing;
+- `:barycenterephem` if `body == 0`, `:bodyandcentersame` if `body == center`.
 """
 function spkw13(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, degree::Integer, states, epochs;
@@ -606,18 +714,25 @@ _spk18_subtype(s::Integer) = Int(s)
 _spk18_subtype(s::Symbol) = s === :S18TP0 ? 0 : s === :S18TP1 ? 1 : -1
 
 """
-    spkw18(handle, subtyp, body, center, frame, first, last, segid, degree, packts, epochs; ctx=default_context())
+    spkw18(handle, subtyp, body, center, frame, first, last, segid, degree, packts, epochs;
+           ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 18 (ESOC/DDID interpolation), as `spkw18_c`. `subtyp` is
-0 or `:S18TP0` (Hermite, packets of 12 values) or 1 or `:S18TP1` (Lagrange, packets
-of 6 values).
+Write an SPK segment of type 18 (ESOC/DDID interpolation), as `spkw18_c`.
 
-Preconditions (each throws `SpiceError`): a known subtype (`:invalidvalue`), a known
-frame (`:invalidrefframe`), a valid `segid` (`:segidtoolong`, `:nonprintablechars`),
-`1 <= degree <= 15` and an even window size, that is a degree of 3 mod 4 for subtype
-0 and an odd degree for subtype 1 (`:invaliddegree`), `n >= 2` (`:toofewstates`),
-`first <= last` (`:baddescrtimes`), strictly increasing epochs (`:timesoutoforder`),
-`epochs[1] <= first` and `epochs[n] >= last` (`:baddescrtimes`).
+`subtyp` is `0` or `:S18TP0` (Hermite interpolation, packets of 12 values) or `1` or
+`:S18TP1` (Lagrange interpolation, packets of 6 values). `packts` holds the `n` packets
+and `epochs` their `n` epochs (seconds past J2000 TDB). `degree` is the degree of the
+interpolating polynomial. See [`spkw02`](@ref) for the other arguments and for the errors
+of every writer.
+
+Throws `SpiceError`:
+- `:invalidvalue` if `subtyp` is not known;
+- `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
+- `:invaliddegree` unless `1 <= degree <= 15` and the window size is even: the degree is
+  3 modulo 4 for subtype 0, and odd for subtype 1;
+- `:toofewstates` unless `n >= 2`;
+- `:baddescrtimes` unless `first <= last`, `epochs[1] <= first` and `epochs[n] >= last`;
+- `:timesoutoforder` unless the epochs are strictly increasing.
 """
 function spkw18(h::DAFHandle, subtyp::Union{Integer,Symbol}, body::Integer, center::Integer,
         frame::SegFrame, first::Real, last::Real, segid::AbstractString, degree::Integer,
@@ -679,19 +794,24 @@ end
 
 """
     spkw15(handle, body, center, frame, first, last, segid, epoch, tp, pa, p, ecc, j2flg,
-           pv, gm, j2, radius; ctx=default_context())
+           pv, gm, j2, radius; ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 15 (precessing conic propagation), as `spkw15_c`: `epoch`
-of periapsis, trajectory pole `tp`, periapsis vector `pa`, semi-latus rectum `p`,
-eccentricity `ecc`, J2 processing flag `j2flg`, central body pole `pv`, `gm`, `j2`
-and the equatorial `radius` of the central body. The three vectors are stored as unit
-vectors.
+Write an SPK segment of type 15 (precessing conic propagation), as `spkw15_c`.
 
-Preconditions (each throws `SpiceError`): `p > 0` (`:badlatusrectum`), `ecc >= 0`
-(`:badeccentricity`), `gm > 0` (`:nonpositivemass`), non-zero `tp`, `pa`, `pv`
-(`:badvector`), `radius >= 0` (`:badradius`), `tp` orthogonal to `pa` within 1e-5
-(`:badinitstate`), a valid `segid` (`:segidtoolong`, `:nonprintablechars`), and the
-checks of [`spkpds`](@ref).
+`epoch` is the epoch of periapsis (seconds past J2000 TDB), `tp` the trajectory pole,
+`pa` the periapsis vector, `p` the semi-latus rectum (km), `ecc` the eccentricity, `j2flg`
+the J2 processing flag of CSPICE, `pv` the pole of the central body, and `gm` (km³/s²),
+`j2` and `radius` (equatorial, km) the constants of the central body. The three vectors
+are stored as unit vectors. See [`spkw02`](@ref) for the other arguments and for the
+errors of every writer.
+
+Throws `SpiceError`:
+- `:badlatusrectum` unless `p > 0`, `:badeccentricity` if `ecc < 0`;
+- `:nonpositivemass` unless `gm > 0`, `:badradius` if `radius < 0`;
+- `:badvector` if `tp`, `pa` or `pv` is zero;
+- `:badinitstate` unless the unit vectors of `tp` and `pa` are orthogonal within 1e-5;
+- `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
+- the kinds of [`spkpds`](@ref).
 """
 function spkw15(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, epoch::Real, tp, pa, p::Real, ecc::Real,
@@ -723,15 +843,22 @@ function spkw15(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
 end
 
 """
-    spkw17(handle, body, center, frame, first, last, segid, epoch, eqel, rapol, decpol; ctx=default_context())
+    spkw17(handle, body, center, frame, first, last, segid, epoch, eqel, rapol, decpol;
+           ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 17 (equinoctial elements), as `spkw17_c`: `eqel` holds
-the nine equinoctial elements at `epoch`, and `rapol`, `decpol` are the right
-ascension and declination of the pole of the reference plane.
+Write an SPK segment of type 17 (equinoctial elements), as `spkw17_c`.
 
-Preconditions (each throws `SpiceError`): `eqel[1] > 0` (`:badsemiaxis`), eccentricity
-`sqrt(eqel[2]^2 + eqel[3]^2) <= 0.9` (`:badeccentricity`), a valid `segid`
-(`:segidtoolong`, `:nonprintablechars`), and the checks of [`spkpds`](@ref).
+`eqel` holds the nine equinoctial elements at `epoch` (seconds past J2000 TDB), in the
+order and the units of CSPICE. `rapol` and `decpol` are the right ascension and the
+declination (radians) of the pole of the reference plane. See [`spkw02`](@ref) for the
+other arguments and for the errors of every writer.
+
+Throws `SpiceError`:
+- `:badsemiaxis` unless the semi-major axis `eqel[1]` is positive;
+- `:badeccentricity` if the eccentricity `sqrt(eqel[2]^2 + eqel[3]^2)` is greater than
+  0.9;
+- `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
+- the kinds of [`spkpds`](@ref).
 """
 function spkw17(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, epoch::Real, eqel, rapol::Real, decpol::Real;
@@ -758,16 +885,22 @@ end
 # ---------------------------------------------------------------------------------------
 
 """
-    spkw01(handle, body, center, frame, first, last, segid, dlines, epochs; ctx=default_context())
+    spkw01(handle, body, center, frame, first, last, segid, dlines, epochs;
+           ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 1 (modified difference arrays), as `spkw01` of SPICELIB
-(CSPICE has no C wrapper; the count `n` follows from the input). `dlines` holds `n`
-difference lines of 71 doubles and `epochs` the final epoch of each line.
+Write an SPK segment of type 1 (modified difference arrays), as `spkw01` of SPICELIB.
+CSPICE has no C wrapper for it.
 
-Preconditions (each throws `SpiceError`): a known frame (`:invalidrefframe`), a valid
-`segid` (`:segidtoolong`, `:nonprintablechars`), `n >= 1` (`:invalidcount`),
-`first < last` (`:baddescrtimes`), strictly increasing epochs (`:timesoutoforder`),
-`epochs[n] >= last` (`:baddescrtimes`), and the checks of [`spkpds`](@ref).
+`dlines` holds `n` difference lines of 71 doubles each, and `epochs` holds the final
+epoch of each line (seconds past J2000 TDB). The count `n` follows from the input. See
+[`spkw02`](@ref) for the other arguments and for the errors of every writer.
+
+Throws `SpiceError`:
+- `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
+- `:invalidcount` if there is no difference line;
+- `:baddescrtimes` unless `first < last` and `epochs[n] >= last`;
+- `:timesoutoforder` unless the epochs are strictly increasing;
+- `:barycenterephem` if `body == 0`, `:bodyandcentersame` if `body == center`.
 """
 function spkw01(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, dlines, epochs; ctx::SegContext=default_context())
@@ -795,19 +928,26 @@ function spkw01(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
 end
 
 """
-    spkw21(handle, body, center, frame, first, last, segid, dlines, epochs; ctx=default_context())
+    spkw21(handle, body, center, frame, first, last, segid, dlines, epochs;
+           ctx=default_context()) -> Nothing
 
 Write an SPK segment of type 21 (extended modified difference arrays), as `spkw21` of
-SPICELIB (CSPICE has no C wrapper). `dlines` holds `n` difference lines of equal size
-`dlsize` (a matrix with one line in each column, or a vector of vectors); `n` and
-`dlsize` follow from its shape.
+SPICELIB. CSPICE has no C wrapper for it.
 
-Preconditions (each throws `SpiceError`): `dlsize <= 111` (`:difflinetoolarge`),
-`dlsize >= 71` (`:difflinetoosmall`), a known frame (`:invalidrefframe`), a valid
-`segid` (`:segidtoolong`, `:nonprintablechars`), `n >= 1` (`:invalidcount`),
-`first <= last` (`:baddescrtimes`), strictly increasing epochs (`:timesoutoforder`),
-`epochs[n] >= last` (`:coveragegap`), no zero step size inside a line (`:zerostep`),
-and the checks of [`spkpds`](@ref).
+`dlines` holds `n` difference lines of equal size `dlsize`: a matrix with one line in each
+column, or a vector of vectors. `n` and `dlsize` follow from its shape. `epochs` holds
+the final epoch of each line (seconds past J2000 TDB). See [`spkw02`](@ref) for the other
+arguments and for the errors of every writer.
+
+Throws `SpiceError`:
+- `:difflinetoolarge` if `dlsize > 111`, `:difflinetoosmall` if `dlsize < 71`;
+- `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
+- `:invalidcount` if there is no difference line;
+- `:baddescrtimes` unless `first < last`;
+- `:timesoutoforder` unless the epochs are strictly increasing;
+- `:coveragegap` if `epochs[n] < last`;
+- `:zerostep` if a step size inside a line is zero;
+- `:barycenterephem` if `body == 0`, `:bodyandcentersame` if `body == center`.
 """
 function spkw21(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, dlines, epochs; ctx::SegContext=default_context())
@@ -856,24 +996,31 @@ const _SPK19_PKTSZS = (12, 6, 6)
 
 """
     spkw19(handle, body, center, frame, first, last, segid, npkts, subtps, degres, packts,
-           epochs, ivlbds, sellst; ctx=default_context())
+           epochs, ivlbds, sellst; ctx=default_context()) -> Nothing
 
 Write an SPK segment of type 19 (mini-segments of the ESOC/DDID types), as `spkw19` of
-SPICELIB (CSPICE has no C wrapper; the interval count is `length(npkts)`).
-For mini-segment `i`, `npkts[i]` is the packet count, `subtps[i]` the subtype (0
-Hermite with 12 values, 1 Lagrange with 6, 2 Hermite with 6) and `degres[i]` the
-degree. `packts` is the flat vector of all packets and `epochs` of all epochs, in
-order; `ivlbds` holds the `nintvl + 1` interval bounds; `sellst` selects the last
-interval when an epoch is on a common bound.
+SPICELIB. CSPICE has no C wrapper for it.
 
-Preconditions (each throws `SpiceError`): `first <= last` (`:baddescrtimes`), a known
-frame (`:invalidrefframe`), a valid `segid` (`:segidtoolong`, `:nonprintablechars`),
-at least one interval (`:invalidcount`), strictly increasing bounds
-(`:boundsoutoforder`), [`first`, `last`] inside the bounds (`:coveragegap`); for each
-mini-segment at least two packets (`:toofewpackets`), a subtype in 0:2
-(`:invalidsubtype`), a degree in 1:27 (`:invaliddegree`), an even window size
-(`:badwindowsize`), strictly increasing epochs (`:timesoutoforder`), and epochs that
-cover the interval (`:boundsdisagree`).
+The number of mini-segments is `length(npkts)`. For mini-segment `i`, `npkts[i]` is the
+number of packets, `subtps[i]` the subtype (0 Hermite with packets of 12 values, 1
+Lagrange with 6, 2 Hermite with 6) and `degres[i]` the degree. `packts` is the flat vector
+of all packets and `epochs` that of all epochs (seconds past J2000 TDB), in order.
+`ivlbds` holds the `length(npkts) + 1` bounds of the intervals of the mini-segments. If
+`sellst` is `true`, the later interval is used for an epoch that is on a bound of two
+intervals; else the earlier one is used. See [`spkw02`](@ref) for the other arguments and
+for the errors of every writer.
+
+Throws `SpiceError`:
+- `:baddescrtimes` if `first > last`;
+- `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
+- `:invalidcount` if there is no mini-segment;
+- `:boundsoutoforder` unless `ivlbds` is strictly increasing;
+- `:coveragegap` unless [`first`, `last`] is inside [`ivlbds[1]`, `ivlbds[end]`];
+- for a mini-segment: `:toofewpackets` if it has fewer than two packets,
+  `:invalidsubtype` if its subtype is not in `0:2`, `:invaliddegree` if its degree is not
+  in `1:27`, `:badwindowsize` if its window size is odd, `:timesoutoforder` unless its
+  epochs are strictly increasing, and `:boundsdisagree` unless its epochs cover its
+  interval.
 """
 function spkw19(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, npkts::AbstractVector{<:Integer},
@@ -967,11 +1114,12 @@ end
 """
     SPK14Writer
 
-A type 14 segment that is open for the addition of records: the result of
-[`spk14b`](@ref), the first argument of [`spk14a`](@ref) and [`spk14e`](@ref). CSPICE
-keeps this state in a table of the files that have a generic segment in work; here the
-caller owns it. The file gets the segment when `spk14e` runs, so a segment that is
-never ended leaves the file unchanged.
+An SPK segment of type 14 that is open for the addition of records. [`spk14b`](@ref)
+returns it, and it is the first argument of [`spk14a`](@ref) and [`spk14e`](@ref).
+
+CSPICE keeps this state in a table of the files that have a segment in work; here the
+caller owns it. The file gets the segment when `spk14e` runs, so a segment that is never
+ended leaves the file unchanged.
 """
 mutable struct SPK14Writer
     const handle::DAFHandle
@@ -987,15 +1135,53 @@ Base.show(io::IO, w::SPK14Writer) = print(io, "SPK14Writer(\"", w.segid, "\", ",
     length(w.refs), " records", w.open ? "" : ", ended", ")")
 
 """
-    spk14b(handle, segid, body, center, frame, first, last, chbdeg; ctx=default_context()) -> SPK14Writer
+    spk14b(handle, segid, body, center, frame, first, last, chbdeg; ctx=default_context())
+        -> SPK14Writer
 
-Begin an SPK segment of type 14 (Chebyshev series for position and velocity on
-intervals of unequal length), as `spk14b_c`. `chbdeg` is the degree of the series.
+Begin an SPK segment of type 14 (Chebyshev polynomials for the position and the velocity,
+on intervals of unequal length), as `spk14b_c`, and return its writer.
 
-Preconditions (each throws `SpiceError`): `chbdeg >= 0` (`:invalidargument`), the
-checks of [`spkpds`](@ref), a `segid` of at most 40 printable characters
-(`:segidtoolong`, `:nonprintablechars`), a file that is open for writing. An empty
-`frame` or `segid` throws `:emptystring`, as the C wrapper does.
+`chbdeg` is the degree of the polynomials. The other arguments are those of
+[`spkw02`](@ref); note that `segid` comes before `body`. Add records with
+[`spk14a`](@ref) and end the segment with [`spk14e`](@ref).
+
+Throws `SpiceError`:
+- `:dafnosuchhandle` or `:dafinvalidaccess` if the file is not open for writing;
+- `:emptystring` if `frame` or `segid` is empty;
+- `:invalidargument` if `chbdeg < 0`;
+- `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
+- the kinds of [`spkpds`](@ref).
+
+# Examples
+Two records of degree 1, each on an interval of 100 s:
+```jldoctest
+julia> path = joinpath(mktempdir(), "type14.bsp");
+
+julia> h = spkopn(path, "type 14 example");
+
+julia> w = spk14b(h, "probe", -99, 399, "J2000", 0.0, 200.0, 1)
+SPK14Writer("probe", 0 records)
+
+julia> record(mid, x) = [mid, 50.0, x, 1.0, 0.0, 0.0, 0.0, 0.0, 0.02, 0.0, 0.0, 0.0, 0.0, 0.0];
+
+julia> spk14a(w, [record(50.0, 10.0); record(150.0, 11.0)], [0.0, 100.0])
+
+julia> spk14e(w)
+
+julia> w
+SPK14Writer("probe", 2 records, ended)
+
+julia> spkcls(h)
+
+julia> ctx = SpiceContext();
+
+julia> furnsh(ctx, path)
+
+julia> state, lt = spkezr(ctx, -99, 150.0, "J2000", "NONE", 399);
+
+julia> state == [11.0, 0.0, 0.0, 0.02, 0.0, 0.0]
+true
+```
 """
 function spk14b(h::DAFHandle, segid::AbstractString, body::Integer, center::Integer,
         frame::SegFrame, first::Real, last::Real, chbdeg::Integer;
@@ -1014,17 +1200,25 @@ end
 
 """
     spk14a(writer, ncsets, coeffs, epochs) -> Nothing
-    spk14a(writer, coeffs, epochs)
+    spk14a(writer, coeffs, epochs) -> Nothing
 
-Add `ncsets` records to the type 14 segment `writer`, as `spk14a_c`. A record has
-`2 + 6 * (chbdeg + 1)` numbers: the midpoint and the radius of its interval (seconds),
-then the coefficients of x, y, z (km) and of dx, dy, dz (km/s); `coeffs` holds the
-records one after the other (a vector, or a matrix with one record in each column).
-`epochs[i]` is the start of the interval of record `i`.
+Add `ncsets` records to the type 14 segment `writer`, as `spk14a_c`. Without `ncsets`,
+the number of records is `length(epochs)`.
 
-Preconditions (each throws `SpiceError`): a writer that `spk14e` did not end
-(`:segmentnotopen`), `ncsets > 0` (`:invalidargument`), strictly increasing `epochs`
-whose first value is after the last epoch of the call before (`:unorderedrefs`).
+A record has `2 + 6 * (chbdeg + 1)` numbers: the midpoint (seconds past J2000 TDB) and
+the radius (s) of its interval, then the coefficients of x, y, z (km) and of dx, dy, dz
+(km/s). `coeffs` holds the records one after the other: a vector, or a matrix with one
+record in each column. `epochs[i]` is the start of the interval of record `i`. The file
+does not change before [`spk14e`](@ref).
+
+Throws `SpiceError`:
+- `:segmentnotopen` if `spk14e` ended the writer;
+- `:invalidargument` unless `ncsets > 0`;
+- `:badarg` if `coeffs` or `epochs` does not have the size that `ncsets` requires;
+- `:unorderedrefs` unless `epochs` is strictly increasing and starts after the last epoch
+  of the call before.
+
+See [`spk14b`](@ref) for an example.
 """
 function spk14a(w::SPK14Writer, ncsets::Integer, coeffs, epochs)
     who = "spk14a"
@@ -1057,12 +1251,12 @@ spk14a(w::SPK14Writer, coeffs, epochs) = spk14a(w, length(epochs), coeffs, epoch
 """
     spk14e(writer) -> Nothing
 
-End the type 14 segment `writer` and add it to its file, as `spk14e_c`.
+End the type 14 segment `writer` and write it to its file, as `spk14e_c`.
 
-Postcondition: the file has one more segment with the data area of the generic segment
-writer of CSPICE: the number of coefficients of a series; each record after its epoch;
-the epochs; every 100th epoch for the first `(n-1) ÷ 100` hundreds; the 17 meta data
-items. Throws `SpiceError(:segmentnotopen)` for a writer that was ended before.
+The file then has one more segment, with the data area that the generic segment writer of
+CSPICE writes. The writer cannot be used again.
+
+Throws `SpiceError(:segmentnotopen)` if the writer was ended before.
 """
 function spk14e(w::SPK14Writer)
     who = "spk14e"
