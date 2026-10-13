@@ -10,7 +10,7 @@ export spkezr, spkpos, spkgeo, spkder
 export Aberration, spkssb, spkltc, spkaps, spkacs, spkapo, ltime, stelab, stlabx
 export pxform, sxform, pxder
 export gdpool, gcpool, gipool, bodvrd, bodn2c, bodc2n, bods2c, namfrm, frmnam
-export deltet, utc2et, str2et, et2utc, etcal, timout, tpictr, tparse, timdef, unitim
+export deltet, utc2et, str2et, et2utc, etcal, timout, tpictr, tparse, timdef, unitim, tsetyr
 export jul2gr, gr2jul
 export j1900, j1950, j2000, j2100, jyear, tyear, spd, b1900, b1950, clight
 export halfpi, twopi, rpd, dpr

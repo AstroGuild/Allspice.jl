@@ -831,6 +831,31 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
             # The form on a `KernelSet` takes the defaults as an argument and has no state.
             @test str2et(ks, "2000 Jan 1 12:00:00") == str2et(other, "2000 Jan 1 12:00:00")
             @test str2et(ks, "2000 Jan 1 12:00:00", Allspice.TimeDefaults("GREGORIAN", "TDB", "")) == 0.0
+            # `tsetyr`: the interval of the years of two digits, for one context only.
+            yctx = neo_context([Kernels.LSK])
+            try
+                for bound in (1969, 1980, 2000, 1950, 2101, 1)
+                    SPICE.tsetyr(bound)
+                    tsetyr(yctx, bound)
+                    for yy in (0, 1, 49, 50, 68, 69, 79, 80, 99)
+                        str = "$(lpad(yy, 2, '0')) Mar 4 05:06:07"
+                        @test str2et(yctx, str) == SPICE.str2et(str)
+                        @test utc2et(yctx, str) == SPICE.utc2et(str)
+                    end
+                    @test str2et(yctx, "105 A.D. Jan 1") == SPICE.str2et("105 A.D. Jan 1")    # not abbreviated
+                end
+                tsetyr(yctx, 1980)
+                @test tparse(yctx, "79 Jan 1") == tparse("2079 Jan 1")
+                @test tparse(yctx, "80 Jan 1") == tparse("1980 Jan 1")
+                @test tparse("80 Jan 1") == tparse("1980 Jan 1") && tparse("68 Jan 1") == tparse("2068 Jan 1")
+                tsetyr(yctx, 0); tsetyr(yctx, -5)                   # no change, as in CSPICE
+                @test str2et(yctx, "79 Jan 1") == str2et(yctx, "2079 Jan 1")
+                timdef(yctx, "SET", "CALENDAR", "MIXED")            # keeps the interval
+                @test str2et(yctx, "79 Jan 1") == str2et(yctx, "2079 Jan 1")
+                @test str2et(other, "79 Jan 1 TDB") == str2et(other, "1979 Jan 1 TDB")
+            finally
+                SPICE.tsetyr(1969)
+            end
             # `kclear` does not reset the defaults, as in CSPICE.
             kclear(other); timdef(other, "SET", "ZONE", "PST"); furnsh(other, Kernels.LSK)
             @test timdef(other, "GET", "ZONE") == "UTC-8" && timdef(other, "GET", "SYSTEM") == ""

@@ -54,7 +54,7 @@ unitim(epoch::Real, insys::AbstractString, outsys::AbstractString) =
 ttrans(ctx::SpiceContext, from::AbstractString, to::AbstractString, tv) =
     ttrans(kernelset(ctx), from, to, tv)
 
-utc2et(ctx::SpiceContext, s::AbstractString) = utc2et(kernelset(ctx), s)
+utc2et(ctx::SpiceContext, s::AbstractString) = utc2et(kernelset(ctx), s, timedefaults(ctx))
 utc2et(s::AbstractString) = utc2et(default_context(), s)
 
 str2et(ctx::SpiceContext, s::AbstractString) = str2et(kernelset(ctx), s, timedefaults(ctx))
@@ -69,7 +69,29 @@ timout(ctx::SpiceContext, et::Real, pictur::AbstractString) =
     timout(kernelset(ctx), et, pictur, timedefaults(ctx))
 timout(et::Real, pictur::AbstractString) = timout(default_context(), et, pictur)
 
-# These three need no kernel; the context forms exist so that every call has them.
+"""
+    tsetyr([ctx], year) -> Nothing
+
+Set the first year of the 100 years that a year of two digits abbreviates in `str2et`,
+`utc2et` and `tparse` of the context, as `tsetyr_c`: after `tsetyr(ctx, 1980)` the year
+80 is 1980 and the year 79 is 2079. A `year` that is not positive changes nothing, as in
+CSPICE. The value belongs to the context (CSPICE keeps one for the process), and a
+reader sees the old or the new value, never a mixture.
+"""
+function tsetyr(ctx::SpiceContext, year::Integer)
+    year > 0 || return nothing
+    lock(ctx.lock) do
+        d = timedefaults(ctx)
+        @atomic ctx.timedefs = TimeDefaults(d.calendar, d.system, d.zone, Int(year))
+    end
+    @assert timedefaults(ctx).yearbound > 0
+    return nothing
+end
+tsetyr(year::Integer) = tsetyr(default_context(), year)
+
+# These three need no kernel; the context forms exist so that every call has them. The
+# context form of `tparse` uses the interval of abbreviated years of the context.
 etcal(::Union{SpiceContext,KernelSet}, et::Real) = etcal(et)
-tparse(::Union{SpiceContext,KernelSet}, s::AbstractString) = tparse(s)
+tparse(ctx::SpiceContext, s::AbstractString) = tparse(s, timedefaults(ctx))
+tparse(::KernelSet, s::AbstractString) = tparse(s)
 tpictr(::Union{SpiceContext,KernelSet}, sample::AbstractString) = tpictr(sample)

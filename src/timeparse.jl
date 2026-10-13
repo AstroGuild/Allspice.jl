@@ -880,8 +880,12 @@ const _NOJDVALUE = "The Julian date of the string has no value: the sign and the
 # Checks and small rules: TCHECK, TEXPYR, ZZUTCPM
 # ---------------------------------------------------------------------------------
 
-"Contract: returns a year 0..99 as the year of the century 1969..2068 that it abbreviates, and another year unchanged (`texpyr` with its default bound)."
-_expand_year(year::Int)::Int = (year >= 100 || year < 0) ? year : (year + 1900 < 1969 ? year + 2000 : year + 1900)
+"Contract: returns a year 0..99 as the year of the 100 years from `lbound` (1969..2068 at start) that it abbreviates, and another year unchanged (`texpyr`; bound)."
+function _expand_year(year::Int, lbound::Int=1969)::Int
+    (year >= 100 || year < 0) && return year
+    y = year + lbound ÷ 100 * 100
+    return y < lbound ? y + 100 : y
+end
 
 """
     _zzutcpm(str, start) -> (hoff, moff, last, ok)
@@ -1029,7 +1033,7 @@ function _timdef_set(defs::TimeDefaults, item::AbstractString, value::AbstractSt
     if it == "SYSTEM"
         val in ("TDB", "TDT", "TT", "UTC") || throw(SpiceError(:badtimedefault,
             "the default time system '$value' is not one of UTC, TDB, TDT, TT"))
-        return TimeDefaults(defs.calendar, val, "")
+        return TimeDefaults(defs.calendar, val, "", defs.yearbound)
     elseif it == "ZONE"
         zone = findfirst(==(val), _TK_ZONES)
         zone === nothing || (val = _TK_OFFSETS[zone])
@@ -1038,11 +1042,11 @@ function _timdef_set(defs::TimeDefaults, item::AbstractString, value::AbstractSt
         ok || throw(SpiceError(:badtimedefault, "the default time zone '$value' is not " *
             "one of EST, EDT, CST, CDT, MST, MDT, PST, PDT and is not an offset " *
             "UTC+h[:mm] or UTC-h[:mm] with h below 13"))
-        return TimeDefaults(defs.calendar, "", String(val))
+        return TimeDefaults(defs.calendar, "", String(val), defs.yearbound)
     elseif it == "CALENDAR"
         val in ("JULIAN", "GREGORIAN", "MIXED") || throw(SpiceError(:badtimedefault,
             "the default calendar '$value' is not one of GREGORIAN, JULIAN, MIXED"))
-        return TimeDefaults(val, defs.system, defs.zone)
+        return TimeDefaults(val, defs.system, defs.zone, defs.yearbound)
     end
     throw(SpiceError(:badtimedefault,
         "the default item '$item' is not one of CALENDAR, SYSTEM, ZONE"))
@@ -1154,7 +1158,7 @@ function str2et(ks::KernelSet, s::AbstractString, defs::TimeDefaults=TimeDefault
     end
     year = _nint(tvec[yr])
     if p.yabbrv || (year < 100 && modify[_MOD_ERA] == "")
-        tvec[yr] = Float64(_expand_year(year))
+        tvec[yr] = Float64(_expand_year(year, defs.yearbound))
     end
 
     dojul = if calndr == "MIXED"
@@ -1215,7 +1219,7 @@ does this check only after `tparch("YES")`), so `1996-02-30` is March 1. Throws
 `SpiceError(:badtime)` for a string that CSPICE rejects and `SpiceError(:nolsk)`
 without a leap-second kernel. Reads `ks.lsk` only.
 """
-function utc2et(ks::KernelSet, s::AbstractString)::Float64
+function utc2et(ks::KernelSet, s::AbstractString, defs::TimeDefaults=TimeDefaults())::Float64
     l = _lsk(ks)
     p = _tpartv(s, 8)
     p.ok || _badtime(s, p.error)
@@ -1234,7 +1238,7 @@ function utc2et(ks::KernelSet, s::AbstractString)::Float64
     if modify[_MOD_ERA] == "B.C."
         year = 1 - year
     elseif modify[_MOD_ERA] != "A.D." && year < 100
-        year = _expand_year(year)
+        year = _expand_year(year, defs.yearbound)
     end
     tv = _tvec(year, tvec[2], tvec[3], tvec[4], tvec[5], tvec[6])
     return _ttrans(l, p.type == "YD" ? _TT_YD : _TT_YMD, _TT_TDB, tv)[1]
@@ -1249,7 +1253,7 @@ which every day has 86400 seconds (no leap seconds, no kernel needed), with the
 arithmetic of CSPICE `tparse`. Throws `SpiceError(:badtime)` with the message that
 `tparse` returns in its `errmsg` argument.
 """
-function tparse(s::AbstractString)::Float64
+function tparse(s::AbstractString, defs::TimeDefaults=TimeDefaults())::Float64
     p = _tpartv(s, 8)
     p.ok || _badtime(s, p.error)
     modify = p.modify
@@ -1272,7 +1276,7 @@ function tparse(s::AbstractString)::Float64
     if modify[_MOD_ERA] == "B.C."
         year = 1 - year
     elseif modify[_MOD_ERA] != "A.D." && year < 100
-        year = _expand_year(year)
+        year = _expand_year(year, defs.yearbound)
     end
     q = 0
     adjust = year < 1
