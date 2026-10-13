@@ -1070,7 +1070,15 @@ function mxvg(m1::AbstractMatrix, v2::AbstractVector)
     end
     return out
 end
-mxvg(m1::StaticMatrix, v2::StaticVector) = _m_f.(m1) * _m_f.(v2)
+"Sum of `g(1)`, ..., `g(M)` added to zero in that order: the static forms give the bits of the array forms."
+@inline function _m_ordsum(g::G, ::Val{M}) where {G,M}
+    t = ntuple(g, Val(M))
+    return foldl(+, t; init=zero(t[1]))
+end
+@inline _m_ordsum(g::G, ::Val{0}) where {G} = 0.0
+
+mxvg(m1::StaticMatrix{N,M}, v2::StaticVector{M}) where {N,M} =
+    SVector{N}(ntuple(i -> _m_ordsum(k -> _m_f(m1[i, k]) * _m_f(v2[k]), Val(M)), Val(N)))
 
 """
     mtxvg(m1, v2)
@@ -1086,7 +1094,8 @@ function mtxvg(m1::AbstractMatrix, v2::AbstractVector)
     end
     return out
 end
-mtxvg(m1::StaticMatrix, v2::StaticVector) = transpose(_m_f.(m1)) * _m_f.(v2)
+mtxvg(m1::StaticMatrix{N,M}, v2::StaticVector{N}) where {N,M} =
+    SVector{M}(ntuple(i -> _m_ordsum(k -> _m_f(m1[k, i]) * _m_f(v2[k]), Val(N)), Val(M)))
 
 """
     mxmg(m1, m2)
@@ -1103,7 +1112,8 @@ function mxmg(m1::AbstractMatrix, m2::AbstractMatrix)
     end
     return out
 end
-mxmg(m1::StaticMatrix, m2::StaticMatrix) = _m_f.(m1) * _m_f.(m2)
+mxmg(m1::StaticMatrix{N,M}, m2::StaticMatrix{M,P}) where {N,M,P} =
+    SMatrix{N,P}(ntuple(q -> _m_ordsum(k -> _m_f(m1[(q-1)%N+1, k]) * _m_f(m2[k, (q-1)÷N+1]), Val(M)), Val(N * P)))
 
 """
     mtxmg(m1, m2)
@@ -1120,7 +1130,8 @@ function mtxmg(m1::AbstractMatrix, m2::AbstractMatrix)
     end
     return out
 end
-mtxmg(m1::StaticMatrix, m2::StaticMatrix) = transpose(_m_f.(m1)) * _m_f.(m2)
+mtxmg(m1::StaticMatrix{N,M}, m2::StaticMatrix{N,P}) where {N,M,P} =
+    SMatrix{M,P}(ntuple(q -> _m_ordsum(k -> _m_f(m1[k, (q-1)%M+1]) * _m_f(m2[k, (q-1)÷M+1]), Val(N)), Val(M * P)))
 
 """
     mxmtg(m1, m2)
@@ -1137,7 +1148,8 @@ function mxmtg(m1::AbstractMatrix, m2::AbstractMatrix)
     end
     return out
 end
-mxmtg(m1::StaticMatrix, m2::StaticMatrix) = _m_f.(m1) * transpose(_m_f.(m2))
+mxmtg(m1::StaticMatrix{N,M}, m2::StaticMatrix{P,M}) where {N,M,P} =
+    SMatrix{N,P}(ntuple(q -> _m_ordsum(k -> _m_f(m1[(q-1)%N+1, k]) * _m_f(m2[(q-1)÷N+1, k]), Val(M)), Val(N * P)))
 
 """
     xposeg(matrix)
