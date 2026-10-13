@@ -121,3 +121,30 @@ let
         precompile(f, (H, I, S, Vector{T}, Vector{I}, Vector{Bool}, EKFastLoad))
     end
 end
+
+# A small workload for the time calls. Their formatting code calls methods of Base with
+# argument types that only a run finds, so directives alone left 140 ms of compilation
+# in the first `timout`. The leap seconds below are text in this file (two entries are
+# enough for the code paths); no kernel file is read.
+let
+    ctx = SpiceContext()
+    lmpool(ctx, ["DELTET/DELTA_T_A = 32.184", "DELTET/K = 1.657D-3",
+        "DELTET/EB = 1.671D-2", "DELTET/M = ( 6.239996D0 1.99096871D-7 )",
+        "DELTET/DELTA_AT = ( 10, @1972-JAN-1 11, @1972-JUL-1 )"])
+    for et in (0.0, -1.0e9), pic in ("YYYY MON DD HR:MN:SC.### ::UTC", "YYYY-MM-DDTHR:MN:SC ::TDB",
+            "Wkd Mon DD, YYYY AP:MN:SC.## AMPM ::RND", "JULIAND.##### ::TDT", "YYYY-DOYTHR:MN:SC.###")
+        timout(ctx, et, pic)
+    end
+    for fmt in ("C", "D", "J", "ISOC", "ISOD"), prec in (0, 3)
+        et2utc(ctx, 0.0, fmt, prec)
+    end
+    etcal(0.0)
+    for s in ("2025 JAN 01 12:00:00", "2025-01-01T00:00:00.000", "JD 2451545.0", "2025-032 // 12:00",
+            "Jan 1, 2025 3:00 PM TDB")
+        str2et(ctx, s)
+        tpictr(s)
+    end
+    utc2et(ctx, "2025-01-01T00:00:00")
+    unitim(ctx, 0.0, "TDB", "JDTDB")
+    deltet(ctx, 0.0, "ET")
+end

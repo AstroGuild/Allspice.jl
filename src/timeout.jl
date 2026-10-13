@@ -43,7 +43,9 @@ function _dpstr_digits(x::Float64, maxsig::Int=14)
     # that digit n is its integer part.
     for n in 1:maxsig
         d = clamp(trunc(Int, copy), 0, 9)
-        digits = Base.setindex(digits, d, n)
+        digits = let d = d, n = n, old = digits
+            ntuple(i -> i == n ? d : old[i], Val(14))
+        end
         copy = (copy - d) * 10.0
     end
     return digits, expont
@@ -434,7 +436,8 @@ function timout(ks::KernelSet, et::Real, pictur::AbstractString,
     # Remove the marks that write nothing.
     keep = [!(_to_class(id) == _TC_SYSTEM || _to_class(id) == _TC_CAL || id == _ID_RND ||
               id == 32) for id in ident]
-    ident, beg, fin = ident[keep], beg[keep], fin[keep]
+    kept = [i for i in eachindex(ident) if keep[i]]
+    ident, beg, fin = [ident[i] for i in kept], [beg[i] for i in kept], [fin[i] for i in kept]
     ntokns = length(ident)
     class(i) = i <= ntokns ? _to_class(ident[i]) : _TC_TEXT
 
@@ -532,7 +535,7 @@ function timout(ks::KernelSet, et::Real, pictur::AbstractString,
             appnd += len
         elseif type == _TC_PLACE
             if making
-                fmt = string(fmt, String(text))
+                fmt = string(fmt, String(copy(text)))
                 width += len
             else
                 appnd <= 256 && (out[appnd] = text[1])
@@ -544,7 +547,7 @@ function timout(ks::KernelSet, et::Real, pictur::AbstractString,
                 appnd += len
                 have[_TC_POINT] = false
             else
-                fmt = string(fmt, String(text))
+                fmt = string(fmt, String(copy(text)))
                 width += len
                 have[_TC_POINT] = true
                 if timfmt != 2
