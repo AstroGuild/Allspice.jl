@@ -1093,7 +1093,7 @@ and a system together. A year can be abbreviated as `'97` or given with two digi
 - A UTC leap second `23:59:60` is accepted on a day that has one.
 
 Throws `SpiceError(:badtime)`, with the reason in the message, if `s` is not a time
-string of these forms, and `SpiceError(:nolsk)` if no leap-second kernel is loaded.
+string of these forms, and `SpiceError(:noleapseconds)` if no leap-second kernel is loaded.
 
 # Examples
 ```julia
@@ -1244,7 +1244,7 @@ CSPICE routine:
 - The components are not checked against their ranges, so `1996-02-30` is March 1.
 
 Throws `SpiceError(:badtime)` if `s` is not a time string of these forms and
-`SpiceError(:nolsk)` if no leap-second kernel is loaded.
+`SpiceError(:noleapseconds)` if no leap-second kernel is loaded.
 """
 function utc2et(ks::KernelSet, s::AbstractString, defs::TimeDefaults=TimeDefaults())::Float64
     l = _lsk(ks)

@@ -301,7 +301,7 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
         @test throws_kind(() -> stelab(SVector(1.0, 0.0, 0.0), SVector(3e5, 0.0, 0.0)), :badarg)
         @test throws_kind(() -> stelab([1.0, 0.0], [0.0, 0.0, 0.0]), :badarg)
         # An epoch whose light-time corrected epoch leaves the coverage.
-        @test throws_kind(() -> spkezr(ctx, 8, DE440S_COVERAGE[1] - 86000.0, "J2000", "LT", 399), :nocoverage)
+        @test throws_kind(() -> spkezr(ctx, 8, DE440S_COVERAGE[1] - 86000.0, "J2000", "LT", 399), :spkinsuffdata)
     end
 
     cases = [(301, 399, "J2000", AB_FD_INERTIAL), (399, 10, "J2000", AB_FD_INERTIAL),

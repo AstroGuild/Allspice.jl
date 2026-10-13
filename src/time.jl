@@ -32,13 +32,21 @@ function build_lsk(pool::AbstractDict{String,PoolValue})::Union{Nothing,LeapSeco
     return LeapSeconds(dta[1], k[1], eb[1], (m[1], m[2]), copy(dat))
 end
 
-"Contract: returns the leap-second data of `ks`; throws `SpiceError(:nolsk)` if no leap-second kernel is loaded."
-function _lsk(ks::KernelSet)::LeapSeconds
+"""
+    _lsk(ks, kind=:noleapseconds) -> LeapSeconds
+
+Return the leap-second data of `ks`; throws `SpiceError(kind)` if no leap-second kernel
+is loaded. CSPICE signals another message by call: NOLEAPSECONDS in `ttrans` and what
+calls it, MISSINGTIMEINFO in `unitim`, `timout`, `et2utc` and the spacecraft clocks,
+KERNELVARNOTFOUND in `deltet`.
+"""
+function _lsk(ks::KernelSet, kind::Symbol=:noleapseconds)::LeapSeconds
     l = ks.lsk
-    l === nothing && throw(SpiceError(:nolsk,
-        "no leap-second kernel is loaded; load one (for example naif0012.tls) with furnsh"))
+    l === nothing && _throw_nolsk(kind)
     return l
 end
+@noinline _throw_nolsk(kind::Symbol) = throw(SpiceError(kind,
+    "no leap-second kernel is loaded; load one (for example naif0012.tls) with furnsh"))
 
 "Contract: `b` is upper case; returns whether `a` equals `b` when case is ignored, without allocation."
 _eqci(a::AbstractString, b::AbstractString) =
@@ -53,7 +61,7 @@ Return the difference ET - UTC in seconds at `epoch`, as `deltet_c`.
 for seconds past J2000 TDB; letter case is ignored. A leap-second kernel must be
 loaded.
 
-Throws `SpiceError(:nolsk)` if no leap-second kernel is loaded and
+Throws `SpiceError(:kernelvarnotfound)` if no leap-second kernel is loaded and
 `SpiceError(:badepochtype)` if `eptype` is not `"UTC"` or `"ET"`.
 
 # Examples
@@ -65,7 +73,7 @@ deltet(0.0, "ET")       # seconds, at J2000
 See also [`unitim`](@ref), [`str2et`](@ref).
 """
 function deltet(ks::KernelSet, epoch::Real, eptype::AbstractString)::Float64
-    l = _lsk(ks)
+    l = _lsk(ks, :kernelvarnotfound)
     typ = strip(eptype)
     isutc = _eqci(typ, "UTC")
     isutc || _eqci(typ, "ET") || throw(SpiceError(:badepochtype,
@@ -530,7 +538,7 @@ constants for TDB - TDT and for TDT - TAI. The result has the number type of
 allocate.
 
 Throws `SpiceError(:badtimetype)` if a scale is not one of the above and
-`SpiceError(:nolsk)` if no leap-second kernel is loaded.
+`SpiceError(:missingtimeinfo)` if no leap-second kernel is loaded.
 
 # Examples
 ```julia
@@ -542,7 +550,7 @@ tt = unitim(et, "TDB", "TT")        # seconds past J2000, TT
 See also [`deltet`](@ref).
 """
 function unitim(ks::KernelSet, epoch::Real, insys::AbstractString, outsys::AbstractString)
-    l = _lsk(ks)
+    l = _lsk(ks, :missingtimeinfo)
     i = _unitim_code(insys)
     o = _unitim_code(outsys)
     (i == 0 || o == 0) && _unitim_error(insys, outsys)
@@ -742,8 +750,8 @@ Contract: `from` and `to` are names of time-vector representations of CSPICE `tt
 `"YMWDF"`, `"DAYSEC"`, `"DP2000"`, `"FORMAL"`, `"JDUTC"`, `"TAI"`, `"TDT"`, `"TDB"`,
 `"ET"`, `"JED"`, `"JDTDB"`, `"JDTDT"`), in any case; `tvec` holds up to seven
 components. Returns the seven components of the same epoch in representation `to`.
-Throws `SpiceError(:badtimetype)` for another name and `SpiceError(:nolsk)` without a
-leap-second kernel. Internal: not exported.
+Throws `SpiceError(:badtimetype)` for another name and `SpiceError(:noleapseconds)` without
+a leap-second kernel. Internal: not exported.
 """
 function ttrans(ks::KernelSet, from::AbstractString, to::AbstractString, tv)
     l = _lsk(ks)

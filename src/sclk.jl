@@ -124,7 +124,7 @@ end
     "invalid SCLK rate (not positive) for the spacecraft clock $sc"))
 @noinline _sclk_badsys(sc, sys) = throw(SpiceError(:valueoutofrange,
     "invalid time system code $sys was found for the spacecraft clock $sc"))
-@noinline _sclk_nolsk() = throw(SpiceError(:nolsk,
+@noinline _sclk_nolsk() = throw(SpiceError(:missingtimeinfo,
     "a spacecraft clock with parallel time system TDT needs a leap-second kernel"))
 
 """
@@ -254,7 +254,8 @@ keeps its derivative. The call does not allocate.
 Throws `SpiceError(:kernelvarnotfound)` if no SCLK kernel for `sc` is loaded or its
 data are incomplete, and `SpiceError(:notsupported)` if the clock is not of type 1.
 Throws `SpiceError(:valueoutofrange)` if `sclkdp` is outside the range of the
-kernel and `SpiceError(:nolsk)` if a leap-second kernel is needed and not loaded.
+kernel and `SpiceError(:missingtimeinfo)` if a leap-second kernel is needed and not
+loaded.
 
 # Examples
 ```julia

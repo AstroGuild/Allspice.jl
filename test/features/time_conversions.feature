@@ -114,7 +114,15 @@ Feature: Conversions between time strings, ephemeris time and uniform time scale
     Then every conversion uses the defaults before a change or the defaults after it
     And no reader waits for a lock
 
-  Scenario: No leap-second kernel
+  Scenario Outline: No leap-second kernel
     Given a context with no kernel loaded
-    When the user calls "str2et", "et2utc", "timout" or "unitim"
-    Then a "SpiceError" with kind "nolsk" is thrown
+    When the user calls "<call>"
+    Then a "SpiceError" with kind "<kind>" is thrown, as in CSPICE
+
+    Examples:
+      | call   | kind              |
+      | str2et | noleapseconds     |
+      | et2utc | missingtimeinfo   |
+      | timout | missingtimeinfo   |
+      | unitim | missingtimeinfo   |
+      | deltet | kernelvarnotfound |

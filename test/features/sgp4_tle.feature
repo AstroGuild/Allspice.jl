@@ -98,7 +98,7 @@ Feature: Two-line elements and SPK segments of type 10
   Scenario: No leap-second kernel
     Given a context with the SPK file only
     When the user asks for a state of the type 10 segment
-    Then a SpiceError of the kind nolsk is thrown
+    Then a SpiceError of the kind noleapseconds is thrown
 
   Scenario Outline: Segment that spkw10 refuses
     When the user calls spkw10 with <defect>

@@ -214,8 +214,8 @@ sub_alloc_rec(ks) = @allocated srfrec(ks, 301, 0.1, 0.2)
             g_subslr("NEAR POINT/ELLIPSOID", "MOON", et, "IAU_MOON", "LT", "MOON")[1]) < SUB_TOL.point
         # No ephemeris data for Mars: CSPICE gives SPKINSUFFDATA, Allspice the kind of its SPK layer.
         @test c_kind(() -> g_subpnt("NEAR POINT/ELLIPSOID", "MARS", et, "IAU_MARS", "LT", "EARTH")) == :spkinsuffdata
-        @test neo_kind(() -> subpnt(ctx, "NEAR POINT/ELLIPSOID", "MARS", et, "IAU_MARS", "LT", "EARTH")) == :nopath
-        @test neo_kind(() -> sincpt(ctx, "ELLIPSOID", "MARS", et, "IAU_MARS", "LT", "EARTH", "J2000", e3)) == :nopath
+        @test neo_kind(() -> subpnt(ctx, "NEAR POINT/ELLIPSOID", "MARS", et, "IAU_MARS", "LT", "EARTH")) == :spkinsuffdata
+        @test neo_kind(() -> sincpt(ctx, "ELLIPSOID", "MARS", et, "IAU_MARS", "LT", "EARTH", "J2000", e3)) == :spkinsuffdata
         @test same_kind(() -> g_subslr("NEAR POINT/ELLIPSOID", "SUN", et, "IAU_SUN", "LT", "EARTH"),
             () -> subslr(ctx, "NEAR POINT/ELLIPSOID", "SUN", et, "IAU_SUN", "LT", "EARTH"); expect=:invalidtarget)
         @test same_kind(() -> g_subslr("NEAR POINT/ELLIPSOID", "MOON", et, "IAU_MOON", "XLT", "EARTH"),

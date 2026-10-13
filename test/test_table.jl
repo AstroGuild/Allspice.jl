@@ -97,9 +97,9 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
         @test throws_kind(() -> Allspice.EphemerisTable(zeros(5), 0.0, 1.0, 1, 2, 1, 2, 1, 0.0), :badarg)
         tab = ephemeris_table(ctx, 301, t0, t1, "J2000", "NONE", 399)
         lo, hi = table_span(tab)
-        @test throws_kind(() -> table_position(tab, lo - 1.0), :nocoverage)
-        @test throws_kind(() -> table_state(tab, hi + 1.0), :nocoverage)
-        @test throws_kind(() -> table_jet(tab, NaN, Val(2)), :nocoverage)
+        @test throws_kind(() -> table_position(tab, lo - 1.0), :spkinsuffdata)
+        @test throws_kind(() -> table_state(tab, hi + 1.0), :spkinsuffdata)
+        @test throws_kind(() -> table_jet(tab, NaN, Val(2)), :spkinsuffdata)
         @test table_position(tab, lo) isa SVector{3,Float64} && table_position(tab, hi) isa SVector{3,Float64}
         if Base.JLOptions().check_bounds != 1
             @test all(isfinite, table_unchecked(tab, hi + 1.0))   # extrapolation, by contract
@@ -211,7 +211,7 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
         @test moved.coef == single.coef && (moved.from, moved.to, moved.nint) == (tab.from, tab.to, tab.nint)
         @test occursin("RotationTable{Float64}", sprint(show, tab))
         @test rotation_table(ctx, 1, "IAU_EARTH", r0, r1; tol=1e-8).coef == tab.coef
-        @test throws_kind(() -> table_rotation(tab, r1 + 1.0), :nocoverage)
+        @test throws_kind(() -> table_rotation(tab, r1 + 1.0), :spkinsuffdata)
         @test throws_kind(() -> rotation_table(ctx, "J2000", "IAU_EARTH", r1, r0), :badarg)
         @test throws_kind(() -> rotation_table(ctx, "J2000", "IAU_EARTH", r0, r1; ncoef=1), :badarg)
         @test throws_kind(() -> rotation_table(ctx, "J2000", "IAU_EARTH", r0, r1; tol=-1.0), :badarg)

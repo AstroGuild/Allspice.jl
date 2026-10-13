@@ -7,7 +7,7 @@ Feature: Errors for queries that cannot be answered
 
   Scenario Outline: Epoch outside the coverage
     When the user asks for the state of body 301 relative to body 399 at ET <epoch> seconds
-    Then a "SpiceError" with kind "nocoverage" is thrown
+    Then a "SpiceError" with kind "spkinsuffdata" is thrown, as in CSPICE
     And the message is not empty
 
     Examples:
@@ -65,6 +65,17 @@ Feature: Errors for queries that cannot be answered
       | bodvrd | a body name that is not known          |
       | bodvrd | an item that is not in the kernel pool |
       | bodvrd | an item that holds strings             |
+
+  Scenario Outline: Missing SPK data have the kind of CSPICE
+    Given <loaded>
+    When the user asks for the state of <target> relative to body 399
+    Then a "SpiceError" with kind "<kind>" is thrown, as in CSPICE
+
+    Examples:
+      | loaded                   | target                           | kind          |
+      | "de440s.bsp"             | body 301 at an epoch outside it  | spkinsuffdata |
+      | "de440s.bsp"             | body 599, which is in no file    | spkinsuffdata |
+      | no SPK file              | body 301                         | noloadedfiles |
 
   Scenario: The kinds are registered
     When the user reads "Allspice.ERROR_KINDS"

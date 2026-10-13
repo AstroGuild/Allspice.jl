@@ -362,11 +362,9 @@ end
             () -> GFO.gfdist("NOSUCHBODY", "NONE", "EARTH", "=>", 1.0, 0.0, GF_DAY, c))
         both(:invalidoption, () -> gfdist(ctx, "MOON", "LT+X", "EARTH", "=", 1.0, 0.0, GF_DAY, cn),
             () -> GFO.gfdist("MOON", "LT+X", "EARTH", "=", 1.0, 0.0, GF_DAY, c))
-        # A body without ephemeris data has the kind that `spkezr` of this package gives
-        # it (`:nopath`); CSPICE signals an error too.
-        @test gf_kind(() -> gfdist(ctx, "PHOBOS", "NONE", "EARTH", "=", 1.0, 0.0, GF_DAY, cn)) in
-              (:nocoverage, :nopath)
-        @test GFO.kind(() -> GFO.gfdist("PHOBOS", "NONE", "EARTH", "=", 1.0, 0.0, GF_DAY, c)) !== :none
+        # A body without ephemeris data has the kind of `spkezr`.
+        both(:spkinsuffdata, () -> gfdist(ctx, "PHOBOS", "NONE", "EARTH", "=", 1.0, 0.0, GF_DAY, cn),
+            () -> GFO.gfdist("PHOBOS", "NONE", "EARTH", "=", 1.0, 0.0, GF_DAY, c))
     end
 
     FULL && @testset "search time against CSPICE (reported, not asserted)" begin

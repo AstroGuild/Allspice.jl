@@ -1818,7 +1818,7 @@ group("9. DAF access, SPK and CK writers") do
         @test after == before
         @test spkgeo(ctx2, -504, seg2.first, "J2000", 399) == spkgeo(ctx2, -501, seg2.first, "J2000", 399)
         @test spkobj(spk1) == [-504, -502, -501]
-        @test throws_kind(() -> spkgeo(snapshot, -504, seg2.first, "J2000", 399), :nopath)
+        @test throws_kind(() -> spkgeo(snapshot, -504, seg2.first, "J2000", 399), :spkinsuffdata)
         SPICE.kclear()
     end
 

@@ -414,7 +414,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         @test collect(getelm(ctx0, 1957, long)[2]) == SPICE.getelm(1957, long)[2]
         @test throws_kind(() -> getelm(ctx0, 1957, [l1, put(l2, 9:16, " 34.26é2")]), :badtle)
         # No leap-second kernel.
-        @test throws_kind(() -> getelm(SpiceContext(), 1957, [l1, l2]), :nolsk)
+        @test throws_kind(() -> getelm(SpiceContext(), 1957, [l1, l2]), :noleapseconds)
     end
 
     # Worst differences of each class: (b) evsgp4, (d) J2000 and IAU_EARTH.
@@ -572,7 +572,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         @test lt ≈ SPICE.spkezr(string(body), et, "J2000", "NONE", "399")[2] rtol = 1e-13
         @test spkgeo(ctx, 399, et, 1, body)[1] ≈ -state rtol = 1e-15
         # Outside the segment: no data.
-        @test throws_kind(() -> spkgeo(ctx, body, segs[5].t1 + 10.0, 1, 399), :nocoverage)
+        @test throws_kind(() -> spkgeo(ctx, body, segs[5].t1 + 10.0, 1, 399), :spkinsuffdata)
     end
 
     @apart @testset "accuracy table" begin
@@ -771,8 +771,8 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         @test throws_kind(() -> Allspice.spk_eval(data, seg, et, Val(1)), :notsupported)
         # A context without a leap-second kernel.
         nolsk = neo_context([pc])
-        @test throws_kind(() -> spkgeo(nolsk, -100005, et, 1, 399), :nolsk)
-        @test throws_kind(() -> evsgp4(nolsk, et, geophs, parsed[5][2]), :nolsk)
+        @test throws_kind(() -> spkgeo(nolsk, -100005, et, 1, 399), :noleapseconds)
+        @test throws_kind(() -> evsgp4(nolsk, et, geophs, parsed[5][2]), :noleapseconds)
         # Wrong counts of constants or elements.
         @test throws_kind(() -> evsgp4(ctx0, et, geophs[1:7], parsed[5][2]), :badarg)
         @test throws_kind(() -> evsgp4(ctx0, et, geophs, parsed[5][2][1:9]), :badarg)

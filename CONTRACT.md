@@ -187,9 +187,10 @@ evaluator pair `spkrNN`/`spkeNN` of CSPICE, so a plain epoch gives the CSPICE st
 ## `time.jl`, `timeparse.jl`, `timeout.jl`, `time_api.jl`
 
 Every function with a `ks` argument has a form with a `SpiceContext` and a form on the
-default context. The conversions need a leap-second kernel (`SpiceError(:nolsk)`).
+default context. The conversions need a leap-second kernel; the kind without one is that of CSPICE for
+the call (`:noleapseconds`, `:missingtimeinfo` or `:kernelvarnotfound`).
 
-- `build_lsk(pool) -> Union{Nothing,LeapSeconds}`; `_lsk(ks) -> LeapSeconds`.
+- `build_lsk(pool) -> Union{Nothing,LeapSeconds}`; `_lsk(ks, kind=:noleapseconds) -> LeapSeconds`.
 - `deltet(ks, epoch::Real, eptype::AbstractString) -> Float64` (ET − UTC, as `deltet_c`).
 - `unitim(ks, epoch::T, insys, outsys) -> T` between `TAI`, `TDT`, `TT`, `GPS`, `TDB`,
   `ET`, `JDTDT`, `JDTDB`, `JED`; generic over `T`, no allocation.
@@ -220,7 +221,7 @@ default context. The conversions need a leap-second kernel (`SpiceError(:nolsk)`
 - `jul2gr(y, m, d)`, `gr2jul(y, m, d) -> (year, month, day, doy)`.
 - Constants: `j1900 j1950 j2000 j2100 jyear tyear spd b1900 b1950 clight halfpi twopi
   rpd dpr`, each a function without arguments.
-- Errors: `:nolsk`, `:badtime` (string or epoch), `:badtimetype` (system or
+- Errors: `:noleapseconds`, `:missingtimeinfo`, `:badtime` (string or epoch), `:badtimetype` (system or
   representation), `:badepochtype` (`eptype` of `deltet`), `:badtimedefault` (`timdef`),
   `:badformat` (`et2utc` format, empty picture).
 
@@ -365,7 +366,7 @@ the default context, plus an inner form on a `KernelSet`.
   unknown name, and `namfrm` returns 0 for an unknown frame.
 - Internal: `spk_jet(ks, targ::Int32, et::T, ref::Int32, obs::Int32, ::Val{N}) ->
   NTuple{N+1,Vec3}` is the geometric position and its derivatives; it does not allocate
-  and throws `SpiceError(:nocoverage)` or `SpiceError(:nopath)`. It is the place where a
+  and throws `SpiceError(:spkinsuffdata)` or `SpiceError(:noloadedfiles)`. It is the place where a
   type 10 segment is evaluated, with `_t10_jet` and the leap seconds of `ks`.
   `frame_jet(ks, from, to, et, ::Val{N})` is the rotation jet for any epoch type.
 - `check_epoch(et)` throws `SpiceError(:badarg)` for an epoch that is not finite;
@@ -668,7 +669,7 @@ length. A query needs no kernel set, so it suits the inner loop of an optimizer.
 - `ephemeris_table(targ, t0, t1, ref, abcorr, obs; tol, ncoef, maxintervals)` builds a
   table; `table_jet(tab, et, Val(N)) -> NTuple{N+1,SVector{3}}`, `table_position`,
   `table_state` and `table_span` read it without allocation and without kernel access.
-  The range check throws `SpiceError(:nocoverage)` and is a bounds check: under
+  The range check throws `SpiceError(:spkinsuffdata)` and is a bounds check: under
   `@inbounds` it is removed, and an epoch outside the table is then extrapolated.
 - `table_to_spk(handle, tab, segid; first, last, ctx)` writes the table as one SPK
   segment of type 2 through `spkw02`, with the records of the table as its records.

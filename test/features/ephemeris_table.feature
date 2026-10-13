@@ -35,7 +35,7 @@ Feature: Ephemeris table for a fixed interval of time
 
   Scenario: Epoch outside the table
     When the user asks for an epoch before the start or after the end of the table
-    Then the call throws "SpiceError" of kind "nocoverage"
+    Then the call throws "SpiceError" of kind "spkinsuffdata", the kind of "spkezr" for an epoch outside the data
 
   Scenario: Other array types
     When the user converts the table with "adapt" or to "Float32" coefficients

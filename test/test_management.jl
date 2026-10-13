@@ -182,13 +182,13 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         ctx = neo_context(Kernels.full_set())
         lo, hi = -4.734072e9, 4.735368e9
         # Out of coverage: on both sides, and after the end in every form of the call.
-        @test throws_kind(() -> spkezr(ctx, 301, lo - 1e6, "J2000", "NONE", 399), :nocoverage)
+        @test throws_kind(() -> spkezr(ctx, 301, lo - 1e6, "J2000", "NONE", 399), :spkinsuffdata)
         et = hi + 1e6
-        @test throws_kind(() -> spkezr(ctx, 301, et, "J2000", "NONE", 399), :nocoverage)
-        @test throws_kind(() -> spkezr(ctx, "MOON", et, "J2000", "NONE", "EARTH"), :nocoverage)
-        @test throws_kind(() -> spkpos(ctx, 10, et, "J2000", "NONE", 0), :nocoverage)
-        @test throws_kind(() -> spkgeo(ctx, 399, et, "J2000", 10), :nocoverage)
-        @test throws_kind(() -> spkder(ctx, 301, et, "J2000", 399, Val(2)), :nocoverage)
+        @test throws_kind(() -> spkezr(ctx, 301, et, "J2000", "NONE", 399), :spkinsuffdata)
+        @test throws_kind(() -> spkezr(ctx, "MOON", et, "J2000", "NONE", "EARTH"), :spkinsuffdata)
+        @test throws_kind(() -> spkpos(ctx, 10, et, "J2000", "NONE", 0), :spkinsuffdata)
+        @test throws_kind(() -> spkgeo(ctx, 399, et, "J2000", 10), :spkinsuffdata)
+        @test throws_kind(() -> spkder(ctx, 301, et, "J2000", 399, Val(2)), :spkinsuffdata)
         # The ends of the coverage are inside it, as in CSPICE.
         oracle_load(Kernels.full_set())
         for et in (lo, hi)
@@ -219,7 +219,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         # The error is printable and names the kind.
         err = try spkezr(ctx, 301, 1e11, "J2000", "NONE", 399) catch e; e end
         @test err isa Allspice.SpiceError
-        @test occursin("nocoverage", sprint(showerror, err))
+        @test occursin("spkinsuffdata", sprint(showerror, err))
         @test !isempty(err.msg)
     end
 
@@ -275,6 +275,33 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
             @test nkind(neo) === ckind(c) === kind
         end
         SPICE.dvpool("BODY399_MGMT_TEXT")
+        # Regression: missing SPK data and missing leap seconds had the kinds `:nocoverage`,
+        # `:nopath` and `:nolsk` of this package. With SPK files loaded CSPICE has one
+        # message for an epoch outside the data and for a body in no file; with no SPK
+        # file it has another; without leap seconds the message depends on the call.
+        geo(targ, et) = ccall((:spkgeo_c, SPICE.libcspice), Cvoid, (Cint, Cdouble, Cstring, Cint,
+            Ptr{Cdouble}, Ptr{Cdouble}), targ, et, "J2000", 399, st, lt)
+        @test nkind(() -> spkgeo(ctx, 301, 1.0e11, "J2000", 399)) === ckind(() -> geo(301, 1.0e11)) === :spkinsuffdata
+        @test nkind(() -> spkgeo(ctx, 599, 0.0, "J2000", 399)) === ckind(() -> geo(599, 0.0)) === :spkinsuffdata
+        SPICE.kclear()
+        bare = SpiceContext()
+        buf = zeros(UInt8, 40)
+        bare_cases = (
+            (:noloadedfiles, () -> spkgeo(bare, 301, 0.0, "J2000", 399), () -> geo(301, 0.0)),
+            (:noleapseconds, () -> str2et(bare, "2000 JAN 1"),
+                () -> ccall((:str2et_c, SPICE.libcspice), Cvoid, (Cstring, Ptr{Cdouble}), "2000 JAN 1", lt)),
+            (:missingtimeinfo, () -> et2utc(bare, 0.0, "C", 3), () -> ccall((:et2utc_c, SPICE.libcspice), Cvoid,
+                (Cdouble, Cstring, Cint, Cint, Ptr{UInt8}), 0.0, "C", 3, 40, buf)),
+            (:missingtimeinfo, () -> timout(bare, 0.0, "YYYY"), () -> ccall((:timout_c, SPICE.libcspice), Cvoid,
+                (Cdouble, Cstring, Cint, Ptr{UInt8}), 0.0, "YYYY", 40, buf)),
+            (:missingtimeinfo, () -> unitim(bare, 0.0, "TDB", "TAI"), () -> ccall((:unitim_c, SPICE.libcspice),
+                Cdouble, (Cdouble, Cstring, Cstring), 0.0, "TDB", "TAI")),
+            (:kernelvarnotfound, () -> deltet(bare, 0.0, "ET"), () -> ccall((:deltet_c, SPICE.libcspice), Cvoid,
+                (Cdouble, Cstring, Ptr{Cdouble}), 0.0, "ET", lt)),
+        )
+        for (kind, neo, c) in bare_cases
+            @test nkind(neo) === ckind(c) === kind
+        end
     end
 
     @apart @testset "the registry of kinds holds the kinds that the source throws" begin

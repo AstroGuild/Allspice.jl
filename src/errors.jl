@@ -6,7 +6,7 @@
 The kinds of [`SpiceError`](@ref) that the package can throw, as a sorted tuple of
 symbols.
 
-Use it to check a kind that a handler tests: `:nocoverage in Allspice.ERROR_KINDS`. A
+Use it to check a kind that a handler tests: `:spkinsuffdata in Allspice.ERROR_KINDS`. A
 `SpiceError` with a kind that is not in the tuple cannot be constructed, so a comparison
 with such a kind is never true.
 """
@@ -58,24 +58,25 @@ const ERROR_KINDS = (
     :invalidstepsize, :invalidsublist, :invalidsubtype, :invalidtarget, :invalidtermtype,
     :invalidtolerance, :invalidtype, :invalidvalue, :invalidvertex, :irfnotrec,
     :itemnotfound, :kernelvarnotfound, :lowerboundtoolow, :missingdata, :missingframevar,
-    :missingvalue, :namesnotresolved, :noclass, :noconverg, :noconvergence, :nocoverage,
-    :nocurrentarray, :nodetoofull, :nodsksegments, :noframe, :noframeconnect, :noframeinfo,
-    :nofreenodes, :nointerval, :noloadedfiles, :nolsk, :nonconicmotion, :nonemptyentry,
-    :nonemptytree, :nonpositiveaxis, :nonpositivemass, :nonpositiveradius,
-    :nonpositivescale, :nonpositivevalue, :nonprintablechars, :nonprintingchars,
-    :nopartition, :nopath, :nosegmentsfound, :noseparation, :nosuchfile, :nosuchhandle,
-    :notanumber, :notarotation, :notcomputable, :notdisjoint, :notindexed, :notinpart,
-    :notranslation, :notrecognized, :notsupported, :numcoeffsnotpos, :numericoverflow,
-    :numpacketsnotpos, :numstatesnotpos, :objectstooclose, :orbitdecay, :outofrange,
-    :outofroom, :partialframespec, :platelisttoosmall, :pointeroutofrange, :pointnotfound,
-    :pointnotinsegment, :pointnotonsurface, :pointoffsurface, :pointonzaxis, :pointtoosmall,
-    :ptrarraytoosmall, :querynotparsed, :radiioutoforder, :rayiszerovector, :recordnotfound,
-    :recursiontoodeep, :recursiveloading, :refanglemissing, :refvectormissing,
-    :segidtoolong, :segmentnotopen, :shapemissing, :shapenotsupported, :sizemismatch,
-    :spkinvalidoption, :spktypenotsupp, :suborbital, :subpointnotfound, :syntaxerror,
-    :tablenotloaded, :timesdontmatch, :timesoutoforder, :toofewpackets, :toofewplates,
-    :toofewstates, :toofewvertices, :toomanyconjunctions, :toomanyhits, :toomanysurfaces,
-    :typemismatch, :typenotsupported, :unallocatednode, :undefinedframe, :uninitialized,
+    :missingtimeinfo, :missingvalue, :namesnotresolved, :noclass, :noconverg,
+    :noconvergence, :nocurrentarray, :nodetoofull, :nodsksegments, :noframe,
+    :noframeconnect, :noframeinfo, :nofreenodes, :nointerval, :noleapseconds,
+    :noloadedfiles, :nonconicmotion, :nonemptyentry, :nonemptytree, :nonpositiveaxis,
+    :nonpositivemass, :nonpositiveradius, :nonpositivescale, :nonpositivevalue,
+    :nonprintablechars, :nonprintingchars, :nopartition, :nosegmentsfound, :noseparation,
+    :nosuchfile, :nosuchhandle, :notanumber, :notarotation, :notcomputable, :notdisjoint,
+    :notindexed, :notinpart, :notranslation, :notrecognized, :notsupported,
+    :numcoeffsnotpos, :numericoverflow, :numpacketsnotpos, :numstatesnotpos,
+    :objectstooclose, :orbitdecay, :outofrange, :outofroom, :partialframespec,
+    :platelisttoosmall, :pointeroutofrange, :pointnotfound, :pointnotinsegment,
+    :pointnotonsurface, :pointoffsurface, :pointonzaxis, :pointtoosmall, :ptrarraytoosmall,
+    :querynotparsed, :radiioutoforder, :rayiszerovector, :recordnotfound, :recursiontoodeep,
+    :recursiveloading, :refanglemissing, :refvectormissing, :segidtoolong, :segmentnotopen,
+    :shapemissing, :shapenotsupported, :sizemismatch, :spkinsuffdata, :spkinvalidoption,
+    :spktypenotsupp, :suborbital, :subpointnotfound, :syntaxerror, :tablenotloaded,
+    :timesdontmatch, :timesoutoforder, :toofewpackets, :toofewplates, :toofewstates,
+    :toofewvertices, :toomanyconjunctions, :toomanyhits, :toomanysurfaces, :typemismatch,
+    :typenotsupported, :unallocatednode, :undefinedframe, :uninitialized,
     :uninitializedvalue, :unitsmissing, :unitsnotrec, :unknownbff, :unknownckmeta,
     :unknownfilarc, :unknownframe, :unknownframetype, :unknownmode, :unknownspktype,
     :unknownsystem, :unmatchendpts, :unnaturalrelation, :unorderedrefs, :unorderedtimes,
@@ -97,7 +98,7 @@ end
 
 The exception that the package throws for a call that fails.
 
-`kind` is a short symbol that names the failure, such as `:nocoverage`,
+`kind` is a short symbol that names the failure, such as `:spkinsuffdata`,
 `:kernelvarnotfound` or `:badarg`; test it to handle one failure. `msg` is the text for
 a person.
 
@@ -105,9 +106,9 @@ A kind is the short error message that CSPICE signals in the same call, in lower
 (`:kernelvarnotfound` for `SPICE(KERNELVARNOTFOUND)`). Two calls can therefore report
 the same failure with different kinds, as in CSPICE: a file that does not exist is
 `:nosuchfile` in `furnsh` and `:filenotfound` in `spkobj`. Test the kinds that the
-docstring of the call lists. A few kinds are names of this package, where CSPICE has no
-message or a less exact one: `:badarg` for an argument of the wrong size or type,
-`:nocoverage` and `:nopath` for missing SPK data, `:nolsk` for missing leap seconds.
+docstring of the call lists. Where CSPICE has no message, because the failure cannot
+occur in C or the call has no counterpart, the kind is a name of this package; the
+main one is `:badarg`, for an argument of the wrong size or type.
 
 A call of CSPICE that has a `found` flag returns `nothing` here when nothing is found,
 unless its docstring names another result (an error, `0`, an empty string or vector, or

@@ -169,7 +169,7 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
         @test throws_kind(() -> sct2e(other, -90, 0.0), :notsupported)
         # The TDT clock needs the leap-second kernel; the TDB clock does not.
         bare = neo_context([CKFix.sclk_kernel()])
-        @test throws_kind(() -> sct2e(bare, CKFix.SC_TDT, 1000.0), :nolsk)
+        @test throws_kind(() -> sct2e(bare, CKFix.SC_TDT, 1000.0), :missingtimeinfo)
         @test sct2e(bare, sc, 1000.0) == sct2e(ctx, sc, 1000.0)
     end
 

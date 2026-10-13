@@ -96,7 +96,7 @@ Base.show(io::IO, tab::EphemerisTable{T}) where {T} = print(io, "EphemerisTable{
     tab.ncoef, " coefficients, largest error ", tab.maxerr, " km)")
 
 @noinline _throw_table_range() =
-    throw(SpiceError(:nocoverage, "the epoch is outside the ephemeris table"))
+    throw(SpiceError(:spkinsuffdata, "the epoch is outside the ephemeris table"))
 
 @inline _tab_arg(::Type{T}, s::AbstractFloat) where {T} = T(s)
 @inline _tab_arg(::Type, s::Real) = s
@@ -112,8 +112,9 @@ derivative of the position polynomial. `et` is in seconds past J2000 TDB and is 
 plain number or a dual number. A plain epoch is used as `Float64` also when the
 coefficients are `Float32`. The call reads no kernel and does not allocate.
 
-Throws `SpiceError(:nocoverage)` if `et` is outside [`table_span`](@ref)`(tab)`. The
-check is a bounds check. Under `@inbounds`, as in a GPU kernel, it is removed, and an
+Throws `SpiceError(:spkinsuffdata)` if `et` is outside [`table_span`](@ref)`(tab)`;
+this is the kind of [`spkezr`](@ref) for an epoch outside the loaded data. The check is
+a bounds check. Under `@inbounds`, as in a GPU kernel, it is removed, and an
 epoch outside the table then gives the extrapolation of the nearest interval.
 
 See also [`table_position`](@ref), [`table_state`](@ref).
@@ -137,7 +138,7 @@ Return the position from the ephemeris table `tab` at `et`, in km.
 `tab.observer` and `tab.frame`. The rules for the epoch, for `@inbounds` and for the
 number types are those of [`table_jet`](@ref).
 
-Throws `SpiceError(:nocoverage)` if `et` is outside the table.
+Throws `SpiceError(:spkinsuffdata)` if `et` is outside the table.
 """
 Base.@propagate_inbounds table_position(tab::EphemerisTable, et::Real) = table_jet(tab, et, Val(0))[1]
 
@@ -152,7 +153,7 @@ aberration correction it is therefore order 1 of [`spkder`](@ref), not the veloc
 of [`spkezr`](@ref). The rules for the epoch, for `@inbounds` and for the number
 types are those of [`table_jet`](@ref).
 
-Throws `SpiceError(:nocoverage)` if `et` is outside the table.
+Throws `SpiceError(:spkinsuffdata)` if `et` is outside the table.
 """
 Base.@propagate_inbounds function table_state(tab::EphemerisTable, et::Real)
     r, v = table_jet(tab, et, Val(1))
@@ -513,7 +514,7 @@ lists the frame classes for which the derivative block of [`sxform`](@ref) diffe
 epoch, for `@inbounds` and for the number types are those of [`table_jet`](@ref). The
 call reads no kernel and does not allocate.
 
-Throws `SpiceError(:nocoverage)` if `et` is outside [`table_span`](@ref)`(tab)`.
+Throws `SpiceError(:spkinsuffdata)` if `et` is outside [`table_span`](@ref)`(tab)`.
 """
 Base.@propagate_inbounds function table_rotation_jet(tab::RotationTable{T}, et::Real, v::Val{N}) where {T,N}
     t = primal(et)
@@ -538,7 +539,7 @@ rotation table `tab`.
 `et` is in seconds past J2000 TDB. The rules for the epoch, for `@inbounds` and for
 the number types are those of [`table_jet`](@ref).
 
-Throws `SpiceError(:nocoverage)` if `et` is outside the table.
+Throws `SpiceError(:spkinsuffdata)` if `et` is outside the table.
 """
 Base.@propagate_inbounds table_rotation(tab::RotationTable, et::Real) =
     table_rotation_jet(tab, et, Val(0))[1]

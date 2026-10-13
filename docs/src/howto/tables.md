@@ -37,7 +37,7 @@ The function builds the table in one of two ways. For a geometric position in an
 
 The velocity of a table is always the derivative of its position, so that it can differ in the last digits from the velocity of `spkezr` for SPK types that store a separate velocity. An epoch can be a `ForwardDiff.Dual` number, also on the GPU.
 
-A query checks that the epoch is inside the table and throws `SpiceError(:nocoverage)` if it is not. The check is a bounds check, so `@inbounds` removes it, as a GPU function requires; an epoch outside the table then gives the extrapolation of the nearest interval.
+A query checks that the epoch is inside the table and throws `SpiceError(:spkinsuffdata)` if it is not. The check is a bounds check, so `@inbounds` removes it, as a GPU function requires; an epoch outside the table then gives the extrapolation of the nearest interval.
 
 ## On a GPU
 

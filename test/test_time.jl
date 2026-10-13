@@ -594,7 +594,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         @test occursin("month", lowercase(msg("2000-13-01")))
         @test occursin("seconds", lowercase(msg("2000 Jan 1 23:59:60")))
         @test occursin("blank", msg("  "))
-        @test throws_kind(() -> str2et(Allspice.empty_kernelset(), "2000 Jan 1"), :nolsk)
+        @test throws_kind(() -> str2et(Allspice.empty_kernelset(), "2000 Jan 1"), :noleapseconds)
         @test throws_kind(() -> str2et(ctx, "not a time"), :badtime)
     end
 
@@ -682,7 +682,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         @test nbit == ncmp
         @test throws_kind(() -> unitim(ctx, 0.0, "UTC", "TDB"), :badtimetype)
         @test throws_kind(() -> unitim(ctx, 0.0, "TDB", "XYZ"), :badtimetype)
-        @test throws_kind(() -> unitim(Allspice.empty_kernelset(), 0.0, "TDB", "TAI"), :nolsk)
+        @test throws_kind(() -> unitim(Allspice.empty_kernelset(), 0.0, "TDB", "TAI"), :missingtimeinfo)
         @test oracle_outcome(() -> SPICE.unitim(0.0, "UTC", "TDB")) === nothing
         # No allocation, for `unitim` and for `deltet`.
         f1(k, t) = unitim(k, t, "TDB", "TAI")

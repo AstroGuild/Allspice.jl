@@ -80,7 +80,7 @@ column 1 are not read.
 
 Throws `SpiceError`:
 - `:badarg` unless `lines` holds two lines;
-- `:nolsk` if no leap-second kernel is loaded;
+- `:noleapseconds` if no leap-second kernel is loaded;
 - `:badtle`, as CSPICE, in each of these cases:
   - the satellite numbers of the two lines differ;
   - a line does not have 68 or 69 characters (blanks at the end are not counted);
@@ -194,7 +194,7 @@ tuples, static vectors or vectors.
 
 Throws `SpiceError`:
 - `:badarg` unless `geophs` has 8 elements and `elems` has 10;
-- `:nolsk` if no leap-second kernel is loaded;
+- `:noleapseconds` if no leap-second kernel is loaded;
 - `:suborbital`, `:badmeanmotion`, `:badmeccentricity`, `:badmsemimajor`,
   `:badpeccentricity`, `:badsemilatus` or `:orbitdecay`, as CSPICE, for elements that
   cannot be propagated.
