@@ -44,22 +44,41 @@ end
 _lst_two(n::Integer) = string(n ÷ 10, n % 10)
 
 """
-    et2lst(et, body, lon, type) -> (hr, mn, sc, time, ampm)
+    et2lst([ctx,] et, body, lon, type) -> (hr, mn, sc, time, ampm)
 
-Local solar time at ET `et` for the longitude `lon` (radians) on the body with ID
-`body`, as `et2lst_c`: hour, minute and second on a 24 hour clock, the string
-`HH:MM:SS`, and the string `HH:MM:SS A.M.` or `HH:MM:SS P.M.` on a 12 hour clock.
-`type` is `"PLANETOCENTRIC"` or `"PLANETOGRAPHIC"` (case ignored) and says how `lon`
-is measured. The local solar time is the angle between the meridian of `lon` and the
-meridian of the Sun (position with the correction `LT+S` in the body-fixed frame of
-`cidfrm`), 12:00:00 at the sub-solar meridian, with 24 "hours" in one rotation; the
-sign of `BODY<body>_PM[2]` gives the direction of the rotation. For the Sun the
-result is always 12:00:00.
+Return the local solar time at `et` for the longitude `lon` on the body with ID
+`body`, as `et2lst_c`.
 
-Throws `SpiceError(:unknownsystem)` for another `type`, `SpiceError(:cantfindframe)`
-if the body has no body-fixed frame, and `SpiceError(:cantgetrotationtype)` without a
-numeric `BODY<body>_PM` of two or more values. Forms: on a `KernelSet`, on a
-`SpiceContext`, and on the default context.
+- `et`: seconds past J2000 TDB.
+- `lon`: longitude in radians.
+- `type`: `"PLANETOCENTRIC"` or `"PLANETOGRAPHIC"`, in any letter case; it says how
+  `lon` is measured.
+
+`hr`, `mn` and `sc` are the integer hour, minute and second on a 24 hour clock. `time`
+is the string `HH:MM:SS`, and `ampm` is the string `HH:MM:SS A.M.` or `HH:MM:SS P.M.`
+on a 12 hour clock.
+
+The local solar time is the angle between the meridian of `lon` and the meridian of
+the Sun, with 12:00:00 at the sub-solar meridian and 24 "hours" in one rotation; an
+"hour" is not 3600 s. The Sun is taken with the correction `"LT+S"` in the body-fixed
+frame of [`cidfrm`](@ref), and the sign of the second value of `BODY<body>_PM` gives
+the direction of the rotation. For the Sun (`body = 10`) the result is always
+12:00:00. The call needs SPK data for the body and the Sun and PCK data for the body.
+
+Throws `SpiceError(:unknownsystem)` if `type` is not one of the two,
+`SpiceError(:cantfindframe)` if the body has no body-fixed frame, and
+`SpiceError(:cantgetrotationtype)` if `BODY<body>_PM` is not a numeric variable of two
+or more values. For `"PLANETOGRAPHIC"`, throws `SpiceError(:invalidoption)` if
+`BODY<body>_PGR_POSITIVE_LON` is not `EAST` or `WEST`, and `SpiceError(:missingdata)`
+if that variable and `BODY<body>_PM` are both absent. Throws the errors of
+[`spkezr`](@ref).
+
+# Examples
+```julia
+furnsh("naif0012.tls"); furnsh("pck00011.tpc"); furnsh("de440s.bsp")
+et = str2et("2025-03-01T12:00:00")
+hr, mn, sc, time, ampm = et2lst(et, 399, deg2rad(-118.0), "PLANETOCENTRIC")
+```
 """
 function et2lst(ks::KernelSet, et::Real, body::Integer, lon::Real, type::AbstractString)
     system = uppercase(strip(type))
@@ -104,15 +123,27 @@ et2lst(et::Real, body::Integer, lon::Real, type::AbstractString) =
     et2lst(default_context(), et, body, lon, type)
 
 """
-    lspcn(body, et, abcorr) -> Float64
+    lspcn([ctx,] body, et, abcorr) -> Float64
 
-Planetocentric longitude of the Sun (L_s, radians in `[0, 2pi)`) for the body `body`
-(name or ID) at ET `et`, as `lspcn_c`: the right ascension of the Sun as seen from the
-body, with the correction `abcorr`, in the frame whose Z axis is the orbital angular
-momentum of the body about the Sun and whose X axis is the cross product of the north
-pole of the body and that Z axis (the vernal equinox of the body). Needs PCK data for
-the pole and SPK data for the body and the Sun. Forms: on a `KernelSet`, on a
-`SpiceContext`, and on the default context.
+Return the planetocentric longitude of the Sun (L_s) for `body` at `et`, in radians
+in `[0, 2pi)`, as `lspcn_c`.
+
+L_s is the season angle of the body: 0 at its spring equinox of the north, `pi/2` at
+the summer solstice of the north. It is the right ascension of the Sun as seen from
+the body in the frame whose Z axis is the orbital angular momentum of the body about
+the Sun and whose X axis is the cross product of the north pole of the body and that
+Z axis. `body` is a name or a NAIF ID, `et` is in seconds past J2000 TDB, and
+`abcorr` is as for [`spkezr`](@ref). The call needs PCK data for the pole and SPK data
+for the body and the Sun.
+
+Throws `SpiceError(:dependentvectors)` if the pole is parallel to the orbital angular
+momentum, and the errors of [`spkezr`](@ref) and [`tipbod`](@ref).
+
+# Examples
+```julia
+furnsh("naif0012.tls"); furnsh("pck00011.tpc"); furnsh("de440s.bsp")
+ls = rad2deg(lspcn("EARTH", str2et("2025-03-01"), "LT+S"))    # degrees
+```
 """
 function lspcn(ks::KernelSet, body::NameOrID, et::Real, abcorr::AbcorrArg)
     id = body_code(ks, body)

@@ -306,7 +306,6 @@ function _to_format(type::Int)
     return "XXXXXXXXXXX", 11
 end
 
-"Contract: returns the elements `v[i]` for which `keep[i]` is true, in order."
 function _to_keep(v::Vector{Int}, keep::Vector{Bool})
     @assert length(v) == length(keep)
     out = Int[]
@@ -365,21 +364,58 @@ function _to_scan(mystr::Vector{UInt8})
 end
 
 """
-    timout(ks, et, pictur, defs=TimeDefaults()) -> String
+    timout([ctx,] et, pictur) -> String
 
-Contract: `et` is TDB seconds past J2000 and `pictur` a format picture of CSPICE
-`timout`. The marks are `YYYY`, `YR`, `MM`, `MON`/`Mon`/`mon`, `MONTH`/`Month`/
-`month`, `DD`, `DOY`, `WKD`/`Wkd`/`wkd`, `WEEKDAY`/`Weekday`/`weekday`, `HR`, `AP`
-(hour 1..12), `MN`, `SC`, `AMPM`/`ampm`, `ERA`/`era`, `?ERA?`/`?era?` (blank from the
-year 1000 A.D.), `JULIAND`, `SP2000`, `SP1950`, `.#` and `#` (decimals of the
-component to the left), and the marks that write nothing: `::UTC`, `::TDB`, `::TDT`,
-`::TT`, `::UTC+h:mm`, `::UTC-h:mm` (time system or zone), `::GCAL`, `::JCAL`, `::MCAL`
-(calendar), `::RND`, `::TRNC` (round or truncate the last component; truncation is
-the default). Every other character is copied. A picture without a system mark uses
-the system or the zone of `defs`, and one without a calendar mark `defs.calendar`.
-Returns the string that CSPICE builds, without trailing blanks. Throws
-`SpiceError(:nolsk)` without a leap-second kernel and `SpiceError(:badformat)` for
-a picture of length zero, which the C interface of CSPICE rejects. Reads `ks.lsk` only.
+Return the epoch `et` (seconds past J2000 TDB) as a string in the form of the picture
+`pictur`, as `timout_c`.
+
+A leap-second kernel must be loaded. The picture is copied to the result with each
+mark replaced by its component. Marks are case sensitive:
+
+| Mark                                  | Component                                             |
+|:--------------------------------------|:------------------------------------------------------|
+| `YYYY`, `YR`                          | year; last two digits of the year                     |
+| `MM`                                  | month number                                          |
+| `MON`, `Mon`, `mon`                   | month name, three letters, in that letter case        |
+| `MONTH`, `Month`, `month`             | month name, in that letter case                       |
+| `DD`, `DOY`                           | day of the month; day of the year                     |
+| `WKD`, `Wkd`, `wkd`                   | weekday, three letters                                |
+| `WEEKDAY`, `Weekday`, `weekday`       | weekday                                               |
+| `HR`, `AP`                            | hour 0 to 23; hour 1 to 12                            |
+| `MN`, `SC`                            | minute; second                                        |
+| `AMPM`, `ampm`                        | `A.M.` or `P.M.`, in that letter case                 |
+| `ERA`, `era`                          | `B.C.` or `A.D.`                                      |
+| `?ERA?`, `?era?`                      | the era, blank from the year 1000 A.D.                |
+| `JULIAND`                             | Julian date                                           |
+| `SP2000`, `SP1950`                    | seconds past J2000; seconds past J1950                |
+| `.#`, `#`                             | decimal point and decimals of the component to the left |
+
+These marks write nothing and select how the components are computed:
+
+| Mark                                  | Selects                                               |
+|:--------------------------------------|:------------------------------------------------------|
+| `::UTC`, `::TDB`, `::TDT`, `::TT`     | time system                                           |
+| `::UTC+h:mm`, `::UTC-h:mm`            | time zone                                             |
+| `::GCAL`, `::JCAL`, `::MCAL`          | Gregorian, Julian or mixed calendar                   |
+| `::RND`, `::TRNC`                     | round or truncate the last component (default: truncate) |
+
+A picture without a system or zone mark is UTC, and one without a calendar mark is
+Gregorian, unless [`timdef`](@ref) changed the default of the context. The result has
+no trailing blanks. [`tpictr`](@ref) makes a picture from a sample string.
+
+Throws `SpiceError(:nolsk)` if no leap-second kernel is loaded and
+`SpiceError(:badformat)` if `pictur` is the empty string.
+
+# Examples
+```julia
+furnsh("naif0012.tls")
+et = str2et("2025-03-01T12:34:56.789")
+timout(et, "YYYY-MM-DDTHR:MN:SC.### ::UTC")       # ISO form, UTC, truncated
+timout(et, "Mon DD, YYYY AP:MN ampm ::UTC-8")     # 12 hour clock in a time zone
+timout(et, "JULIAND.##### ::TDB ::RND")           # Julian date in TDB, rounded
+```
+
+See also [`et2utc`](@ref), [`etcal`](@ref), [`str2et`](@ref).
 """
 function timout(ks::KernelSet, et::Real, pictur::AbstractString,
         defs::TimeDefaults=TimeDefaults())::String
@@ -736,18 +772,37 @@ end
 # ---------------------------------------------------------------------------------
 
 """
-    et2utc(ks, et, format, prec) -> String
+    et2utc([ctx,] et, format, prec) -> String
 
-Contract: `format` is `"C"` (`1986 APR 12 16:31:09.814`), `"D"`
-(`1986-102 // 16:31:09.814`), `"ISOC"` (`1986-04-12T16:31:09.814`), `"ISOD"`
-(`1986-102T16:31:09.814`) or `"J"` (`JD 2446533.18834276`), in any case; `prec` is
-the number of decimal places and is limited to 0..14 (CSPICE writes at most 14
-significant digits, so 13 places of seconds and 7 of a Julian date). Returns the UTC
-string of the TDB epoch `et` as CSPICE `et2utc` builds it, with seconds 60 inside a
-leap second; the fraction of the seconds is rounded, and a year before 1000 has
-`A.D.` or `B.C.` in the formats `C` and `D`. Throws `SpiceError(:badformat)` for
-another format, `SpiceError(:badtime)` for a year before 1 A.D. in an ISO format, and
-`SpiceError(:nolsk)` without a leap-second kernel. Reads `ks.lsk` only.
+Return the epoch `et` (seconds past J2000 TDB) as a UTC string, as `et2utc_c`.
+
+A leap-second kernel must be loaded. `format` selects the form; letter case is
+ignored:
+
+| `format` | Form                         |
+|:---------|:-----------------------------|
+| `"C"`    | `1986 APR 12 16:31:09.814`   |
+| `"D"`    | `1986-102 // 16:31:09.814`   |
+| `"J"`    | `JD 2446533.18834276`        |
+| `"ISOC"` | `1986-04-12T16:31:09.814`    |
+| `"ISOD"` | `1986-102T16:31:09.814`      |
+
+`prec` is the number of decimal places of the seconds, or of the Julian date. It is
+limited to 0 to 14, and CSPICE writes at most 14 significant digits: 13 places of
+seconds and 7 of a Julian date. The fraction is rounded. The seconds are 60 inside a
+leap second. A year before 1000 has `A.D.` or `B.C.` in the formats `C` and `D`.
+
+Throws `SpiceError(:badformat)` if `format` is not one of the five,
+`SpiceError(:badtime)` if the year is before 1 A.D. in an ISO format, and
+`SpiceError(:nolsk)` if no leap-second kernel is loaded.
+
+# Examples
+```julia
+furnsh("naif0012.tls")
+et2utc(0.0, "ISOC", 3)      # UTC at the epoch J2000 TDB
+```
+
+See also [`timout`](@ref), [`str2et`](@ref).
 """
 function et2utc(ks::KernelSet, et::Real, format::AbstractString, prec::Integer)::String
     fmt = uppercase(rstrip(first(format, 4), ' '))
@@ -806,15 +861,27 @@ function et2utc(ks::KernelSet, et::Real, format::AbstractString, prec::Integer):
 end
 
 """
-    etcal(et) -> String
+    etcal([ctx,] et) -> String
 
-Contract: `et` is TDB seconds past J2000. Returns the calendar string of `et` on a
-formal calendar in which every day has 86400 seconds, in the form
-`1986 APR 12 16:31:09.814` (TDB, no leap seconds, no kernel needed), with `A.D.`
-after a year before 1000 and `B.C.` for a year before 1, as CSPICE `etcal` builds it;
-the seconds are rounded to milliseconds but never up to 60. An epoch whose day number
-is outside the 32-bit integers gives `Epoch before ...` or `Epoch after ...` and the
-first or last date that can be written.
+Return the calendar string of `et` (seconds past J2000 TDB) on a formal calendar, as
+`etcal_c`.
+
+The string has the form `1986 APR 12 16:31:09.814`. It is a TDB date: every day has
+86400 seconds, there are no leap seconds, and the call needs no kernel. Use
+[`et2utc`](@ref) or [`timout`](@ref) for UTC. A year before 1000 has `A.D.` after it,
+and a year before 1 is written with `B.C.`. The seconds are rounded to milliseconds,
+but never up to 60. An epoch whose day number is outside the 32-bit integers gives
+`Epoch before ...` or `Epoch after ...` with the first or last date that can be
+written.
+
+# Examples
+```jldoctest
+julia> etcal(0.0)
+"2000 JAN 01 12:00:00.000"
+
+julia> etcal(-1.0e11)
+"1170 B.C. FEB 16 02:13:20.000"
+```
 """
 function etcal(et::Real)::String
     mynum = primal(et) + _HALFD

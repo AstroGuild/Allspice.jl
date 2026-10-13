@@ -45,12 +45,24 @@ _eqci(a::AbstractString, b::AbstractString) =
     ncodeunits(a) == ncodeunits(b) && all(((x, y),) -> uppercase(x) == y, zip(a, b))
 
 """
-    deltet(ks, epoch, eptype) -> Float64
+    deltet([ctx,] epoch, eptype) -> Float64
 
-Contract: `eptype` is `"UTC"` (`epoch` is UTC seconds past J2000) or `"ET"` (`epoch`
-is TDB seconds past J2000), in any case; returns ET - UTC in seconds at `epoch` with
-the arithmetic of CSPICE `deltet`. Throws `SpiceError(:nolsk)` without a leap-second
-kernel and `SpiceError(:badepochtype)` for another `eptype`. Reads `ks.lsk` only.
+Return the difference ET - UTC in seconds at `epoch`, as `deltet_c`.
+
+`eptype` says how `epoch` is measured: `"UTC"` for UTC seconds past J2000 or `"ET"`
+for seconds past J2000 TDB; letter case is ignored. A leap-second kernel must be
+loaded.
+
+Throws `SpiceError(:nolsk)` if no leap-second kernel is loaded and
+`SpiceError(:badepochtype)` if `eptype` is not `"UTC"` or `"ET"`.
+
+# Examples
+```julia
+furnsh("naif0012.tls")
+deltet(0.0, "ET")       # seconds, at J2000
+```
+
+See also [`unitim`](@ref), [`str2et`](@ref).
 """
 function deltet(ks::KernelSet, epoch::Real, eptype::AbstractString)::Float64
     l = _lsk(ks)
@@ -202,33 +214,89 @@ end
 # Constants
 # ---------------------------------------------------------------------------------
 
-"Contract: returns the Julian date of 1899 DEC 31 12:00:00 (`j1900_c`)."
+"""
+    j1900() -> Float64
+
+Return the Julian date of 1899 DEC 31 12:00:00, 2415020.0, as `j1900_c`.
+"""
 j1900() = 2415020.0
-"Contract: returns the Julian date of 1950 JAN 01 00:00:00 (`j1950_c`)."
+"""
+    j1950() -> Float64
+
+Return the Julian date of 1950 JAN 01 00:00:00, 2433282.5, as `j1950_c`.
+"""
 j1950() = 2433282.5
-"Contract: returns the Julian date of 2000 JAN 01 12:00:00 (`j2000_c`)."
+"""
+    j2000() -> Float64
+
+Return the Julian date of 2000 JAN 01 12:00:00, 2451545.0, as `j2000_c`.
+"""
 j2000() = _JD2000
-"Contract: returns the Julian date of 2100 JAN 01 12:00:00 (`j2100_c`)."
+"""
+    j2100() -> Float64
+
+Return the Julian date of 2100 JAN 01 12:00:00, 2488070.0, as `j2100_c`.
+"""
 j2100() = 2488070.0
-"Contract: returns the number of seconds in a Julian year, 31557600 (`jyear_c`)."
+"""
+    jyear() -> Float64
+
+Return the number of seconds in a Julian year, 31557600.0, as `jyear_c`.
+"""
 jyear() = 31557600.0
-"Contract: returns the number of seconds in a tropical year, 31556925.9747 (`tyear_c`)."
+"""
+    tyear() -> Float64
+
+Return the number of seconds in a tropical year, 31556925.9747, as `tyear_c`.
+"""
 tyear() = 31556925.9747
-"Contract: returns the number of seconds in a day, 86400 (`spd_c`)."
+"""
+    spd() -> Float64
+
+Return the number of seconds in a day, 86400.0, as `spd_c`.
+"""
 spd() = _SPD
-"Contract: returns the Julian date of the Besselian epoch B1900.0 (`b1900_c`)."
+"""
+    b1900() -> Float64
+
+Return the Julian date of the Besselian epoch B1900.0, 2415020.31352, as `b1900_c`.
+"""
 b1900() = 2415020.31352
-"Contract: returns the Julian date of the Besselian epoch B1950.0 (`b1950_c`)."
+"""
+    b1950() -> Float64
+
+Return the Julian date of the Besselian epoch B1950.0, 2433282.42345905, as `b1950_c`.
+"""
 b1950() = 2433282.42345905
-"Contract: returns the speed of light in vacuum in km/s (`clight_c`)."
+"""
+    clight() -> Float64
+
+Return the speed of light in vacuum in km/s, 299792.458, as `clight_c`.
+"""
 clight() = 299792.458
-"Contract: returns pi / 2 (`halfpi_c`)."
+"""
+    halfpi() -> Float64
+
+Return `pi / 2`, as `halfpi_c`.
+"""
 halfpi() = Float64(pi) / 2
-"Contract: returns 2 pi (`twopi_c`)."
+"""
+    twopi() -> Float64
+
+Return `2 pi`, as `twopi_c`.
+"""
 twopi() = 2 * Float64(pi)
-"Contract: returns the number of radians in a degree, pi / 180 (`rpd_c`)."
+"""
+    rpd() -> Float64
+
+Return the number of radians in a degree, `pi / 180`, as `rpd_c`.
+"""
 rpd() = Float64(pi) / 180.0
-"Contract: returns the number of degrees in a radian, 180 / pi (`dpr_c`)."
+"""
+    dpr() -> Float64
+
+Return the number of degrees in a radian, `180 / pi`, as `dpr_c`.
+"""
 dpr() = 180.0 / Float64(pi)
 
 # ---------------------------------------------------------------------------------
@@ -287,9 +355,20 @@ const _OFFSTG = _RDAYG - _RDAYJ
 """
     jul2gr(year, month, day) -> (year, month, day, doy)
 
-Contract: the input is a date of the Julian calendar (the year 1 B.C. is 0, 2 B.C. is
--1; `month` may be outside 1..12 and is reduced into the year); returns the same day
-in the extended Gregorian calendar and its day of year, as CSPICE `jul2gr`.
+Return the Gregorian calendar date, and its day of year, of a date given in the
+Julian calendar, as `jul2gr_` of CSPICE.
+
+Years are astronomical: 1 B.C. is 0 and 2 B.C. is -1. A `month` outside 1:12 is
+reduced into a year. The Gregorian calendar is extended to all dates. The result is a
+tuple of integers; CSPICE changes its arguments in place.
+
+# Examples
+```jldoctest
+julia> jul2gr(1582, 10, 5)    # the day after 1582 OCT 4 of the Julian calendar
+(1582, 10, 15, 288)
+```
+
+See also [`gr2jul`](@ref).
 """
 function jul2gr(year::Integer, month::Integer, day::Integer)
     yroff, mon = fldmod(Int(month) - 1, 12)
@@ -323,9 +402,16 @@ end
 """
     gr2jul(year, month, day) -> (year, month, day, doy)
 
-Contract: the input is a date of the extended Gregorian calendar; returns the same
-day in the Julian calendar and its day of year, as CSPICE `gr2jul`. Inverse of
-`jul2gr`.
+Return the Julian calendar date, and its day of year, of a date given in the extended
+Gregorian calendar, as `gr2jul_` of CSPICE.
+
+This is the inverse of [`jul2gr`](@ref), with the same conventions.
+
+# Examples
+```jldoctest
+julia> gr2jul(1582, 10, 15)
+(1582, 10, 5, 278)
+```
 """
 function gr2jul(year::Integer, month::Integer, day::Integer)
     yroff, mon = fldmod(Int(month) - 1, 12)
@@ -423,16 +509,37 @@ end
 end
 
 """
-    unitim(ks, epoch, insys, outsys)
+    unitim([ctx,] epoch, insys, outsys)
 
-Contract: `insys` and `outsys` are uniform time scales, in any case: `"TAI"`, `"TDT"`,
-`"TT"`, `"GPS"`, `"JDTDT"` (seconds past J2000, or a Julian date for `JD...`, of the
-TDT kind) and `"TDB"`, `"ET"`, `"JDTDB"`, `"JED"` (of the TDB kind). Returns `epoch`
-of scale `insys` expressed in scale `outsys` with the arithmetic of CSPICE `unitim`.
-The result has the number type of `epoch * 1.0`, so a `ForwardDiff.Dual` or a `Taylor`
-epoch keeps its derivatives. Does not allocate. Throws `SpiceError(:badtimetype)` for
-another scale and `SpiceError(:nolsk)` without a leap-second kernel. Reads `ks.lsk`
-only.
+Return the epoch `epoch` of the uniform time scale `insys` expressed in the scale
+`outsys`, as `unitim_c`.
+
+| Scale                    | Epoch is                                  |
+|:-------------------------|:------------------------------------------|
+| `"TAI"`                  | TAI seconds past J2000 TAI                |
+| `"TDT"`, `"TT"`          | TDT seconds past J2000 TDT                |
+| `"TDB"`, `"ET"`          | TDB seconds past J2000 TDB                |
+| `"GPS"`                  | GPS seconds, on the scale TAI - 19 s      |
+| `"JDTDT"`                | Julian date in TDT, days                  |
+| `"JDTDB"`, `"JED"`       | Julian date in TDB, days                  |
+
+Letter case is ignored. UTC is not a uniform scale: use [`str2et`](@ref) and
+[`et2utc`](@ref) for it. A leap-second kernel must be loaded; the call reads its
+constants for TDB - TDT and for TDT - TAI. The result has the number type of
+`epoch * 1.0`, so a dual-number epoch keeps its derivatives. The call does not
+allocate.
+
+Throws `SpiceError(:badtimetype)` if a scale is not one of the above and
+`SpiceError(:nolsk)` if no leap-second kernel is loaded.
+
+# Examples
+```julia
+furnsh("naif0012.tls")
+jd = unitim(et, "TDB", "JDTDB")     # Julian date, TDB
+tt = unitim(et, "TDB", "TT")        # seconds past J2000, TT
+```
+
+See also [`deltet`](@ref).
 """
 function unitim(ks::KernelSet, epoch::Real, insys::AbstractString, outsys::AbstractString)
     l = _lsk(ks)
@@ -501,7 +608,6 @@ end
 
 const TVec = NTuple{7,Float64}
 
-"Contract: returns the time vector whose first components are `x` and whose other components are 0."
 @inline _tvec(x::Vararg{Real,N}) where {N} = ntuple(i -> i <= N ? Float64(x[i]) : 0.0, Val(7))
 
 """

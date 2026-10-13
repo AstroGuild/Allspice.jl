@@ -140,7 +140,6 @@ is `vrotv_` of a unit vector); the identity for a zero axis. Generic over the an
         col(Vec3{Float64}(0.0, 0.0, 1.0)))
 end
 
-"Result of a CK evaluation that found no pointing."
 @inline _ck_none(::Type{T}) where {T} = (false, zero(Mat3{T}), zero(Vec3{T}), 0.0)
 
 "Angular velocity stored at `data[a:a+2]` as `Vec3{T}`, or zero if `has` is false."
@@ -817,7 +816,6 @@ end
 
 # --- CK meta data -------------------------------------------------------------------------
 
-"Default of `ckmeta_` for the clock and the SPK ID of the CK ID `ckid`: `ckid ÷ 1000` if `ckid <= -1000`, else 0."
 @inline _ckmeta_default(ckid::Integer) = ckid <= -1000 ? Int32(ckid ÷ 1000) : Int32(0)
 
 """

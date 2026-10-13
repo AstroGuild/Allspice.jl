@@ -92,7 +92,6 @@ Base.promote_rule(::Type{Taylor{N,T}}, ::Type{S}) where {N,T<:Real,S<:TaylorScal
 Base.promote_rule(::Type{Taylor{N,T}}, ::Type{Taylor{N,S}}) where {N,T<:Real,S<:Real} =
     Taylor{N,promote_type(T, S)}
 
-"`zero` and `one` of a Taylor type are the constants 0 and 1."
 Base.zero(::Type{Taylor{N,T}}) where {N,T<:Real} = Taylor{N,T}(zero(T))
 Base.one(::Type{Taylor{N,T}}) where {N,T<:Real} = Taylor{N,T}(one(T))
 Base.zero(x::Taylor) = zero(typeof(x))
@@ -178,7 +177,6 @@ Series quotient: `q_k = (x_k - Σ_{j=1}^{k} y_j q_{k-j}) / y_0`. Requires `y_0 !
     return Expr(:block, Expr(:meta, :inline), ex..., _pack(:q, N))
 end
 
-"`inv(x)` is `one(x) / x`."
 @inline Base.inv(x::Taylor) = one(x) / x
 
 """
@@ -206,7 +204,6 @@ Coupled recurrences `s_k = (1/k) Σ_{j=1}^{k} j x_j c_{k-j}` and
     return Expr(:block, Expr(:meta, :inline), ex..., :(($(_pack(:s, N)), $(_pack(:c, N)))))
 end
 
-"`sin(x)` and `cos(x)` are the two parts of `sincos(x)`."
 @inline Base.sin(x::Taylor) = sincos(x)[1]
 @inline Base.cos(x::Taylor) = sincos(x)[2]
 

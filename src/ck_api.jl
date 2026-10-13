@@ -63,17 +63,39 @@ end
 end
 
 """
-    ckgp(inst, sclkdp, tol, ref) -> (cmat::SMatrix{3,3}, clkout::Float64, found::Bool)
+    ckgp([ctx,] inst, sclkdp, tol, ref) -> (cmat, clkout, found)
 
-Pointing of the instrument or structure `inst` (CK ID) at the encoded spacecraft clock
-`sclkdp` within `tol` ticks, as `ckgp_c`: `cmat` rotates vectors from the frame `ref`
-(name or ID) to the instrument frame, and `clkout` is the clock time of the pointing
-that was used. Segments with and without angular velocity are searched in priority
-order. If no segment gives a pointing, `found` is false and `cmat` is zero. If `ref`
-is not the frame of the segment, the matrix is changed with the rotation between the
-two frames at the ET of `clkout` (which needs the SCLK kernel of the instrument unless
-both frames are inertial). Throws `SpiceError(:valueoutofrange)` for `tol < 0`.
-Forms: on a `KernelSet`, on a `SpiceContext`, and on the default context.
+Return the pointing of the instrument or structure `inst` at the encoded spacecraft
+clock value `sclkdp`, as `ckgp_c`.
+
+- `inst`: CK ID of the instrument or structure.
+- `sclkdp`: encoded spacecraft clock, in ticks (see [`sce2c`](@ref)).
+- `tol`: time tolerance in ticks, `>= 0`. A pointing within `tol` of `sclkdp` is
+  accepted.
+- `ref`: name or ID of the reference frame of the result.
+
+`cmat` is an `SMatrix{3,3}` that rotates a vector from `ref` to the instrument frame.
+`clkout` is the clock value, in ticks, of the pointing that was used. If no loaded CK
+segment gives a pointing, `found` is `false`, `cmat` is zero and `clkout` is 0.
+Segments with and without angular velocity are searched in priority order.
+
+If `ref` is not the frame of the segment, the matrix is changed with the rotation
+between the two frames at the epoch of `clkout`. This needs the SCLK kernel of the
+spacecraft, unless both frames are inertial.
+
+Throws `SpiceError(:valueoutofrange)` if `tol < 0`. Throws
+`SpiceError(:unknownframe)` if `ref` is not a known frame name; `ref` is read only
+when a pointing is found.
+
+# Examples
+```julia
+furnsh("naif0012.tls"); furnsh("mission.tsc"); furnsh("mission.bc")
+sclkdp = sce2c(-77, et)
+cmat, clkout, found = ckgp(-77000, sclkdp, 0.0, "J2000")
+found && (boresight_j2000 = cmat' * [0.0, 0.0, 1.0])
+```
+
+See also [`ckgpav`](@ref), [`ckcov`](@ref), [`pxform`](@ref).
 """
 function ckgp(ks::KernelSet, inst::Integer, sclkdp::Real, tol::Real, ref::NameOrID)
     i = Int32(inst)
@@ -88,12 +110,15 @@ function ckgp(ks::KernelSet, inst::Integer, sclkdp::Real, tol::Real, ref::NameOr
 end
 
 """
-    ckgpav(inst, sclkdp, tol, ref) -> (cmat, av::SVector{3}, clkout, found)
+    ckgpav([ctx,] inst, sclkdp, tol, ref) -> (cmat, av, clkout, found)
 
-Pointing and angular velocity of the instrument `inst` at the encoded spacecraft clock
-`sclkdp` within `tol` ticks, as `ckgpav_c`. Only segments with angular velocity are
-used. `av` is the angular velocity of the instrument frame relative to `ref`, in
-radians per second, expressed in `ref`. For the rest see `ckgp`.
+Return the pointing and the angular velocity of the instrument or structure `inst` at
+the encoded spacecraft clock value `sclkdp`, as `ckgpav_c`.
+
+`av` is an `SVector{3}`: the angular velocity of the instrument frame relative to
+`ref`, in rad/s, with components in `ref`. Only segments with angular velocity are
+used. If none gives a pointing, `found` is `false` and `cmat`, `av` and `clkout` are
+zero. The other arguments, results and errors are those of [`ckgp`](@ref).
 """
 function ckgpav(ks::KernelSet, inst::Integer, sclkdp::Real, tol::Real, ref::NameOrID)
     i = Int32(inst)
@@ -113,12 +138,23 @@ function ckgpav(ks::KernelSet, inst::Integer, sclkdp::Real, tol::Real, ref::Name
 end
 
 """
-    ckmeta(ckid, meta) -> Int
+    ckmeta([ctx,] ckid, meta) -> Int
 
-ID that belongs to the CK ID `ckid`, as `ckmeta_c`: for `meta = "SCLK"` the spacecraft
-clock (`CK_<ckid>_SCLK`), for `meta = "SPK"` the body (`CK_<ckid>_SPK`); without the
-variable `ckid ÷ 1000` if `ckid <= -1000`, else 0. Throws `SpiceError(:unknownckmeta)`
-for another item.
+Return the ID of the spacecraft clock or of the body that belongs to the CK ID
+`ckid`, as `ckmeta_c`.
+
+`meta` is `"SCLK"` for the clock ID or `"SPK"` for the body ID; letter case is
+ignored. The kernel-pool variables `CK_<ckid>_SCLK` and `CK_<ckid>_SPK` give the
+answer. Without the variable the answer is `ckid ÷ 1000` for `ckid <= -1000`, and 0
+otherwise.
+
+Throws `SpiceError(:unknownckmeta)` if `meta` is not one of the two.
+
+# Examples
+```jldoctest
+julia> ckmeta(-77000, "SCLK"), ckmeta(5, "SPK")
+(-77, 0)
+```
 """
 function ckmeta(ks::KernelSet, ckid::Integer, meta::AbstractString)
     item = uppercase(strip(meta))
@@ -142,9 +178,16 @@ end
 """
     ckobj(ck) -> Vector{Int}
 
-CK IDs of the instruments and structures that have a segment in the CK file at the path
-`ck`, ascending and without repeats, as the set that `ckobj_c` returns. The file does
-not have to be loaded.
+Return the CK IDs of the instruments and structures that have a segment in the CK file
+`ck`, sorted and without duplicates, as `ckobj_c`.
+
+The file is read from disk and need not be loaded.
+
+Throws `SpiceError(:nofile)` if the file does not exist, `SpiceError(:baddaf)` if it
+cannot be read as a DAF, and `SpiceError(:invalidfiletype)` if it is an SPK or a
+binary PCK.
+
+See also [`ckcov`](@ref).
 """
 ckobj(ck::AbstractString) = sort!(unique!(Int[s.inst for s in _ck_open(ck).cksegments]))
 
@@ -266,17 +309,39 @@ function _wnmerge(v::Vector{NTuple{2,Float64}})
 end
 
 """
-    ckcov(ck, idcode, needav, level, tol, timsys) -> Vector{NTuple{2,Float64}}
+    ckcov([ctx,] ck, idcode, needav, level, tol, timsys) -> Vector{NTuple{2,Float64}}
 
-Coverage of the instrument `idcode` in the CK file at the path `ck`, as `ckcov_c`: the
-ascending disjoint intervals `(start, stop)` on which the file gives a pointing.
-`needav` restricts the answer to segments with angular velocity. `level` is
-`"SEGMENT"` (the bounds in the segment descriptors) or `"INTERVAL"` (the intervals on
-which a pointing with tolerance zero exists). Each interval is widened by `tol >= 0`
-ticks on both sides (the start not below zero). `timsys` is `"SCLK"` (ticks) or `"TDB"`
-(ET seconds, converted with the SCLK kernel of the instrument, which must be loaded in
-the `KernelSet`). The CK file does not have to be loaded. Forms: on a `KernelSet`, on a
-`SpiceContext`, and on the default context.
+Return the coverage of the instrument or structure `idcode` in the CK file `ck`, as
+`ckcov_c`.
+
+The result is the list of the intervals `(start, stop)` on which the file gives a
+pointing, ascending and disjoint. Different from [`spkcov`](@ref), the result is a
+vector of tuples and not a `Window`, and there is no form that adds to a window.
+
+- `needav`: `true` restricts the answer to segments with angular velocity.
+- `level`: `"SEGMENT"` gives the bounds in the segment descriptors; `"INTERVAL"` gives
+  the intervals on which a pointing with tolerance zero exists.
+- `tol`: `>= 0`, in ticks. Each interval is widened by `tol` on both sides; the start
+  does not go below zero.
+- `timsys`: `"SCLK"` gives encoded clock ticks; `"TDB"` gives seconds past J2000 TDB.
+  `"TDB"` needs the SCLK kernel of the spacecraft in `ctx`.
+
+The CK file is read from disk and need not be loaded.
+
+Throws `SpiceError(:valueoutofrange)` if `tol < 0`, `SpiceError(:invalidoption)` if
+`level` is not one of the two, `SpiceError(:unsupported)` if `timsys` is not one of
+the two, the file errors of [`ckobj`](@ref), and for `"TDB"` the errors of
+[`sct2e`](@ref).
+
+# Examples
+```julia
+furnsh("naif0012.tls"); furnsh("mission.tsc")
+for id in ckobj("mission.bc")
+    for (start, stop) in ckcov("mission.bc", id, false, "INTERVAL", 0.0, "TDB")
+        println(id, ": ", et2utc(start, "ISOC", 0), " to ", et2utc(stop, "ISOC", 0))
+    end
+end
+```
 """
 function ckcov(ks::KernelSet, ck::AbstractString, idcode::Integer, needav::Bool,
         level::AbstractString, tol::Real, timsys::AbstractString)

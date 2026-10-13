@@ -4,12 +4,25 @@
 # a form on a `KernelSet`, on a `SpiceContext` and on the default context.
 
 """
-    frinfo(frcode) -> Union{Nothing,Tuple{Int,Int,Int}}
+    frinfo([ctx,] frcode) -> Union{Nothing,Tuple{Int,Int,Int}}
 
-Center, class and class ID of the frame with ID `frcode`, as `frinfo_c`, or `nothing`
-if the frame is not known. A built-in frame has priority over a frame of the kernel
-pool, and an ID in 13000:13999 without a specification is a class 2 frame of the Earth
-with the class ID `frcode - 10000`.
+Return `(center, class, classid)` of the frame with ID `frcode`, as `frinfo_c`, or
+`nothing` if the frame is not known.
+
+`center` is the NAIF ID of the body at the frame origin. `class` is 1 for inertial, 2
+for PCK, 3 for CK, 4 for fixed offset, 5 for dynamic and 6 for switch frames;
+`classid` is the ID of the frame inside its class. A built-in frame has priority over
+a frame of the kernel pool. An ID in 13000:13999 without a definition is a PCK frame
+of the Earth with the class ID `frcode - 10000`, as in CSPICE. `nothing` takes the
+place of the `found` flag.
+
+# Examples
+```jldoctest
+julia> frinfo(namfrm("IAU_EARTH")), frinfo(-999)
+((399, 2, 399), nothing)
+```
+
+See also [`namfrm`](@ref), [`ccifrm`](@ref).
 """
 function frinfo(ks::KernelSet, frcode::Integer)
     (typemin(Int32) <= frcode <= typemax(Int32)) || return nothing
@@ -62,13 +75,24 @@ const _FRAME_CENTER_ORDER = let all = Tuple{Int,String,Int}[]
 end
 
 """
-    cidfrm(cent) -> Union{Nothing,Tuple{Int,String}}
+    cidfrm([ctx,] cent) -> Union{Nothing,Tuple{Int,String}}
 
-ID and name of the frame that is associated with the body with ID `cent`, as
-`cidfrm_c`, or `nothing` if there is none. The variable `OBJECT_<cent>_FRAME` (or
-`OBJECT_<name>_FRAME`) of the kernel pool has priority; without it the answer is
-`IAU_EARTH` for the Earth and otherwise the built-in frame whose center is `cent` (for
-a center with several built-in frames, the one that the binary search of CSPICE finds).
+Return `(frcode, frname)` of the frame that is associated with the body with ID
+`cent`, as `cidfrm_c`, or `nothing` if there is none.
+
+The kernel-pool variable `OBJECT_<cent>_FRAME` (or `OBJECT_<name>_FRAME`) has
+priority. Without it the answer is `IAU_EARTH` for the Earth, and otherwise a built-in
+frame whose center is `cent`. For a center with several built-in frames the answer is
+the one that the binary search of CSPICE finds. `nothing` takes the place of the
+`found` flag.
+
+# Examples
+```jldoctest
+julia> cidfrm(499)
+(10014, "IAU_MARS")
+```
+
+See also [`cnmfrm`](@ref).
 """
 function cidfrm(ks::KernelSet, cent::Integer)
     v = get(ks.pool, "OBJECT_$(cent)_FRAME", nothing)
@@ -92,12 +116,22 @@ function cidfrm(ks::KernelSet, cent::Integer)
 end
 
 """
-    cnmfrm(cname) -> Union{Nothing,Tuple{Int,String}}
+    cnmfrm([ctx,] cname) -> Union{Nothing,Tuple{Int,String}}
 
-ID and name of the frame that is associated with the body called `cname`, as
-`cnmfrm_c`, or `nothing` if there is none. The variable `OBJECT_<cname>_FRAME` (or
-`OBJECT_<id>_FRAME`) of the kernel pool has priority; without it the answer is the
-built-in frame `IAU_<CNAME>`, if it exists.
+Return `(frcode, frname)` of the frame that is associated with the body called
+`cname`, as `cnmfrm_c`, or `nothing` if there is none.
+
+The kernel-pool variable `OBJECT_<cname>_FRAME` (or `OBJECT_<id>_FRAME`) has priority.
+Without it the answer is the built-in frame `IAU_<CNAME>`, if it exists. `nothing`
+takes the place of the `found` flag.
+
+# Examples
+```jldoctest
+julia> cnmfrm("Mars"), cnmfrm("NO SUCH BODY")
+((10014, "IAU_MARS"), nothing)
+```
+
+See also [`cidfrm`](@ref).
 """
 function cnmfrm(ks::KernelSet, cname::AbstractString)
     name = String(strip(cname))
@@ -113,13 +147,22 @@ function cnmfrm(ks::KernelSet, cname::AbstractString)
 end
 
 """
-    ccifrm(frclss, clssid) -> Union{Nothing,Tuple{Int,String,Int}}
+    ccifrm([ctx,] frclss, clssid) -> Union{Nothing,Tuple{Int,String,Int}}
 
-ID, name and center of the frame with the class `frclss` and the class ID `clssid`, as
-`ccifrm_c`, or `nothing` if there is none. The built-in frames are searched first, in
-the order of their table; then the frames of the kernel pool, of which the one with
-the smallest ID is returned if several match (CSPICE returns the first one in the
-order of its hash table).
+Return `(frcode, frname, center)` of the frame with the class `frclss` and the class
+ID `clssid`, as `ccifrm_c`, or `nothing` if there is none.
+
+The built-in frames are searched first. If several frames of the kernel pool match,
+the one with the smallest ID is returned; CSPICE returns the first one in the order
+of its hash table. `nothing` takes the place of the `found` flag.
+
+# Examples
+```jldoctest
+julia> ccifrm(2, 499)
+(10014, "IAU_MARS", 499)
+```
+
+See also [`frinfo`](@ref).
 """
 function ccifrm(ks::KernelSet, frclss::Integer, clssid::Integer)
     if frclss == 1 && 1 <= clssid <= N_INERTIAL_FRAMES
@@ -137,12 +180,15 @@ function ccifrm(ks::KernelSet, frclss::Integer, clssid::Integer)
 end
 
 """
-    tkfram(frcode) -> Union{Nothing,Tuple{SMatrix{3,3,Float64,9},Int}}
+    tkfram([ctx,] frcode) -> Union{Nothing,Tuple{SMatrix{3,3,Float64,9},Int}}
 
-Data of the fixed-offset (class 4) frame with the class ID `frcode`, as `tkfram_`: the
-matrix that rotates vectors from that frame to its relative frame, and the ID of the
-relative frame. `nothing` if no valid `TKFRAME_<frcode>_*` definition is loaded (CSPICE
-signals an error for an incomplete definition).
+Return `(rot, relative)` of the fixed-offset (class 4) frame with the class ID
+`frcode`, as `tkfram_` of CSPICE, or `nothing` if no valid definition is loaded.
+
+`rot` rotates a vector from the frame to its relative frame, the frame with ID
+`relative`; this is the meaning of `TKFRAME_<frcode>_MATRIX`. The definition comes
+from the `TKFRAME_<frcode>_*` variables of the kernel pool. For an incomplete
+definition CSPICE signals an error, and this call returns `nothing`.
 """
 function tkfram(ks::KernelSet, frcode::Integer)
     r = ccifrm(ks, 4, frcode)
@@ -182,20 +228,33 @@ function _tis_jet(ks::KernelSet, ref::NameOrID, body::Integer, et::Real)
 end
 
 """
-    tipbod(ref, body, et) -> SMatrix{3,3}
+    tipbod([ctx,] ref, body, et) -> SMatrix{3,3}
 
-Matrix that rotates positions from the inertial frame `ref` (name or ID) to the
-body-fixed frame of `body` (ID) at ET `et`, as `tipbod_c`. Throws
-`SpiceError(:irfnotrec)` if `ref` is not a built-in inertial frame and
-`SpiceError(:framedatanotfound)` without PCK data for the body.
+Return the matrix that rotates a position vector from the inertial frame `ref` to the
+body-fixed frame of `body` at `et`, as `tipbod_c`.
+
+`ref` is the name or the ID of a built-in inertial frame. `body` is a NAIF body ID, or
+the frame class ID of a binary PCK frame. `et` is in seconds past J2000 TDB. A binary
+PCK has priority over the constants of a text PCK.
+
+Throws `SpiceError(:irfnotrec)` if `ref` is not a built-in inertial frame,
+`SpiceError(:badarg)` if `et` is not finite, and `SpiceError(:framedatanotfound)` if
+no PCK data are loaded for the body.
+
+See also [`tisbod`](@ref), [`pxform`](@ref).
 """
 tipbod(ks::KernelSet, ref::NameOrID, body::Integer, et::Real) = _tis_jet(ks, ref, body, et)[1]
 
 """
-    tisbod(ref, body, et) -> SMatrix{6,6}
+    tisbod([ctx,] ref, body, et) -> SMatrix{6,6}
 
-State transformation `[R 0; dR R]` from the inertial frame `ref` (name or ID) to the
-body-fixed frame of `body` (ID) at ET `et`, as `tisbod_c`. Throws as `tipbod`.
+Return the matrix that transforms a state from the inertial frame `ref` to the
+body-fixed frame of `body` at `et`, as `tisbod_c`.
+
+The matrix is `[R 0; dR R]`, with `R` the matrix of [`tipbod`](@ref) and `dR` its
+time derivative in 1/s. The arguments and the errors are those of `tipbod`.
+
+See also [`sxform`](@ref).
 """
 function tisbod(ks::KernelSet, ref::NameOrID, body::Integer, et::Real)
     r, dr = _tis_jet(ks, ref, body, et)
@@ -206,9 +265,12 @@ end
     pckfrm!(ids, pck) -> ids
 
 Insert the frame class IDs of the frames that have data in the binary PCK file `pck`
-into the vector `ids`, which is used as a set (sorted, without duplicates), as `pckfrm_c`
-(argument order of SPICE.jl). The file need not be loaded. Throws `SpiceError` as
-[`spkobj`](@ref), for a file that is not a binary PCK.
+into the vector `ids`, as `pckfrm_c` does with a SPICE cell.
+
+`ids` is used as a set: on return it is sorted and without duplicates. The argument
+order is the one of SPICE.jl. The file is read from disk and need not be loaded.
+
+Throws the errors of [`pckfrm`](@ref).
 """
 function pckfrm!(ids::AbstractVector{<:Integer}, pck::AbstractString)
     _require_binary_kernel("pckfrm", pck, "PCK")
@@ -223,8 +285,17 @@ end
 """
     pckfrm(pck) -> Vector{Int}
 
-Frame class IDs of the frames that have data in the binary PCK file `pck`, sorted and
-without duplicates, as `pckfrm_c`.
+Return the frame class IDs of the frames that have data in the binary PCK file `pck`,
+sorted and without duplicates, as `pckfrm_c`.
+
+The file is read from disk and need not be loaded.
+
+Throws `SpiceError(:filenotfound)` if the file does not exist,
+`SpiceError(:invalidformat)` if it is a transfer file, `SpiceError(:invalidarchtype)`
+if it is not a DAF, and `SpiceError(:invalidfiletype)` if it is a DAF of another
+kernel type.
+
+See also [`pckcov`](@ref).
 """
 pckfrm(pck::AbstractString) = pckfrm!(Int[], pck)
 
@@ -232,7 +303,11 @@ pckfrm(pck::AbstractString) = pckfrm!(Int[], pck)
     pckcov!(cover, pck, idcode) -> cover
 
 Insert the coverage of the frame with the class ID `idcode` in the binary PCK file
-`pck` into the window `cover` (union with its old content), as `pckcov_c`.
+`pck` into the window `cover`, as `pckcov_c`.
+
+The result is the union of the old content of `cover` with the new intervals. The
+argument order is the one of SPICE.jl. See [`pckcov`](@ref) for the intervals and the
+errors.
 """
 function pckcov!(cover::Window, pck::AbstractString, idcode::Integer)
     _require_binary_kernel("pckcov", pck, "PCK")
@@ -245,26 +320,58 @@ end
 """
     pckcov(pck, idcode) -> Window
 
-Coverage window (ET seconds) of the frame with the class ID `idcode` in the binary PCK
-file `pck`, as `pckcov_c`; empty if the frame has no data.
+Return the coverage window of the frame with the class ID `idcode` in the binary PCK
+file `pck`, as `pckcov_c`.
+
+The window is the union of the intervals of the segments of that frame, in seconds
+past J2000 TDB. It is empty if the frame has no data. The file is read from disk and
+need not be loaded.
+
+Throws the errors of [`pckfrm`](@ref).
+
+See also [`pckcov!`](@ref), [`spkcov`](@ref).
 """
 pckcov(pck::AbstractString, idcode::Integer) = pckcov!(Window(), pck, idcode)
 
 """
-    bodfnd(body, item) -> Bool
+    bodfnd([ctx,] body, item) -> Bool
 
-True if the kernel pool holds the variable `BODY<body>_<item>` (numeric or character),
-as `bodfnd_c`. `item` is case sensitive.
+Return `true` if the kernel pool holds the variable `BODY<body>_<item>`, as
+`bodfnd_c`.
+
+`body` is a NAIF ID code. `item` is case sensitive; blanks around it are ignored. The
+variable can be numeric or character.
+
+See also [`bodvcd`](@ref).
 """
 bodfnd(ks::KernelSet, body::Integer, item::AbstractString) =
     haskey(ks.pool, string("BODY", body, "_", strip(item)))
 
 """
-    bodvcd(bodyid, item) -> Vector{Float64}
+    bodvcd([ctx,] bodyid, item) -> Vector{Float64}
 
-Values of the kernel-pool variable `BODY<bodyid>_<item>`, as `bodvcd_c`. Throws
-`SpiceError(:kernelvarnotfound)` if the variable is absent and
-`SpiceError(:typemismatch)` if it is character.
+Return the values of the kernel-pool variable `BODY<bodyid>_<item>`, as `bodvcd_c`.
+
+`bodyid` is a NAIF ID code; [`bodvrd`](@ref) takes a body name. `item` is case
+sensitive. The result is a new vector with every value, in the units of the kernel;
+there is no `maxn` argument.
+
+Throws `SpiceError(:kernelvarnotfound)` if the variable is not in the pool and
+`SpiceError(:typemismatch)` if it holds character values. Note that `bodvrd` reports
+the same two failures with the kinds `:notfound` and `:badtype`.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> pdpool(ctx, "BODY399_RADII", [6378.1366, 6378.1366, 6356.7519]);
+
+julia> bodvcd(ctx, 399, "RADII")
+3-element Vector{Float64}:
+ 6378.1366
+ 6378.1366
+ 6356.7519
+```
 """
 function bodvcd(ks::KernelSet, bodyid::Integer, item::AbstractString)
     key = string("BODY", bodyid, "_", strip(item))

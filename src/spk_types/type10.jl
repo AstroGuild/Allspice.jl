@@ -399,7 +399,6 @@ end
     return _t10_dvhat(_cross(p1, p2), _cross(v1, p2) + _cross(p1, v2))
 end
 
-"Row `i` of `m` as a vector."
 @inline _t10_row(m::Mat3{T}, i::Int) where {T} = Vec3{T}(m[i, 1], m[i, 2], m[i, 3])
 
 """

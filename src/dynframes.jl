@@ -32,7 +32,6 @@ const _DYN_PRODUCT = Int8(6)
 "Number of snapshots below the one that the user holds: levels 1 and 2 of CSPICE."
 const _DYN_LEVELS = 2
 
-"A `DynVector` that is not used."
 const _DYN_NOVECTOR = DynVector(0, 1, false, 0x00, 0, 0, 0, 0, 0, zero(SVector{3,Float64}))
 
 # ---------------------------------------------------------------------------------------
@@ -83,7 +82,6 @@ function _dyn_chars(pool, id, name, item, maxn::Int)
     return v
 end
 
-"Contract: the single character value of a required definition item."
 _dyn_char(pool, id, name, item) = _dyn_chars(pool, id, name, item, 1)[1]
 
 "Contract: the single character value of an optional definition item, or `nothing`, as `zzdynoac_`."
@@ -445,7 +443,6 @@ end
 @inline _dyn_still(x::Taylor{1,Float64}) = Taylor((x.v, 0.0))
 @inline _dyn_still(x::Float64) = x
 
-"The constant `x` in the number type `S`."
 @inline _dyn_lift(::Type{S}, x::Float64) where {S<:Real} = convert(S, x)
 @inline _dyn_lift(::Type{S}, x::Taylor{1,Float64}) where {S<:Real} = convert(S, _dyn_still(x))
 

@@ -345,7 +345,6 @@ end
 const _BEGINDATA = Vector{UInt8}(codeunits("\\begindata"))
 const _BEGINTEXT = Vector{UInt8}(codeunits("\\begintext"))
 
-"Throws `SpiceError(:badkernel)` with `msg` and the place `lineno` of `path`."
 @noinline _tk_fail(path, lineno::Int, msg) =
     throw(SpiceError(:badkernel, "$msg (line $lineno of '$path')"))
 

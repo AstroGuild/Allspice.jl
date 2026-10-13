@@ -56,7 +56,6 @@ another frame is rotated with the rotation jet of that frame.
     return rotate_jet(frame_jet(ks, seg.frame, Int32(1), et, Val(N)), jet)
 end
 
-"Index of `body` in the first `n` entries of `chain`, or 0."
 @inline function chain_index(chain::NTuple{MAXCHAIN,Int32}, n::Int, body::Int32)
     for k in 1:n
         chain[k] == body && return k
@@ -87,7 +86,6 @@ end
         "observer chain ends at body $oend"))
 end
 
-"Throw the error for a chain that is longer than `MAXCHAIN`."
 @noinline throw_chain_depth(targ, obs, t::Float64) = throw(SpiceError(:nopath,
     "the SPK chain between target $targ and observer $obs at ET $t s is longer than " *
     "$MAXCHAIN bodies"))
@@ -147,7 +145,6 @@ function spk_jet(ks::KernelSet, targ::Int32, et::T, ref::Int32, obs::Int32,
     return rotate_jet(frame_jet(ks, Int32(1), ref, et, Val(N)), jet)
 end
 
-"Return `et` as a floating-point epoch; throws `SpiceError(:badarg)` if it is not finite."
 @inline function check_epoch(et::Real)
     isfinite(primal(et)) || throw(SpiceError(:badarg, "the epoch is not finite"))
     return float(et)
@@ -156,13 +153,6 @@ end
 "A body or a frame given by name or by integer ID."
 const NameOrID = Union{AbstractString,Integer}
 
-"""
-    spkder(targ, et, ref, obs, Val(N)) -> NTuple{N+1,SVector{3}}
-
-Return the geometric position of `targ` relative to `obs` in frame `ref` at ET `et`
-(km) and its time derivatives to order N. Forms: on a `KernelSet`, on a `SpiceContext`,
-and on the default context. `targ`, `obs`, `ref` are names or integer IDs.
-"""
 function spkder(ks::KernelSet, targ::NameOrID, et::Real, ref::NameOrID, obs::NameOrID,
         ::Val{N}) where {N}
     N isa Int && N >= 0 || throw(SpiceError(:badarg, "spkder: the order must be an integer >= 0"))
@@ -175,10 +165,21 @@ spkder(targ::NameOrID, et::Real, ref::NameOrID, obs::NameOrID, v::Val) =
     spkder(default_context(), targ, et, ref, obs, v)
 
 """
-    spkgeo(targ::Integer, et, ref, obs::Integer) -> (SVector{6}, lt)
+    spkgeo([ctx,] targ::Integer, et, ref, obs::Integer) -> (state, lt)
 
-Return the geometric state (km, km/s) of body `targ` relative to body `obs` in frame
-`ref` at ET `et`, and the one-way light time `|r|/c` in seconds, as `spkgeo_c`.
+Return the geometric state of body `targ` relative to body `obs` in frame `ref` at
+`et`, and the one-way light time, as `spkgeo_c`.
+
+`state` is an `SVector{6}`: position in km, then velocity in km/s. `lt` is the
+distance divided by the speed of light, in seconds. `et` is in seconds past J2000
+TDB. `targ` and `obs` are NAIF ID codes; `ref` is a frame name or a frame ID.
+
+Throws `SpiceError(:unknownframe)` if `ref` is not a known frame name,
+`SpiceError(:badarg)` if `et` is not finite, `SpiceError(:nocoverage)` if the loaded
+SPK files hold a body of the chain but not at `et`, and `SpiceError(:nopath)` if no
+chain of segments connects `targ` and `obs`.
+
+See also [`spkezr`](@ref), [`spkssb`](@ref).
 """
 function spkgeo(ks::KernelSet, targ::Integer, et::Real, ref::NameOrID, obs::Integer)
     r, v = spk_jet(ks, Int32(targ), check_epoch(et), frame_id(ks, ref), Int32(obs), Val(1))
@@ -190,13 +191,42 @@ spkgeo(targ::Integer, et::Real, ref::NameOrID, obs::Integer) =
     spkgeo(default_context(), targ, et, ref, obs)
 
 """
-    spkezr(targ, et, ref, abcorr, obs) -> (SVector{6}, lt)
+    spkezr([ctx,] targ, et, ref, abcorr, obs) -> (state, lt)
 
-Return the state (km, km/s) of `targ` relative to `obs` in frame `ref` at ET `et` and
-the one-way light time in seconds, as `spkezr_c`. `abcorr` is one of `NONE`, `LT`,
-`LT+S`, `CN`, `CN+S`, `XLT`, `XLT+S`, `XCN`, `XCN+S` (case and blanks ignored) or an
-`Aberration`; another value throws `SpiceError(:badarg)`. The numeric methods for a
-parsed correction are in `aberration.jl`.
+Return the state of `targ` relative to `obs` in frame `ref` at `et`, and the one-way
+light time, as `spkezr_c`.
+
+`state` is an `SVector{6}`: position in km, then velocity in km/s. `lt` is in seconds.
+
+- `targ`, `obs`: body name or NAIF ID code.
+- `et`: epoch of the observer in seconds past J2000 TDB (see [`str2et`](@ref)).
+- `ref`: frame name or frame ID. For a frame that is not inertial and a correction
+  other than `"NONE"`, the frame is evaluated at `et` corrected for the light time
+  between the observer and the frame center, as in CSPICE.
+- `abcorr`: `"NONE"` (geometric), `"LT"`, `"LT+S"`, `"CN"`, `"CN+S"` for reception, or
+  the same with the prefix `X` for transmission. Letter case and blanks are ignored.
+  An [`Aberration`](@ref) value is also accepted; it has the meaning of each string.
+
+The call does not allocate when the bodies and the frame are integer IDs and `abcorr`
+is an `Aberration`. With ForwardDiff loaded, `et` can be a dual number.
+
+Throws `SpiceError(:unknownbody)` or `SpiceError(:unknownframe)` if a name is not
+known, `SpiceError(:badarg)` if `abcorr` is not valid or `et` is not finite,
+`SpiceError(:nocoverage)` if the loaded SPK files hold a body of the chain but not at
+the epoch needed, and `SpiceError(:nopath)` if no chain of segments connects `targ`
+and `obs`.
+
+# Examples
+```julia
+furnsh("naif0012.tls")
+furnsh("de440s.bsp")
+et = str2et("2025-03-01T12:00:00")
+state, lt = spkezr("MARS BARYCENTER", et, "ECLIPJ2000", "LT+S", "EARTH")
+r, v = state[1:3], state[4:6]                  # km, km/s
+state, lt = spkezr(4, et, 17, Aberration("LT+S"), 399)   # the same with IDs
+```
+
+See also [`spkpos`](@ref), [`spkgeo`](@ref), [`spkder`](@ref), [`furnsh`](@ref).
 """
 spkezr(ks::KernelSet, targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString,
     obs::NameOrID) = spkezr(ks, targ, et, ref, Aberration(abcorr), obs)
@@ -206,12 +236,25 @@ spkezr(targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString, obs::Nam
     spkezr(default_context(), targ, et, ref, abcorr, obs)
 
 """
-    spkpos(targ, et, ref, abcorr, obs) -> (SVector{3}, lt)
+    spkpos([ctx,] targ, et, ref, abcorr, obs) -> (pos, lt)
 
-Return the position (km) of `targ` relative to `obs` in frame `ref` at ET `et` and the
-one-way light time in seconds, as `spkpos_c`. `abcorr` is as for `spkezr`. As in
-CSPICE, the `CN` forms make exactly three light-time iterations here, so the position
-can differ from the position part of `spkezr` at rounding level.
+Return the position of `targ` relative to `obs` in frame `ref` at `et`, and the
+one-way light time, as `spkpos_c`.
+
+`pos` is an `SVector{3}` in km and `lt` is in seconds. The arguments and the errors
+are those of [`spkezr`](@ref).
+
+As in CSPICE, the `CN` corrections make exactly three light-time iterations here, and
+[`spkezr`](@ref) iterates to convergence. The position can therefore differ from the
+position part of `spkezr` at rounding level.
+
+# Examples
+```julia
+et = str2et("2025-03-01T12:00:00")
+pos, lt = spkpos("SUN", et, "J2000", "LT+S", "EARTH")    # km, s
+```
+
+See also [`spkezr`](@ref), [`spkder`](@ref).
 """
 spkpos(ks::KernelSet, targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString,
     obs::NameOrID) = spkpos(ks, targ, et, ref, Aberration(abcorr), obs)

@@ -128,7 +128,6 @@ function _spk_state(data::Vector{Float64}, seg::Segment, et::T) where {T<:Real}
     end
 end
 
-"Plain values of the components of `x`, whose elements are `Taylor{M,T}`."
 @inline _values(x::Vec3{Taylor{M,T}}) where {M,T} = Vec3{T}(x[1].v, x[2].v, x[3].v)
 
 "Tuple of the ordinary derivatives of orders 0 to M of `x`, as vectors."

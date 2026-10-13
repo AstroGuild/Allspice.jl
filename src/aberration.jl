@@ -16,26 +16,47 @@ const _AB_S = 0x04      # stellar aberration
 const _AB_X = 0x08      # transmission (the default is reception)
 
 """
-    Aberration
-
-An aberration correction as a plain-bits value. The properties are those of the
-attribute block of `zzprscor`: `uselt` (light time is corrected; true for every value
-but `NONE`), `converged` (`CN` forms), `stellar` (`+S` forms), `transmit` (`X` forms),
-and `geometric` (`NONE`).
-
-    Aberration(s::AbstractString)
-
-Parse a correction string as `zzvalcor` does: letter case and blanks are ignored, and
-the valid values are `NONE`, `LT`, `LT+S`, `CN`, `CN+S`, `XLT`, `XLT+S`, `XCN`,
-`XCN+S`. Any other value throws `SpiceError(:badarg)`; this includes the values that
-CSPICE recognizes and rejects (`RL`, `RL+S`, `XRL`, `XRL+S`, `S`, `XS`).
-Postcondition: no heap allocation for any input.
-
+    Aberration(abcorr::AbstractString)
     Aberration(; lt=false, converged=false, stellar=false, transmit=false)
 
-Build the value from flags. `converged`, `stellar` and `transmit` each imply `lt`.
+An aberration correction as a plain-bits value. Every call that takes a correction
+string also takes an `Aberration`; the string is then not parsed at each call.
 
-Every call that takes a correction string also takes an `Aberration`.
+| String             | Correction                                                          |
+|:-------------------|:--------------------------------------------------------------------|
+| `"NONE"`           | none: the geometric state                                           |
+| `"LT"`             | reception, one-way light time, one iteration                        |
+| `"LT+S"`           | `"LT"` and stellar aberration                                       |
+| `"CN"`             | reception, light time iterated to convergence                       |
+| `"CN+S"`           | `"CN"` and stellar aberration                                       |
+| `"XLT"`, `"XLT+S"` | the `"LT"` forms for transmission                                   |
+| `"XCN"`, `"XCN+S"` | the `"CN"` forms for transmission                                   |
+
+Reception gives the target as the observer sees it at `et`: the target at
+`et - lt`. Transmission gives the target where a signal sent at `et` reaches it: the
+target at `et + lt`. Letter case and blanks in the string are ignored.
+
+The keyword form builds the value from flags; `converged`, `stellar` and `transmit`
+each imply `lt`. The properties `uselt`, `converged`, `stellar`, `transmit` and
+`geometric` (true for `"NONE"` only) read the value, and `string` gives the CSPICE
+spelling.
+
+Throws `SpiceError(:badarg)` if the string is not one of the nine above. This includes
+the values that CSPICE recognizes and rejects: `RL`, `RL+S`, `XRL`, `XRL+S`, `S`, `XS`.
+
+# Examples
+```jldoctest
+julia> c = Aberration(" lt + s ")
+Aberration("LT+S")
+
+julia> c.stellar, c.transmit, c.geometric
+(true, false, false)
+
+julia> Aberration(converged=true, transmit=true)
+Aberration("XCN")
+```
+
+See also [`spkezr`](@ref), [`spkpos`](@ref).
 """
 struct Aberration
     flags::UInt8
@@ -127,7 +148,6 @@ end
     return _parse_abcorr(s)
 end
 
-"A correction given as a string or as a parsed value."
 const AbcorrArg = Union{AbstractString,Aberration}
 
 # --- small vector helpers -----------------------------------------------------------
@@ -157,11 +177,9 @@ end
     return u - zero(v), _vperp(v, u) / n
 end
 
-"State of `body` relative to the solar system barycenter in the inertial frame `iref`."
 @inline _ssb(ks::KernelSet, body::Int32, et, iref::Int32) =
     spk_jet(ks, body, et, iref, Int32(0), Val(1))
 
-"Position of `body` relative to the solar system barycenter in the inertial frame `iref`."
 @inline _ssbpos(ks::KernelSet, body::Int32, et, iref::Int32) =
     spk_jet(ks, body, et, iref, Int32(0), Val(0))[1]
 
@@ -172,7 +190,6 @@ end
 @noinline _throw_not_inertial(ks, ref) = throw(SpiceError(:badarg,
     "the frame with ID $ref is not an inertial frame; this call needs one"))
 
-"Throw `SpiceError(:badarg)` unless `ref` is inertial; return `ref`."
 @inline function _need_inertial(ks::KernelSet, ref::Int32)
     _is_inertial(ks, ref) || _throw_not_inertial(ks, ref)
     return ref
@@ -553,44 +570,58 @@ spkpos(targ::NameOrID, et::Real, ref::NameOrID, corr::Aberration, obs::NameOrID)
     spkpos(default_context(), targ, et, ref, corr, obs)
 
 """
-    spkder(targ, et, ref, abcorr, obs, Val(N)) -> NTuple{N+1,SVector{3}}
+    spkder([ctx,] targ, et, ref, obs, Val(N)) -> NTuple{N+1,SVector{3}}
+    spkder([ctx,] targ, et, ref, abcorr, obs, Val(N)) -> NTuple{N+1,SVector{3}}
 
-Return the position of `targ` relative to `obs` in frame `ref` at ET `et` (km) with
-the aberration correction `abcorr` (a string or an `Aberration`), and its time
-derivatives to order N. Forms: on a `KernelSet`, on a `SpiceContext`, and on the
-default context.
+Return the position of `targ` relative to `obs` in frame `ref` at `et` and its time
+derivatives to order `N`. This call has no CSPICE counterpart.
 
-What is differentiated: the position function that CSPICE computes. Let `s` be -1 for
-reception and +1 for transmission, and, in the barycentric inertial frame,
+Element `k + 1` of the result is the derivative of order `k`, in km/s^k. `et` is in
+seconds past J2000 TDB. `targ`, `obs` and `ref` are names or integer IDs. The form
+without `abcorr` is geometric, as is `abcorr = "NONE"`; `abcorr` is a string or an
+[`Aberration`](@ref), as for [`spkezr`](@ref). With ForwardDiff loaded, `et` can be a
+dual number. The call does not allocate for integer IDs.
+
+Order 0 is the position of [`spkezr`](@ref) and of [`spkpos`](@ref), to rounding.
+Every higher order is the exact derivative of the position function `P` below, so the
+result agrees with a finite difference and with automatic differentiation of
+`spkpos`.
+
+Let `s` be -1 for reception and +1 for transmission and, in the barycentric inertial
+frame,
 
     p(t) = r_targ(t + s ℓ(t)) - r_obs(t)
-
-For the `LT` forms `ℓ(t) = |r_targ(t) - r_obs(t)| / c`, the geometric light time,
-because the single iteration of CSPICE evaluates the target at that light time. For
-the `CN` forms `ℓ` is the solution of the light-time equation `ℓ(t) = |p(t)| / c`;
-its value at `et` is the one of the CSPICE iteration, and its derivatives satisfy the
-equation order by order. The function is
-
     P(t) = R(t + s |pc(t)| / c) * A(p(t), s * v_obs(t))
 
-where `A` is the stellar aberration (the identity without `+S`; otherwise
-`A(p, v) = p + |p| sinφ v̂⊥ + |p| (cosφ - 1) p̂`, with `v⊥` the part of `v`
-perpendicular to `p` and `sinφ = |v⊥| / c`), `R` is the rotation from J2000 to `ref`
-(constant for an inertial frame), and `pc` is `p` with the center of `ref` in the
-place of the target (the epoch of `R` is `t` if the center is the observer).
+- `ℓ` is the light time. For the `LT` forms `ℓ(t) = |r_targ(t) - r_obs(t)| / c`, the
+  geometric light time, because the single iteration of CSPICE evaluates the target at
+  that light time. For the `CN` forms `ℓ` solves the light-time equation
+  `ℓ(t) = |p(t)| / c`: its value at `et` is the one of the CSPICE iteration, and its
+  derivatives satisfy the equation order by order.
+- `A` is the stellar aberration: the identity without `+S`, otherwise
+  `A(p, v) = p + |p| sinφ v̂⊥ + |p| (cosφ - 1) p̂`, with `v⊥` the part of `v`
+  perpendicular to `p` and `sinφ = |v⊥| / c`.
+- `R` is the rotation from J2000 to `ref`, constant for an inertial frame. `pc` is `p`
+  with the center of `ref` in the place of the target; the epoch of `R` is `t` if the
+  center is the observer.
 
-Order 0 is the position of `spkezr` and of `spkpos`, to rounding, and every higher
-order is the exact derivative of `P`, so the result agrees with a finite difference
-and with automatic differentiation of `spkpos`. Order 1 is not always the velocity of
-`spkezr`: CSPICE takes the rate of the light time from the converged light-time
-equation also for the `LT` forms (a relative difference near `|v_targ| / c` times the
-range rate over `c`, about 1e-8 for the Moon seen from the Earth), and it takes the
-observer acceleration of the `+S` forms from a difference of velocities over ±1 s
-(rounding level). `abcorr = "NONE"` gives the geometric form
-`spkder(targ, et, ref, obs, Val(N))`. The epoch can be a dual number.
+Order 1 is not always the velocity of `spkezr`, for two reasons. CSPICE takes the rate
+of the light time from the converged light-time equation also for the `LT` forms: a
+relative difference near `|v_targ| / c` times the range rate over `c`, about 1e-8 for
+the Moon seen from the Earth. CSPICE also takes the observer acceleration of the `+S`
+forms from a difference of velocities over ±1 s, a difference at rounding level.
 
-Throws `SpiceError(:badarg)` for an invalid correction or order, and the errors of
-`spkezr`. No allocation for integer IDs.
+Throws `SpiceError(:badarg)` if `N` is not an integer `>= 0` or `abcorr` is not valid,
+and the errors of [`spkezr`](@ref).
+
+# Examples
+```julia
+et = str2et("2025-03-01T12:00:00")
+r, v, a = spkder("MOON", et, "J2000", "EARTH", Val(2))          # km, km/s, km/s^2
+r, v, a, j = spkder("MOON", et, "J2000", "LT+S", "EARTH", Val(3))
+```
+
+See also [`pxder`](@ref), [`spkezr`](@ref).
 """
 function spkder(ks::KernelSet, targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbcorrArg,
         obs::NameOrID, ::Val{N}) where {N}
@@ -604,11 +635,16 @@ spkder(targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbcorrArg, obs::NameOrID
     spkder(default_context(), targ, et, ref, abcorr, obs, v)
 
 """
-    spkssb(targ::Integer, et, ref) -> SVector{6}
+    spkssb([ctx,] targ::Integer, et, ref) -> SVector{6}
 
-Return the state (km, km/s) of body `targ` relative to the solar system barycenter in
-frame `ref` at ET `et`, as `spkssb_c`. Postcondition: equal to the state of
+Return the geometric state of body `targ` relative to the solar system barycenter in
+frame `ref` at `et`, as `spkssb_c`.
+
+Position in km, then velocity in km/s. `et` is in seconds past J2000 TDB. `targ` is a
+NAIF ID code; `ref` is a frame name or a frame ID. The result equals the state of
 `spkgeo(targ, et, ref, 0)`.
+
+Throws the errors of [`spkgeo`](@ref).
 """
 function spkssb(ks::KernelSet, targ::Integer, et::Real, ref::NameOrID)
     r, v = spk_jet(ks, Int32(targ), check_epoch(et), frame_id(ks, ref), Int32(0), Val(1))
@@ -618,26 +654,37 @@ spkssb(ctx::SpiceContext, targ::Integer, et::Real, ref::NameOrID) =
     spkssb(kernelset(ctx), targ, et, ref)
 spkssb(targ::Integer, et::Real, ref::NameOrID) = spkssb(default_context(), targ, et, ref)
 
-"Position and velocity parts of a state vector of length 6 (`SpiceError(:badarg)` otherwise)."
 @inline function _split_state(state::AbstractVector)
     length(state) == 6 || throw(SpiceError(:badarg, "a state vector must have 6 elements"))
     @inbounds return Vec3(state[1], state[2], state[3]), Vec3(state[4], state[5], state[6])
 end
 
-"The vector `a` of length 3 as a `Vec3` (`SpiceError(:badarg)` otherwise)."
 @inline function _vec3(a::AbstractVector)
     length(a) == 3 || throw(SpiceError(:badarg, "a vector must have 3 elements"))
     @inbounds return Vec3(a[1], a[2], a[3])
 end
 
 """
-    spkltc(targ::Integer, et, ref, abcorr, stobs) -> (SVector{6}, lt, dlt)
+    spkltc([ctx,] targ::Integer, et, ref, abcorr, stobs) -> (state, lt, dlt)
 
-Return the state of body `targ` relative to an observer with the barycentric state
-`stobs` (length 6, in `ref`) at ET `et`, corrected for light time, the light time and
-its time derivative, as `spkltc_c`. Requires an inertial `ref`
-(`SpiceError(:badarg)` otherwise). Stellar aberration is not applied, whatever
-`abcorr` says.
+Return the state of body `targ` relative to an observer with a given barycentric
+state, corrected for light time, with the light time and its rate, as `spkltc_c`.
+
+- `stobs`: state of the observer relative to the solar system barycenter at `et`, in
+  `ref`; 6 elements, km and km/s.
+- `ref`: an inertial frame, by name or ID.
+- `abcorr`: as for [`spkezr`](@ref). Stellar aberration is not applied, whatever
+  `abcorr` says.
+
+`state` is an `SVector{6}` in km and km/s, `lt` is in seconds and `dlt` is the time
+derivative of `lt` (no unit). The `LT` forms make one iteration. The `CN` forms make
+at most five and stop when the light time changes by less than `1e-17 * max(1, |epoch|)`.
+
+Throws `SpiceError(:badarg)` if `ref` is not inertial, `stobs` does not have 6
+elements, `abcorr` is not valid, `et` is not finite, or the range rate of the target
+is near the speed of light. Throws the SPK errors of [`spkgeo`](@ref).
+
+See also [`spkaps`](@ref), [`spkacs`](@ref).
 """
 function spkltc(ks::KernelSet, targ::Integer, et::Real, ref::NameOrID, abcorr::AbcorrArg,
         stobs::AbstractVector)
@@ -652,13 +699,23 @@ spkltc(targ::Integer, et::Real, ref::NameOrID, abcorr::AbcorrArg, stobs::Abstrac
     spkltc(default_context(), targ, et, ref, abcorr, stobs)
 
 """
-    spkaps(targ::Integer, et, ref, abcorr, stobs, accobs) -> (SVector{6}, lt, dlt)
+    spkaps([ctx,] targ::Integer, et, ref, abcorr, stobs, accobs) -> (state, lt, dlt)
 
-Return the state of body `targ` relative to an observer with the barycentric state
-`stobs` (length 6) and acceleration `accobs` (length 3), both in `ref`, corrected for
-light time and stellar aberration as `abcorr` says, the light time and its time
-derivative, as `spkaps_c`. Requires an inertial `ref` (`SpiceError(:badarg)`
-otherwise).
+Return the state of body `targ` relative to an observer with a given barycentric state
+and acceleration, corrected for light time and stellar aberration, as `spkaps_c`.
+
+`stobs` (6 elements, km and km/s) and `accobs` (3 elements, km/s^2) are relative to
+the solar system barycenter at `et`, in the inertial frame `ref`. `abcorr` is as for
+[`spkezr`](@ref). The acceleration is used for the `+S` forms only: it enters the
+velocity part of the stellar aberration.
+
+`state` is an `SVector{6}` in km and km/s, `lt` is in seconds and `dlt` is the time
+derivative of `lt`.
+
+Throws `SpiceError(:badarg)` if `accobs` does not have 3 elements, and the errors of
+[`spkltc`](@ref).
+
+See also [`spkacs`](@ref).
 """
 function spkaps(ks::KernelSet, targ::Integer, et::Real, ref::NameOrID, abcorr::AbcorrArg,
         stobs::AbstractVector, accobs::AbstractVector)
@@ -674,11 +731,17 @@ spkaps(targ::Integer, et::Real, ref::NameOrID, abcorr::AbcorrArg, stobs::Abstrac
     accobs::AbstractVector) = spkaps(default_context(), targ, et, ref, abcorr, stobs, accobs)
 
 """
-    spkacs(targ::Integer, et, ref, abcorr, obs::Integer) -> (SVector{6}, lt, dlt)
+    spkacs([ctx,] targ::Integer, et, ref, abcorr, obs::Integer) -> (state, lt, dlt)
 
 Return the state of body `targ` relative to body `obs` in the inertial frame `ref` at
-ET `et` with the correction `abcorr`, the light time and its time derivative, as
-`spkacs_c`. Requires an inertial `ref` (`SpiceError(:badarg)` otherwise).
+`et` with the correction `abcorr`, the light time and its rate, as `spkacs_c`.
+
+`state` is an `SVector{6}` in km and km/s, `lt` is in seconds and `dlt` is the time
+derivative of `lt`. `targ` and `obs` are NAIF ID codes. For the `+S` forms the
+acceleration of the observer is the central difference of its velocity over ±1 s, as
+in CSPICE. For an inertial `ref` the state and `lt` are those of [`spkezr`](@ref).
+
+Throws the errors of [`spkltc`](@ref).
 """
 function spkacs(ks::KernelSet, targ::Integer, et::Real, ref::NameOrID, abcorr::AbcorrArg,
         obs::Integer)
@@ -695,11 +758,21 @@ spkacs(targ::Integer, et::Real, ref::NameOrID, abcorr::AbcorrArg, obs::Integer) 
     spkacs(default_context(), targ, et, ref, abcorr, obs)
 
 """
-    spkapo(targ::Integer, et, ref, sobs, abcorr) -> (SVector{3}, lt)
+    spkapo([ctx,] targ::Integer, et, ref, sobs, abcorr) -> (pos, lt)
 
-Return the position of body `targ` relative to an observer with the barycentric state
-`sobs` (length 6, in `ref`) at ET `et` with the correction `abcorr`, and the light
-time, as `spkapo_c`. Requires an inertial `ref` (`SpiceError(:badarg)` otherwise).
+Return the position of body `targ` relative to an observer with a given barycentric
+state, with the correction `abcorr`, and the light time, as `spkapo_c`.
+
+`sobs` is the state of the observer relative to the solar system barycenter at `et`
+in the inertial frame `ref` (6 elements, km and km/s). `pos` is an `SVector{3}` in km
+and `lt` is in seconds. The `LT` forms make one light-time iteration and the `CN`
+forms exactly three, as in CSPICE. Note the argument order: `sobs` is before `abcorr`.
+
+Throws `SpiceError(:badarg)` if `ref` is not inertial, `sobs` does not have 6
+elements, `abcorr` is not valid, `et` is not finite, or (for `+S`) the speed of the
+observer is not below the speed of light. Throws the SPK errors of [`spkgeo`](@ref).
+
+See also [`spkpos`](@ref), [`spkltc`](@ref).
 """
 function spkapo(ks::KernelSet, targ::Integer, et::Real, ref::NameOrID, sobs::AbstractVector,
         abcorr::AbcorrArg)
@@ -713,12 +786,19 @@ spkapo(targ::Integer, et::Real, ref::NameOrID, sobs::AbstractVector, abcorr::Abc
     spkapo(default_context(), targ, et, ref, sobs, abcorr)
 
 """
-    ltime(etobs, obs::Integer, dir, targ::Integer) -> (ettarg, elapsd)
+    ltime([ctx,] etobs, obs::Integer, dir, targ::Integer) -> (ettarg, elapsd)
 
-Return the epoch `ettarg` at which a signal leaves (`dir = "<-"`) or reaches
-(`dir = "->"`) body `targ`, for a signal that is at body `obs` at ET `etobs`, and the
-light time `elapsd = |ettarg - etobs|`, as `ltime_c`: three iterations after the
-geometric start. Another `dir` throws `SpiceError(:badarg)`.
+Return the epoch at which a signal is at body `targ`, given that it is at body `obs`
+at `etobs`, and the light time between the two, as `ltime_c`.
+
+`dir = "->"`: the signal leaves `obs` at `etobs` and reaches `targ` at `ettarg`.
+`dir = "<-"`: the signal reaches `obs` at `etobs` and left `targ` at `ettarg`. Epochs
+are in seconds past J2000 TDB; `elapsd = |ettarg - etobs|` is in seconds. `obs` and
+`targ` are NAIF ID codes. The call makes three iterations after the geometric start,
+as CSPICE does.
+
+Throws `SpiceError(:badarg)` if `dir` is not `"->"` or `"<-"` (blanks are not
+ignored) or `etobs` is not finite, and the SPK errors of [`spkgeo`](@ref).
 """
 function ltime(ks::KernelSet, etobs::Real, obs::Integer, dir::AbstractString, targ::Integer)
     s = dir == "->" ? 1 : dir == "<-" ? -1 :
@@ -742,17 +822,35 @@ ltime(etobs::Real, obs::Integer, dir::AbstractString, targ::Integer) =
 """
     stelab(pobj, vobs) -> SVector{3}
 
-Return the position `pobj` (km, relative to the observer) corrected for stellar
-aberration at reception, for an observer with the barycentric velocity `vobs` (km/s),
-as `stelab_c`. Requires `|vobs| < c` (`SpiceError(:badarg)` otherwise).
-Postcondition: the norm of `pobj` is kept.
+Return the position `pobj` corrected for stellar aberration at reception, as
+`stelab_c`.
+
+`pobj` is the position of the target relative to the observer and `vobs` is the
+velocity of the observer relative to the solar system barycenter, in the same
+inertial frame (3 elements each; km and km/s). The result is `pobj` rotated toward
+`vobs`; its norm is the norm of `pobj`.
+
+Throws `SpiceError(:badarg)` if a vector does not have 3 elements or the speed
+`|vobs|` is not below the speed of light.
+
+# Examples
+```jldoctest
+julia> p = stelab([1.0e8, 0.0, 0.0], [0.0, 30.0, 0.0]);
+
+julia> round(p[2] / p[1] * 1.0e4; digits=4)    # tangent of the angle is near v/c = 1.0007e-4
+1.0007
+```
+
+See also [`stlabx`](@ref).
 """
 stelab(pobj::AbstractVector, vobs::AbstractVector) = _stelab(_vec3(pobj), _vec3(vobs))
 
 """
     stlabx(pobj, vobs) -> SVector{3}
 
-Return the position `pobj` corrected for stellar aberration at transmission: `stelab`
-with the velocity negated, as `stlabx_`.
+Return the position `pobj` corrected for stellar aberration at transmission, as
+`stlabx_` of CSPICE: [`stelab`](@ref) with the velocity negated.
+
+Units and errors are those of [`stelab`](@ref).
 """
 stlabx(pobj::AbstractVector, vobs::AbstractVector) = _stelab(_vec3(pobj), -_vec3(vobs))

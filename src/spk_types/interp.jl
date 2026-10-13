@@ -109,7 +109,6 @@ function _hermite(seg::Segment, data::Vector{Float64}, pbase::Int, psize::Int, o
     return @inbounds (w1[1], w2[1])
 end
 
-"Position and velocity parts of a six-element state."
 @inline _split6(s::SVector{6,T}) where {T} = (Vec3{T}(s[1], s[2], s[3]), Vec3{T}(s[4], s[5], s[6]))
 
 """

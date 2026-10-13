@@ -6,17 +6,54 @@
 
 """
     EphemerisTable{T,A<:AbstractVector{T}}
+    EphemerisTable{T}(tab) -> EphemerisTable{T,Vector{T}}
 
-Position (km) of body `target` relative to body `observer` in frame `frame` for
-`t0 <= et <= t0 + nint * dt` (seconds of ET), from `ephemeris_table`.
+Position of one body relative to another on a fixed span of time, as piecewise
+Chebyshev polynomials that need no kernel to evaluate. [`ephemeris_table`](@ref)
+makes one.
 
-Interval `i` (from 0) covers `t0 + i dt` to `t0 + (i + 1) dt` and holds `ncoef`
-Chebyshev coefficients for each of x, y and z, in this order, from index
-`3 ncoef i + 1` of `coef`; this is the layout of a record of SPK type 2 without its
-first two numbers. `maxerr` is the largest difference (km) between the table and the
-source that `ephemeris_table` measured, with coefficients of type `Float64`.
+A query does no segment search and follows no chain of bodies, so it suits the inner
+loop of an optimizer. With Adapt.jl loaded, `adapt` moves the coefficients to another
+array type; the table is then an `isbits` value on a GPU.
 
-Invariants: `dt > 0`, `nint >= 1`, `ncoef >= 1`, `length(coef) == 3 ncoef nint`.
+| Field              | Meaning                                                              |
+|:-------------------|:---------------------------------------------------------------------|
+| `target`, `observer`, `frame` | NAIF IDs of the bodies and ID of the frame                |
+| `t0`, `dt`, `nint` | the table covers `t0 <= et <= t0 + nint * dt`, seconds past J2000 TDB |
+| `ncoef`            | Chebyshev coefficients for each component and interval               |
+| `coef`             | the coefficients, km                                                 |
+| `maxerr`           | largest difference from the source that `ephemeris_table` measured, km |
+
+Interval `i` (from 0) covers `t0 + i dt` to `t0 + (i + 1) dt`. It holds `ncoef`
+coefficients for each of x, y and z, in this order, from index `3 ncoef i + 1` of
+`coef`: the layout of a record of SPK type 2 without its first two numbers.
+
+`EphemerisTable{T}(tab)` returns a copy with coefficients of type `T` on the CPU. With
+`Float32` the position keeps about seven digits (15 km at one astronomical unit);
+`maxerr` is not measured again.
+
+Throws `SpiceError(:badarg)` if the constructor gets `dt <= 0`, `nint < 1`,
+`ncoef < 1` or `length(coef) != 3 * ncoef * nint`.
+
+# Examples
+```jldoctest
+julia> tab = EphemerisTable([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 0.0, 10.0, 1, 2, 301, 399, 1, 0.0);
+
+julia> table_span(tab)
+(0.0, 10.0)
+
+julia> table_state(tab, 7.5)    # x = 1 + 2s, y = 3 + 4s, z = 5 + 6s at s = 0.5
+6-element StaticArraysCore.SVector{6, Float64} with indices SOneTo(6):
+ 2.0
+ 5.0
+ 8.0
+ 0.4
+ 0.8
+ 1.2
+```
+
+See also [`table_position`](@ref), [`table_state`](@ref), [`table_jet`](@ref),
+[`table_to_spk`](@ref), [`RotationTable`](@ref).
 """
 struct EphemerisTable{T<:AbstractFloat,A<:AbstractVector{T}}
     coef::A
@@ -36,18 +73,18 @@ struct EphemerisTable{T<:AbstractFloat,A<:AbstractVector{T}}
     end
 end
 
-"""
-    EphemerisTable{T}(tab) -> EphemerisTable{T,Vector{T}}
-
-Copy of `tab` with coefficients of type `T` on the CPU. With `Float32` the position
-keeps about seven digits (15 km at one astronomical unit); `maxerr` is not measured
-again.
-"""
 EphemerisTable{T}(tab::EphemerisTable) where {T<:AbstractFloat} =
     EphemerisTable(Vector{T}(tab.coef), tab.t0, tab.dt, tab.nint, tab.ncoef, tab.target,
         tab.observer, tab.frame, tab.maxerr)
 
-"First and last epoch (seconds of ET) of `tab`."
+"""
+    table_span(tab) -> (first, last)
+
+Return the first and the last epoch of the table `tab`, in seconds past J2000 TDB.
+
+`tab` is an [`EphemerisTable`](@ref) or a [`RotationTable`](@ref). A query is valid
+for `first <= et <= last`.
+"""
 @inline table_span(tab::EphemerisTable) = (tab.t0, tab.t0 + tab.nint * tab.dt)
 
 Base.show(io::IO, tab::EphemerisTable{T}) where {T} = print(io, "EphemerisTable{", T, "}(",
@@ -58,21 +95,25 @@ Base.show(io::IO, tab::EphemerisTable{T}) where {T} = print(io, "EphemerisTable{
 @noinline _throw_table_range() =
     throw(SpiceError(:nocoverage, "the epoch is outside the ephemeris table"))
 
-"The normalized time in the number type of the coefficients, for a plain epoch only."
 @inline _tab_arg(::Type{T}, s::AbstractFloat) where {T} = T(s)
 @inline _tab_arg(::Type, s::Real) = s
 
 """
     table_jet(tab, et, Val(N)) -> NTuple{N+1,SVector{3}}
 
-Position (km) from `tab` at `et` and its time derivatives to order N; every order is
-a derivative of the position polynomial. `et` is a plain number, a `Taylor` or a
-dual number; a plain epoch is `Float64` even when the coefficients are `Float32`.
+Return the position from the ephemeris table `tab` at `et`, in km, and its time
+derivatives to order `N`.
 
-Requires `table_span(tab)[1] <= et <= table_span(tab)[2]`, else
-`SpiceError(:nocoverage)`. The check is a bounds check: under `@inbounds` (as in a
-GPU kernel) it is removed, and an epoch outside the table then gives the
-extrapolation of the nearest interval. No allocation, no kernel access.
+Element `k + 1` is the derivative of order `k`, in km/s^k; every order is a
+derivative of the position polynomial. `et` is in seconds past J2000 TDB and is a
+plain number or a dual number. A plain epoch is used as `Float64` also when the
+coefficients are `Float32`. The call reads no kernel and does not allocate.
+
+Throws `SpiceError(:nocoverage)` if `et` is outside [`table_span`](@ref)`(tab)`. The
+check is a bounds check. Under `@inbounds`, as in a GPU kernel, it is removed, and an
+epoch outside the table then gives the extrapolation of the nearest interval.
+
+See also [`table_position`](@ref), [`table_state`](@ref).
 """
 Base.@propagate_inbounds function table_jet(tab::EphemerisTable{T}, et::Real, v::Val{N}) where {T,N}
     t = primal(et)
@@ -87,15 +128,28 @@ end
 """
     table_position(tab, et) -> SVector{3}
 
-Position (km) from `tab` at `et`. Contract as for `table_jet`.
+Return the position from the ephemeris table `tab` at `et`, in km.
+
+`et` is in seconds past J2000 TDB. The bodies and the frame are `tab.target`,
+`tab.observer` and `tab.frame`. The rules for the epoch, for `@inbounds` and for the
+number types are those of [`table_jet`](@ref).
+
+Throws `SpiceError(:nocoverage)` if `et` is outside the table.
 """
 Base.@propagate_inbounds table_position(tab::EphemerisTable, et::Real) = table_jet(tab, et, Val(0))[1]
 
 """
     table_state(tab, et) -> SVector{6}
 
-Position (km) and velocity (km/s) from `tab` at `et`; the velocity is the derivative
-of the position polynomial. Contract as for `table_jet`.
+Return the position (km) and the velocity (km/s) from the ephemeris table `tab` at
+`et`.
+
+The velocity is the derivative of the position polynomial. For a table with an
+aberration correction it is therefore order 1 of [`spkder`](@ref), not the velocity
+of [`spkezr`](@ref). The rules for the epoch, for `@inbounds` and for the number
+types are those of [`table_jet`](@ref).
+
+Throws `SpiceError(:nocoverage)` if `et` is outside the table.
 """
 Base.@propagate_inbounds function table_state(tab::EphemerisTable, et::Real)
     r, v = table_jet(tab, et, Val(1))
@@ -261,32 +315,50 @@ function _tab_refine(f::F, a::Float64, b::Float64, tol::Union{Nothing,Real}, nco
 end
 
 """
-    ephemeris_table(targ, t0, t1, ref, abcorr, obs; tol=nothing, ncoef=16,
-                    maxintervals=65536) -> EphemerisTable{Float64,Vector{Float64}}
+    ephemeris_table([ctx,] targ, t0, t1, ref, abcorr, obs;
+                    tol=nothing, ncoef=16, maxintervals=65536) -> EphemerisTable
 
-Extract the position of `targ` relative to `obs` in frame `ref`, with the aberration
-correction `abcorr`, for `t0 <= et <= t1` into a table that `table_position`,
-`table_state` and `table_jet` evaluate without the kernels. Forms: on a `KernelSet`,
-on a `SpiceContext`, and on the default context. The arguments other than the epochs
-are as for `spkpos`.
+Return a table of the position of `targ` relative to `obs` in frame `ref` for
+`t0 <= et <= t1`, which [`table_position`](@ref), [`table_state`](@ref) and
+[`table_jet`](@ref) evaluate without the kernels. This call has no CSPICE counterpart.
 
-Two methods give the coefficients. When the position is one polynomial for each
-record of the kernels (see `_tab_native_grid`: geometric position, inertial frame,
-SPK type 2 only), the table takes the record length and the degree of the kernels,
-it agrees with `spkpos` to rounding, it can start before `t0` and end after `t1`, and
-`tol`, `ncoef` and `maxintervals` are not used. In all other cases the function
-interpolates on `t0` to `t1` with `ncoef` coefficients for each interval and doubles
-the number of intervals until the measured error is at most `tol` (km). Without `tol`
-the goal is `1e-12` times the largest distance in the table, and the function stops
-also when one more doubling does not divide a small error by four: the source then
-limits the accuracy (rounding of a rotation angle of many turns, or the small steps
-of an aberration-corrected position at the record boundaries of the kernels).
+`t0` and `t1` are in seconds past J2000 TDB. `targ`, `ref`, `abcorr` and `obs` are as
+for [`spkpos`](@ref). The table is a snapshot: a later change of the kernels does not
+change it. The result is an `EphemerisTable{Float64,Vector{Float64}}`, and its field
+`maxerr` is the measured error in km.
 
-Requires `t0 < t1`, both finite, with data for all of `t0` to `t1`; `ncoef >= 2`;
-`tol > 0`. Throws `SpiceError(:badarg)` for a bad argument and
-`SpiceError(:noconvergence)` if `maxintervals` intervals do not reach `tol`.
-Ensures `result.maxerr` is the measured error, `table_span(result)` contains `t0`
-to `t1`, and the velocity of the table is the derivative of its position.
+Two methods give the coefficients:
+
+- **Records of the kernels.** If `abcorr` is `"NONE"`, `ref` is inertial, and every
+  segment between the two bodies is SPK type 2 in an inertial frame with record
+  boundaries on one common grid, the table takes the record length and the degree of
+  the kernels. It then agrees with `spkpos` to rounding, it can start before `t0` and
+  end after `t1`, and `tol`, `ncoef` and `maxintervals` are not used.
+- **Interpolation.** In all other cases the call interpolates on `t0` to `t1` with
+  `ncoef` coefficients for each interval, and it doubles the number of intervals
+  until the measured error is at most `tol` (km). Without `tol` the goal is `1e-12`
+  times the largest distance in the table. The call then stops also when one more
+  doubling does not divide a small error by four: the source limits the accuracy
+  (rounding of a rotation angle of many turns, or the small steps of an
+  aberration-corrected position at the record boundaries of the kernels).
+
+Throws `SpiceError(:badarg)` if the epochs are not finite with `t0 < t1`, if
+`ncoef < 2`, `tol <= 0` or `maxintervals < 1`. Throws `SpiceError(:noconvergence)` if
+`maxintervals` intervals do not reach the goal, and the errors of [`spkpos`](@ref) if
+the kernels do not cover `t0` to `t1`.
+
+# Examples
+```julia
+furnsh("naif0012.tls"); furnsh("de440s.bsp")
+t0, t1 = str2et("2025-01-01"), str2et("2026-01-01")
+tab = ephemeris_table("MARS BARYCENTER", t0, t1, "ECLIPJ2000", "NONE", "SUN")
+tab.maxerr                              # km
+r = table_position(tab, t0 + 86400.0)   # km, no kernel access
+x = table_state(tab, t0 + 86400.0)      # km, km/s
+tab32 = EphemerisTable{Float32}(tab)    # smaller, about seven digits
+```
+
+See also [`EphemerisTable`](@ref), [`rotation_table`](@ref), [`table_to_spk`](@ref).
 """
 function ephemeris_table(ks::KernelSet, targ::NameOrID, t0::Real, t1::Real, ref::NameOrID,
         abcorr::Union{AbstractString,Aberration}, obs::NameOrID;
@@ -331,17 +403,30 @@ ephemeris_table(targ::NameOrID, t0::Real, t1::Real, ref::NameOrID,
     table_to_spk(handle, tab, segid; first=table_span(tab)[1], last=table_span(tab)[2],
                  ctx=default_context()) -> Nothing
 
-Add the ephemeris table `tab` to the SPK file `handle` as one segment of type 2: the
-records of the table are the records of the segment, so `spkpos` on the new file gives
-the position of the table to rounding and the velocity that is its derivative.
+Add the ephemeris table `tab` to the SPK file `handle` as one segment of type 2.
 
-Preconditions (each throws `SpiceError`): the checks of [`spkw02`](@ref) (among them
-`tab.ncoef <= 28`, `tab.target != 0`, `tab.target != tab.observer`, a known frame,
-`first` and `last` inside the table), and a table whose position is a geometric one in
-its frame, which the caller knows: a segment has no aberration correction. The
-coefficients are written as `Float64` (a table on a GPU is copied to the CPU).
-Postcondition: the file has one more segment for `tab.target` relative to
-`tab.observer` in the frame `tab.frame`.
+The records of the table are the records of the segment. [`spkpos`](@ref) on the new
+file therefore gives the position of the table to rounding, and the velocity is its
+derivative. `handle` comes from [`spkopn`](@ref) or [`spkopa`](@ref); `segid` is the
+segment identifier; `first` and `last` are the bounds of the segment in seconds past
+J2000 TDB. The segment is for `tab.target` relative to `tab.observer` in the frame
+`tab.frame`. The coefficients are written as `Float64`; a table on a GPU is copied to
+the CPU.
+
+A segment has no aberration correction. Write only a table that was made with
+`abcorr = "NONE"`; the call cannot check this.
+
+Throws the errors of [`spkw02`](@ref). Among its conditions: `tab.ncoef <= 28`,
+`tab.target != 0`, `tab.target != tab.observer`, a known frame, and `first` and `last`
+inside the table.
+
+# Examples
+```julia
+tab = ephemeris_table("MOON", t0, t1, "J2000", "NONE", "EARTH")
+h = spkopn("moon.bsp", "moon.bsp", 0)
+table_to_spk(h, tab, "Moon from table")
+spkcls(h)
+```
 """
 function table_to_spk(h::DAFHandle, tab::EphemerisTable, segid::AbstractString;
         first::Real=table_span(tab)[1], last::Real=table_span(tab)[2],
@@ -358,18 +443,31 @@ end
 
 """
     RotationTable{T,A<:AbstractVector{T}}
+    RotationTable{T}(tab) -> RotationTable{T,Vector{T}}
 
-Rotation matrix from frame `from` to frame `to` for `t0 <= et <= t0 + nint * dt`
-(seconds of ET), from `rotation_table`: the counterpart of `EphemerisTable` for
-`pxform`.
+Rotation matrix from one frame to another on a fixed span of time, as piecewise
+Chebyshev polynomials that need no kernel to evaluate: the counterpart of
+[`EphemerisTable`](@ref) for [`pxform`](@ref). [`rotation_table`](@ref) makes one.
 
-Interval `i` (from 0) holds `ncoef` Chebyshev coefficients for each of the nine
-elements of the matrix, column after column, from index `9 ncoef i + 1` of `coef`.
-`maxerr` is the largest Frobenius norm of the difference between the table and the
-source that `rotation_table` measured; a matrix of the table is orthogonal to that
-accuracy and is not made orthogonal again.
+| Field              | Meaning                                                              |
+|:-------------------|:---------------------------------------------------------------------|
+| `from`, `to`       | frame IDs; the matrix rotates a vector from `from` to `to`           |
+| `t0`, `dt`, `nint` | the table covers `t0 <= et <= t0 + nint * dt`, seconds past J2000 TDB |
+| `ncoef`            | Chebyshev coefficients for each matrix element and interval          |
+| `coef`             | the coefficients                                                     |
+| `maxerr`           | largest Frobenius norm of the difference from the source that `rotation_table` measured |
 
-Invariants: `dt > 0`, `nint >= 1`, `ncoef >= 1`, `length(coef) == 9 ncoef nint`.
+Interval `i` (from 0) holds `ncoef` coefficients for each of the nine elements of the
+matrix, column after column, from index `9 ncoef i + 1` of `coef`. A matrix of the
+table is orthogonal to the accuracy `maxerr`; it is not made orthogonal again.
+
+`RotationTable{T}(tab)` returns a copy with coefficients of type `T` on the CPU;
+`maxerr` is not measured again.
+
+Throws `SpiceError(:badarg)` if the constructor gets `dt <= 0`, `nint < 1`,
+`ncoef < 1` or `length(coef) != 9 * ncoef * nint`.
+
+See also [`table_rotation`](@ref), [`table_rotation_jet`](@ref), [`table_span`](@ref).
 """
 struct RotationTable{T<:AbstractFloat,A<:AbstractVector{T}}
     coef::A
@@ -388,7 +486,6 @@ struct RotationTable{T<:AbstractFloat,A<:AbstractVector{T}}
     end
 end
 
-"Copy of `tab` with coefficients of type `T` on the CPU; `maxerr` is not measured again."
 RotationTable{T}(tab::RotationTable) where {T<:AbstractFloat} =
     RotationTable(Vector{T}(tab.coef), tab.t0, tab.dt, tab.nint, tab.ncoef, tab.from, tab.to,
         tab.maxerr)
@@ -402,9 +499,17 @@ Base.show(io::IO, tab::RotationTable{T}) where {T} = print(io, "RotationTable{",
 """
     table_rotation_jet(tab, et, Val(N)) -> NTuple{N+1,SMatrix{3,3}}
 
-Rotation matrix from `tab` at `et` and its time derivatives to order N (order 1 is the
-derivative block of `sxform`). The contract on the epoch, on `@inbounds` and on the
-number types is the one of [`table_jet`](@ref). No allocation, no kernel access.
+Return the rotation matrix from the rotation table `tab` at `et` and its time
+derivatives to order `N`.
+
+Element `k + 1` is the derivative of order `k`, in 1/s^k; every order is a derivative
+of the polynomials of the table. Order 1 thus follows order 1 of [`pxder`](@ref). It
+is the derivative block of [`sxform`](@ref) for the frames where the two agree, which
+excludes CK and dynamic frames. `et` is in seconds past J2000 TDB. The rules for the
+epoch, for `@inbounds` and for the number types are those of [`table_jet`](@ref). The
+call reads no kernel and does not allocate.
+
+Throws `SpiceError(:nocoverage)` if `et` is outside [`table_span`](@ref)`(tab)`.
 """
 Base.@propagate_inbounds function table_rotation_jet(tab::RotationTable{T}, et::Real, v::Val{N}) where {T,N}
     t = primal(et)
@@ -423,33 +528,51 @@ end
 """
     table_rotation(tab, et) -> SMatrix{3,3}
 
-Rotation matrix from frame `tab.from` to frame `tab.to` at `et`. Contract as for
-`table_rotation_jet`.
+Return the rotation matrix from frame `tab.from` to frame `tab.to` at `et`, from the
+rotation table `tab`.
+
+`et` is in seconds past J2000 TDB. The rules for the epoch, for `@inbounds` and for
+the number types are those of [`table_jet`](@ref).
+
+Throws `SpiceError(:nocoverage)` if `et` is outside the table.
 """
 Base.@propagate_inbounds table_rotation(tab::RotationTable, et::Real) =
     table_rotation_jet(tab, et, Val(0))[1]
 
 """
-    rotation_table(from, to, t0, t1; tol=nothing, ncoef=16, maxintervals=65536)
-        -> RotationTable{Float64,Vector{Float64}}
+    rotation_table([ctx,] from, to, t0, t1; tol=nothing, ncoef=16, maxintervals=65536)
+        -> RotationTable
 
-Extract the rotation from frame `from` to frame `to` for `t0 <= et <= t1` into a table
-that `table_rotation` and `table_rotation_jet` evaluate without the kernels. Forms: on
-a `KernelSet`, on a `SpiceContext`, and on the default context. The frames are as for
-`pxform`.
+Return a table of the rotation from frame `from` to frame `to` for `t0 <= et <= t1`,
+which [`table_rotation`](@ref) and [`table_rotation_jet`](@ref) evaluate without the
+kernels. This call has no CSPICE counterpart.
 
-The function interpolates the nine elements of the matrix with `ncoef` coefficients
-for each interval and doubles the number of intervals until the measured error
-(Frobenius norm, no unit) is at most `tol`. Without `tol` the goal is `1.7e-12`, and
-the function stops also when one more doubling does not divide a small error by four:
-the source then limits the accuracy (a rotation angle of many turns has an error of
+`t0` and `t1` are in seconds past J2000 TDB; the frames are as for [`pxform`](@ref).
+The result is a `RotationTable{Float64,Vector{Float64}}` with
+`table_span(result) == (t0, t1)` to rounding, and its field `maxerr` is the measured
+error.
+
+The call interpolates the nine elements of the matrix with `ncoef` coefficients for
+each interval, and it doubles the number of intervals until the measured error
+(Frobenius norm, no unit) is at most `tol`. Without `tol` the goal is `1.7e-12`. The
+call then stops also when one more doubling does not divide a small error by four:
+the source limits the accuracy (a rotation angle of many turns has an error of
 rounding near 1e-11).
 
-Requires `t0 < t1`, both finite, with data for all of `t0` to `t1`; `ncoef >= 2`;
-`tol > 0`. Throws `SpiceError(:badarg)` for a bad argument and
-`SpiceError(:noconvergence)` if `maxintervals` intervals do not reach `tol`.
-Ensures `result.maxerr` is the measured error and `table_span(result) == (t0, t1)` to
-rounding.
+Throws `SpiceError(:badarg)` if the epochs are not finite with `t0 < t1`, if
+`ncoef < 2`, `tol <= 0` or `maxintervals < 1`. Throws `SpiceError(:noconvergence)` if
+`maxintervals` intervals do not reach the goal, and the errors of [`pxform`](@ref) if
+the kernels do not cover `t0` to `t1`.
+
+# Examples
+```julia
+furnsh("naif0012.tls"); furnsh("pck00011.tpc")
+t0, t1 = str2et("2025-01-01"), str2et("2025-02-01")
+tab = rotation_table("J2000", "IAU_MARS", t0, t1)
+R = table_rotation(tab, t0 + 3600.0)
+```
+
+See also [`RotationTable`](@ref), [`ephemeris_table`](@ref).
 """
 function rotation_table(ks::KernelSet, from::NameOrID, to::NameOrID, t0::Real, t1::Real;
         tol::Union{Nothing,Real}=nothing, ncoef::Integer=16, maxintervals::Integer=65536)

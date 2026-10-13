@@ -930,7 +930,6 @@ function _zone_offsets(zone::AbstractString)
     return hoff, moff, ok
 end
 
-"Contract: returns the decimal text of `x` for a message."
 _num(x::Float64) = isinteger(x) && abs(x) < 1e15 ? string(Int(x)) : string(x)
 
 """
@@ -1065,24 +1064,47 @@ end
 # Public calls: STR2ET, UTC2ET, TPARSE, TPICTR
 # ---------------------------------------------------------------------------------
 
-"Contract: throws `SpiceError(:badtime)` for the time string `s` with the reason `why`."
 @noinline _badtime(s, why) =
     throw(SpiceError(:badtime, "cannot convert the time string '$s': $why"))
 
 """
-    str2et(ks, s, defs=TimeDefaults()) -> Float64
+    str2et([ctx,] s) -> Float64
 
-Contract: `s` is a time string in one of the forms that CSPICE `str2et` accepts:
-calendar dates with a month name or number in the orders of `tpartv`, day of year
-(`1997-123`, `1997 123//12:00`), ISO 8601 with `T`, Julian dates (`JD 2451545.0`), an
-era (`B.C.`, `A.D.`), `A.M.`/`P.M.`, a weekday, a time zone (`PDT`, `UTC-7:30`) or a
-time system (`UTC`, `TDB`, `TDT`), a year abbreviated as `'97` or given with two
-digits (1969..2068). A string without a zone and without a system uses the zone or
-the system of `defs`, and `defs.calendar` says whether the date is Gregorian, Julian
-or mixed (Julian before 1582 OCT 15). Returns TDB seconds past J2000, with the
-arithmetic of CSPICE; a UTC leap second `23:59:60` is accepted where one exists.
-Throws `SpiceError(:badtime)` with the reason for a string that CSPICE rejects, and
-`SpiceError(:nolsk)` without a leap-second kernel. Reads `ks.lsk` only.
+Return the epoch of the time string `s` in seconds past J2000 TDB, as `str2et_c`.
+
+A leap-second kernel must be loaded. The string forms of CSPICE are accepted:
+
+| Form                             | Examples                                             |
+|:---------------------------------|:-----------------------------------------------------|
+| ISO 8601                         | `"2025-03-01T12:00:00.5"`, `"2025-060T12:00"`        |
+| calendar, month name or number   | `"1 MAR 2025 12:00:00"`, `"March 1, 2025 3:00 PM"`, `"3/1/2025"` |
+| day of year                      | `"2025-060 // 12:00"`                                |
+| Julian date                      | `"JD 2460736.0"`                                     |
+
+A string can also hold an era (`B.C.`, `A.D.`), `A.M.` or `P.M.`, a weekday, and a
+time zone (`PDT`, `UTC-7:30`) or a time system (`UTC`, `TDB`, `TDT`), but not a zone
+and a system together. A year can be abbreviated as `'97` or given with two digits.
+
+- Without a zone and a system the string is UTC, or what [`timdef`](@ref) set for the
+  context.
+- The date is Gregorian, or of the calendar that `timdef` set for the context.
+- A year of two digits is in 1969 to 2068, or in the 100 years that
+  [`tsetyr`](@ref) set for the context.
+- A UTC leap second `23:59:60` is accepted on a day that has one.
+
+Throws `SpiceError(:badtime)`, with the reason in the message, if CSPICE rejects the
+string, and `SpiceError(:nolsk)` if no leap-second kernel is loaded.
+
+# Examples
+```julia
+furnsh("naif0012.tls")
+et = str2et("2025-03-01T12:00:00")              # UTC
+et = str2et("2025 MAR 01 12:00:00 TDB")         # the string names the time system
+et = str2et("March 1, 2025 4:00 AM PST")        # the string names a time zone
+timout(et, "YYYY-MM-DDTHR:MN:SC.### ::UTC")     # back to a string
+```
+
+See also [`timout`](@ref), [`et2utc`](@ref), [`utc2et`](@ref), [`tparse`](@ref).
 """
 function str2et(ks::KernelSet, s::AbstractString, defs::TimeDefaults=TimeDefaults())::Float64
     l = _lsk(ks)
@@ -1208,15 +1230,21 @@ function str2et(ks::KernelSet, s::AbstractString, defs::TimeDefaults=TimeDefault
 end
 
 """
-    utc2et(ks, s) -> Float64
+    utc2et([ctx,] s) -> Float64
 
-Contract: `s` is a UTC time string in a form that `str2et` accepts, without a time
-zone, without A.M./P.M. and without a time system other than `UTC`; the defaults of
-`timdef` are not used and the date is Gregorian. Returns TDB seconds past J2000 as
-CSPICE `utc2et` does: the components are not checked against their ranges (CSPICE
-does this check only after `tparch("YES")`), so `1996-02-30` is March 1. Throws
-`SpiceError(:badtime)` for a string that CSPICE rejects and `SpiceError(:nolsk)`
-without a leap-second kernel. Reads `ks.lsk` only.
+Return the epoch of the UTC time string `s` in seconds past J2000 TDB, as `utc2et_c`.
+
+[`str2et`](@ref) is the call for new code; this one keeps the behaviour of the older
+CSPICE routine:
+
+- `s` has a form that `str2et` accepts, without a time zone, without `A.M.` or `P.M.`
+  and without a time system other than `UTC`.
+- The defaults of [`timdef`](@ref) are not used: the string is UTC and the date is
+  Gregorian. The year bound of [`tsetyr`](@ref) is used.
+- The components are not checked against their ranges, so `1996-02-30` is March 1.
+
+Throws `SpiceError(:badtime)` if CSPICE rejects the string and `SpiceError(:nolsk)`
+if no leap-second kernel is loaded.
 """
 function utc2et(ks::KernelSet, s::AbstractString, defs::TimeDefaults=TimeDefaults())::Float64
     l = _lsk(ks)
@@ -1244,13 +1272,31 @@ function utc2et(ks::KernelSet, s::AbstractString, defs::TimeDefaults=TimeDefault
 end
 
 """
-    tparse(s) -> Float64
+    tparse([ctx,] s) -> Float64
 
-Contract: `s` is a time string in a form that `str2et` accepts, without a time zone,
-a time system or A.M./P.M. Returns the seconds past J2000 on a formal calendar in
-which every day has 86400 seconds (no leap seconds, no kernel needed), with the
-arithmetic of CSPICE `tparse`. Throws `SpiceError(:badtime)` with the message that
-`tparse` returns in its `errmsg` argument.
+Return the seconds past J2000 of the time string `s` on a formal calendar, as
+`tparse_c`.
+
+On the formal calendar every day has 86400 seconds: there are no leap seconds, and
+the call needs no kernel. The result is not an epoch of a time scale; it is the count
+that [`etcal`](@ref) writes back. `s` has a form that [`str2et`](@ref) accepts,
+without a time zone, a time system, or `A.M.` and `P.M.`. With `ctx`, a year of two
+digits follows [`tsetyr`](@ref) of that context; without it the 100 years start at
+1969.
+
+Different from CSPICE, a string that cannot be parsed is an error and not an `errmsg`
+result.
+
+Throws `SpiceError(:badtime)` with the message that `tparse_c` returns in `errmsg`.
+
+# Examples
+```jldoctest
+julia> tparse("2000-01-01T12:00:00")
+0.0
+
+julia> tparse("2 JAN 2000")
+43200.0
+```
 """
 function tparse(s::AbstractString, defs::TimeDefaults=TimeDefaults())::Float64
     p = _tpartv(s, 8)
@@ -1292,12 +1338,25 @@ function tparse(s::AbstractString, defs::TimeDefaults=TimeDefaults())::Float64
 end
 
 """
-    tpictr(sample) -> String
+    tpictr([ctx,] sample) -> String
 
-Contract: `sample` is a time string in a form that `str2et` accepts. Returns the
-picture with which `timout` writes epochs in the form of `sample`, as CSPICE `tpictr`
-builds it (for example `"Mon DD, YYYY AP:MN:SC ampm ::UTC-7"`). Throws
-`SpiceError(:badtime)` with the reason when CSPICE gives no picture. No kernel needed.
+Return the picture with which [`timout`](@ref) writes epochs in the form of the time
+string `sample`, as `tpictr_c`.
+
+`sample` has a form that [`str2et`](@ref) accepts. The call needs no kernel. Different
+from CSPICE, a string that gives no picture is an error and not an `errmsg` result.
+
+Throws `SpiceError(:badtime)`, with the reason in the message, if CSPICE gives no
+picture for `sample`.
+
+# Examples
+```jldoctest
+julia> tpictr("Mar 1, 2025 3:04:05 PM")
+"Mon DD, YYYY AP:MN:SC AMPM"
+
+julia> tpictr("2025-03-01T12:00:00.000")
+"YYYY-MM-DDTHR:MN:SC.### ::RND"
+```
 """
 function tpictr(sample::AbstractString)::String
     p = _tpartv(sample, 8)

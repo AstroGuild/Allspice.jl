@@ -213,13 +213,32 @@ end
 # ---------------------------------------------------------------------------------------
 
 """
-    pdpool([ctx], name, values) -> Nothing
+    pdpool([ctx,] name, values) -> Nothing
 
-Set the kernel-pool variable `name` to the numbers `values`, as `pdpool_c`; a variable
-of that name is replaced. An empty `values` changes nothing, as in CSPICE. Throws
-`SpiceError(:badvarname)` for a name that is empty or longer than 32 characters. The
-edit is atomic for concurrent queries; see the head of `pool_write.jl` for how it
-interacts with `furnsh`, `unload` and `kclear`.
+Set the kernel-pool variable `name` to the numbers `values`, as `pdpool_c`.
+
+A variable of that name is replaced, whatever its type. An empty `values` changes
+nothing, as in CSPICE. Blanks around `name` are ignored.
+
+The edit is atomic for queries on other threads, and every table that is built from
+the pool (body names, frames, clocks) follows it. The edit stays through a later
+[`furnsh`](@ref) and through the [`unload`](@ref) of a binary kernel. It is lost at
+[`kclear`](@ref) and at the `unload` of a text kernel or a meta-kernel, as in CSPICE.
+
+Throws `SpiceError(:badvarname)` if `name` is blank or longer than 32 characters.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> pdpool(ctx, "BODY999_GM", [42.0]);
+
+julia> gdpool(ctx, "BODY999_GM")
+1-element Vector{Float64}:
+ 42.0
+```
+
+See also [`pipool`](@ref), [`pcpool`](@ref), [`dvpool`](@ref), [`lmpool`](@ref).
 """
 function pdpool(ctx::SpiceContext, name::AbstractString, values::AbstractVector{<:Real})
     n = _pool_x_name(name)
@@ -229,20 +248,23 @@ function pdpool(ctx::SpiceContext, name::AbstractString, values::AbstractVector{
 end
 
 """
-    pipool([ctx], name, ivals) -> Nothing
+    pipool([ctx,] name, ivals) -> Nothing
 
-Set the kernel-pool variable `name` to the integers `ivals`, as `pipool_c` (the pool
-stores them as numbers). For the rest see [`pdpool`](@ref).
+Set the kernel-pool variable `name` to the integers `ivals`, as `pipool_c`.
+
+The pool stores them as `Float64` numbers; [`gipool`](@ref) reads them back as
+integers. The rules and the error are those of [`pdpool`](@ref).
 """
 pipool(ctx::SpiceContext, name::AbstractString, ivals::AbstractVector{<:Integer}) =
     pdpool(ctx, name, ivals)
 
 """
-    pcpool([ctx], name, cvals) -> Nothing
+    pcpool([ctx,] name, cvals) -> Nothing
 
-Set the kernel-pool variable `name` to the strings `cvals`, as `pcpool_c`. A string
-longer than 80 characters is cut, as in the kernel pool of CSPICE. For the rest see
-[`pdpool`](@ref).
+Set the kernel-pool variable `name` to the strings `cvals`, as `pcpool_c`.
+
+A string longer than 80 characters is cut to 80, as in the kernel pool of CSPICE. The
+rules and the error are those of [`pdpool`](@ref).
 """
 function pcpool(ctx::SpiceContext, name::AbstractString, cvals::AbstractVector{<:AbstractString})
     n = _pool_x_name(name)
@@ -252,10 +274,12 @@ function pcpool(ctx::SpiceContext, name::AbstractString, cvals::AbstractVector{<
 end
 
 """
-    dvpool([ctx], name) -> Nothing
+    dvpool([ctx,] name) -> Nothing
 
-Delete the kernel-pool variable `name`, as `dvpool_c`. A name that is not in the pool
-changes nothing.
+Delete the kernel-pool variable `name`, as `dvpool_c`.
+
+A name that is not in the pool changes nothing. The deletion is a direct edit of the
+pool, with the rules of [`pdpool`](@ref).
 """
 function dvpool(ctx::SpiceContext, name::AbstractString)
     n = String(strip(name))
@@ -269,24 +293,47 @@ end
 """
     clpool([ctx]) -> Nothing
 
-Remove every variable from the kernel pool, as `clpool_c`. The load list is not
-changed: binary kernels stay usable, and the text kernels stay in the list although
-their variables are gone.
+Remove every variable from the kernel pool, as `clpool_c`.
+
+The loaded kernels are not changed: binary kernels stay usable, and the text kernels
+stay in the list of [`ktotal`](@ref) although their variables are gone. A later
+[`unload`](@ref) of a text kernel builds the pool again from the text kernels that
+stay loaded.
+
+See also [`kclear`](@ref).
 """
 clpool(ctx::SpiceContext) = _pool_x_edit!(pool -> (empty!(pool); :all), ctx)
 
-"Contract: apply the assignments of `tk` to `pool` and return the assigned names."
 function _pool_x_apply!(pool::Dict{String,PoolValue}, tk::TextKernel)
     apply_assignments!(pool, tk)
     return String[a.name for a in tk.assignments]
 end
 
 """
-    lmpool([ctx], cvals) -> Nothing
+    lmpool([ctx,] cvals) -> Nothing
 
-Load the text lines `cvals` into the kernel pool as the data section of a text kernel
-(`name = value` assignments; `\\begintext` and `\\begindata` work as in a file), as
-`lmpool_c`. Throws `SpiceError(:badkernel)` for a malformed assignment.
+Load the text lines `cvals` into the kernel pool as the data section of a text kernel,
+as `lmpool_c`.
+
+Each line holds text-kernel assignments (`NAME = value`, `NAME += value`); an
+assignment can continue on the next line. The lines start in a data section, and
+`\\begintext` and `\\begindata` work as in a file. The variables are direct edits of
+the pool, with the rules of [`pdpool`](@ref).
+
+Throws `SpiceError(:badkernel)` if an assignment is malformed; the pool is then
+unchanged.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> lmpool(ctx, ["A = 1.5", "B = ( 'x', 'y' )"]);
+
+julia> gdpool(ctx, "A"), gcpool(ctx, "B")
+([1.5], ["x", "y"])
+```
+
+See also [`ldpool`](@ref), [`furnsh`](@ref).
 """
 function lmpool(ctx::SpiceContext, cvals::AbstractVector{<:AbstractString})
     tk = parse_text_lines("lmpool", vcat(["\\begindata"], String[String(s) for s in cvals]),
@@ -295,12 +342,18 @@ function lmpool(ctx::SpiceContext, cvals::AbstractVector{<:AbstractString})
 end
 
 """
-    ldpool([ctx], fname) -> Nothing
+    ldpool([ctx,] fname) -> Nothing
 
-Load the variables of the text kernel `fname` into the kernel pool, as `ldpool_c`. The
-file does not enter the load list of `furnsh`, so `ktotal` does not count it and
-`unload` cannot remove it; its variables are direct edits of the pool. Throws
-`SpiceError(:nofile)` if the file does not exist.
+Load the variables of the text kernel file `fname` into the kernel pool, as
+`ldpool_c`.
+
+Different from [`furnsh`](@ref), the file does not enter the list of loaded kernels:
+[`ktotal`](@ref) does not count it and [`unload`](@ref) cannot remove it. Its
+variables are direct edits of the pool, with the rules of [`pdpool`](@ref). A
+`KERNELS_TO_LOAD` list in the file is not followed.
+
+Throws `SpiceError(:nofile)` if the file does not exist and `SpiceError(:badkernel)`
+if an assignment is malformed.
 """
 function ldpool(ctx::SpiceContext, fname::AbstractString)
     tk = parse_text_kernel(String(fname), timedefaults(ctx).yearbound)
@@ -308,14 +361,27 @@ function ldpool(ctx::SpiceContext, fname::AbstractString)
 end
 
 """
-    boddef([ctx], name, code) -> Nothing
+    boddef([ctx,] name, code) -> Nothing
 
-Define `name` as a name of the body with the ID `code`, as `boddef_c`. The pair has
-priority over the built-in names; a name or a code that the kernel pool defines
-(`NAIF_BODY_NAME`, `NAIF_BODY_CODE`) keeps the definition of the pool. The pair stays
-through `furnsh`, `unload` and `kclear`, as in CSPICE. Letter case and blanks of the
-name do not matter for a lookup, and `bodc2n` returns the name as given here. Throws
-`SpiceError(:badarg)` for a blank name.
+Define `name` as a name of the body with the NAIF ID `code`, as `boddef_c`.
+
+The pair has priority over the built-in names. A name or a code that the kernel pool
+defines (`NAIF_BODY_NAME`, `NAIF_BODY_CODE`) keeps the definition of the pool. The
+pair stays through [`furnsh`](@ref), [`unload`](@ref) and [`kclear`](@ref), as in
+CSPICE. A lookup ignores letter case and blanks around the name;
+[`bodc2n`](@ref) returns the name as given here.
+
+Throws `SpiceError(:badarg)` if `name` is blank.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> boddef(ctx, "My Probe", -999);
+
+julia> bodn2c(ctx, "my probe"), bodc2n(ctx, -999)
+(-999, "My Probe")
+```
 """
 function boddef(ctx::SpiceContext, name::AbstractString, code::Integer)
     nm = String(strip(name))
@@ -335,20 +401,34 @@ end
 # ---------------------------------------------------------------------------------------
 
 """
-    expool(name) -> Bool
+    expool([ctx,] name) -> Bool
 
-True if `name` is a numeric variable of the kernel pool, as `expool_c` (a character
-variable gives false).
+Return `true` if `name` is a numeric variable of the kernel pool, as `expool_c`.
+
+A character variable gives `false`, as in CSPICE. Use [`dtpool`](@ref) to find a
+variable of any type.
 """
 expool(ks::KernelSet, name::AbstractString) =
     get(ks.pool, String(strip(name)), nothing) isa Vector{Float64}
 
 """
-    dtpool(name) -> (n::Int, type::Symbol)
+    dtpool([ctx,] name) -> (n::Int, type::Symbol)
 
-Number of values and type of the kernel-pool variable `name`, as `dtpool_c` (return
-value of SPICE.jl): the type is `:N` for numbers, `:C` for strings, and the result is
-`(0, :X)` if the variable is not in the pool.
+Return the number of values and the type of the kernel-pool variable `name`, as
+`dtpool_c`.
+
+`type` is `:N` for numbers and `:C` for strings. A variable that is not in the pool
+gives `(0, :X)`; this takes the place of the `found` flag of CSPICE, as in SPICE.jl.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> pcpool(ctx, "NAMES", ["a", "b"]);
+
+julia> dtpool(ctx, "NAMES"), dtpool(ctx, "ABSENT")
+((2, :C), (0, :X))
+```
 """
 function dtpool(ks::KernelSet, name::AbstractString)
     v = get(ks.pool, String(strip(name)), nothing)
@@ -388,13 +468,30 @@ function _pool_x_match(s::AbstractString, t::AbstractString)
 end
 
 """
-    gnpool(name, start=1, room=typemax(Int)) -> Vector{String}
+    gnpool([ctx,] name, start=1, room=typemax(Int)) -> Vector{String}
 
-Names of the kernel-pool variables that match the template `name` (`*` for any
-substring, `%` for any one character, letter case ignored), as `gnpool_c`: at most
-`room` names, from match number `start` (1-based, as in SPICE.jl). The matches are in
+Return the names of the kernel-pool variables that match the template `name`, as
+`gnpool_c`.
+
+In the template `*` stands for any substring and `%` for any one character; letter
+case is ignored. The result holds at most `room` names, from match number `start`.
+`start` counts from 1, as in SPICE.jl; CSPICE counts from 0. The matches are in
 ascending order of the name; CSPICE returns them in the order of its hash table. The
-result is empty if nothing matches. Throws `SpiceError(:badarraysize)` for `room < 1`.
+result is empty if nothing matches; there is no `found` flag.
+
+Throws `SpiceError(:badarraysize)` if `room < 1`.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> pdpool(ctx, "BODY399_GM", [398600.4]); pdpool(ctx, "BODY301_GM", [4902.8]);
+
+julia> gnpool(ctx, "BODY%%%_GM")
+2-element Vector{String}:
+ "BODY301_GM"
+ "BODY399_GM"
+```
 """
 function gnpool(ks::KernelSet, name::AbstractString, start::Integer=1, room::Integer=typemax(Int))
     room >= 1 || throw(SpiceError(:badarraysize, "the amount of room specified as " *
@@ -409,10 +506,13 @@ end
 """
     szpool(name) -> Union{Int,Nothing}
 
-Value of the kernel-pool size parameter `name` of CSPICE (`MAXVAR`, `MAXVAL`, `MAXLIN`,
-`MAXCHR`, `MXNOTE`, `MAXLEN`, `MAXAGT`; case and blanks ignored), as `szpool_c`, or
-`nothing` for another name. This package has none of these limits except `MAXLEN` and
-`MAXCHR`; the values are those of CSPICE N0067.
+Return the kernel-pool size parameter `name` of CSPICE N0067, or `nothing` if the name
+is not one, as `szpool_c`.
+
+The names are `MAXVAR`, `MAXVAL`, `MAXLIN`, `MAXCHR`, `MXNOTE`, `MAXLEN` and `MAXAGT`;
+letter case and blanks are ignored. Of these limits the package has only `MAXLEN`
+(32 characters in a variable name) and `MAXCHR` (80 characters in a string value). The
+other values are reported for programs that read them and limit nothing here.
 """
 function szpool(name::AbstractString)
     key = uppercase(replace(name, ' ' => ""))
@@ -423,12 +523,26 @@ function szpool(name::AbstractString)
 end
 
 """
-    stpool(item, nth, contin) -> Union{String,Nothing}
+    stpool([ctx,] item, nth, contin) -> Union{String,Nothing}
 
-String number `nth` (1-based, as in SPICE.jl) of the character kernel-pool variable
-`item`, where an element that ends with the continuation marker `contin` is joined
-with the next one, as `stpool_c`. `nothing` if the variable is absent, is numeric, or
-has fewer strings.
+Return string number `nth` of the character kernel-pool variable `item`, with
+continued elements joined, as `stpool_c`.
+
+An element that ends with the continuation marker `contin` is joined with the next
+element; the marker is removed and the text before it is kept. `nth` counts the joined
+strings from 1, as in SPICE.jl; CSPICE counts from 0. The result is `nothing` if the
+variable is absent, is numeric, or has fewer strings; this takes the place of the
+`found` flag.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> pcpool(ctx, "PATH", ["/data/kernels/+", "spk/de440s.bsp", "other"]);
+
+julia> stpool(ctx, "PATH", 1, "+"), stpool(ctx, "PATH", 2, "+"), stpool(ctx, "PATH", 3, "+")
+("/data/kernels/spk/de440s.bsp", "other", nothing)
+```
 """
 function stpool(ks::KernelSet, item::AbstractString, nth::Integer, contin::AbstractString)
     v = get(ks.pool, String(strip(item)), nothing)
@@ -443,12 +557,32 @@ end
 # ---------------------------------------------------------------------------------------
 
 """
-    swpool([ctx], agent, names) -> Nothing
+    swpool([ctx,] agent, names) -> Nothing
 
-Watch the kernel-pool variables `names` for the agent `agent`, as `swpool_c`: after
-this call, and after every later change of one of the variables, `cvpool(ctx, agent)`
-returns true once. The names are added to the ones that the agent watches already.
-The watch belongs to the context `ctx`; the call is thread safe.
+Watch the kernel-pool variables `names` for the agent `agent`, as `swpool_c`.
+
+After this call, and after every later change of one of the variables,
+[`cvpool`](@ref) returns `true` once for `agent`. The names are added to the ones
+that the agent watches already. A watch belongs to one context: CSPICE keeps one
+table for the process, and here two contexts do not see the watches of each other.
+The call takes the lock of the context, so it is safe on any thread.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> swpool(ctx, "MY_AGENT", ["BODY399_GM"]);
+
+julia> cvpool(ctx, "MY_AGENT"), cvpool(ctx, "MY_AGENT")
+(true, false)
+
+julia> pdpool(ctx, "BODY399_GM", [398600.4]);
+
+julia> cvpool(ctx, "MY_AGENT")
+true
+```
+
+See also [`poolversion`](@ref).
 """
 function swpool(ctx::SpiceContext, agent::AbstractString, names::AbstractVector{<:AbstractString})
     a = String(strip(agent))
@@ -464,13 +598,17 @@ function swpool(ctx::SpiceContext, agent::AbstractString, names::AbstractVector{
 end
 
 """
-    cvpool([ctx], agent) -> Bool
+    cvpool([ctx,] agent) -> Bool
 
-True if a variable that `agent` watches in `ctx` changed since the last call for that
-agent (or since `swpool`), as `cvpool_c`; the pending update is cleared. A change is an
-assignment by `furnsh`, `ldpool`, `lmpool`, `pdpool`, `pcpool` or `pipool`, a deletion
-by `dvpool`, and for every watched variable `clpool`, `kclear` and the `unload` of a
-text kernel, as in CSPICE. The call is thread safe.
+Return `true` if a variable that `agent` watches changed since the last call for that
+agent, or since [`swpool`](@ref), as `cvpool_c`.
+
+The call clears the pending update. A change is an assignment by [`furnsh`](@ref),
+[`ldpool`](@ref), [`lmpool`](@ref), [`pdpool`](@ref), [`pcpool`](@ref) or
+[`pipool`](@ref), or a deletion by [`dvpool`](@ref). [`clpool`](@ref),
+[`kclear`](@ref) and the [`unload`](@ref) of a text kernel count as a change of every
+watched variable, as in CSPICE. An agent without a watch gives `false`. The call
+takes the lock of the context, so it is safe on any thread.
 """
 function cvpool(ctx::SpiceContext, agent::AbstractString)
     a = String(strip(agent))
@@ -484,9 +622,27 @@ end
 """
     poolversion([ctx]) -> Int
 
-Number of changes of the kernel pool of `ctx` since the context was made: one atomic
-read, no lock. A caller that keeps the value can find out later that the pool changed
-by comparing; this is the lock-free form of a watch on the whole pool.
+Return the number of changes of the kernel pool of `ctx` since the context was made.
+This call has no CSPICE counterpart.
+
+The call is one atomic read and takes no lock. Keep the value and compare it later to
+find out whether the pool changed: this is the lock-free form of a watch on the whole
+pool. A change of the load list that assigns no variable (a binary kernel) does not
+count.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> v = poolversion(ctx);
+
+julia> pdpool(ctx, "A", [1.0]);
+
+julia> poolversion(ctx) - v
+1
+```
+
+See also [`swpool`](@ref), [`cvpool`](@ref).
 """
 poolversion(ctx::SpiceContext) = @atomic ctx.watch.version
 

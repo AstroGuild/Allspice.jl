@@ -19,10 +19,8 @@ import StaticArrays
 # The generic evaluators stay reachable with `invoke` on the `et::Real` signature; the
 # tests use this as an independent check of the analytical derivatives.
 
-"`primal(x::Dual)`: the plain `Float64` value of a dual number, with all partials removed."
 Allspice.primal(x::Dual) = Allspice.primal(value(x))
 
-"Nesting depth of a dual-number type: 0 for a plain real, 1 + depth of the value type."
 depth(::Type{<:Real}) = 0
 depth(::Type{Dual{T,V,P}}) where {T,V,P} = 1 + depth(V)
 

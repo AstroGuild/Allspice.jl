@@ -21,7 +21,6 @@ Coupled recurrences `s_k = (1/k) Σ_{j=1}^{k} j x_j c_{k-j}` and
     return Expr(:block, Expr(:meta, :inline), ex..., :(($(_pack(:s, N)), $(_pack(:c, N)))))
 end
 
-"`sinh(x)` and `cosh(x)` are the two parts of `_sinhcosh(x)`."
 @inline Base.sinh(x::Taylor) = _sinhcosh(x)[1]
 @inline Base.cosh(x::Taylor) = _sinhcosh(x)[2]
 
@@ -97,7 +96,6 @@ const _PI = Float64(pi)
 @inline _cross(a::Vec3, b::Vec3) = Vec3(a[2] * b[3] - a[3] * b[2], a[3] * b[1] - a[1] * b[3],
     a[1] * b[2] - a[2] * b[1])
 
-"Largest absolute plain value of the components of `v`."
 @inline _maxabs(v::Vec3) = max(abs(primal(v[1])), abs(primal(v[2])), abs(primal(v[3])))
 
 "Euclidean norm of a plain vector, scaled by its largest component as `vnorm` does."

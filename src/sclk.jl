@@ -80,10 +80,14 @@ function build_sclk(pool::AbstractDict)
 end
 
 """
-    sctype(ks, sc) -> Int
+    sctype([ctx,] sc) -> Int
 
-Data type of the spacecraft clock `sc` (`SCLK_DATA_TYPE_<-sc>`), as `sctype_`. Throws
-`SpiceError(:kernelvarnotfound)` if no SCLK kernel for `sc` is loaded.
+Return the data type of the spacecraft clock `sc`, as `sctype_c`.
+
+`sc` is the NAIF ID of the spacecraft, a negative number. The value is the one of
+`SCLK_DATA_TYPE_<-sc>`. The conversion calls of the package support type 1.
+
+Throws `SpiceError(:kernelvarnotfound)` if no SCLK kernel for `sc` is loaded.
 """
 function sctype(ks::KernelSet, sc::Integer)
     name = "SCLK_DATA_TYPE_$(-Int(sc))"
@@ -231,41 +235,79 @@ end
 
 # --- numeric interface ------------------------------------------------------------------
 
-"`x` as a floating-point number: an integer becomes `Float64`, every other real is kept."
 @inline _sclk_num(x::Integer) = Float64(x)
 @inline _sclk_num(x::Real) = x
 
 """
-    sct2e(sc, sclkdp) -> ET
+    sct2e([ctx,] sc, sclkdp) -> ET
 
-Convert the encoded spacecraft clock `sclkdp` (ticks) of the clock `sc` to ET, as
-`sct2e_c`. Generic over the number type of `sclkdp`; does not allocate. Forms: on a
-`KernelSet`, on a `SpiceContext`, and on the default context.
+Return the epoch, in seconds past J2000 TDB, of the encoded spacecraft clock value
+`sclkdp` of the clock `sc`, as `sct2e_c`.
+
+`sc` is the NAIF ID of the spacecraft. `sclkdp` is in ticks from the start of the
+first partition; [`scencd`](@ref) makes it from a clock string. An SCLK kernel for
+`sc` must be loaded, and a leap-second kernel if the clock runs parallel to TDT. The
+result has the number type of `sclkdp` (`Float64` for an integer), so a dual number
+keeps its derivative. The call does not allocate.
+
+Throws `SpiceError(:kernelvarnotfound)` if no SCLK kernel for `sc` is loaded or its
+data are incomplete, and `SpiceError(:unsupported)` if the clock is not of type 1.
+Throws `SpiceError(:valueoutofrange)` if `sclkdp` is outside the range of the
+kernel and `SpiceError(:nolsk)` if a leap-second kernel is needed and not loaded.
+
+# Examples
+```julia
+furnsh("naif0012.tls")
+furnsh("mission.tsc")                    # the SCLK kernel of the spacecraft -77
+et = sct2e(-77, scencd(-77, "1/0123456789:123"))
+et = scs2e(-77, "1/0123456789:123")      # the same in one call
+```
+
+See also [`sce2c`](@ref), [`scs2e`](@ref).
 """
 sct2e(ks::KernelSet, sc::Integer, sclkdp::Real) =
     _sct2e(ks, _sclk(ks, sc), _sclk_num(sclkdp))
 
 """
-    sce2c(sc, et) -> ticks
+    sce2c([ctx,] sc, et) -> ticks
 
-Convert ET `et` to the continuous encoded spacecraft clock of the clock `sc`, as
-`sce2c_c`. Generic over the number type of `et`; does not allocate.
+Return the continuous encoded spacecraft clock value of the clock `sc` at `et`, as
+`sce2c_c`.
+
+`et` is in seconds past J2000 TDB. The result is in ticks from the start of the first
+partition and can have a fraction; [`sce2t`](@ref) rounds it to whole ticks. This is
+the form that [`ckgp`](@ref) takes. The result has the number type of `et`, and the
+call does not allocate.
+
+Throws the errors of [`sct2e`](@ref), with `et` in the place of `sclkdp`.
 """
 sce2c(ks::KernelSet, sc::Integer, et::Real) = _sce2c(ks, _sclk(ks, sc), _sclk_num(et))
 
 """
-    sce2t(sc, et) -> Float64
+    sce2t([ctx,] sc, et) -> Float64
 
-Convert ET `et` to the discrete encoded spacecraft clock of the clock `sc` (whole
-ticks), as `sce2t_c`. A number that is not a `Float64` is taken at its `primal` value.
+Return the discrete encoded spacecraft clock value of the clock `sc` at `et`, in
+whole ticks, as `sce2t_c`.
+
+`et` is in seconds past J2000 TDB. A dual-number `et` is taken at its plain value: the
+result is a step function and has no derivative.
+
+Throws the errors of [`sce2c`](@ref).
 """
 sce2t(ks::KernelSet, sc::Integer, et::Real) = _sce2t(ks, _sclk(ks, sc), primal(et))
 
 """
-    scpart(sc) -> (pstart::Vector{Float64}, pstop::Vector{Float64})
+    scpart([ctx,] sc) -> (pstart::Vector{Float64}, pstop::Vector{Float64})
 
-Partition start and stop times of the clock `sc` in ticks, as `scpart_c`. The vectors
-are copies; they have one element for each partition.
+Return the start and stop times of the partitions of the clock `sc`, in ticks, as
+`scpart_c`.
+
+The two vectors are new and have one element for each partition; their length takes
+the place of the `nparts` result of CSPICE. A partition is a span on which the clock
+counts without a reset or a jump.
+
+Throws `SpiceError(:kernelvarnotfound)` if no SCLK kernel for `sc` is loaded or its
+data are incomplete, and `SpiceError(:unsupported)` if the clock is not of type 1.
 """
 function scpart(ks::KernelSet, sc::Integer)
     clock = _sclk(ks, sc)
@@ -327,13 +369,22 @@ function _sclk_cmptks(clock::SclkType1)
 end
 
 """
-    sctiks(sc, clkstr) -> Float64
+    sctiks([ctx,] sc, clkstr) -> Float64
 
-Ticks of the clock string `clkstr` (no partition number) of the clock `sc`, as
-`sctiks_c`: the fields, most significant first and separated by `.`, `:`, `-`, `,` or
-blanks, less their offsets, times the ticks of one count of the field. A blank field
-counts as its offset. Throws `SpiceError(:invalidsclkstring)` for a blank string, too
-many fields, a field that is not a number, or a field below its offset.
+Return the tick count of the clock string `clkstr` of the clock `sc`, as `sctiks_c`.
+
+`clkstr` has no partition number. Its fields are given most significant first and are
+separated by `.`, `:`, `-`, `,` or blanks. The count is the sum over the fields of the
+field value less its offset, times the ticks of one count of the field. A blank field
+counts as its offset. The result is a count inside one partition, not an encoded
+clock value; see [`scencd`](@ref).
+
+Throws `SpiceError(:invalidsclkstring)` if the string is blank, has too many fields,
+has a field that is not a number, or has a field below its offset.
+Throws `SpiceError(:kernelvarnotfound)` if no SCLK kernel for `sc` is loaded or its
+data are incomplete, and `SpiceError(:unsupported)` if the clock is not of type 1.
+
+See also [`scfmt`](@ref).
 """
 function sctiks(ks::KernelSet, sc::Integer, clkstr::AbstractString)
     clock = _sclk(ks, sc)
@@ -365,12 +416,19 @@ function sctiks(ks::KernelSet, sc::Integer, clkstr::AbstractString)
 end
 
 """
-    scfmt(sc, ticks) -> String
+    scfmt([ctx,] sc, ticks) -> String
 
-Clock string (no partition number) of the tick count `ticks` of the clock `sc`, as
-`scfmt_c`: `ticks` is rounded, split into the clock fields, and each field is written
-with leading zeros to the width of its largest value, with the output delimiter of the
-clock between the fields. Throws `SpiceError(:valueoutofrange)` for negative ticks.
+Return the clock string of the tick count `ticks` of the clock `sc`, without a
+partition number, as `scfmt_c`.
+
+`ticks` is rounded to a whole number and split into the fields of the clock. Each
+field is written with leading zeros to the width of its largest value, with the
+output delimiter of the clock between the fields. This is the inverse of
+[`sctiks`](@ref).
+
+Throws `SpiceError(:valueoutofrange)` if `ticks` is negative.
+Throws `SpiceError(:kernelvarnotfound)` if no SCLK kernel for `sc` is loaded or its
+data are incomplete, and `SpiceError(:unsupported)` if the clock is not of type 1.
 """
 function scfmt(ks::KernelSet, sc::Integer, ticks::Real)
     clock = _sclk(ks, sc)
@@ -412,13 +470,24 @@ function _sclk_partitions(clock::SclkType1)
 end
 
 """
-    scencd(sc, sclkch) -> Float64
+    scencd([ctx,] sc, sclkch) -> Float64
 
-Encode the clock string `sclkch` of the clock `sc` (`"partition/fields"`, the partition
-number optional) as ticks from the start of the first partition, as `scencd_c`. Without
-a partition number the first partition that holds the count is taken. Throws
-`SpiceError` with kind `:badpartnumber`, `:notinpart`, `:nopartition` or
-`:invalidsclkstring`.
+Return the encoded spacecraft clock value of the clock string `sclkch` of the clock
+`sc`, as `scencd_c`.
+
+`sclkch` has the form `"partition/fields"`, such as `"1/0123456789:123"`; the
+partition number is optional. The result is in ticks from the start of the first
+partition. Without a partition number, the first partition that holds the count is
+taken.
+
+Throws `SpiceError(:badpartnumber)` if the partition number cannot be read or is not
+the number of a partition, `SpiceError(:notinpart)` if the count is not inside the given partition,
+`SpiceError(:nopartition)` if no partition holds the count, and
+`SpiceError(:invalidsclkstring)` if the fields cannot be read (see [`sctiks`](@ref)).
+Throws `SpiceError(:kernelvarnotfound)` if no SCLK kernel for `sc` is loaded or its
+data are incomplete, and `SpiceError(:unsupported)` if the clock is not of type 1.
+
+See also [`scdecd`](@ref), [`scs2e`](@ref).
 """
 function scencd(ks::KernelSet, sc::Integer, sclkch::AbstractString)
     clock = _sclk(ks, sc)
@@ -457,11 +526,17 @@ function scencd(ks::KernelSet, sc::Integer, sclkch::AbstractString)
 end
 
 """
-    scdecd(sc, sclkdp) -> String
+    scdecd([ctx,] sc, sclkdp) -> String
 
-Clock string `"partition/fields"` of the encoded SCLK `sclkdp` (rounded to whole ticks)
-of the clock `sc`, as `scdecd_c`. Throws `SpiceError(:valueoutofrange)` if the ticks
-are not inside a partition.
+Return the clock string `"partition/fields"` of the encoded spacecraft clock value
+`sclkdp` of the clock `sc`, as `scdecd_c`.
+
+`sclkdp` is in ticks from the start of the first partition and is rounded to whole
+ticks. This is the inverse of [`scencd`](@ref).
+
+Throws `SpiceError(:valueoutofrange)` if the ticks are not inside a partition.
+Throws `SpiceError(:kernelvarnotfound)` if no SCLK kernel for `sc` is loaded or its
+data are incomplete, and `SpiceError(:unsupported)` if the clock is not of type 1.
 """
 function scdecd(ks::KernelSet, sc::Integer, sclkdp::Real)
     clock = _sclk(ks, sc)
@@ -476,16 +551,26 @@ function scdecd(ks::KernelSet, sc::Integer, sclkdp::Real)
 end
 
 """
-    sce2s(sc, et) -> String
+    sce2s([ctx,] sc, et) -> String
 
-Clock string of the ET `et` for the clock `sc`, as `sce2s_c`: `scdecd` of `sce2t`.
+Return the clock string `"partition/fields"` of the clock `sc` at `et` (seconds past
+J2000 TDB), as `sce2s_c`.
+
+The result is [`scdecd`](@ref) of [`sce2t`](@ref), and the errors are theirs.
+
+See also [`scs2e`](@ref).
 """
 sce2s(ks::KernelSet, sc::Integer, et::Real) = scdecd(ks, sc, sce2t(ks, sc, et))
 
 """
-    scs2e(sc, sclkch) -> Float64
+    scs2e([ctx,] sc, sclkch) -> Float64
 
-ET of the clock string `sclkch` of the clock `sc`, as `scs2e_c`: `sct2e` of `scencd`.
+Return the epoch, in seconds past J2000 TDB, of the clock string `sclkch` of the
+clock `sc`, as `scs2e_c`.
+
+The result is [`sct2e`](@ref) of [`scencd`](@ref), and the errors are theirs.
+
+See also [`sce2s`](@ref).
 """
 scs2e(ks::KernelSet, sc::Integer, sclkch::AbstractString) =
     sct2e(ks, sc, scencd(ks, sc, sclkch))

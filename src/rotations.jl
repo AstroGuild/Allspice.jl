@@ -95,13 +95,11 @@ Barycenter code of the planetary system of `body` (planets and satellites `PNN` 
 _bodbry(body::Integer) =
     100 <= body <= 999 ? Int(body) ÷ 100 : 10000 <= body <= 99999 ? Int(body) ÷ 10000 : Int(body)
 
-"Numeric pool variable `name`, or `nothing` if it is absent or not numeric."
 function _pool_numbers(pool::AbstractDict, name::AbstractString)
     v = get(pool, name, nothing)
     return v isa Vector{Float64} ? v : nothing
 end
 
-"Numeric pool variable `name`, or an empty vector."
 _pool_numbers_or_empty(pool, name) = something(_pool_numbers(pool, name), Float64[])
 
 "First value of the first of the numeric pool variables `names` that exists, else `default`."

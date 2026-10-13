@@ -4,12 +4,6 @@
 "Pool variables that `furnsh` uses for a meta-kernel and then deletes, as CSPICE does."
 const METAKERNEL_VARIABLES = ("KERNELS_TO_LOAD", "PATH_SYMBOLS", "PATH_VALUES")
 
-"""
-    empty_kernelset() -> KernelSet
-
-Return a `KernelSet` with no kernel loaded; every container in it is empty and
-`lsk === nothing`.
-"""
 empty_kernelset() = build_kernelset(Loaded[])
 
 """
@@ -86,20 +80,24 @@ function build_kernelset(loaded::Vector{Loaded},
         edited !== nothing, bodydefs)
 end
 
-"""
-    SpiceContext()
-
-Create a context whose current snapshot is the empty `KernelSet`.
-"""
 SpiceContext() = SpiceContext(empty_kernelset(), ReentrantLock())
 
-"The process-wide context of the calls that take no `ctx` argument."
 const DEFAULT_CONTEXT = SpiceContext()
 
 """
     default_context() -> SpiceContext
 
-Return the one process-wide context that the calls without a `ctx` argument use.
+Return the process-wide context that every call without a `ctx` argument uses.
+
+The result is always the same object. Pass it where a call needs an explicit context.
+
+# Examples
+```jldoctest
+julia> default_context() === default_context()
+true
+```
+
+See also [`SpiceContext`](@ref).
 """
 default_context() = DEFAULT_CONTEXT
 
@@ -149,12 +147,39 @@ function load_entries(path::AbstractString, yearbound::Int=1969)
 end
 
 """
-    furnsh(ctx::SpiceContext, path) -> Nothing
+    furnsh([ctx,] path) -> Nothing
 
-Load the kernel at `path` (SPK, binary PCK, CK, DSK, EK, text kernel or meta-kernel) into `ctx`.
-The new snapshot replaces the old one atomically; if the load fails, `ctx` is unchanged.
-A path that is already loaded gets a second entry, as in CSPICE. Direct edits of the
-kernel pool (`pdpool`, ...) stay; the assignments of a text kernel are applied on top.
+Load the kernel file at `path` into `ctx`, as `furnsh_c`.
+
+The type is read from the file: SPK, binary PCK, CK, DSK, EK, text kernel or
+meta-kernel. A meta-kernel loads the files of its `KERNELS_TO_LOAD` list in order.
+Without `ctx` the kernel goes into [`default_context`](@ref).
+
+- The load is atomic. A query on another thread sees the kernel set before the load or
+  after it, and a load that fails leaves `ctx` unchanged.
+- A later kernel has priority over an earlier one, as in CSPICE.
+- A path that is already loaded gets a second entry, as in CSPICE.
+- Direct edits of the kernel pool ([`pdpool`](@ref), [`lmpool`](@ref), ...) stay; the
+  assignments of a text kernel are applied on top of them.
+- An SPK, PCK or CK file in the non-native byte order is read; it is converted in memory.
+
+Throws `SpiceError(:badarg)` if `path` is blank, `SpiceError(:nofile)` if the file (or
+a file that a meta-kernel lists) does not exist, and `SpiceError(:unsupported)` if a
+meta-kernel lists a meta-kernel. A file that cannot be read as a kernel throws a
+`SpiceError` of the kind that the reader gives (`:baddaf`, `:badkernel`, ...).
+
+# Examples
+```julia
+furnsh("naif0012.tls")      # leap seconds
+furnsh("de440s.bsp")        # planetary ephemeris
+et = str2et("2025-03-01T12:00:00")
+state, lt = spkezr("MOON", et, "J2000", "LT+S", "EARTH")
+
+ctx = SpiceContext()        # a second, independent kernel set
+furnsh(ctx, "mission.tm")
+```
+
+See also [`unload`](@ref), [`kclear`](@ref), [`ktotal`](@ref), [`kdata`](@ref).
 """
 function furnsh(ctx::SpiceContext, path::AbstractString)
     isempty(strip(path)) && throw(SpiceError(:badarg, "furnsh: the kernel path is blank"))
@@ -168,13 +193,19 @@ function furnsh(ctx::SpiceContext, path::AbstractString)
 end
 
 """
-    unload(ctx::SpiceContext, path) -> Nothing
+    unload([ctx,] path) -> Nothing
 
-Remove the last load-list entry with path `path` and, if it is a meta-kernel, the
-entries that it caused. Kernels that stay loaded are not read again. A path that is not
-loaded changes nothing, as in CSPICE. If a text kernel is removed, the kernel pool is
-built again from the text kernels that stay, so direct edits of the pool (`pdpool`,
-...) are lost, as in CSPICE.
+Remove the kernel that was loaded from `path` out of `ctx`, as `unload_c`.
+
+`path` is compared as a string with the path given to [`furnsh`](@ref). If the path
+was loaded more than once, the last entry is removed. A meta-kernel takes the files
+that it loaded with it. A path that is not loaded changes nothing, as in CSPICE.
+
+If a text kernel is removed, the kernel pool is built again from the text kernels
+that stay, so direct edits of the pool ([`pdpool`](@ref), ...) are lost, as in CSPICE.
+The kernels that stay are not read from disk again.
+
+See also [`kclear`](@ref).
 """
 function unload(ctx::SpiceContext, path::AbstractString)
     p = String(path)
@@ -194,10 +225,27 @@ function unload(ctx::SpiceContext, path::AbstractString)
 end
 
 """
-    kclear(ctx::SpiceContext) -> Nothing
+    kclear([ctx]) -> Nothing
 
-Replace the snapshot of `ctx` with the empty `KernelSet`. Direct edits of the kernel
-pool are removed; the names of `boddef` stay, as in CSPICE.
+Unload every kernel of `ctx` and empty its kernel pool, as `kclear_c`.
+
+Direct edits of the pool are removed and the pool watchers are told of the change.
+The names of [`boddef`](@ref) stay, as in CSPICE. The time defaults of
+[`timdef`](@ref) are not reset.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> pdpool(ctx, "A", [1.0]);
+
+julia> kclear(ctx)
+
+julia> expool(ctx, "A")
+false
+```
+
+See also [`unload`](@ref).
 """
 function kclear(ctx::SpiceContext)
     lock(ctx.lock) do
@@ -206,26 +254,13 @@ function kclear(ctx::SpiceContext)
     return nothing
 end
 
-"""
-    ktotal(ctx::SpiceContext) -> Int
-
-Return the number of load-list entries of `ctx` (a meta-kernel counts as one entry plus
-one for each file that it lists).
-"""
 ktotal(ctx::SpiceContext) = length(kernelset(ctx).loaded)
 
-"`furnsh(path)`: load the kernel at `path` into the default context."
 furnsh(path::AbstractString) = furnsh(default_context(), path)
-"`unload(path)`: unload the kernel at `path` from the default context."
 unload(path::AbstractString) = unload(default_context(), path)
-"`kclear()`: unload all kernels of the default context."
 kclear() = kclear(default_context())
-"`ktotal()`: number of load-list entries of the default context."
 ktotal() = ktotal(default_context())
 
-"Alias of [`furnsh`](@ref)."
 const furnsh! = furnsh
-"Alias of [`unload`](@ref)."
 const unload! = unload
-"Alias of [`kclear`](@ref)."
 const kclear! = kclear

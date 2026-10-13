@@ -35,7 +35,6 @@ struct Segment
     nrec::Int32
 end
 
-"Copy of `s` that belongs to file number `file` of a `KernelSet`."
 withfile(s::Segment, file::Integer) = Segment(s.target, s.center, s.frame, s.dtype, s.t0,
     s.t1, Int32(file), s.baddr, s.eaddr, s.init, s.intlen, s.rsize, s.nrec)
 
@@ -60,7 +59,6 @@ struct CKSegment
     eaddr::Int
 end
 
-"Copy of `s` that belongs to file number `file` of a `KernelSet`."
 withfile(s::CKSegment, file::Integer) = CKSegment(s.inst, s.frame, s.dtype, s.avflag,
     s.t0, s.t1, Int32(file), s.baddr, s.eaddr)
 
@@ -81,7 +79,6 @@ struct DAF
     cksegments::Vector{CKSegment}
 end
 
-"`DAF(path, kind, data, segments)`: a DAF without CK segments."
 DAF(path, kind, data, segments::Vector{Segment}) =
     DAF(path, kind, data, segments, CKSegment[])
 
@@ -307,14 +304,44 @@ TimeDefaults() = TimeDefaults("GREGORIAN", "UTC", "")
 """
     SpiceContext()
 
-Holder of the current `KernelSet`. Queries read the reference once and work on that
-snapshot; `furnsh`, `unload` and `kclear` build a new snapshot under `lock` and swap
-the reference atomically. Readers never take the lock. `timedefs` holds the defaults
-of `timdef` in the same way: `timdef` replaces the snapshot under `lock`. `watch` is the
-watcher state of `swpool` and `cvpool` (`pool_write.jl`). `dsktols` holds the DSK
-tolerances of `dskgtl`/`dskstl` in the same way as `timedefs`. `gftol` is the default
-convergence tolerance of the geometry finder in seconds (`gfstol`, `gf/api.jl`); a search
-reads it once at its start.
+Create an empty kernel context: the loaded kernels and the settings that the queries read.
+
+Every call that reads kernels takes a context as an optional first argument. Without
+it the call uses [`default_context`](@ref), one context for the whole process.
+Contexts are independent: [`furnsh`](@ref) on one context does not change another.
+
+A context holds:
+
+- the loaded kernels and the kernel pool ([`furnsh`](@ref), [`unload`](@ref),
+  [`kclear`](@ref), [`pdpool`](@ref), [`boddef`](@ref));
+- the time defaults of [`timdef`](@ref) and [`tsetyr`](@ref);
+- the pool watchers of [`swpool`](@ref);
+- the DSK tolerances of [`dskstl`](@ref) and the search tolerance of [`gfstol`](@ref).
+
+A context can be shared between threads. A query reads one immutable snapshot of the
+kernel set and takes no lock. A call that changes the context builds a new snapshot
+under a lock and swaps it in atomically, so a query that runs during a load sees the
+kernel set before the load or after it, never a part of it.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> ktotal(ctx)
+0
+
+julia> pdpool(ctx, "MY_VALUES", [1.0, 2.0]);
+
+julia> gdpool(ctx, "MY_VALUES")
+2-element Vector{Float64}:
+ 1.0
+ 2.0
+
+julia> expool("MY_VALUES")    # the default context is not changed
+false
+```
+
+See also [`default_context`](@ref), [`furnsh`](@ref).
 """
 mutable struct SpiceContext
     @atomic ks::KernelSet
@@ -327,7 +354,26 @@ mutable struct SpiceContext
         new(ks, lock, TimeDefaults(), PoolWatch(), DSKTolerances(), 1.0e-6)
 end
 
-"Error type of the package. `kind` is a short symbol such as `:nocoverage`."
+"""
+    SpiceError(kind::Symbol, msg::String)
+
+The exception that the package throws for a call that fails.
+
+`kind` is a short symbol that names the failure, such as `:nocoverage`, `:notfound` or
+`:badarg`; test it to handle one failure. `msg` is the text for a person. The kinds
+are not the short error messages of CSPICE (`SPICE(SPKINSUFFDATA)`, ...); each
+docstring lists the kinds that its call throws.
+
+# Examples
+```jldoctest
+julia> try
+           gdpool(SpiceContext(), "NO_SUCH_VARIABLE")
+       catch err
+           err isa SpiceError ? err.kind : rethrow()
+       end
+:notfound
+```
+"""
 struct SpiceError <: Exception
     kind::Symbol
     msg::String
