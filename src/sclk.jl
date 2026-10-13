@@ -306,7 +306,9 @@ function _lparsm(list::AbstractString, delims::AbstractString, nmax::Int)
             end
             e <= eol && !isdelim(e) && (e -= 1)
         end
-        push!(items, SubString(s, b, stop))
+        # `stop` is the last byte of the item; a character of several bytes ends there
+        # when the text is not ASCII, and a string index is the first byte of a character.
+        push!(items, SubString(s, b, stop < b ? stop : thisind(s, stop)))
         length(items) < nmax || return items
         b = e + 1
     end

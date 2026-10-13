@@ -153,6 +153,9 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
         @test throws_kind(() -> scencd(ctx, sc, "x/100.5"), :badpartnumber)
         @test throws_kind(() -> scencd(ctx, sc, "3/100.5"), :badpartnumber)
         @test throws_kind(() -> scencd(ctx, sc, "1/"), :invalidsclkstring)
+        # A character of several bytes in a field is an error of the string, not of the code.
+        @test all(s -> try scencd(ctx, sc, s); false catch e; e isa NeoSpice.SpiceError end,
+            ("1/é:2", "1/100:4é", "é"))
         @test throws_kind(() -> scencd(ctx, sc, "1/10001.0"), :notinpart)
         @test throws_kind(() -> scencd(ctx, CKFix.SC_TDT, "2/1:0:0"), :notinpart)
         @test throws_kind(() -> scencd(ctx, CKFix.SC_TDT, "900000001:0:0"), :nopartition)
