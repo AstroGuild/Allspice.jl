@@ -1,6 +1,7 @@
 [deps]
 Allspice = "1c6edf61-da3a-4136-b24a-0cb478996395"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [sources]

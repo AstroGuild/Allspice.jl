@@ -20,12 +20,12 @@ Each fact has one home, and other places link to it.
 
 ## Prose register
 
-Two registers apply, by place.
+Two registers apply, chosen by what the reader does with the text.
 
-- **Docstrings:** short and direct. The first sentence states what the call returns or does; fragments are acceptable in argument lists.
-- **README and manual pages:** Simplified Technical English with varied sentence length. Join related facts with a conjunction, a colon or a semicolon; three or more consecutive sentences under about 15 words is a defect. Statistics and measured values go in a table.
+- **Reference text** is scanned or followed step by step: a docstring, the install and example part of the README, the steps of a task page, a table cell. Write short, direct sentences with one fact or one instruction each (20 words at most). The first sentence of a docstring states what the call returns or does.
+- **Explanatory text** is followed as an argument: the opening of the README, an explanation page, the paragraph of a task page that says why. Use Simplified Technical English with varied sentence length; join related facts with a conjunction, a colon or a semicolon. Three or more consecutive sentences under about 15 words is a defect there.
 
-Both registers: use the standard Julia and domain terms (do not paraphrase "type stability", "tolerance", "light time"); define a term the reader may not know in one sentence where it first appears; write no sentence that states no fact ("powerful", "seamless", "robust", "leverages").
+Both registers: use the standard Julia and domain terms (do not paraphrase "type stability", "tolerance", "light time"); define a term the reader may not know in one sentence where it first appears; write no sentence that states no fact ("powerful", "seamless", "robust", "leverages"). Measured values go in a table, and every number in the text is one that a command produced: never write an accuracy or a timing from memory.
 
 ## Docstring form for an exported name
 
@@ -64,7 +64,9 @@ A private function keeps a docstring only when it states something the code does
 
 ## Manual
 
-Pages follow reader needs, not `src/` file names: a tutorial, task pages, explanation pages, and a curated reference built with `@docs` blocks grouped by subject. Add a page only when a reader task needs it. Examples run (`@example`, `jldoctest`) on the kernels that `docs/fixture.jl` writes; the repository holds no kernel file.
+Pages follow reader needs, not `src/` file names: a tutorial, task pages, explanation pages, and a curated reference built with `@docs` blocks grouped by subject. Add a page only when a reader task needs it. Examples run (`@example`, `jldoctest`) on the kernels that `docs/fixture.jl` writes; the repository holds no kernel file. Try each example in a scratch script before it goes into a page, and after the build read the outputs in `docs/build/` once: a result that surprises (a search that finds fewer events than expected) is a fault of the example or of the text beside it.
+
+The reference pages list every exported name once (`checkdocs=:exports` fails the build otherwise); a new export goes into the page of its subject.
 
 ## Checks before the work is done
 
