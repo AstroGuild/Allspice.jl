@@ -10,11 +10,21 @@
 """
     stmp03(x) -> (c0, c1, c2, c3)
 
-Return the Stumpff functions `c0` to `c3` of `x`, as `stmp03_`: closed forms with
-hyperbolic functions for `x < -1` and with circular functions for `x > 1`, and a
-series of 20 terms between. Requires `x` above `-(log(2) + log(floatmax))^2`
-(`SpiceError(:valueoutofrange)`), where `c0` would overflow. Postcondition:
-`c0 = 1 - x c2` and `c1 = 1 - x c3` to rounding.
+Return the Stumpff functions `c0`, `c1`, `c2`, `c3` of `x`, as `stmp03_` of SPICELIB.
+
+`c0 = 1 - x * c2` and `c1 = 1 - x * c3` hold to rounding. For `x > 0`, `c0` is
+`cos(sqrt(x))` and `c1` is `sin(sqrt(x)) / sqrt(x)`.
+
+Throws `SpiceError(:valueoutofrange)` if `x <= -(log(2) + log(floatmax(Float64)))^2`,
+about -5.05e5, where `c0` would overflow.
+
+# Examples
+```jldoctest
+julia> stmp03(0)
+(1.0, 1.0, 0.5, 0.16666666666666666)
+```
+
+See also [`prop2b`](@ref).
 """
 function stmp03(x::Real)
     xx = _m_f(x)
@@ -26,16 +36,29 @@ end
 """
     prop2b(gm, pvinit, dt) -> SVector{6}
 
-Return the state at the time `dt` after the state `pvinit` of a body that moves about a
-mass with the gravitational parameter `gm` with no other force, as `prop2b_c`
-(universal variables; the Kepler equation is solved by the bracketing and bisection of
-CSPICE). `gm` and `pvinit` are plain numbers; `dt` may be a `ForwardDiff` or `Taylor`
-number, and the result then carries the derivatives with respect to `dt`. Requires
-`gm > 0` (`SpiceError(:nonpositivemass)`), a position and a velocity that are not zero
-(`SpiceError(:zeroposition)`, `SpiceError(:zerovelocity)`) and not parallel
-(`SpiceError(:nonconicmotion)`); `SpiceError(:dtoutofrange)` if `dt` is too long for
-the arithmetic. Postcondition: the specific energy and the angular momentum are kept
-to rounding.
+Return the state of a body at the time `dt` after the state `pvinit`, for two-body
+motion about a mass with the gravitational parameter `gm`, as `prop2b_c` of CSPICE.
+
+The units must be consistent, for example km, km/s, seconds and km³/s². `gm` and
+`pvinit` are converted to `Float64`. `dt` can be a `ForwardDiff` or `Taylor` number;
+the result then holds the derivatives with respect to `dt`.
+
+Throws:
+- `SpiceError(:nonpositivemass)` if `gm <= 0`.
+- `SpiceError(:zeroposition)` or `SpiceError(:zerovelocity)` if that part of `pvinit`
+  is zero.
+- `SpiceError(:nonconicmotion)` if the position and the velocity are parallel.
+- `SpiceError(:dtoutofrange)` if `dt` is too large for the arithmetic.
+- `SpiceError(:badarg)` if `pvinit` does not have 6 elements.
+
+# Examples
+A quarter of a circular orbit with unit radius and `gm = 1`:
+```jldoctest
+julia> prop2b(1, [1, 0, 0, 0, 1, 0], pi / 2) ≈ [0, 1, 0, -1, 0, 0]
+true
+```
+
+See also [`conics`](@ref), [`oscelt`](@ref).
 """
 function prop2b(gm::Real, pvinit::AbstractVector, dt::Real)
     s = _m_v6(pvinit)
@@ -66,11 +89,37 @@ end
     conics(elts, et) -> SVector{6}
 
 Return the state at the epoch `et` of a body on the conic orbit with the elements
-`elts = (rp, ecc, inc, lnode, argp, m0, t0, mu)`, as `conics_c`. `et` may be a
-`ForwardDiff` or `Taylor` number. Requires `ecc >= 0`
-(`SpiceError(:badeccentricity)`), `rp > 0` (`SpiceError(:badperiapsevalue)`) and
-`mu > 0` (`SpiceError(:badgm)`). Postcondition: `conics(oscelt(state, et, mu), et)` is
-`state` to rounding.
+`elts`, as `conics_c` of CSPICE.
+
+| Index | Name    | Meaning                                    |
+|:------|:--------|:-------------------------------------------|
+| 1     | `rp`    | perifocal distance                         |
+| 2     | `ecc`   | eccentricity                               |
+| 3     | `inc`   | inclination, rad                           |
+| 4     | `lnode` | longitude of the ascending node, rad       |
+| 5     | `argp`  | argument of periapsis, rad                 |
+| 6     | `m0`    | mean anomaly at the epoch `t0`, rad        |
+| 7     | `t0`    | epoch of the elements                      |
+| 8     | `mu`    | gravitational parameter of the central mass |
+
+The units must be consistent, for example km, seconds and km³/s². The elements are
+converted to `Float64`. `et` can be a `ForwardDiff` or `Taylor` number.
+
+Throws:
+- `SpiceError(:badeccentricity)` if `ecc < 0`.
+- `SpiceError(:badperiapsevalue)` if `rp <= 0`.
+- `SpiceError(:badgm)` if `mu <= 0`.
+- `SpiceError(:dtoutofrange)` if `et - t0` is too large for the arithmetic.
+- `SpiceError(:badarg)` if `elts` does not have 8 elements.
+
+# Examples
+A circular orbit with unit radius and `mu = 1`, a quarter period after the epoch:
+```jldoctest
+julia> conics([1, 0, 0, 0, 0, 0, 0, 1], pi / 2) ≈ [0, 1, 0, -1, 0, 0]
+true
+```
+
+See also [`oscelt`](@ref), [`prop2b`](@ref).
 """
 function conics(elts::AbstractVector, et::Real)
     length(elts) == 8 || _m_baddim("a set of conic elements", 8)
@@ -174,23 +223,57 @@ end
 """
     oscelt(state, et, mu) -> SVector{8}
 
-Return the osculating conic elements `(rp, ecc, inc, lnode, argp, m0, t0, mu)` of the
-state `state` at the epoch `et` about a mass with the gravitational parameter `mu`, as
-`oscelt_c`. The angles are in radians: `inc` in [0, pi], `lnode`, `argp` and (for an
-ellipse) `m0` in [0, 2 pi). An eccentricity within 1e-10 of 1 is set to 1, and an
-inclination within 1e-10 of 0 or pi to that value, as in CSPICE. Requires `mu > 0`
-(`SpiceError(:nonpositivemass)`) and a position and a velocity that are not zero and
-not parallel (`SpiceError(:degeneratecase)`).
+Return the osculating conic elements `(rp, ecc, inc, lnode, argp, m0, t0, mu)` of a
+state, as `oscelt_c` of CSPICE.
+
+`state` is the position and the velocity at the epoch `et`, relative to a mass with the
+gravitational parameter `mu`. The table in [`conics`](@ref) defines the elements; `t0`
+is `et`. The angles are in radians: `inc` in [0, pi], and `lnode` and `argp` in
+[0, 2 pi). `m0` is in [0, 2 pi) for an ellipse.
+
+As in CSPICE, an eccentricity within 1e-10 of 1 becomes 1. An inclination within 1e-10
+of 0 or pi becomes that value, and `lnode` is then 0.
+
+Throws `SpiceError(:nonpositivemass)` if `mu <= 0`. Throws
+`SpiceError(:degeneratecase)` if the position or the velocity is zero or if they are
+parallel. Throws `SpiceError(:badarg)` if `state` does not have 6 elements.
+
+# Examples
+The apoapsis of an orbit with `mu = 1`, semi-major axis 4/3 and eccentricity 0.5:
+```jldoctest
+julia> round.(Tuple(oscelt([0, 2, 0, -0.5, 0, 0], 0, 1)); digits=6)
+(0.666667, 0.5, 0.0, 0.0, 4.712389, 3.141593, 0.0, 1.0)
+```
+
+See also [`oscltx`](@ref), [`conics`](@ref).
 """
 oscelt(state::AbstractVector, et::Real, mu::Real) = _m_oscelt(_m_v6(state), et, _m_f(mu))
 
 """
     oscltx(state, et, mu) -> SVector{20}
 
-Return the elements of `oscelt` in places 1 to 8, the true anomaly in [0, 2 pi) in
-place 9, the semi-major axis in place 10 (negative for a hyperbola, 0 where it is not
-defined) and the period in place 11 (0 where it is not defined or would overflow), as
-`oscltx_c`; places 12 to 20 are zero. Errors as `oscelt`.
+Return the osculating elements of [`oscelt`](@ref) with the true anomaly, the
+semi-major axis and the period, as `oscltx_c` of CSPICE.
+
+| Index | Content                                                                    |
+|:------|:---------------------------------------------------------------------------|
+| 1:8   | the elements of [`oscelt`](@ref)                                           |
+| 9     | true anomaly, rad, in [0, 2 pi)                                            |
+| 10    | semi-major axis; negative for a hyperbola, 0 where it is not defined       |
+| 11    | period; 0 for an orbit that is not an ellipse, or if it would overflow     |
+| 12:20 | zero                                                                       |
+
+Throws as [`oscelt`](@ref).
+
+# Examples
+```jldoctest
+julia> elts = oscltx([0, 2, 0, -0.5, 0, 0], 0, 1);
+
+julia> round.(Tuple(elts[9:11]); digits=6)
+(3.141593, 1.333333, 9.673597)
+```
+
+See also [`oscelt`](@ref), [`conics`](@ref).
 """
 function oscltx(state::AbstractVector, et::Real, mu::Real)
     s = _m_v6(state)

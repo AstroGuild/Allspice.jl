@@ -9,9 +9,14 @@
 """
     SpicePlane{T}
 
-Plane `{x : normal ⋅ x = constant}`, as `SpicePlane` of CSPICE. Invariant of a plane
-made by `nvc2pl`, `nvp2pl` or `psv2pl`: `normal` has unit length and `constant >= 0`,
-so `constant` is the distance of the plane from the origin.
+Plane of the points `x` with `normal ⋅ x == constant`, as `SpicePlane` of CSPICE.
+
+The fields are `normal::SVector{3,T}` and `constant::T`. A plane from
+[`nvc2pl`](@ref), [`nvp2pl`](@ref) or [`psv2pl`](@ref) has a unit `normal` and
+`constant >= 0`. `constant` is then the distance of the plane from the origin. The
+constructor does not check this.
+
+See also [`pl2nvc`](@ref), [`pl2nvp`](@ref), [`pl2psv`](@ref).
 """
 struct SpicePlane{T<:Real}
     normal::SVector{3,T}
@@ -23,9 +28,14 @@ SpicePlane(normal::SVector{3}, constant::Real) =
 """
     SpiceEllipse{T}
 
-Ellipse `{center + cos(θ) semimajor + sin(θ) semiminor}`, as `SpiceEllipse` of CSPICE.
-Invariant of an ellipse made by `cgv2el`: the semi-axes are orthogonal and `semimajor`
-is not shorter than `semiminor`.
+Ellipse of the points `center + cos(θ) * semimajor + sin(θ) * semiminor`, as
+`SpiceEllipse` of CSPICE.
+
+The fields `center`, `semimajor` and `semiminor` are `SVector{3,T}` values. An ellipse
+from [`cgv2el`](@ref) has orthogonal semi-axes, and `semimajor` is not shorter than
+`semiminor`. The constructor does not check this.
+
+See also [`el2cgv`](@ref).
 """
 struct SpiceEllipse{T<:Real}
     center::SVector{3,T}
@@ -39,7 +49,6 @@ end
 
 @inline _m_abs(x::Real) = primal(x) < 0.0 ? -x : x
 
-"The larger of `x` and `y` by their plain values (`x` if they are equal)."
 @inline _m_max(x, y) = primal(y) > primal(x) ? y : x
 
 @noinline _m_badaxis(a, b, c) = throw(SpiceError(:badaxislength,
@@ -62,9 +71,22 @@ end
 """
     surfnm(a, b, c, point) -> SVector{3}
 
-Return the outward unit normal of the ellipsoid with the semi-axes `a`, `b`, `c` at the
-surface point `point`, as `surfnm_c`. The point is not checked to be on the surface.
-Requires positive semi-axes (`SpiceError(:badaxislength)`).
+Return the outward unit normal of an ellipsoid at the surface point `point`, as
+`surfnm_c` of CSPICE.
+
+The ellipsoid has its center at the origin and the semi-axes `a`, `b`, `c` along x, y,
+z. This holds for all the ellipsoid calls. `point` is not checked to be on the surface.
+
+Throws `SpiceError(:badaxislength)` if a semi-axis is not positive, and
+`SpiceError(:badarg)` if `point` does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> surfnm(1, 2, 3, [0, 0, 3]) == [0, 0, 1]
+true
+```
+
+See also [`ednmpt`](@ref), [`nearpt`](@ref).
 """
 surfnm(a::Real, b::Real, c::Real, point::AbstractVector) =
     _m_surfnm(_m_f(a), _m_f(b), _m_f(c), _m_v3(point))
@@ -101,11 +123,28 @@ end
 """
     surfpt(positn, u, a, b, c) -> Union{SVector{3},Nothing}
 
-Return the first point where the ray from `positn` along `u` meets the ellipsoid with
-the semi-axes `a`, `b`, `c`, or `nothing` if the ray misses, as `surfpt_c`. A vertex
-inside the ellipsoid gives the exit point; a vertex on the surface gives the vertex.
-Requires a direction that is not zero (`SpiceError(:zerovector)`) and positive semi-axes
-(`SpiceError(:badaxislength)`).
+Return the first point where a ray meets an ellipsoid, or `nothing` if the ray misses,
+as `surfpt_c` of CSPICE.
+
+The ray starts at `positn` and has the direction `u`. The ellipsoid has the semi-axes
+`a`, `b`, `c`. CSPICE returns a `found` flag in place of `nothing`. A start point
+inside the ellipsoid gives the point where the ray leaves. A start point on the surface
+gives that point.
+
+Throws `SpiceError(:zerovector)` if `u` is zero, `SpiceError(:badaxislength)` if a
+semi-axis is not positive, and `SpiceError(:badarg)` if a vector does not have 3
+elements.
+
+# Examples
+```jldoctest
+julia> surfpt([10, 0, 0], [-1, 0, 0], 1, 2, 3) == [1, 0, 0]
+true
+
+julia> isnothing(surfpt([10, 0, 0], [1, 0, 0], 1, 2, 3))
+true
+```
+
+See also [`surfpv`](@ref), [`npedln`](@ref), [`nearpt`](@ref).
 """
 function surfpt(positn::AbstractVector, u::AbstractVector, a::Real, b::Real, c::Real)
     found, point = _m_surfpt(_m_v3(positn), _m_v3(u), _m_f(a), _m_f(b), _m_f(c))
@@ -115,10 +154,14 @@ end
 """
     edpnt(p, a, b, c) -> SVector{3}
 
-Return the point of the ellipsoid that is on the ray from the center through `p`, as
-`edpnt_c`. Requires positive semi-axes (`SpiceError(:invalidradii)`), a point that is
-not zero (`SpiceError(:zerovector)`) and not so near the center that its scaled square
-is zero (`SpiceError(:pointtoosmall)`).
+Return the point of an ellipsoid on the ray from the center through the point `p`, as
+`edpnt_c` of CSPICE. The ellipsoid has the semi-axes `a`, `b`, `c`.
+
+Throws `SpiceError(:invalidradii)` if a semi-axis is not positive, and
+`SpiceError(:zerovector)` if `p` is zero. Throws `SpiceError(:pointtoosmall)` if `p` is
+so near the center that its scaled square is zero.
+
+See also [`nearpt`](@ref), [`surfpt`](@ref).
 """
 function edpnt(p::AbstractVector, a::Real, b::Real, c::Real)
     v = _m_v3(p)
@@ -139,11 +182,23 @@ end
 """
     ednmpt(a, b, c, normal) -> SVector{3}
 
-Return the point of the ellipsoid where the outward normal is parallel to `normal`, as
-`ednmpt_c`. Requires positive semi-axes (`SpiceError(:badaxislength)`) whose ratio to
-the largest one does not underflow (`SpiceError(:axisunderflow)`), and a normal that is
-not zero (`SpiceError(:zerovector)`); `SpiceError(:degeneratecase)` if the scale factor
-underflows.
+Return the point of an ellipsoid where the outward normal is parallel to `normal`, as
+`ednmpt_c` of CSPICE. The ellipsoid has the semi-axes `a`, `b`, `c`.
+
+Throws:
+- `SpiceError(:badaxislength)` if a semi-axis is not positive.
+- `SpiceError(:axisunderflow)` if the ratio of a semi-axis to the largest one
+  underflows.
+- `SpiceError(:zerovector)` if `normal` is zero.
+- `SpiceError(:degeneratecase)` if the scale factor underflows.
+
+# Examples
+```jldoctest
+julia> ednmpt(1, 2, 3, [0, 1, 0]) == [0, 2, 0]
+true
+```
+
+See also [`surfnm`](@ref).
 """
 function ednmpt(a::Real, b::Real, c::Real, normal::AbstractVector)
     n = _m_v3(normal)
@@ -473,13 +528,27 @@ end
 """
     nearpt(positn, a, b, c) -> (npoint::SVector{3}, alt)
 
-Return the point of the ellipsoid with the semi-axes `a`, `b`, `c` that is nearest to
-`positn`, and the altitude of `positn` above the ellipsoid (negative inside), as
-`nearpt_c`, with the iteration of CSPICE. Requires positive semi-axes
-(`SpiceError(:badaxislength)`); `SpiceError(:inputstoolarge)` if a product of an axis
-and a coordinate would overflow. Postcondition: `npoint` is on the ellipsoid and
-`positn - npoint` is along the surface normal, to rounding. For `ForwardDiff` and
-`Taylor` arguments the plain result is the one of the `Float64` iteration.
+Return the point of an ellipsoid that is nearest to the point `positn`, and the
+altitude of `positn` above the ellipsoid, as `nearpt_c` of CSPICE.
+
+The ellipsoid has the semi-axes `a`, `b`, `c`. `alt` is negative for a point inside.
+The results have the unit of the arguments. The iteration is the one of CSPICE.
+
+The arguments can be `ForwardDiff` or `Taylor` numbers. The value is then the one of
+the `Float64` iteration. The derivatives are zero at the center and at an interior
+point whose nearest point is not unique.
+
+Throws `SpiceError(:badaxislength)` if a semi-axis is not positive or if the ratio of
+the longest to the shortest one is too large. Throws `SpiceError(:inputstoolarge)` if
+the product of a semi-axis and a coordinate would overflow.
+
+# Examples
+```jldoctest
+julia> nearpt([3.5, 0, 0], 1, 2, 3)
+([1.0, 0.0, 0.0], 2.5)
+```
+
+See also [`dnearp`](@ref), [`recgeo`](@ref), [`npedln`](@ref), [`surfpt`](@ref).
 """
 nearpt(positn::AbstractVector, a::Real, b::Real, c::Real) =
     _m_nearpt(_m_v3(positn), _m_f(a), _m_f(b), _m_f(c))
@@ -487,10 +556,23 @@ nearpt(positn::AbstractVector, a::Real, b::Real, c::Real) =
 """
     dnearp(state, a, b, c) -> Union{Tuple{SVector{6},SVector{2}},Nothing}
 
-Return the state (position and velocity) of the point of the ellipsoid that is nearest
-to the position of `state`, and the altitude with its rate, as `dnearp_c`; `nothing`
-where the velocity of the near point is not defined (the `found` flag of CSPICE is
-false). Errors as `nearpt`.
+Return the state of the point of an ellipsoid that is nearest to the position of
+`state`, and the altitude with its rate, as `dnearp_c` of CSPICE.
+
+The first result is the position and the velocity of the near point. The second is
+`(alt, dalt/dt)`. The result is `nothing` where the velocity of the near point is not
+defined, for example at the center of a sphere; CSPICE returns a `found` flag.
+
+Throws as [`nearpt`](@ref), and `SpiceError(:badarg)` if `state` does not have 6
+elements.
+
+# Examples
+```jldoctest
+julia> dnearp([2, 0, 0, 0, 1, 0], 1, 1, 1)
+([1.0, 0.0, 0.0, 0.0, 0.5, 0.0], [1.0, 0.0])
+```
+
+See also [`nearpt`](@ref), [`surfpv`](@ref).
 """
 function dnearp(state::AbstractVector, a::Real, b::Real, c::Real)
     s = _m_v6(state)
@@ -516,10 +598,24 @@ end
 """
     surfpv(stvrtx, stdir, a, b, c) -> Union{SVector{6},Nothing}
 
-Return the state of the point where the ray with the vertex state `stvrtx` and the
-direction state `stdir` meets the ellipsoid, as `surfpv_c`; `nothing` if the ray
-misses, if it is tangent, or if the velocity would overflow. Requires a vertex that is
-not on the surface (`SpiceError(:invalidvertex)`); other errors as `surfpt`.
+Return the state of the point where a ray meets an ellipsoid, as `surfpv_c` of CSPICE.
+
+`stvrtx` is the state of the start point of the ray, and `stdir` holds the direction
+and its time derivative. The result is the position and the velocity of the intercept
+point of [`surfpt`](@ref). The result is `nothing` if the ray misses, if it is tangent
+to the surface, or if the velocity would overflow; CSPICE returns a `found` flag.
+
+Throws `SpiceError(:invalidvertex)` if the start point is on the surface and
+`SpiceError(:badarg)` if a state does not have 6 elements; other errors as
+[`surfpt`](@ref).
+
+# Examples
+```jldoctest
+julia> surfpv([4, 0, 0, 0, 0, 0], [-1, 0, 0, 0, 0.5, 0], 1, 1, 1) == [1, 0, 0, 0, 1.5, 0]
+true
+```
+
+See also [`surfpt`](@ref), [`dnearp`](@ref).
 """
 function surfpv(stvrtx::AbstractVector, stdir::AbstractVector, a::Real, b::Real, c::Real)
     sv = _m_v6(stvrtx)
@@ -551,16 +647,26 @@ end
 
 # --- planes -------------------------------------------------------------------------------
 
-"Plane with a non-negative constant: `(normal, constant)` or both negated."
 @inline _m_plane(normal::SVector{3}, constant) =
     primal(constant) < 0.0 ? SpicePlane(-normal, -constant) : SpicePlane(normal, constant)
 
 """
     nvc2pl(normal, konst) -> SpicePlane
 
-Return the plane `normal ⋅ x = konst`, as `nvc2pl_c`. Requires a normal that is not
-zero (`SpiceError(:zerovector)`). Postcondition: unit normal and a constant that is not
-negative.
+Return the plane of the points `x` with `normal ⋅ x == konst`, as `nvc2pl_c` of CSPICE.
+
+The result has a unit normal and a constant that is not negative: `normal` is scaled,
+and both values change sign if needed.
+
+Throws `SpiceError(:zerovector)` if `normal` is zero.
+
+# Examples
+```jldoctest
+julia> nvc2pl([0, 0, 2], 4)
+SpicePlane{Float64}([0.0, 0.0, 1.0], 2.0)
+```
+
+See also [`nvp2pl`](@ref), [`psv2pl`](@ref), [`pl2nvc`](@ref), [`SpicePlane`](@ref).
 """
 function nvc2pl(normal::AbstractVector, konst::Real)
     u, mag = _m_unorm(_m_v3(normal))
@@ -571,8 +677,12 @@ end
 """
     nvp2pl(normal, point) -> SpicePlane
 
-Return the plane through `point` with the normal `normal`, as `nvp2pl_c`. Requires a
-normal that is not zero (`SpiceError(:zerovector)`).
+Return the plane through `point` with the normal vector `normal`, as `nvp2pl_c` of
+CSPICE. The result has a unit normal and a constant that is not negative.
+
+Throws `SpiceError(:zerovector)` if `normal` is zero.
+
+See also [`nvc2pl`](@ref), [`psv2pl`](@ref), [`pl2nvp`](@ref).
 """
 function nvp2pl(normal::AbstractVector, point::AbstractVector)
     n = _m_v3(normal)
@@ -587,8 +697,12 @@ end
     psv2pl(point, span1, span2) -> SpicePlane
 
 Return the plane through `point` that the vectors `span1` and `span2` span, as
-`psv2pl_c`. Requires spanning vectors that are not parallel
-(`SpiceError(:degeneratecase)`).
+`psv2pl_c` of CSPICE. The result has a unit normal and a constant that is not negative.
+
+Throws `SpiceError(:degeneratecase)` if `span1` and `span2` are parallel or one is
+zero.
+
+See also [`nvc2pl`](@ref), [`nvp2pl`](@ref), [`pl2psv`](@ref).
 """
 function psv2pl(point::AbstractVector, span1::AbstractVector, span2::AbstractVector)
     n = _m_ucrss(_m_v3(span1), _m_v3(span2))
@@ -600,14 +714,19 @@ end
 """
     pl2nvc(plane) -> (normal::SVector{3}, konst)
 
-Return the unit normal and the constant of a plane, as `pl2nvc_c`.
+Return the normal vector and the constant of a plane, as `pl2nvc_c` of CSPICE.
+
+See also [`nvc2pl`](@ref), [`pl2nvp`](@ref), [`pl2psv`](@ref).
 """
 pl2nvc(plane::SpicePlane) = plane.normal, plane.constant
 
 """
     pl2nvp(plane) -> (normal::SVector{3}, point::SVector{3})
 
-Return the unit normal of a plane and its point nearest to the origin, as `pl2nvp_c`.
+Return the normal vector of a plane and the point of the plane nearest to the origin,
+as `pl2nvp_c` of CSPICE.
+
+See also [`nvp2pl`](@ref), [`pl2nvc`](@ref), [`pl2psv`](@ref).
 """
 pl2nvp(plane::SpicePlane) = plane.normal, plane.constant * plane.normal
 
@@ -646,7 +765,9 @@ end
     pl2psv(plane) -> (point::SVector{3}, span1::SVector{3}, span2::SVector{3})
 
 Return the point of a plane nearest to the origin and two orthonormal vectors that
-span the plane, as `pl2psv_c`. Postcondition: `span1 × span2` is the plane normal.
+span the plane, as `pl2psv_c` of CSPICE. `span1 × span2` is the normal of the plane.
+
+See also [`psv2pl`](@ref), [`pl2nvc`](@ref), [`pl2nvp`](@ref).
 """
 function pl2psv(plane::SpicePlane)
     _, span1, span2 = _m_frame(plane.normal)
@@ -659,16 +780,39 @@ end
 """
     vprjp(vin, plane) -> SVector{3}
 
-Return the orthogonal projection of the vector `vin` on a plane, as `vprjp_c`.
+Return the orthogonal projection of the vector `vin` on a plane, as `vprjp_c` of
+CSPICE.
+
+Throws `SpiceError(:badarg)` if `vin` does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> vprjp([1, 2, 3], nvc2pl([0, 0, 1], 0)) == [1, 2, 0]
+true
+```
+
+See also [`vprjpi`](@ref), [`vproj`](@ref), [`pjelpl`](@ref).
 """
 vprjp(vin::AbstractVector, plane::SpicePlane) = _m_vprjp(_m_v3(vin), plane)
 
 """
     vprjpi(vin, projpl, invpl) -> Union{SVector{3},Nothing}
 
-Return the vector of the plane `invpl` whose orthogonal projection on the plane
-`projpl` is `vin`, as `vprjpi_c`; `nothing` if the planes are orthogonal or so nearly
-orthogonal that the result would overflow.
+Return the vector in the plane `invpl` whose orthogonal projection on the plane
+`projpl` is `vin`, as `vprjpi_c` of CSPICE.
+
+The result is `nothing` if the planes are orthogonal, or so near to orthogonal that the
+result would overflow. CSPICE returns a `found` flag.
+
+Throws `SpiceError(:badarg)` if `vin` does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> vprjpi([1, 2, 0], nvc2pl([0, 0, 1], 0), nvc2pl([0, 1, 1], 0)) == [1, 2, -2]
+true
+```
+
+See also [`vprjp`](@ref).
 """
 function vprjpi(vin::AbstractVector, projpl::SpicePlane, invpl::SpicePlane)
     v = _m_v3(vin)
@@ -683,11 +827,26 @@ end
 """
     inrypl(vertex, dir, plane) -> (nxpts::Int, xpt::SVector{3})
 
-Return the intersection of the ray from `vertex` along `dir` with a plane, as
-`inrypl_c`: `nxpts` is 1 with the point `xpt`, 0 if the ray misses (then `xpt` is
-zero), or -1 if the ray is in the plane (then `xpt` is the vertex). Requires a
-direction that is not zero (`SpiceError(:zerovector)`) and a vertex and a plane
-constant below a third of the largest number (`SpiceError(:vectortoobig)`).
+Return the number of points where a ray meets a plane, and the point, as `inrypl_c` of
+CSPICE. The ray starts at `vertex` and has the direction `dir`.
+
+| `nxpts` | Case                      | `xpt`             |
+|:--------|:--------------------------|:------------------|
+| 1       | one point                 | that point        |
+| 0       | the ray misses the plane  | the zero vector   |
+| -1      | the ray is in the plane   | `vertex`          |
+
+Throws `SpiceError(:zerovector)` if `dir` is zero. Throws `SpiceError(:vectortoobig)`
+if the norm of `vertex` or the plane constant is a third of `floatmax(Float64)` or
+more.
+
+# Examples
+```jldoctest
+julia> inrypl([1, 0, 4], [1, 0, -1], nvc2pl([0, 0, 1], 0))
+(1, [5.0, 0.0, 0.0])
+```
+
+See also [`inelpl`](@ref), [`inedpl`](@ref), [`surfpt`](@ref).
 """
 function inrypl(vertex::AbstractVector, dir::AbstractVector, plane::SpicePlane)
     vtx = _m_v3(vertex)
@@ -812,9 +971,21 @@ end
 """
     saelgv(vec1, vec2) -> (smajor::SVector{3}, sminor::SVector{3})
 
-Return the semi-major and semi-minor axes of the ellipse that the generating vectors
-`vec1` and `vec2` define (`cos(θ) vec1 + sin(θ) vec2`), as `saelgv_c`. Postcondition:
-the results are orthogonal and `smajor` is not shorter than `sminor`.
+Return the semi-major and the semi-minor axis of the ellipse that two generating
+vectors define, as `saelgv_c` of CSPICE.
+
+The ellipse is the set of the points `cos(θ) * vec1 + sin(θ) * vec2`. The results are
+orthogonal, and `smajor` is not shorter than `sminor`.
+
+Throws `SpiceError(:badarg)` if a vector does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> saelgv([0, 1, 0], [2, 0, 0])
+([2.0, 0.0, 0.0], [0.0, 1.0, 0.0])
+```
+
+See also [`cgv2el`](@ref).
 """
 saelgv(vec1::AbstractVector, vec2::AbstractVector) = _m_saelgv(_m_v3(vec1), _m_v3(vec2))
 
@@ -826,8 +997,13 @@ end
 """
     cgv2el(center, vec1, vec2) -> SpiceEllipse
 
-Return the ellipse with the center `center` and the generating vectors `vec1`, `vec2`,
-as `cgv2el_c`.
+Return the ellipse with the center `center` and the generating vectors `vec1` and
+`vec2`, as `cgv2el_c` of CSPICE. The semi-axes of the result come from
+[`saelgv`](@ref).
+
+Throws `SpiceError(:badarg)` if a vector does not have 3 elements.
+
+See also [`el2cgv`](@ref), [`SpiceEllipse`](@ref).
 """
 cgv2el(center::AbstractVector, vec1::AbstractVector, vec2::AbstractVector) =
     _m_cgv2el(_m_v3(center), _m_v3(vec1), _m_v3(vec2))
@@ -835,7 +1011,9 @@ cgv2el(center::AbstractVector, vec1::AbstractVector, vec2::AbstractVector) =
 """
     el2cgv(ellipse) -> (center, smajor, sminor)
 
-Return the center and the semi-axes of an ellipse, as `el2cgv_c`.
+Return the center and the two semi-axes of an ellipse, as `el2cgv_c` of CSPICE.
+
+See also [`cgv2el`](@ref).
 """
 el2cgv(ellipse::SpiceEllipse) = ellipse.center, ellipse.semimajor, ellipse.semiminor
 
@@ -863,9 +1041,27 @@ end
 """
     inedpl(a, b, c, plane) -> Union{SpiceEllipse,Nothing}
 
-Return the intersection of the ellipsoid with the semi-axes `a`, `b`, `c` and a plane,
-or `nothing` if they do not meet, as `inedpl_c`. A tangent plane gives an ellipse of
-one point. Requires positive semi-axes (`SpiceError(:degeneratecase)`, as in CSPICE).
+Return the ellipse where a plane cuts an ellipsoid, or `nothing` if they do not meet,
+as `inedpl_c` of CSPICE.
+
+The ellipsoid has the semi-axes `a`, `b`, `c`. CSPICE returns a `found` flag in place
+of `nothing`. A tangent plane gives an ellipse of one point, with zero semi-axes.
+
+Throws `SpiceError(:degeneratecase)` if a semi-axis is not positive, as in CSPICE.
+
+# Examples
+A plane at the height 0.6 cuts the unit sphere in a circle of radius 0.8:
+```jldoctest
+julia> e = inedpl(1, 1, 1, nvc2pl([0, 0, 1], 0.6));
+
+julia> e.center == [0, 0, 0.6]
+true
+
+julia> vnorm(e.semimajor) ≈ 0.8 && vnorm(e.semiminor) ≈ 0.8
+true
+```
+
+See also [`edlimb`](@ref), [`inelpl`](@ref), [`inrypl`](@ref).
 """
 function inedpl(a::Real, b::Real, c::Real, plane::SpicePlane)
     a, b, c = _m_f(a), _m_f(b), _m_f(c)
@@ -878,11 +1074,28 @@ end
 """
     inelpl(ellips, plane) -> (nxpts::Int, xpt1::SVector{3}, xpt2::SVector{3})
 
-Return the intersection of an ellipse and a plane, as `inelpl_c`: `nxpts` is 0, 1 or 2,
-or -1 if the ellipse is in the plane; points that are not found are zero. Requires a
-plane with a normal that is not zero and a constant that is not negative
-(`SpiceError(:invalidplane)`) and an ellipse with orthogonal semi-axes
-(`SpiceError(:invalidellipse)`).
+Return the number of points where an ellipse meets a plane, and the points, as
+`inelpl_c` of CSPICE.
+
+`nxpts` is 0, 1 or 2, or -1 if the ellipse is in the plane. With one point, `xpt1` and
+`xpt2` are equal. With no point, and for -1, both are zero.
+
+Throws `SpiceError(:invalidplane)` if the plane has a zero normal or a negative
+constant. Throws `SpiceError(:invalidellipse)` if the semi-axes of the ellipse are not
+orthogonal.
+
+# Examples
+```jldoctest
+julia> e = cgv2el([0, 0, 0], [2, 0, 0], [0, 1, 0]);
+
+julia> inelpl(e, nvc2pl([1, 0, 0], 2))
+(1, [2.0, 0.0, 0.0], [2.0, 0.0, 0.0])
+
+julia> inelpl(e, nvc2pl([1, 0, 0], 3))
+(0, [0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
+```
+
+See also [`inedpl`](@ref), [`inrypl`](@ref).
 """
 function inelpl(ellips::SpiceEllipse, plane::SpicePlane)
     normal, inpcon = plane.normal, plane.constant
@@ -939,16 +1152,39 @@ end
 """
     pjelpl(elin, plane) -> SpiceEllipse
 
-Return the orthogonal projection of an ellipse on a plane, as `pjelpl_c`.
+Return the orthogonal projection of the ellipse `elin` on a plane, as `pjelpl_c` of
+CSPICE.
+
+See also [`vprjp`](@ref), [`cgv2el`](@ref).
 """
 pjelpl(elin::SpiceEllipse, plane::SpicePlane) = _m_pjelpl(elin, plane)
 
 """
     edlimb(a, b, c, viewpt) -> SpiceEllipse
 
-Return the limb of the ellipsoid with the semi-axes `a`, `b`, `c` as seen from the point
-`viewpt`, as `edlimb_c`. Requires positive semi-axes and a view point that is not
-inside the ellipsoid (`SpiceError(:degeneratecase)`).
+Return the limb of an ellipsoid as seen from the point `viewpt`, as `edlimb_c` of
+CSPICE.
+
+The limb is the set of the surface points where the line of sight is tangent to the
+ellipsoid. The ellipsoid has the semi-axes `a`, `b`, `c`. A view point on the surface
+gives an ellipse of one point.
+
+Throws `SpiceError(:degeneratecase)` if a semi-axis is not positive or if `viewpt` is
+inside the ellipsoid.
+
+# Examples
+The limb of the unit sphere from a distance of 2:
+```jldoctest
+julia> limb = edlimb(1, 1, 1, [0, 0, 2]);
+
+julia> limb.center == [0, 0, 0.5]
+true
+
+julia> vnorm(limb.semimajor) ≈ sqrt(3) / 2
+true
+```
+
+See also [`inedpl`](@ref), [`edterm`](@ref).
 """
 function edlimb(a::Real, b::Real, c::Real, viewpt::AbstractVector)
     a, b, c = _m_f(a), _m_f(b), _m_f(c)
@@ -982,9 +1218,19 @@ end
 """
     nplnpt(linpt, lindir, point) -> (pnear::SVector{3}, dist)
 
-Return the point of the line through `linpt` along `lindir` that is nearest to `point`,
-and the distance, as `nplnpt_c`. Requires a direction that is not zero
-(`SpiceError(:zerovector)`).
+Return the point of a line that is nearest to `point`, and the distance between the
+two, as `nplnpt_c` of CSPICE. The line goes through `linpt` and has the direction
+`lindir`.
+
+Throws `SpiceError(:zerovector)` if `lindir` is zero.
+
+# Examples
+```jldoctest
+julia> nplnpt([0, 0, 0], [1, 0, 0], [3, 4, 0])
+([3.0, 0.0, 0.0], 4.0)
+```
+
+See also [`npelpt`](@ref), [`npedln`](@ref).
 """
 function nplnpt(linpt::AbstractVector, lindir::AbstractVector, point::AbstractVector)
     lp = _m_v3(linpt)
@@ -1022,19 +1268,36 @@ end
 """
     npelpt(point, ellips) -> (pnear::SVector{3}, dist)
 
-Return the point of an ellipse that is nearest to `point`, and the distance, as
-`npelpt_c`. Requires semi-axes that are not zero (`SpiceError(:degeneratecase)`).
+Return the point of an ellipse that is nearest to `point`, and the distance between the
+two, as `npelpt_c` of CSPICE.
+
+Throws `SpiceError(:degeneratecase)` if a semi-axis of the ellipse is zero.
+
+See also [`nplnpt`](@ref), [`nearpt`](@ref).
 """
 npelpt(point::AbstractVector, ellips::SpiceEllipse) = _m_npelpt(_m_v3(point), ellips)
 
 """
     npedln(a, b, c, linept, linedr) -> (pnear::SVector{3}, dist)
 
-Return the point of the ellipsoid with the semi-axes `a`, `b`, `c` that is nearest to
-the line through `linept` along `linedr`, and the distance, as `npedln_c`. A line that
-meets the ellipsoid gives an intersection point and the distance 0. Requires a
-direction that is not zero (`SpiceError(:zerovector)`) and positive semi-axes
-(`SpiceError(:invalidaxislength)`); `SpiceError(:degeneratecase)` for extreme shapes.
+Return the point of an ellipsoid that is nearest to a line, and the distance between
+the two, as `npedln_c` of CSPICE.
+
+The ellipsoid has the semi-axes `a`, `b`, `c`. The line goes through `linept` and has
+the direction `linedr`. A line that meets the ellipsoid gives one of the intersection
+points and the distance 0.
+
+Throws `SpiceError(:zerovector)` if `linedr` is zero,
+`SpiceError(:invalidaxislength)` if a semi-axis is not positive, and
+`SpiceError(:degeneratecase)` if the shape is too extreme for the arithmetic.
+
+# Examples
+```jldoctest
+julia> npedln(1, 1, 1, [2, 0, 0], [0, 0, 1])
+([1.0, 0.0, 0.0], 1.0)
+```
+
+See also [`nearpt`](@ref), [`surfpt`](@ref), [`nplnpt`](@ref).
 """
 function npedln(a::Real, b::Real, c::Real, linept::AbstractVector, linedr::AbstractVector)
     a, b, c = _m_f(a), _m_f(b), _m_f(c)
@@ -1152,7 +1415,6 @@ function _m_radii(ks::KernelSet, body::Integer)
     return v[1], v[2], v[3]
 end
 
-"ID of the body `name`, or `SpiceError(kind)` if the name is not known."
 function _m_bodyid(ks::KernelSet, name::NameOrID, kind::Symbol)
     name isa Integer && return Int32(name)
     try
@@ -1165,19 +1427,41 @@ function _m_bodyid(ks::KernelSet, name::NameOrID, kind::Symbol)
 end
 
 """
-    edterm(trmtyp, source, target, et, fixref, abcorr, obsrvr, npts)
+    edterm([ctx,] trmtyp, source, target, et, fixref, abcorr, obsrvr, npts)
         -> (trgepc, obspos::SVector{3}, trmpts::Vector{SVector{3,Float64}})
 
-Return `npts` points of the umbral (`trmtyp = "UMBRAL"`) or penumbral (`"PENUMBRAL"`)
-terminator of the ellipsoidal body `target` lit by the spherical body `source`, in the
-body-fixed frame `fixref` of the target, with the epoch of the target and the position
-of the observer in that frame, as `edterm_c`. Needs SPK data for the three bodies, the
-orientation of `fixref` and the `RADII` of source and target. Throws
-`SpiceError(:notranslation)` for an unknown name, `SpiceError(:spkinvalidoption)` for an
-aberration correction that is not known, `SpiceError(:invalidfixref)` if
-`fixref` is not centered on the target, `SpiceError(:notsupported)` for another
-terminator type, `SpiceError(:invalidsize)` for `npts < 1` and
-`SpiceError(:objectstooclose)` if the source touches the target.
+Return `npts` points of the terminator of an ellipsoidal body that a spherical body
+lights, as `edterm_c` of CSPICE.
+
+`trmtyp` is `"UMBRAL"` or `"PENUMBRAL"`. `source` is the light source and `target` the
+lit body. `et` is the epoch at the observer `obsrvr`, in seconds past J2000 TDB.
+`fixref` is a body-fixed frame of the target. `abcorr` is the aberration correction.
+Bodies and frames are names or IDs.
+
+- `trgepc`: the epoch at the target, `et` corrected for light time if `abcorr` asks
+  for it.
+- `obspos`: the position of the observer relative to the target center, in `fixref`,
+  km.
+- `trmpts`: the terminator points relative to the target center, in `fixref`, km.
+
+The call needs SPK data for the three bodies, the orientation of `fixref`, and the
+`BODY<id>_RADII` of the source and the target.
+
+Throws:
+- `SpiceError(:notranslation)` if a body or frame name is not known.
+- `SpiceError(:invalidfixref)` if `fixref` does not have its center at the target.
+- `SpiceError(:spkinvalidoption)` if `abcorr` is not known.
+- `SpiceError(:notsupported)` for another terminator type.
+- `SpiceError(:invalidsize)` if `npts < 1`.
+- `SpiceError(:objectstooclose)` if the source touches the target.
+
+# Examples
+This call needs kernels:
+```julia
+trgepc, obspos, trmpts = edterm("UMBRAL", "SUN", "MOON", et, "IAU_MOON", "LT+S", "EARTH", 3)
+```
+
+See also [`edlimb`](@ref), [`termpt`](@ref).
 """
 function edterm(ks::KernelSet, trmtyp::AbstractString, source::NameOrID, target::NameOrID,
         et::Real, fixref::NameOrID, abcorr::AbstractString, obsrvr::NameOrID, npts::Integer)

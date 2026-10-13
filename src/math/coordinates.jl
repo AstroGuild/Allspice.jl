@@ -31,9 +31,26 @@ end
 """
     reclat(rectan) -> (radius, lon, lat)
 
-Return the latitudinal coordinates of a point, as `reclat_c`: `lon` in (-pi, pi], `lat`
-in [-pi/2, pi/2]. Postcondition: `lon` is 0 on the z axis, and all three are 0 at the
-origin; `latrec(reclat(x)...)` is `x` to rounding.
+Return the latitudinal coordinates of the rectangular point `rectan`, as `reclat_c` of
+CSPICE.
+
+`radius` has the unit of `rectan`. The angles are in radians: the longitude `lon` in
+(-pi, pi], from the x axis toward the y axis, and the latitude `lat` in [-pi/2, pi/2],
+from the xy plane. `lon` is 0 on the z axis, and all three are 0 at the origin.
+
+Throws `SpiceError(:badarg)` if `rectan` does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> reclat([0, 2, 0])
+(2.0, 1.5707963267948966, 0.0)
+
+julia> latrec(2, pi / 2, 0) ≈ [0, 2, 0]
+true
+```
+
+See also [`latrec`](@ref), [`recrad`](@ref), [`recsph`](@ref), [`recgeo`](@ref),
+[`dlatdr`](@ref).
 """
 reclat(rectan::AbstractVector) = _m_reclat(_m_v3(rectan), true)
 
@@ -46,16 +63,31 @@ end
 """
     latrec(radius, lon, lat) -> SVector{3}
 
-Return the rectangular coordinates of a point from its latitudinal coordinates, as
-`latrec_c`.
+Return the rectangular coordinates of the point with the latitudinal coordinates
+`radius`, `lon`, `lat` (angles in radians), as `latrec_c` of CSPICE.
+
+See also [`reclat`](@ref), which has an example, and [`drdlat`](@ref).
 """
 latrec(radius::Real, lon::Real, lat::Real) = _m_latrec(_m_f(radius), _m_f(lon), _m_f(lat))
 
 """
     recrad(rectan) -> (range, ra, dec)
 
-Return the range, right ascension in [0, 2 pi) and declination of a point, as
-`recrad_c`.
+Return the range, the right ascension and the declination of the rectangular point
+`rectan`, as `recrad_c` of CSPICE.
+
+The angles are in radians: `ra` in [0, 2 pi) and `dec` in [-pi/2, pi/2]. They differ
+from the result of [`reclat`](@ref) only in the range of the first angle.
+
+Throws `SpiceError(:badarg)` if `rectan` does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> recrad([0, -2, 0])
+(2.0, 4.71238898038469, 0.0)
+```
+
+See also [`radrec`](@ref), [`reclat`](@ref).
 """
 function recrad(rectan::AbstractVector)
     range, ra, dec = _m_reclat(_m_v3(rectan), true)
@@ -65,8 +97,10 @@ end
 """
     radrec(range, ra, dec) -> SVector{3}
 
-Return the rectangular coordinates of a point from its range, right ascension and
-declination, as `radrec_c`.
+Return the rectangular coordinates of the point with the range `range`, the right
+ascension `ra` and the declination `dec` (angles in radians), as `radrec_c` of CSPICE.
+
+See also [`recrad`](@ref).
 """
 radrec(range::Real, ra::Real, dec::Real) = _m_latrec(_m_f(range), _m_f(ra), _m_f(dec))
 
@@ -88,9 +122,22 @@ end
 """
     recsph(rectan) -> (r, colat, slon)
 
-Return the spherical coordinates of a point, as `recsph_c`: the colatitude in [0, pi]
-is the angle from the z axis and `slon` is in (-pi, pi]. Postcondition: `slon` is 0 on
-the z axis and all three are 0 at the origin.
+Return the spherical coordinates of the rectangular point `rectan`, as `recsph_c` of
+CSPICE.
+
+The angles are in radians: the colatitude `colat` in [0, pi], from the positive z axis,
+and the longitude `slon` in (-pi, pi]. `slon` is 0 on the z axis, and all three are 0 at
+the origin.
+
+Throws `SpiceError(:badarg)` if `rectan` does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> recsph([0, 0, -2])
+(2.0, 3.141592653589793, 0.0)
+```
+
+See also [`sphrec`](@ref), [`reclat`](@ref), [`dsphdr`](@ref).
 """
 recsph(rectan::AbstractVector) = _m_recsph(_m_v3(rectan))
 
@@ -103,8 +150,10 @@ end
 """
     sphrec(r, colat, slon) -> SVector{3}
 
-Return the rectangular coordinates of a point from its spherical coordinates, as
-`sphrec_c`.
+Return the rectangular coordinates of the point with the spherical coordinates `r`,
+`colat`, `slon` (angles in radians), as `sphrec_c` of CSPICE.
+
+See also [`recsph`](@ref), [`drdsph`](@ref).
 """
 sphrec(r::Real, colat::Real, slon::Real) = _m_sphrec(_m_f(r), _m_f(colat), _m_f(slon))
 
@@ -124,8 +173,21 @@ end
 """
     reccyl(rectan) -> (r, clon, z)
 
-Return the cylindrical coordinates of a point, as `reccyl_c`: `clon` in [0, 2 pi).
-Postcondition: `clon` is 0 on the z axis.
+Return the cylindrical coordinates of the rectangular point `rectan`, as `reccyl_c` of
+CSPICE.
+
+`r` is the distance from the z axis. The longitude `clon` is in radians in [0, 2 pi),
+and it is 0 on the z axis.
+
+Throws `SpiceError(:badarg)` if `rectan` does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> reccyl([0, -2, 3])
+(2.0, 4.71238898038469, 3.0)
+```
+
+See also [`cylrec`](@ref), [`dcyldr`](@ref).
 """
 reccyl(rectan::AbstractVector) = _m_reccyl(_m_v3(rectan))
 
@@ -137,8 +199,10 @@ end
 """
     cylrec(r, clon, z) -> SVector{3}
 
-Return the rectangular coordinates of a point from its cylindrical coordinates, as
-`cylrec_c`.
+Return the rectangular coordinates of the point with the cylindrical coordinates `r`,
+`clon`, `z` (`clon` in radians), as `cylrec_c` of CSPICE.
+
+See also [`reccyl`](@ref), [`drdcyl`](@ref).
 """
 cylrec(r::Real, clon::Real, z::Real) = _m_cylrec(_m_f(r), _m_f(clon), _m_f(z))
 
@@ -154,8 +218,11 @@ end
 """
     cyllat(r, clon, z) -> (radius, lon, lat)
 
-Convert cylindrical coordinates to latitudinal coordinates, as `cyllat_c`. The
-longitude is returned as given.
+Return the latitudinal coordinates of the point with the cylindrical coordinates `r`,
+`clon`, `z`, as `cyllat_c` of CSPICE. Angles are in radians. The longitude is returned
+as given.
+
+See also [`latcyl`](@ref), [`reclat`](@ref), [`reccyl`](@ref).
 """
 function cyllat(r::Real, clon::Real, z::Real)
     r, clon, z = promote(_m_f(r), _m_f(clon), _m_f(z))
@@ -167,7 +234,11 @@ end
 """
     latcyl(radius, lon, lat) -> (r, clon, z)
 
-Convert latitudinal coordinates to cylindrical coordinates, as `latcyl_c`.
+Return the cylindrical coordinates of the point with the latitudinal coordinates
+`radius`, `lon`, `lat`, as `latcyl_c` of CSPICE. Angles are in radians. The longitude
+is returned as given.
+
+See also [`cyllat`](@ref).
 """
 function latcyl(radius::Real, lon::Real, lat::Real)
     radius, lon, lat = promote(_m_f(radius), _m_f(lon), _m_f(lat))
@@ -178,7 +249,11 @@ end
 """
     cylsph(r, clon, z) -> (radius, colat, slon)
 
-Convert cylindrical coordinates to spherical coordinates, as `cylsph_c`.
+Return the spherical coordinates of the point with the cylindrical coordinates `r`,
+`clon`, `z`, as `cylsph_c` of CSPICE. Angles are in radians. The longitude is returned
+as given.
+
+See also [`sphcyl`](@ref), [`recsph`](@ref).
 """
 function cylsph(r::Real, clon::Real, z::Real)
     r, clon, z = promote(_m_f(r), _m_f(clon), _m_f(z))
@@ -190,7 +265,11 @@ end
 """
     sphcyl(radius, colat, slon) -> (r, clon, z)
 
-Convert spherical coordinates to cylindrical coordinates, as `sphcyl_c`.
+Return the cylindrical coordinates of the point with the spherical coordinates
+`radius`, `colat`, `slon`, as `sphcyl_c` of CSPICE. Angles are in radians. The
+longitude is returned as given.
+
+See also [`cylsph`](@ref).
 """
 function sphcyl(radius::Real, colat::Real, slon::Real)
     radius, colat, slon = promote(_m_f(radius), _m_f(colat), _m_f(slon))
@@ -201,8 +280,11 @@ end
 """
     sphlat(r, colat, slon) -> (radius, lon, lat)
 
-Convert spherical coordinates to latitudinal coordinates, as `sphlat_c`: the latitude
-is `pi/2 - colat`.
+Return the latitudinal coordinates of the point with the spherical coordinates `r`,
+`colat`, `slon`, as `sphlat_c` of CSPICE. Angles are in radians. The latitude is
+`pi/2 - colat`, and the other two values are returned as given.
+
+See also [`latsph`](@ref).
 """
 function sphlat(r::Real, colat::Real, slon::Real)
     r, colat, slon = promote(_m_f(r), _m_f(colat), _m_f(slon))
@@ -212,8 +294,17 @@ end
 """
     latsph(radius, lon, lat) -> (rho, colat, slon)
 
-Convert latitudinal coordinates to spherical coordinates, as `latsph_c`: the colatitude
-is `pi/2 - lat`.
+Return the spherical coordinates of the point with the latitudinal coordinates
+`radius`, `lon`, `lat`, as `latsph_c` of CSPICE. Angles are in radians. The colatitude
+is `pi/2 - lat`, and the other two values are returned as given.
+
+The longitude is the second latitudinal coordinate and the third spherical one:
+```jldoctest
+julia> latsph(2.0, 0.5, 0.0)
+(2.0, 1.5707963267948966, 0.5)
+```
+
+See also [`sphlat`](@ref).
 """
 function latsph(radius::Real, lon::Real, lat::Real)
     radius, lon, lat = promote(_m_f(radius), _m_f(lon), _m_f(lat))
@@ -241,11 +332,32 @@ end
 """
     recgeo(rectan, re, f) -> (lon, lat, alt)
 
-Return the geodetic longitude, latitude and altitude of a point relative to the
-spheroid with the equatorial radius `re` and the flattening `f` (polar radius
-`re (1 - f)`), as `recgeo_c`. The latitude is the one of the outward normal at the
-nearest surface point, which `nearpt` gives. Requires `re > 0` and `f < 1`
-(`SpiceError(:valueoutofrange)`).
+Return the geodetic coordinates of the rectangular point `rectan` relative to a
+spheroid, as `recgeo_c` of CSPICE.
+
+The spheroid has the equatorial radius `re` and the flattening `f`; its polar radius is
+`re * (1 - f)`. `lon` and `lat` are in radians. `lat` is the angle between the
+equatorial plane and the outward normal at the surface point nearest to `rectan`, which
+[`nearpt`](@ref) finds. `alt` is the height above that point, in the unit of `re` and
+`rectan`; it is negative inside the spheroid. `lon` is in (-pi, pi], and it is 0 on the
+z axis.
+
+Throws `SpiceError(:valueoutofrange)` if `re <= 0` or `f >= 1`, and
+`SpiceError(:badarg)` if `rectan` does not have 3 elements.
+
+# Examples
+A point 100 km above the equator of the WGS 84 spheroid:
+```jldoctest
+julia> re, f = 6378.137, 1 / 298.257223563;
+
+julia> round.(recgeo([0, 6478.137, 0], re, f); digits=6)
+(1.570796, 0.0, 100.0)
+
+julia> georec(pi / 2, 0, 100, re, f) ≈ [0, 6478.137, 0]
+true
+```
+
+See also [`georec`](@ref), [`recpgr`](@ref), [`dgeodr`](@ref).
 """
 recgeo(rectan::AbstractVector, re::Real, f::Real) = _m_recgeo(_m_v3(rectan), _m_f(re), _m_f(f))
 
@@ -268,9 +380,15 @@ end
 """
     georec(lon, lat, alt, re, f) -> SVector{3}
 
-Return the rectangular coordinates of the point with the geodetic longitude, latitude
-and altitude `lon`, `lat`, `alt` relative to the spheroid `re`, `f`, as `georec_c`.
-Requires `re > 0` and `f < 1` (`SpiceError(:valueoutofrange)`).
+Return the rectangular coordinates of the point with the geodetic coordinates `lon`,
+`lat` and `alt`, as `georec_c` of CSPICE.
+
+The spheroid has the equatorial radius `re` and the flattening `f`. Angles are in
+radians. The result has the unit of `re` and `alt`.
+
+Throws `SpiceError(:valueoutofrange)` if `re <= 0` or `f >= 1`.
+
+See also [`recgeo`](@ref), which has an example, and [`drdgeo`](@ref).
 """
 georec(lon::Real, lat::Real, alt::Real, re::Real, f::Real) =
     _m_georec(_m_f(lon), _m_f(lat), _m_f(alt), _m_f(re), _m_f(f))
@@ -305,13 +423,42 @@ function _m_pgrsense(ks::KernelSet, body::NameOrID)
 end
 
 """
-    recpgr(body, rectan, re, f) -> (lon, lat, alt)
+    recpgr([ctx,] body, rectan, re, f) -> (lon, lat, alt)
 
-Return the planetographic longitude in [0, 2 pi], latitude and altitude of a point
-relative to the spheroid `re`, `f` of `body` (name or ID), as `recpgr_c`. The sense of
-the longitude comes from the kernel pool of the context (see `pgrrec`). Requires a
-known body (`SpiceError(:idcodenotfound)`), `re > 0` and `f < 1`
-(`SpiceError(:valueoutofrange)`).
+Return the planetographic coordinates of the rectangular point `rectan` relative to the
+spheroid of `body`, as `recpgr_c` of CSPICE.
+
+`body` is a name or an ID. `re` is the equatorial radius and `f` the flattening of the
+spheroid. `lat` (radians) and `alt` are the geodetic values of [`recgeo`](@ref). `lon`
+is in radians in [0, 2 pi], and its sense comes from the kernel pool of the context:
+
+- The variable `BODY<id>_PGR_POSITIVE_LON` (`EAST` or `WEST`) gives the sense, if it is
+  present.
+- Without it, the longitude is positive west for prograde rotation (the rate
+  `BODY<id>_PM[2]` is positive) and positive east for retrograde rotation.
+- For the Earth, the Moon and the Sun it is positive east.
+
+Throws:
+- `SpiceError(:idcodenotfound)` if `body` is a name without an ID.
+- `SpiceError(:valueoutofrange)` if `re <= 0` or `f >= 1`.
+- `SpiceError(:invalidoption)` if the sense variable is not `EAST` or `WEST`.
+- `SpiceError(:missingdata)` if the sense variable and `BODY<id>_PM` are both absent.
+  The Earth needs neither.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> pcpool(ctx, "BODY499_PGR_POSITIVE_LON", ["WEST"]);
+
+julia> round.(recpgr(ctx, "MARS", [0, 3496.19, 0], 3396.19, 0.00589); digits=6)
+(4.712389, 0.0, 100.0)
+
+julia> pgrrec(ctx, "MARS", 3pi / 2, 0, 100, 3396.19, 0.00589) ≈ [0, 3496.19, 0]
+true
+```
+
+See also [`pgrrec`](@ref), [`recgeo`](@ref), [`dpgrdr`](@ref).
 """
 function recpgr(ks::KernelSet, body::NameOrID, rectan::AbstractVector, re::Real, f::Real)
     v = _m_v3(rectan)
@@ -328,16 +475,18 @@ function recpgr(ks::KernelSet, body::NameOrID, rectan::AbstractVector, re::Real,
 end
 
 """
-    pgrrec(body, lon, lat, alt, re, f) -> SVector{3}
+    pgrrec([ctx,] body, lon, lat, alt, re, f) -> SVector{3}
 
 Return the rectangular coordinates of the point with the planetographic coordinates
-`lon`, `lat`, `alt` relative to the spheroid `re`, `f` of `body`, as `pgrrec_c`. The
-longitude is positive east if the pool variable `BODY<id>_PGR_POSITIVE_LON` says
-`EAST`, positive west if it says `WEST`; without the variable it is positive west for
-prograde rotation (`BODY<id>_PM` rate positive) and positive east for retrograde
-rotation and for the Earth, the Moon and the Sun. Throws
-`SpiceError(:idcodenotfound)`, `SpiceError(:valueoutofrange)`,
-`SpiceError(:invalidoption)` or `SpiceError(:missingdata)`.
+`lon`, `lat` and `alt` of `body`, as `pgrrec_c` of CSPICE.
+
+`re` is the equatorial radius and `f` the flattening of the spheroid. Angles are in
+radians. The kernel pool of the context gives the sense of the longitude, by the rules in
+[`recpgr`](@ref).
+
+Throws as [`recpgr`](@ref).
+
+See also [`recpgr`](@ref), which has an example, and [`drdpgr`](@ref).
 """
 function pgrrec(ks::KernelSet, body::NameOrID, lon::Real, lat::Real, alt::Real, re::Real, f::Real)
     id = _m_bodyid(ks, body, :idcodenotfound)
@@ -363,8 +512,13 @@ end
 """
     drdlat(r, lon, lat) -> SMatrix{3,3}
 
-Return the Jacobian of rectangular coordinates with respect to latitudinal coordinates
-(radius, lon, lat), as `drdlat_c`.
+Return the Jacobian of rectangular coordinates with respect to the latitudinal
+coordinates `(r, lon, lat)`, as `drdlat_c` of CSPICE.
+
+Element `[i, j]` is the derivative of rectangular coordinate `i` with respect to
+latitudinal coordinate `j`. Angles are in radians.
+
+See also [`dlatdr`](@ref), [`latrec`](@ref).
 """
 drdlat(r::Real, lon::Real, lat::Real) = _m_drdlat(promote(_m_f(r), _m_f(lon), _m_f(lat))...)
 
@@ -384,9 +538,22 @@ end
 """
     dlatdr(x, y, z) -> SMatrix{3,3}
 
-Return the Jacobian of latitudinal coordinates (radius, lon, lat) with respect to
-rectangular coordinates, as `dlatdr_c`. Requires a point that is not on the z axis
-(`SpiceError(:pointonzaxis)`).
+Return the Jacobian of the latitudinal coordinates `(radius, lon, lat)` with respect to
+rectangular coordinates, at the point `(x, y, z)`, as `dlatdr_c` of CSPICE.
+
+Element `[i, j]` is the derivative of latitudinal coordinate `i` with respect to
+rectangular coordinate `j`. Angles are in radians.
+
+Throws `SpiceError(:pointonzaxis)` if the point is on the z axis.
+
+# Examples
+The two Jacobians at one point are inverses:
+```jldoctest
+julia> dlatdr(1, 1, 0) * drdlat(reclat([1, 1, 0])...) ≈ ident()
+true
+```
+
+See also [`drdlat`](@ref), [`reclat`](@ref).
 """
 function dlatdr(x::Real, y::Real, z::Real)
     v = SVector(promote(_m_f(x), _m_f(y), _m_f(z))...)
@@ -406,17 +573,23 @@ end
 """
     drdsph(r, colat, slon) -> SMatrix{3,3}
 
-Return the Jacobian of rectangular coordinates with respect to spherical coordinates
-(r, colat, slon), as `drdsph_c`.
+Return the Jacobian of rectangular coordinates with respect to the spherical
+coordinates `(r, colat, slon)`, as `drdsph_c` of CSPICE. Angles are in radians.
+
+See also [`dsphdr`](@ref), [`sphrec`](@ref), [`drdlat`](@ref).
 """
 drdsph(r::Real, colat::Real, slon::Real) = _m_drdsph(promote(_m_f(r), _m_f(colat), _m_f(slon))...)
 
 """
     dsphdr(x, y, z) -> SMatrix{3,3}
 
-Return the Jacobian of spherical coordinates (r, colat, slon) with respect to
-rectangular coordinates, as `dsphdr_c`. Requires a point that is not on the z axis
-(`SpiceError(:pointonzaxis)`).
+Return the Jacobian of the spherical coordinates `(r, colat, slon)` with respect to
+rectangular coordinates, at the point `(x, y, z)`, as `dsphdr_c` of CSPICE. Angles are
+in radians.
+
+Throws `SpiceError(:pointonzaxis)` if the point is on the z axis.
+
+See also [`drdsph`](@ref), [`recsph`](@ref), [`dlatdr`](@ref).
 """
 function dsphdr(x::Real, y::Real, z::Real)
     v = SVector(promote(_m_f(x), _m_f(y), _m_f(z))...)
@@ -434,17 +607,23 @@ end
 """
     drdcyl(r, clon, z) -> SMatrix{3,3}
 
-Return the Jacobian of rectangular coordinates with respect to cylindrical coordinates
-(r, clon, z), as `drdcyl_c`.
+Return the Jacobian of rectangular coordinates with respect to the cylindrical
+coordinates `(r, clon, z)`, as `drdcyl_c` of CSPICE. `clon` is in radians.
+
+See also [`dcyldr`](@ref), [`cylrec`](@ref), [`drdlat`](@ref).
 """
 drdcyl(r::Real, clon::Real, z::Real) = _m_drdcyl(promote(_m_f(r), _m_f(clon), _m_f(z))...)
 
 """
     dcyldr(x, y, z) -> SMatrix{3,3}
 
-Return the Jacobian of cylindrical coordinates (r, clon, z) with respect to rectangular
-coordinates, as `dcyldr_c`. Requires a point that is not on the z axis
-(`SpiceError(:pointonzaxis)`).
+Return the Jacobian of the cylindrical coordinates `(r, clon, z)` with respect to
+rectangular coordinates, at the point `(x, y, z)`, as `dcyldr_c` of CSPICE. `clon` is
+in radians.
+
+Throws `SpiceError(:pointonzaxis)` if the point is on the z axis.
+
+See also [`drdcyl`](@ref), [`reccyl`](@ref), [`dlatdr`](@ref).
 """
 function dcyldr(x::Real, y::Real, z::Real)
     v = SVector(promote(_m_f(x), _m_f(y), _m_f(z))...)
@@ -479,9 +658,16 @@ end
 """
     drdgeo(lon, lat, alt, re, f) -> SMatrix{3,3}
 
-Return the Jacobian of rectangular coordinates with respect to geodetic coordinates
-(lon, lat, alt) on the spheroid `re`, `f`, as `drdgeo_c`. Requires `f < 1`
-(`SpiceError(:valueoutofrange)`) and `re > 0` (`SpiceError(:badradius)`).
+Return the Jacobian of rectangular coordinates with respect to the geodetic coordinates
+`(lon, lat, alt)`, as `drdgeo_c` of CSPICE.
+
+The spheroid has the equatorial radius `re` and the flattening `f`. Angles are in
+radians.
+
+Throws `SpiceError(:valueoutofrange)` if `f >= 1`, and `SpiceError(:badradius)` if
+`re <= 0`. [`georec`](@ref) throws `SpiceError(:valueoutofrange)` in both cases.
+
+See also [`dgeodr`](@ref), [`georec`](@ref), [`drdlat`](@ref).
 """
 drdgeo(lon::Real, lat::Real, alt::Real, re::Real, f::Real) =
     _m_drdgeo(promote(_m_f(lon), _m_f(lat), _m_f(alt), _m_f(re), _m_f(f))...)
@@ -498,18 +684,31 @@ end
 """
     dgeodr(x, y, z, re, f) -> SMatrix{3,3}
 
-Return the Jacobian of geodetic coordinates (lon, lat, alt) with respect to rectangular
-coordinates, as `dgeodr_c`. Errors as `drdgeo`, and `SpiceError(:pointonzaxis)` for a
-point on the z axis.
+Return the Jacobian of the geodetic coordinates `(lon, lat, alt)` with respect to
+rectangular coordinates, at the point `(x, y, z)`, as `dgeodr_c` of CSPICE.
+
+The spheroid has the equatorial radius `re` and the flattening `f`. Angles are in
+radians.
+
+Throws `SpiceError(:valueoutofrange)` if `f >= 1`, `SpiceError(:badradius)` if
+`re <= 0`, and `SpiceError(:pointonzaxis)` if the point is on the z axis.
+
+See also [`drdgeo`](@ref), [`recgeo`](@ref), [`dlatdr`](@ref).
 """
 dgeodr(x::Real, y::Real, z::Real, re::Real, f::Real) =
     _m_dgeodr(SVector(promote(_m_f(x), _m_f(y), _m_f(z))...), _m_f(re), _m_f(f))
 
 """
-    drdpgr(body, lon, lat, alt, re, f) -> SMatrix{3,3}
+    drdpgr([ctx,] body, lon, lat, alt, re, f) -> SMatrix{3,3}
 
 Return the Jacobian of rectangular coordinates with respect to the planetographic
-coordinates (lon, lat, alt) of `body`, as `drdpgr_c`. Errors as `pgrrec`.
+coordinates `(lon, lat, alt)` of `body`, as `drdpgr_c` of CSPICE. Angles are in
+radians. The kernel pool of the context gives the sense of the longitude, by the rules
+in [`recpgr`](@ref).
+
+Throws as [`recpgr`](@ref).
+
+See also [`dpgrdr`](@ref), [`pgrrec`](@ref), [`drdgeo`](@ref).
 """
 function drdpgr(ks::KernelSet, body::NameOrID, lon::Real, lat::Real, alt::Real, re::Real, f::Real)
     id = _m_bodyid(ks, body, :idcodenotfound)
@@ -521,11 +720,17 @@ function drdpgr(ks::KernelSet, body::NameOrID, lon::Real, lat::Real, alt::Real, 
 end
 
 """
-    dpgrdr(body, x, y, z, re, f) -> SMatrix{3,3}
+    dpgrdr([ctx,] body, x, y, z, re, f) -> SMatrix{3,3}
 
-Return the Jacobian of the planetographic coordinates (lon, lat, alt) of `body` with
-respect to rectangular coordinates, as `dpgrdr_c`. Errors as `pgrrec`, and
-`SpiceError(:pointonzaxis)` for a point on the z axis.
+Return the Jacobian of the planetographic coordinates `(lon, lat, alt)` of `body` with
+respect to rectangular coordinates, at the point `(x, y, z)`, as `dpgrdr_c` of CSPICE.
+Angles are in radians. The kernel pool of the context gives the sense of the longitude,
+by the rules in [`recpgr`](@ref).
+
+Throws as [`recpgr`](@ref), and `SpiceError(:pointonzaxis)` if the point is on the z
+axis.
+
+See also [`drdpgr`](@ref), [`recpgr`](@ref), [`dgeodr`](@ref).
 """
 function dpgrdr(ks::KernelSet, body::NameOrID, x::Real, y::Real, z::Real, re::Real, f::Real)
     id = _m_bodyid(ks, body, :idcodenotfound)
@@ -555,7 +760,6 @@ end
 const _M_COSYS = ("RECTANGULAR", "CYLINDRICAL", "LATITUDINAL", "SPHERICAL", "GEODETIC",
     "PLANETOGRAPHIC")
 
-"Index of the coordinate system `name` in `_M_COSYS` (blanks and case ignored), or 0."
 function _m_cosys(name::AbstractString)
     s = uppercase(filter(!isspace, name))
     return something(findfirst(==(s), _M_COSYS), 0)
@@ -573,17 +777,47 @@ end
 end
 
 """
-    xfmsta(istate, icosys, ocosys, body) -> SVector{6}
+    xfmsta([ctx,] istate, icosys, ocosys, body) -> SVector{6}
 
-Return the state `istate` (three coordinates and their rates) of the coordinate system
-`icosys` in the system `ocosys`, as `xfmsta_c`. The systems are `"RECTANGULAR"`,
-`"CYLINDRICAL"`, `"LATITUDINAL"`, `"SPHERICAL"`, `"GEODETIC"` and `"PLANETOGRAPHIC"`
-(case and blanks ignored). `body` (name or ID) gives the spheroid for the last two, from
-`BODY<id>_RADII` of the context; it is not read otherwise. Throws
-`SpiceError(:coordsysnotrec)` for an unknown system, `SpiceError(:idcodenotfound)` for
-an unknown body, `SpiceError(:notsupported)` for a body whose first two radii differ,
-`SpiceError(:invalidstate)` for a position on the z axis with a velocity off the axis
-(the output rates are then not defined), and `SpiceError(:numericoverflow)`.
+Return the state `istate` converted from the coordinate system `icosys` to the
+coordinate system `ocosys`, as `xfmsta_c` of CSPICE.
+
+A state is three coordinates followed by their time derivatives. The names of the
+systems ignore case and blanks. Angles are in radians.
+
+| System             | Coordinates          |
+|:-------------------|:---------------------|
+| `"RECTANGULAR"`    | x, y, z              |
+| `"CYLINDRICAL"`    | radius, lon, z       |
+| `"LATITUDINAL"`    | radius, lon, lat     |
+| `"SPHERICAL"`      | radius, colat, lon   |
+| `"GEODETIC"`       | lon, lat, alt        |
+| `"PLANETOGRAPHIC"` | lon, lat, alt        |
+
+`body` (name or ID) gives the spheroid of the last two systems, from `BODY<id>_RADII`
+in the kernel pool of the context. It is not read for the other systems, so `""` is
+enough there.
+
+Throws:
+- `SpiceError(:coordsysnotrec)` if a system name is not known.
+- `SpiceError(:idcodenotfound)` if `body` is needed and is a name without an ID.
+- `SpiceError(:kernelvarnotfound)` if `body` is needed and has no radii in the pool.
+- `SpiceError(:notsupported)` if the first two radii of `body` differ.
+- `SpiceError(:invalidstate)` if the position is on the z axis and the velocity is
+  not along it; the output rates are then not defined.
+- `SpiceError(:numericoverflow)` if a velocity component would overflow.
+- `SpiceError(:badarg)` if `istate` does not have 6 elements.
+
+# Examples
+A point on the x axis that moves along y has a longitude rate:
+```jldoctest
+julia> s = xfmsta([2, 0, 0, 0, 1, 0], "RECTANGULAR", "LATITUDINAL", "");
+
+julia> s == [2, 0, 0, 0, 0.5, 0]
+true
+```
+
+See also [`reclat`](@ref), [`recgeo`](@ref), [`recpgr`](@ref), [`dlatdr`](@ref).
 """
 function xfmsta(ks::KernelSet, istate::AbstractVector, icosys::AbstractString,
         ocosys::AbstractString, body::NameOrID)
@@ -691,7 +925,6 @@ const _M_UNITS = (
     ("DAYS", 86400.0, :time), ("JULIAN_YEARS", 31557600.0, :time),
     ("TROPICAL_YEARS", 31556925.976319999, :time), ("YEARS", 31557600.0, :time))
 
-"Index of the unit `name` in `_M_UNITS` (case ignored, trailing blanks ignored), or 0."
 function _m_unit(name::AbstractString)
     s = uppercase(rstrip(name, ' '))
     return something(findfirst(u -> u[1] == s, _M_UNITS), 0)
@@ -700,14 +933,28 @@ end
 """
     convrt(x, in, out)
 
-Return the measurement `x` in the units `in` converted to the units `out`, as
-`convrt_c`. The units are angles (`RADIANS`, `DEGREES`, `ARCMINUTES`, `ARCSECONDS`,
-`HOURANGLE`, `MINUTEANGLE`, `SECONDANGLE`), distances (`METERS`, `M`, `KM`,
-`KILOMETERS`, `CM`, `CENTIMETERS`, `MM`, `MILLIMETERS`, `FEET`, `INCHES`, `YARDS`,
-`STATUTE_MILES`, `NAUTICAL_MILES`, `AU`, `LIGHTSECS`, `LIGHTYEARS`, `PARSECS`) and times
-(`SECONDS`, `MINUTES`, `HOURS`, `DAYS`, `JULIAN_YEARS`, `TROPICAL_YEARS`, `YEARS`), in
-any case. Throws `SpiceError(:unitsnotrec)` for an unknown unit and
-`SpiceError(:incompatibleunits)` for units of two classes.
+Return the measurement `x` converted from the unit `in` to the unit `out`, as
+`convrt_c` of CSPICE.
+
+| Class    | Units                                                                 |
+|:---------|:----------------------------------------------------------------------|
+| angle    | `RADIANS`, `DEGREES`, `ARCMINUTES`, `ARCSECONDS`, `HOURANGLE`, `MINUTEANGLE`, `SECONDANGLE` |
+| distance | `METERS`, `M`, `KILOMETERS`, `KM`, `CENTIMETERS`, `CM`, `MILLIMETERS`, `MM`, `FEET`, `INCHES`, `YARDS`, `STATUTE_MILES`, `NAUTICAL_MILES`, `AU`, `LIGHTSECS`, `LIGHTYEARS`, `PARSECS` |
+| time     | `SECONDS`, `MINUTES`, `HOURS`, `DAYS`, `JULIAN_YEARS`, `TROPICAL_YEARS`, `YEARS` |
+
+The names ignore case and trailing blanks. `YEARS` is `JULIAN_YEARS`.
+
+Throws `SpiceError(:unitsnotrec)` if a unit is not known, and
+`SpiceError(:incompatibleunits)` if the two units are of different classes.
+
+# Examples
+```jldoctest
+julia> convrt(1.5, "HOURS", "MINUTES")
+90.0
+
+julia> convrt(1, "km", "METERS")
+1000.0
+```
 """
 function convrt(x::Real, in::AbstractString, out::AbstractString)
     i = _m_unit(in)

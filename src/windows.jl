@@ -3,18 +3,38 @@
 # size limit, so the error SPICE(WINDOWEXCESS) cannot occur.
 
 """
-    Window() ; Window(endpoints)
+    Window()
+    Window(endpoints)
 
-Window of double-precision intervals: `data` holds the endpoints
-`left₁, right₁, left₂, right₂, …` of disjoint closed intervals in increasing order
-(`leftᵢ <= rightᵢ < leftᵢ₊₁`). A `Window` is an `AbstractVector{Float64}` of its
-endpoints, so `w[k]`, `length(w)` and iteration give what a SPICE double cell gives.
+Window: a set of disjoint closed intervals of the real line. It takes the place of the
+double-precision window cell of CSPICE.
 
-Contract: `Window(endpoints)` copies `endpoints` and validates them with `wnvald!`
-(the pairs may be in any order and may overlap); it throws `SpiceError` with kind
-`:unmatchendpts` for an odd count and `:badendpoints` for a pair with left > right.
-A `Window` is not safe for concurrent mutation; a caller that shares one between
-threads must lock it.
+`Window()` is empty. `Window(endpoints)` takes the pairs `left₁, right₁, left₂, right₂, …`.
+The pairs can be in any order and can overlap; they are sorted and merged, as
+[`wnvald!`](@ref) does. `endpoints` is copied.
+
+A `Window` is an `AbstractVector{Float64}` of its endpoints in increasing order, so
+`w[k]`, `length(w)` and iteration work. The field `data` holds the endpoints. A window
+has no size limit, so the CSPICE error `SPICE(WINDOWEXCESS)` cannot occur. A `Window`
+is not safe for concurrent mutation.
+
+Throws `SpiceError(:unmatchendpts)` if the number of endpoints is odd, and
+`SpiceError(:badendpoints)` if a pair has `left > right`.
+
+# Examples
+```jldoctest
+julia> w = Window([1, 3, 7, 11, 2, 5])
+4-element Window:
+  1.0
+  5.0
+  7.0
+ 11.0
+
+julia> wncard(w)
+2
+```
+
+See also [`wninsd!`](@ref), [`wnunid`](@ref), [`wnfetd`](@ref), [`wnsumd`](@ref).
 """
 struct Window <: AbstractVector{Float64}
     data::Vector{Float64}
@@ -29,7 +49,7 @@ Base.copy(w::Window) = (c = Window(); append!(c.data, w.data); c)
 Base.empty!(w::Window) = (empty!(w.data); w)
 Base.:(==)(a::Window, b::Window) = a.data == b.data
 
-"Window that owns the valid endpoint vector `d` (no check, no copy)."
+"Window with a copy of the endpoint vector `d`, which must already be valid (no check)."
 function _window_of(d::Vector{Float64})
     w = Window()
     append!(w.data, d)
@@ -39,25 +59,44 @@ end
 """
     card(x) -> Int
 
-Number of elements of `x`, as `card_c` gives for a SPICE cell: the number of endpoints
-of a `Window` (twice the number of intervals) and the length of a vector of IDs.
+Return the number of elements of `x`, as `card_c` of CSPICE gives for a cell.
+
+For a [`Window`](@ref) this is the number of endpoints, which is twice the number of
+intervals. For a vector of IDs it is the length.
+
+See also [`wncard`](@ref).
 """
 card(x::AbstractVector) = length(x)
 
 """
     wncard(window) -> Int
 
-Number of intervals of `window`, as `wncard_c`. Postcondition: `2 * wncard(w) == card(w)`.
+Return the number of intervals of `window`, as `wncard_c` of CSPICE.
+
+See also [`card`](@ref), [`wnfetd`](@ref).
 """
 wncard(w::Window) = length(w.data) ÷ 2
 
 """
     wninsd!(window, left, right) -> window
 
-Insert the interval [`left`, `right`] into `window` and merge it with every interval
-that it overlaps or touches, as `wninsd_c`. Precondition: `left <= right`, else
-`SpiceError(:badendpoints)`. Postcondition: `window` is a valid window that is the
-union of its old value and the interval.
+Insert the interval [`left`, `right`] into `window` and return `window`, as `wninsd_c`
+of CSPICE.
+
+The new interval is merged with each interval that it overlaps or touches. The window
+is the first argument; CSPICE has it last.
+
+Throws `SpiceError(:badendpoints)` if `left > right`.
+
+# Examples
+```jldoctest
+julia> w = Window([1, 3, 7, 11]);
+
+julia> wninsd!(w, 3, 5) == Window([1, 5, 7, 11])
+true
+```
+
+See also [`wnunid`](@ref), [`wnvald!`](@ref).
 """
 function wninsd!(w::Window, left::Real, right::Real)
     l = Float64(left)
@@ -103,9 +142,16 @@ end
 """
     wnvald!(window) -> window
 
-Turn the endpoint pairs in `window.data` (any order, overlaps allowed) into a valid
-window, as `wnvald_c`. Throws `SpiceError(:unmatchendpts)` for an odd number of
-endpoints and `SpiceError(:badendpoints)` for a pair with left > right.
+Sort and merge the endpoint pairs in `window.data` to make a valid window, and return
+`window`, as `wnvald_c` of CSPICE.
+
+The pairs can be in any order and can overlap. `Window(endpoints)` calls this, so it is
+necessary only after a direct change of `window.data`.
+
+Throws `SpiceError(:unmatchendpts)` if the number of endpoints is odd, and
+`SpiceError(:badendpoints)` if a pair has `left > right`.
+
+See also [`Window`](@ref), [`wninsd!`](@ref).
 """
 function wnvald!(w::Window)
     pairs = copy(w.data)
@@ -126,7 +172,26 @@ end
 """
     wnunid(a, b) -> Window
 
-Union of the windows `a` and `b`, as `wnunid_c`.
+Return the union of the windows `a` and `b`, as `wnunid_c` of CSPICE.
+
+# Examples
+```jldoctest
+julia> a = Window([1, 3, 7, 11]); b = Window([2, 8]);
+
+julia> wnunid(a, b) == Window([1, 11])
+true
+
+julia> wnintd(a, b) == Window([2, 3, 7, 8])
+true
+
+julia> wndifd(a, b) == Window([1, 2, 8, 11])
+true
+
+julia> wncomd(a, 0, 10) == Window([0, 1, 3, 7])
+true
+```
+
+See also [`wnintd`](@ref), [`wndifd`](@ref), [`wncomd`](@ref), [`wninsd!`](@ref).
 """
 function wnunid(a::Window, b::Window)
     A, B = a.data, b.data
@@ -152,8 +217,11 @@ end
 """
     wnintd(a, b) -> Window
 
-Intersection of the windows `a` and `b`, as `wnintd_c`. Two intervals that share one
-endpoint give the singleton interval at that point.
+Return the intersection of the windows `a` and `b`, as `wnintd_c` of CSPICE.
+
+Two intervals that share only an endpoint give the interval of that one point.
+
+See also [`wnunid`](@ref), which has an example, and [`wndifd`](@ref).
 """
 function wnintd(a::Window, b::Window)
     A, B = a.data, b.data
@@ -176,9 +244,14 @@ end
 """
     wndifd(a, b) -> Window
 
-Difference of the windows: the points of `a` that are not interior points of `b`, as
-`wndifd_c` computes it (a singleton interval of `b` removes nothing, and the result is
-a window of closed intervals).
+Return the difference of the windows `a` and `b`, as `wndifd_c` of CSPICE.
+
+The result holds closed intervals. An interval of `b` that cuts an interval of `a`
+leaves the shared endpoints in the result: [1, 5] minus [2, 3] is [1, 2] and [3, 5]. An
+interval of `a` that is inside an interval of `b`, endpoints included, is removed
+whole. An interval of `b` of one point removes nothing from a longer interval of `a`.
+
+See also [`wnunid`](@ref), which has an example, and [`wncomd`](@ref).
 """
 function wndifd(a::Window, b::Window)
     A, B = a.data, b.data
@@ -233,9 +306,15 @@ end
 """
     wncomd(window, left, right) -> Window
 
-Complement of `window` with respect to the interval [`left`, `right`], as `wncomd_c`
-(argument order of SPICE.jl). Precondition: `left <= right`, else
-`SpiceError(:badendpoints)`.
+Return the complement of `window` with respect to the interval [`left`, `right`], as
+`wncomd_c` of CSPICE.
+
+The result holds the closed parts of the interval that `window` does not cover. The
+window is the first argument; CSPICE has it after the interval.
+
+Throws `SpiceError(:badendpoints)` if `left > right`.
+
+See also [`wnunid`](@ref), which has an example, and [`wndifd`](@ref).
 """
 function wncomd(w::Window, left::Real, right::Real)
     l = Float64(left)
@@ -264,8 +343,10 @@ end
 """
     wnelmd(window, point) -> Bool
 
-True if `point` is in one of the intervals of `window`, as `wnelmd_c` (argument order
-of SPICE.jl).
+Return `true` if `point` is in an interval of `window`, endpoints included, as
+`wnelmd_c` of CSPICE. The window is the first argument; CSPICE has it last.
+
+See also [`wnincd`](@ref).
 """
 function wnelmd(w::Window, point::Real)
     d = w.data
@@ -278,8 +359,11 @@ end
 """
     wnincd(window, left, right) -> Bool
 
-True if the interval [`left`, `right`] is inside one interval of `window`, as
-`wnincd_c` (argument order of SPICE.jl).
+Return `true` if the interval [`left`, `right`] is inside one interval of `window`,
+endpoints included, as `wnincd_c` of CSPICE. The window is the first argument; CSPICE
+has it last.
+
+See also [`wnelmd`](@ref).
 """
 function wnincd(w::Window, left::Real, right::Real)
     d = w.data
@@ -292,8 +376,18 @@ end
 """
     wnfetd(window, n) -> (left, right)
 
-Endpoints of interval number `n` (1-based, as in SPICE.jl) of `window`. Precondition:
-`1 <= n <= wncard(window)`, else `SpiceError(:nointerval)`.
+Return the endpoints of interval number `n` of `window`, as `wnfetd_c` of CSPICE. `n`
+starts at 1; in CSPICE it starts at 0.
+
+Throws `SpiceError(:nointerval)` if `n` is not in `1:wncard(window)`.
+
+# Examples
+```jldoctest
+julia> wnfetd(Window([1, 3, 7, 11]), 2)
+(7.0, 11.0)
+```
+
+See also [`wncard`](@ref).
 """
 function wnfetd(w::Window, n::Integer)
     (1 <= n <= wncard(w)) || throw(SpiceError(:nointerval,
@@ -304,9 +398,23 @@ end
 """
     wnsumd(window) -> (meas, avg, stddev, idxsml, idxlon)
 
-Summary of `window`, as `wnsumd_c`: total measure, mean and standard deviation of the
-interval lengths, and the 1-based index in `window` of the left endpoint of the
-shortest and of the longest interval (both 0 for an empty window).
+Return a summary of `window`, as `wnsumd_c` of CSPICE.
+
+- `meas`: the sum of the lengths of the intervals.
+- `avg`, `stddev`: the mean and the standard deviation of the lengths.
+- `idxsml`, `idxlon`: the index in `window` of the left endpoint of the shortest and of
+  the longest interval; the first one if several are equal.
+
+The indexes start at 1; in CSPICE they start at 0. An empty window gives 0 for all five
+values.
+
+# Examples
+```jldoctest
+julia> wnsumd(Window([1, 3, 7, 11]))
+(6.0, 3.0, 1.0, 1, 3)
+```
+
+See also [`wncard`](@ref), [`wnfetd`](@ref).
 """
 function wnsumd(w::Window)
     d = w.data

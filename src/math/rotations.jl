@@ -17,7 +17,6 @@
 
 @inline _m_axisok(a::Integer) = 1 <= a <= 3
 
-"Successor of the axis `a` in the cycle 1, 2, 3."
 @inline _m_next(a::Integer) = Int(a) % 3 + 1
 
 @inline function _m_eul2m(angle3, angle2, angle1, axis3::Integer, axis2::Integer, axis1::Integer)
@@ -29,9 +28,26 @@ end
     eul2m(angle3, angle2, angle1, axis3, axis2, axis1) -> SMatrix{3,3}
 
 Return the rotation matrix `[angle3]_axis3 * [angle2]_axis2 * [angle1]_axis1` of three
-Euler angles in radians, as `eul2m_c`. Requires each axis in 1:3
-(`SpiceError(:badaxisnumbers)` otherwise). Postcondition: the result is orthogonal with
-determinant 1.
+Euler angles in radians, as `eul2m_c` of CSPICE.
+
+`[angle]_axis` is `rotate(angle, axis)`: a rotation of the coordinate system about the
+axis 1, 2 or 3 (x, y, z). The rotation by `angle1` acts first on a vector. Equal
+neighbour axes are accepted.
+
+Throws `SpiceError(:badaxisnumbers)` if an axis is not 1, 2 or 3.
+
+# Examples
+```jldoctest
+julia> r = eul2m(0.1, 0.2, 0.3, 3, 1, 3);
+
+julia> r ≈ rotate(0.1, 3) * rotate(0.2, 1) * rotate(0.3, 3)
+true
+
+julia> round.(m2eul(r, 3, 1, 3); digits=12)
+(0.1, 0.2, 0.3)
+```
+
+See also [`m2eul`](@ref), [`eul2xf`](@ref), [`rotate`](@ref).
 """
 function eul2m(angle3::Real, angle2::Real, angle1::Real, axis3::Integer, axis2::Integer,
         axis1::Integer)
@@ -87,12 +103,27 @@ end
     m2eul(r, axis3, axis2, axis1) -> (angle3, angle2, angle1)
 
 Return the Euler angles in radians that factor the rotation matrix `r` as
-`[angle3]_axis3 * [angle2]_axis2 * [angle1]_axis1`, as `m2eul_c`. `angle3` and `angle1`
-are in (-pi, pi]; `angle2` is in [0, pi] if `axis3 == axis1` and in [-pi/2, pi/2]
-otherwise. In the degenerate case (`angle2` at an end of its range) `angle3` is 0, with
-the test of CSPICE. Requires axes in 1:3 with the middle one different from its
-neighbours (`SpiceError(:badaxisnumbers)`) and a rotation matrix within the tolerance
-0.1 of `isrot` (`SpiceError(:notarotation)`).
+`[angle3]_axis3 * [angle2]_axis2 * [angle1]_axis1`, as `m2eul_c` of CSPICE.
+
+`angle3` and `angle1` are in (-pi, pi]. `angle2` is in [0, pi] if `axis3 == axis1` and
+in [-pi/2, pi/2] otherwise. If `angle2` is at an end of its range, the factors are not
+unique: `angle3` is then 0 and `angle1` holds the full rotation. The columns of `r` are
+scaled to unit length before the angles are found.
+
+Throws:
+- `SpiceError(:badaxisnumbers)` if an axis is not 1, 2 or 3, or if `axis2` is equal to
+  `axis3` or to `axis1`.
+- `SpiceError(:notarotation)` if `isrot(r, 0.1, 0.1)` is false.
+- `SpiceError(:badarg)` if `r` is not 3 by 3.
+
+# Examples
+The degenerate case, where `angle2` is 0:
+```jldoctest
+julia> round.(m2eul(rotate(0.3, 3), 3, 1, 3); digits=12)
+(0.0, 0.0, 0.3)
+```
+
+See also [`eul2m`](@ref), which has an example, and [`xf2eul`](@ref).
 """
 m2eul(r::AbstractMatrix, axis3::Integer, axis2::Integer, axis1::Integer) =
     _m_m2eul(_m_m3(r), axis3, axis2, axis1)
@@ -103,12 +134,35 @@ m2eul(r::AbstractMatrix, axis3::Integer, axis2::Integer, axis1::Integer) =
 """
     eul2xf(eulang, axisa, axisb, axisc) -> SMatrix{6,6}
 
-Return the state transformation of the Euler angles `eulang[1:3]` (for the axes
-`axisa`, `axisb`, `axisc`, in the order of the matrix product) and their rates
-`eulang[4:6]`, as `eul2xf_c`. Requires 6 elements and axes in 1:3
-(`SpiceError(:badaxisnumbers)`). Equal neighbour axes are accepted, as in CSPICE: the
-two angles add. Postcondition: the upper left and lower right blocks are
-`eul2m(eulang[1], eulang[2], eulang[3], axisa, axisb, axisc)`.
+Return the 6 by 6 state transformation of three Euler angles and their rates, as
+`eul2xf_c` of CSPICE.
+
+`eulang[1:3]` are the angles in radians of the product
+`[eulang[1]]_axisa * [eulang[2]]_axisb * [eulang[3]]_axisc`, and `eulang[4:6]` are
+their rates in radians per time unit. Equal neighbour axes are accepted, as in CSPICE:
+the two angles add.
+
+The upper left and lower right 3 by 3 blocks of the result are the matrix
+`eul2m(eulang[1], eulang[2], eulang[3], axisa, axisb, axisc)`. The lower left block is
+its time derivative. The upper right block is zero.
+
+Throws `SpiceError(:badaxisnumbers)` if an axis is not 1, 2 or 3, and
+`SpiceError(:badarg)` if `eulang` does not have 6 elements.
+
+# Examples
+```jldoctest
+julia> x = eul2xf([0.1, 0.2, 0.3, 0.01, 0.02, 0.03], 3, 1, 3);
+
+julia> eulang, unique = xf2eul(x, 3, 1, 3);
+
+julia> unique
+true
+
+julia> eulang ≈ [0.1, 0.2, 0.3, 0.01, 0.02, 0.03]
+true
+```
+
+See also [`xf2eul`](@ref), [`eul2m`](@ref), [`rav2xf`](@ref).
 """
 function eul2xf(eulang::AbstractVector, axisa::Integer, axisb::Integer, axisc::Integer)
     e = _m_v6(eulang)
@@ -152,9 +206,17 @@ end
 """
     xf2eul(xform, axisa, axisb, axisc) -> (eulang::SVector{6}, unique::Bool)
 
-Return the Euler angles and their rates of the state transformation `xform`, as
-`xf2eul_c`; `unique` is false in the degenerate case, where the first rate is set to 0.
-Requirements and errors as `m2eul` for the rotation block.
+Return the Euler angles and their rates of the 6 by 6 state transformation `xform`, and
+a flag that tells if they are unique, as `xf2eul_c` of CSPICE.
+
+`eulang` has the layout of [`eul2xf`](@ref): three angles in radians, then their rates.
+`unique` is `false` in the degenerate case of [`m2eul`](@ref); the first angle and its
+rate are then 0.
+
+Throws as [`m2eul`](@ref) for the upper left 3 by 3 block, and `SpiceError(:badarg)` if
+`xform` is not 6 by 6.
+
+See also [`eul2xf`](@ref), which has an example, and [`xf2rav`](@ref).
 """
 function xf2eul(xform::AbstractMatrix, axisa::Integer, axisb::Integer, axisc::Integer)
     r, drdt = _m_blocks(_m_m6(xform))
@@ -184,9 +246,32 @@ end
 """
     axisar(axis, angle) -> SMatrix{3,3}
 
-Return the matrix that rotates vectors by `angle` radians about the vector `axis`
-(right-hand rule), as `axisar_c`: column `i` is `vrotv` of unit vector `i`.
-Postcondition: a zero `axis` gives the identity.
+Return the matrix that rotates vectors by `angle` radians about the vector `axis`, as
+`axisar_c` of CSPICE.
+
+The rotation follows the right-hand rule. `axis` need not have unit length; a zero
+`axis` gives the identity. The result is the transpose of the coordinate system
+rotation that [`rotate`](@ref) gives for the same axis and angle.
+
+Throws `SpiceError(:badarg)` if `axis` does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> r = axisar([0, 0, 1], pi / 2);
+
+julia> r * [1, 0, 0] ≈ [0, 1, 0]
+true
+
+julia> r ≈ rotate(pi / 2, 3)'
+true
+
+julia> axis, angle = raxisa(r);
+
+julia> axis == [0, 0, 1] && angle ≈ pi / 2
+true
+```
+
+See also [`raxisa`](@ref), [`vrotv`](@ref), [`rotate`](@ref).
 """
 function axisar(axis::AbstractVector, angle::Real)
     ax = _m_v3(axis)
@@ -244,20 +329,44 @@ end
 """
     m2q(r) -> SVector{4}
 
-Return the unit quaternion in the SPICE convention (scalar part first) of the rotation
-matrix `r`, as `m2q_c`. The branch on the trace and on the diagonal is the one of
-CSPICE. Requires a rotation matrix within the tolerance 0.1 of `isrot`
-(`SpiceError(:notarotation)`). Postcondition: unit norm and a scalar part that is not
-negative; `q2m(m2q(r))` is `r` to rounding.
+Return the unit quaternion of the rotation matrix `r`, in the SPICE convention, as
+`m2q_c` of CSPICE.
+
+In the SPICE convention the scalar part is first: the matrix that rotates vectors by
+the angle `θ` about the unit vector `u` (`axisar(u, θ)`) has the quaternion
+`(cos(θ/2), sin(θ/2) * u)`. The result has unit norm and a scalar part that is not
+negative. `q2m(m2q(r))` is `r` to rounding.
+
+Throws `SpiceError(:notarotation)` if `isrot(r, 0.1, 0.1)` is false, and
+`SpiceError(:badarg)` if `r` is not 3 by 3.
+
+# Examples
+```jldoctest
+julia> q = m2q(axisar([0, 0, 1], pi / 2));
+
+julia> q ≈ [cos(pi / 4), 0, 0, sin(pi / 4)]
+true
+
+julia> q2m(q) ≈ axisar([0, 0, 1], pi / 2)
+true
+```
+
+See also [`q2m`](@ref), [`qxq`](@ref), [`raxisa`](@ref).
 """
 m2q(r::AbstractMatrix) = _m_m2q(_m_m3(r))
 
 """
     q2m(q) -> SMatrix{3,3}
 
-Return the rotation matrix of the SPICE-convention quaternion `q` (scalar part first),
-as `q2m_c`. A quaternion that is not of unit length and not zero is scaled, as in
-CSPICE. Contract: `q` has 4 elements.
+Return the rotation matrix of the quaternion `q` in the SPICE convention (scalar part
+first, see [`m2q`](@ref)), as `q2m_c` of CSPICE.
+
+A quaternion that does not have unit length is scaled to it, as in CSPICE. The zero
+quaternion gives the identity.
+
+Throws `SpiceError(:badarg)` if `q` does not have 4 elements.
+
+See also [`m2q`](@ref), which has an example.
 """
 function q2m(q::AbstractVector)
     v = _m_v4(q)
@@ -299,17 +408,37 @@ end
 """
     qxq(q1, q2) -> SVector{4}
 
-Return the product of two SPICE-convention quaternions, as `qxq_c`. Postcondition:
-`q2m(qxq(q1, q2))` is `q2m(q1) * q2m(q2)` to rounding for unit quaternions.
+Return the product `q1 * q2` of two quaternions in the SPICE convention (scalar part
+first), as `qxq_c` of CSPICE.
+
+For unit quaternions `q2m(qxq(q1, q2))` is `q2m(q1) * q2m(q2)` to rounding.
+
+Throws `SpiceError(:badarg)` if an argument does not have 4 elements.
+
+# Examples
+With the quaternion units `i` and `j`, the product is `k`:
+```jldoctest
+julia> qxq([0, 1, 0, 0], [0, 0, 1, 0]) == [0, 0, 0, 1]
+true
+```
+
+See also [`m2q`](@ref), [`q2m`](@ref), [`qdq2av`](@ref).
 """
 qxq(q1::AbstractVector, q2::AbstractVector) = _m_qxq(_m_v4(q1), _m_v4(q2))
 
 """
     qdq2av(q, dq) -> SVector{3}
 
-Return the angular velocity of a frame from its SPICE-convention quaternion `q` and the
-time derivative `dq`, as `qdq2av_c`: `-2` times the vector part of `conj(q/|q|) * dq`.
-The unit of the result is radians per time unit of `dq`.
+Return the angular velocity of the frame that the quaternion `q` defines, from `q` and
+its time derivative `dq`, as `qdq2av_c` of CSPICE.
+
+`q` has the SPICE convention (scalar part first) and is scaled to unit length. The
+result is `-2` times the vector part of `conj(q) * dq`, in radians per time unit of
+`dq`.
+
+Throws `SpiceError(:badarg)` if an argument does not have 4 elements.
+
+See also [`qxq`](@ref), [`xf2rav`](@ref).
 """
 function qdq2av(q::AbstractVector, dq::AbstractVector)
     qq = _m_v4(q)
@@ -322,9 +451,26 @@ end
 """
     rav2xf(rot, av) -> SMatrix{6,6}
 
-Return the state transformation of the rotation matrix `rot` and the angular velocity
-`av` of the frame, as `rav2xf_c`. Postcondition: the upper left and lower right blocks
-are `rot`, the upper right block is zero.
+Return the 6 by 6 state transformation of the rotation matrix `rot` and the angular
+velocity `av` of its frame, as `rav2xf_c` of CSPICE.
+
+`av` is in radians per time unit. The upper left and lower right 3 by 3 blocks of the
+result are `rot`. The lower left block is the time derivative of `rot`. The upper right
+block is zero.
+
+Throws `SpiceError(:badarg)` if `rot` is not 3 by 3 or `av` does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> x = rav2xf(rotate(0.3, 3), [0, 0, 1]);
+
+julia> rot, av = xf2rav(x);
+
+julia> rot == rotate(0.3, 3) && av ≈ [0, 0, 1]
+true
+```
+
+See also [`xf2rav`](@ref), [`eul2xf`](@ref).
 """
 function rav2xf(rot::AbstractMatrix, av::AbstractVector)
     r = _m_m3(rot)
@@ -337,9 +483,15 @@ end
 """
     xf2rav(xform) -> (rot::SMatrix{3,3}, av::SVector{3})
 
-Return the rotation matrix and the angular velocity of the state transformation
-`xform`, as `xf2rav_c`. Postcondition: `rav2xf(xf2rav(xform)...)` is `xform` to
-rounding if the upper left block is a rotation.
+Return the rotation matrix and the angular velocity of the 6 by 6 state transformation
+`xform`, as `xf2rav_c` of CSPICE.
+
+`rot` is the upper left 3 by 3 block. `rav2xf(xf2rav(xform)...)` is `xform` to rounding
+if that block is a rotation.
+
+Throws `SpiceError(:badarg)` if `xform` is not 6 by 6.
+
+See also [`rav2xf`](@ref), which has an example, and [`xf2eul`](@ref).
 """
 function xf2rav(xform::AbstractMatrix)
     r, drdt = _m_blocks(_m_m6(xform))
@@ -350,9 +502,16 @@ end
 """
     raxisa(matrix) -> (axis::SVector{3}, angle)
 
-Return the unit axis and the angle in [0, pi] of the rotation `matrix`, as `raxisa_c`.
-Postcondition: the identity gives the axis (0, 0, 1) and the angle 0. Requires a
-rotation matrix (`SpiceError(:notarotation)`).
+Return the unit axis and the angle in radians, in [0, pi], of the rotation `matrix`, as
+`raxisa_c` of CSPICE.
+
+The matrix rotates vectors by `angle` about `axis`: `axisar(axis, angle)` is `matrix`
+to rounding. The identity gives the axis (0, 0, 1) and the angle 0.
+
+Throws `SpiceError(:notarotation)` if `isrot(matrix, 0.1, 0.1)` is false, and
+`SpiceError(:badarg)` if `matrix` is not 3 by 3.
+
+See also [`axisar`](@ref), which has an example, and [`m2q`](@ref).
 """
 function raxisa(matrix::AbstractMatrix)
     q = _m_m2q(_m_m3(matrix))
@@ -368,9 +527,15 @@ end
 """
     sharpr(rot) -> SMatrix{3,3}
 
-Return `rot` with orthonormal columns, as `sharpr_` of SPICELIB: column 1 scaled to
-unit length, column 3 the unit cross product of columns 1 and 2, column 2 the unit
-cross product of columns 3 and 1.
+Return the 3 by 3 matrix `rot` with its columns made orthonormal, as `sharpr_` of
+SPICELIB.
+
+Column 1 is scaled to unit length. Column 3 is the unit cross product of columns 1 and
+2, and column 2 is the unit cross product of columns 3 and 1.
+
+Throws `SpiceError(:badarg)` if `rot` is not 3 by 3.
+
+See also [`isrot`](@ref).
 """
 function sharpr(rot::AbstractMatrix)
     m = _m_m3(rot)

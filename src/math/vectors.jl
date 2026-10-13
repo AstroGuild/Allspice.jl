@@ -11,7 +11,6 @@
 
 # --- input conversion ---------------------------------------------------------------
 
-"`_m_f(x)`: an integer or irrational argument as `Float64`; any other real unchanged."
 @inline _m_f(x::Integer) = Float64(x)
 @inline _m_f(x::AbstractIrrational) = Float64(x)
 @inline _m_f(x::Real) = x
@@ -19,27 +18,23 @@
 @noinline _m_baddim(what::String, n) =
     throw(SpiceError(:badarg, "$what must have $n elements"))
 
-"The vector `a` of length 3 as an `SVector{3}` (`SpiceError(:badarg)` otherwise)."
 @inline function _m_v3(a::AbstractVector)
     length(a) == 3 || _m_baddim("a vector", 3)
     @inbounds return SVector(_m_f(a[1]), _m_f(a[2]), _m_f(a[3]))
 end
 @inline _m_v3(a::SVector{3,<:AbstractFloat}) = a
 
-"The state `a` of length 6 as an `SVector{6}` (`SpiceError(:badarg)` otherwise)."
 @inline function _m_v6(a::AbstractVector)
     length(a) == 6 || _m_baddim("a state vector", 6)
     @inbounds return SVector(_m_f(a[1]), _m_f(a[2]), _m_f(a[3]), _m_f(a[4]), _m_f(a[5]),
         _m_f(a[6]))
 end
 
-"The quaternion `a` of length 4 as an `SVector{4}` (`SpiceError(:badarg)` otherwise)."
 @inline function _m_v4(a::AbstractVector)
     length(a) == 4 || _m_baddim("a quaternion", 4)
     @inbounds return SVector(_m_f(a[1]), _m_f(a[2]), _m_f(a[3]), _m_f(a[4]))
 end
 
-"The 3 by 3 matrix `m` as an `SMatrix{3,3}` (`SpiceError(:badarg)` otherwise)."
 @inline function _m_m3(m::AbstractMatrix)
     size(m) == (3, 3) || _m_baddim("a matrix", "3 by 3")
     @inbounds return SMatrix{3,3}(_m_f(m[1, 1]), _m_f(m[2, 1]), _m_f(m[3, 1]), _m_f(m[1, 2]),
@@ -47,24 +42,19 @@ end
 end
 @inline _m_m3(m::SMatrix{3,3,<:AbstractFloat,9}) = m
 
-"The 6 by 6 matrix `m` as an `SMatrix{6,6}` (`SpiceError(:badarg)` otherwise)."
 @inline function _m_m6(m::AbstractMatrix)
     size(m) == (6, 6) || _m_baddim("a state transformation", "6 by 6")
     return SMatrix{6,6}(ntuple(k -> @inbounds(_m_f(m[k])), Val(36)))
 end
 @inline _m_m6(m::SMatrix{6,6,<:AbstractFloat,36}) = m
 
-"Position and velocity parts of the state `s`."
 @inline _m_pv(s::SVector{6}) = SVector(s[1], s[2], s[3]), SVector(s[4], s[5], s[6])
 
-"The state with the position `p` and the velocity `v`."
 @inline _m_state(p::SVector{3}, v::SVector{3}) = SVector(p[1], p[2], p[3], v[1], v[2], v[3])
 
-"Largest absolute value of the plain parts of the three components of `v`."
 @inline _m_maxabs(v::SVector{3}) =
     max(abs(primal(v[1])), abs(primal(v[2])), abs(primal(v[3])))
 
-"True if the plain parts of all components of `v` are zero."
 @inline _m_iszero(v::SVector{3}) =
     primal(v[1]) == 0.0 && primal(v[2]) == 0.0 && primal(v[3]) == 0.0
 
@@ -190,11 +180,9 @@ end)
 @inline _m_col(m::SMatrix{3,3}, j::Int) = SVector(m[1, j], m[2, j], m[3, j])
 @inline _m_row(m::SMatrix{3,3}, i::Int) = SVector(m[i, 1], m[i, 2], m[i, 3])
 
-"Matrix with the columns `a`, `b`, `c`."
 @inline _m_cols(a::SVector{3}, b::SVector{3}, c::SVector{3}) =
     SMatrix{3,3}(a[1], a[2], a[3], b[1], b[2], b[3], c[1], c[2], c[3])
 
-"Matrix with the rows `a`, `b`, `c`."
 @inline _m_rows(a::SVector{3}, b::SVector{3}, c::SVector{3}) =
     SMatrix{3,3}(a[1], b[1], c[1], a[2], b[2], c[2], a[3], b[3], c[3])
 
@@ -299,78 +287,146 @@ end
 """
     vadd(v1, v2) -> SVector{3}
 
-Return `v1 + v2`, as `vadd_c`. Contract: both arguments have 3 elements
-(`SpiceError(:badarg)` otherwise); no allocation for static arguments.
+Return the sum `v1 + v2` of two vectors of 3 elements, as `vadd_c` of CSPICE.
+
+Integer components are converted to `Float64`.
+
+Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> vadd([1, 2, 3], [4, 5, 6]) == [5, 7, 9]
+true
+```
+
+See also [`vsub`](@ref), [`vlcom`](@ref), [`vaddg`](@ref).
 """
 vadd(v1::AbstractVector, v2::AbstractVector) = _m_v3(v1) + _m_v3(v2)
 
 """
     vsub(v1, v2) -> SVector{3}
 
-Return `v1 - v2`, as `vsub_c`. Contract: both arguments have 3 elements.
+Return the difference `v1 - v2` of two vectors of 3 elements, as `vsub_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
+
+See also [`vadd`](@ref), [`vsubg`](@ref).
 """
 vsub(v1::AbstractVector, v2::AbstractVector) = _m_v3(v1) - _m_v3(v2)
 
 """
     vscl(s, v1) -> SVector{3}
 
-Return `s * v1`, as `vscl_c`. Contract: `v1` has 3 elements.
+Return the product `s * v1` of a scalar and a vector of 3 elements, as `vscl_c` of
+CSPICE.
+
+Throws `SpiceError(:badarg)` if `v1` does not have 3 elements.
+
+See also [`vlcom`](@ref), [`vsclg`](@ref).
 """
 vscl(s::Real, v1::AbstractVector) = _m_f(s) * _m_v3(v1)
 
 """
     vminus(v1) -> SVector{3}
 
-Return `-v1`, as `vminus_c`. Contract: `v1` has 3 elements.
+Return `-v1` for a vector of 3 elements, as `vminus_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if `v1` does not have 3 elements.
+
+See also [`vminug`](@ref).
 """
 vminus(v1::AbstractVector) = -_m_v3(v1)
 
 """
     vdot(v1, v2)
 
-Return the dot product of two vectors of 3 elements, as `vdot_c` (terms added in index
-order). Contract: both arguments have 3 elements.
+Return the dot product of two vectors of 3 elements, as `vdot_c` of CSPICE. The terms
+are added in index order.
+
+Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
+
+See also [`vcrss`](@ref), [`dvdot`](@ref), [`vdotg`](@ref).
 """
 vdot(v1::AbstractVector, v2::AbstractVector) = _m_dot(_m_v3(v1), _m_v3(v2))
 
 """
     vcrss(v1, v2) -> SVector{3}
 
-Return the cross product `v1 × v2`, as `vcrss_c`. Contract: both arguments have 3
-elements.
+Return the cross product `v1 × v2` of two vectors of 3 elements, as `vcrss_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> vcrss([1, 0, 0], [0, 1, 0]) == [0, 0, 1]
+true
+```
+
+See also [`ucrss`](@ref), [`dvcrss`](@ref), [`vdot`](@ref).
 """
 vcrss(v1::AbstractVector, v2::AbstractVector) = _m_cross(_m_v3(v1), _m_v3(v2))
 
 """
     vnorm(v1)
 
-Return the Euclidean norm of a vector of 3 elements, as `vnorm_c`: the components are
-divided by the largest one before they are squared, so that the squares do not overflow
-or underflow. Postcondition: the result is zero if and only if `v1` is zero.
+Return the Euclidean norm of a vector of 3 elements, as `vnorm_c` of CSPICE.
+
+The components are divided by the largest one before they are squared, so the squares
+do not overflow or underflow. The result is zero only for the zero vector.
+
+Throws `SpiceError(:badarg)` if `v1` does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> vnorm([3, 4, 0])
+5.0
+
+julia> isfinite(vnorm([3e200, 4e200, 0]))
+true
+```
+
+See also [`vhat`](@ref), [`unorm`](@ref), [`vdist`](@ref), [`vnormg`](@ref).
 """
 vnorm(v1::AbstractVector) = _m_norm(_m_v3(v1))
 
 """
     vhat(v1) -> SVector{3}
 
-Return the unit vector along `v1`, as `vhat_c`. Postcondition: a zero `v1` gives the
+Return the unit vector along `v1`, as `vhat_c` of CSPICE. The zero vector gives the
 zero vector.
+
+Throws `SpiceError(:badarg)` if `v1` does not have 3 elements.
+
+See also [`unorm`](@ref), [`dvhat`](@ref), [`vhatg`](@ref).
 """
 vhat(v1::AbstractVector) = _m_hat(_m_v3(v1))
 
 """
     unorm(v1) -> (vout::SVector{3}, vmag)
 
-Return the unit vector along `v1` and the norm of `v1`, as `unorm_c`. Postcondition: a
-zero `v1` gives the zero vector and the norm 0.
+Return the unit vector along `v1` and the norm of `v1`, as `unorm_c` of CSPICE. The
+zero vector gives the zero vector and the norm 0.
+
+Throws `SpiceError(:badarg)` if `v1` does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> unorm([3, 4, 0])
+([0.6, 0.8, 0.0], 5.0)
+```
+
+See also [`vhat`](@ref), [`vnorm`](@ref), [`unormg`](@ref).
 """
 unorm(v1::AbstractVector) = _m_unorm(_m_v3(v1))
 
 """
     vdist(v1, v2)
 
-Return the distance between two points, `vnorm(v1 - v2)`, as `vdist_c`. Contract: both
-arguments have 3 elements.
+Return the distance `vnorm(v1 - v2)` between two points, as `vdist_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
+
+See also [`vnorm`](@ref), [`vrel`](@ref), [`vdistg`](@ref).
 """
 vdist(v1::AbstractVector, v2::AbstractVector) = _m_norm(_m_v3(v1) - _m_v3(v2))
 
@@ -388,10 +444,22 @@ end
 """
     vsep(v1, v2)
 
-Return the angle in radians between two vectors, in [0, pi], as `vsep_c`: the arcsine
-of half the distance between the unit vectors for an acute angle, and of half the norm
-of their sum for an obtuse one. Postcondition: the result is 0 if one of the vectors
-is zero.
+Return the angle between two vectors of 3 elements, in radians in [0, pi], as `vsep_c`
+of CSPICE.
+
+For an acute angle, the result is twice the arcsine of half the distance between the
+unit vectors. An obtuse angle uses the norm of their sum in the same way. This keeps
+the precision near 0 and pi. The result is 0 if a vector is zero.
+
+Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> vsep([1, 0, 0], [0, 3, 0])
+1.5707963267948966
+```
+
+See also [`dvsep`](@ref), [`vsepg`](@ref).
 """
 function vsep(v1::AbstractVector, v2::AbstractVector)
     u1, m1 = _m_unorm(_m_v3(v1))
@@ -403,8 +471,13 @@ end
 """
     vrel(v1, v2)
 
-Return the relative difference `|v1 - v2| / max(|v1|, |v2|)`, as `vrel_c`.
-Postcondition: the result is 0 if the vectors are equal, also when both are zero.
+Return the relative difference `|v1 - v2| / max(|v1|, |v2|)` of two vectors of 3
+elements, as `vrel_c` of CSPICE. The result is 0 if the vectors are equal, also if both
+are zero.
+
+Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
+
+See also [`vdist`](@ref), [`vrelg`](@ref).
 """
 function vrel(v1::AbstractVector, v2::AbstractVector)
     a = _m_v3(v1)
@@ -419,25 +492,48 @@ end
 """
     vproj(a, b) -> SVector{3}
 
-Return the projection of `a` on `b`, as `vproj_c`. Postcondition: the result is zero if
-`a` or `b` is zero.
+Return the projection of the vector `a` on the vector `b`, as `vproj_c` of CSPICE. The
+result is the zero vector if `a` or `b` is zero.
+
+Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> vproj([1, 1, 0], [2, 0, 0]) == [1, 0, 0]
+true
+
+julia> vperp([1, 1, 0], [2, 0, 0]) == [0, 1, 0]
+true
+```
+
+See also [`vperp`](@ref), [`vprjp`](@ref), [`vprojg`](@ref).
 """
 vproj(a::AbstractVector, b::AbstractVector) = _m_proj(_m_v3(a), _m_v3(b), true)
 
 """
     vperp(a, b) -> SVector{3}
 
-Return the component of `a` that is perpendicular to `b`, as `vperp_c`. Postcondition:
-a zero `b` gives `a`. This is the documented behaviour and the one of `vperp_` of
-SPICELIB; the code of `vperp_c` in CSPICE N0067 gives the zero vector there.
+Return the component of the vector `a` that is perpendicular to the vector `b`, as
+`vperp_c` of CSPICE.
+
+A zero `b` gives `a`. This is the documented behaviour of CSPICE and the one of
+`vperp_` of SPICELIB; the code of `vperp_c` in CSPICE N0067 gives the zero vector there.
+
+Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
+
+See also [`vproj`](@ref), which has an example.
 """
 vperp(a::AbstractVector, b::AbstractVector) = _m_perp(_m_v3(a), _m_v3(b), true)
 
 """
     vlcom(a, v1, b, v2) -> SVector{3}
 
-Return the linear combination `a*v1 + b*v2`, as `vlcom_c`. Contract: the vectors have 3
-elements.
+Return the linear combination `a*v1 + b*v2` of two vectors of 3 elements, as `vlcom_c`
+of CSPICE.
+
+Throws `SpiceError(:badarg)` if a vector does not have 3 elements.
+
+See also [`vlcom3`](@ref), [`vlcomg`](@ref).
 """
 vlcom(a::Real, v1::AbstractVector, b::Real, v2::AbstractVector) =
     _m_f(a) * _m_v3(v1) + _m_f(b) * _m_v3(v2)
@@ -445,8 +541,12 @@ vlcom(a::Real, v1::AbstractVector, b::Real, v2::AbstractVector) =
 """
     vlcom3(a, v1, b, v2, c, v3) -> SVector{3}
 
-Return the linear combination `a*v1 + b*v2 + c*v3`, as `vlcom3_c`. Contract: the
-vectors have 3 elements.
+Return the linear combination `a*v1 + b*v2 + c*v3` of three vectors of 3 elements, as
+`vlcom3_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if a vector does not have 3 elements.
+
+See also [`vlcom`](@ref).
 """
 vlcom3(a::Real, v1::AbstractVector, b::Real, v2::AbstractVector, c::Real, v3::AbstractVector) =
     _m_f(a) * _m_v3(v1) + _m_f(b) * _m_v3(v2) + _m_f(c) * _m_v3(v3)
@@ -454,8 +554,21 @@ vlcom3(a::Real, v1::AbstractVector, b::Real, v2::AbstractVector, c::Real, v3::Ab
 """
     vrotv(v, axis, theta) -> SVector{3}
 
-Return `v` rotated about the vector `axis` by `theta` radians (right-hand rule), as
-`vrotv_c`. Postcondition: a zero `axis` gives `v`; the norm of `v` is kept to rounding.
+Return the vector `v` rotated about the vector `axis` by `theta` radians, as `vrotv_c`
+of CSPICE.
+
+The rotation follows the right-hand rule. `axis` need not have unit length; a zero
+`axis` gives `v`.
+
+Throws `SpiceError(:badarg)` if a vector does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> vrotv([1, 0, 0], [0, 0, 2], pi / 2) ≈ [0, 1, 0]
+true
+```
+
+See also [`axisar`](@ref), [`rotvec`](@ref).
 """
 vrotv(v::AbstractVector, axis::AbstractVector, theta::Real) =
     _m_vrotv(_m_v3(v), _m_v3(axis), _m_f(theta))
@@ -463,45 +576,70 @@ vrotv(v::AbstractVector, axis::AbstractVector, theta::Real) =
 """
     vzero(v) -> Bool
 
-True if every one of the 3 components of `v` is zero, as `vzero_c`.
+Return `true` if all 3 components of `v` are zero, as `vzero_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if `v` does not have 3 elements.
+
+See also [`vzerog`](@ref).
 """
 vzero(v::AbstractVector) = _m_iszero(_m_v3(v))
 
 """
     vequ(vin) -> SVector{3}
 
-Return a copy of the vector `vin` of 3 elements as a static vector, as `vequ_c`.
+Return the vector `vin` of 3 elements as an `SVector{3}`, as `vequ_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if `vin` does not have 3 elements.
+
+See also [`vpack`](@ref), [`vequg`](@ref).
 """
 vequ(vin::AbstractVector) = _m_v3(vin)
 
 """
     vpack(x, y, z) -> SVector{3}
 
-Return the vector with the components `x`, `y`, `z`, as `vpack_c`.
+Return the vector with the components `x`, `y`, `z`, as `vpack_c` of CSPICE.
+
+See also [`vupack`](@ref).
 """
 vpack(x::Real, y::Real, z::Real) = SVector(_m_f(x), _m_f(y), _m_f(z))
 
 """
     vupack(v) -> (x, y, z)
 
-Return the three components of `v`, as `vupack_c`. Contract: `v` has 3 elements.
+Return the three components of the vector `v` as a tuple, as `vupack_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if `v` does not have 3 elements.
+
+See also [`vpack`](@ref).
 """
 vupack(v::AbstractVector) = Tuple(_m_v3(v))
 
 """
     ucrss(v1, v2) -> SVector{3}
 
-Return the unit vector along `v1 × v2`, as `ucrss_c`: each vector is scaled by its
-largest component before the product. Postcondition: the zero vector if the vectors are
-parallel or one of them is zero.
+Return the unit vector along the cross product `v1 × v2`, as `ucrss_c` of CSPICE.
+
+Each vector is scaled by its largest component before the product, so the product does
+not overflow. The result is the zero vector if the vectors are parallel or one of them
+is zero.
+
+Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
+
+See also [`vcrss`](@ref), [`ducrss`](@ref).
 """
 ucrss(v1::AbstractVector, v2::AbstractVector) = _m_ucrss(_m_v3(v1), _m_v3(v2))
 
 """
     vtmv(v1, matrix, v2)
 
-Return the bilinear form `v1' * matrix * v2`, as `vtmv_c` (terms added row by row).
-Contract: the vectors have 3 elements and the matrix is 3 by 3.
+Return the bilinear form `v1' * matrix * v2` of two vectors of 3 elements and a 3 by 3
+matrix, as `vtmv_c` of CSPICE. The terms are added row by row.
+
+Throws `SpiceError(:badarg)` if a vector does not have 3 elements or the matrix is not
+3 by 3.
+
+See also [`vtmvg`](@ref).
 """
 function vtmv(v1::AbstractVector, matrix::AbstractMatrix, v2::AbstractVector)
     a = _m_v3(v1)
@@ -519,50 +657,96 @@ end
 """
     mxv(m, vin) -> SVector{3}
 
-Return the product `m * vin`, as `mxv_c`. Contract: `m` is 3 by 3 and `vin` has 3
-elements.
+Return the product `m * vin` of a 3 by 3 matrix and a vector of 3 elements, as `mxv_c`
+of CSPICE.
+
+Each component is the sum of its three products from left to right, as in CSPICE. The
+product `m * vin` of StaticArrays can round in another way.
+
+Throws `SpiceError(:badarg)` if `m` is not 3 by 3 or `vin` does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> m = [0 1 0; -1 0 0; 0 0 1];
+
+julia> mxv(m, [1, 2, 3]) == [2, -1, 3]
+true
+
+julia> mtxv(m, [1, 2, 3]) == [-2, 1, 3]
+true
+```
+
+See also [`mtxv`](@ref), [`mxm`](@ref), [`mxvg`](@ref).
 """
 mxv(m::AbstractMatrix, vin::AbstractVector) = _m_mxv(_m_m3(m), _m_v3(vin))
 
 """
     mtxv(m, vin) -> SVector{3}
 
-Return the product of the transpose of `m` and `vin`, as `mtxv_c`.
+Return the product of the transpose of the 3 by 3 matrix `m` and the vector `vin`, as
+`mtxv_c` of CSPICE. For a rotation matrix this is the inverse rotation.
+
+Throws `SpiceError(:badarg)` if `m` is not 3 by 3 or `vin` does not have 3 elements.
+
+See also [`mxv`](@ref), which has an example, and [`mtxvg`](@ref).
 """
 mtxv(m::AbstractMatrix, vin::AbstractVector) = _m_mtxv(_m_m3(m), _m_v3(vin))
 
 """
     mxm(m1, m2) -> SMatrix{3,3}
 
-Return the product `m1 * m2`, as `mxm_c`. Contract: both matrices are 3 by 3.
+Return the product `m1 * m2` of two 3 by 3 matrices, as `mxm_c` of CSPICE. Each element
+is the sum of its three products from left to right.
+
+Throws `SpiceError(:badarg)` if a matrix is not 3 by 3.
+
+See also [`mtxm`](@ref), [`mxmt`](@ref), [`mxv`](@ref), [`mxmg`](@ref).
 """
 mxm(m1::AbstractMatrix, m2::AbstractMatrix) = _m_mxm(_m_m3(m1), _m_m3(m2))
 
 """
     mtxm(m1, m2) -> SMatrix{3,3}
 
-Return the product of the transpose of `m1` and `m2`, as `mtxm_c`.
+Return the product of the transpose of `m1` and `m2`, for 3 by 3 matrices, as `mtxm_c`
+of CSPICE.
+
+Throws `SpiceError(:badarg)` if a matrix is not 3 by 3.
+
+See also [`mxm`](@ref), [`mxmt`](@ref), [`mtxmg`](@ref).
 """
 mtxm(m1::AbstractMatrix, m2::AbstractMatrix) = _m_mtxm(_m_m3(m1), _m_m3(m2))
 
 """
     mxmt(m1, m2) -> SMatrix{3,3}
 
-Return the product of `m1` and the transpose of `m2`, as `mxmt_c`.
+Return the product of `m1` and the transpose of `m2`, for 3 by 3 matrices, as `mxmt_c`
+of CSPICE.
+
+Throws `SpiceError(:badarg)` if a matrix is not 3 by 3.
+
+See also [`mxm`](@ref), [`mtxm`](@ref), [`mxmtg`](@ref).
 """
 mxmt(m1::AbstractMatrix, m2::AbstractMatrix) = _m_mxmt(_m_m3(m1), _m_m3(m2))
 
 """
     xpose(m1) -> SMatrix{3,3}
 
-Return the transpose of a 3 by 3 matrix, as `xpose_c`.
+Return the transpose of a 3 by 3 matrix, as `xpose_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if `m1` is not 3 by 3.
+
+See also [`xpose6`](@ref), [`xposeg`](@ref).
 """
 xpose(m1::AbstractMatrix) = _m_xpose(_m_m3(m1))
 
 """
     xpose6(m1) -> SMatrix{6,6}
 
-Return the transpose of a 6 by 6 matrix, as `xpose6_c`.
+Return the transpose of a 6 by 6 matrix, as `xpose6_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if `m1` is not 6 by 6.
+
+See also [`xpose`](@ref), [`xposeg`](@ref).
 """
 function xpose6(m1::AbstractMatrix)
     m = _m_m6(m1)
@@ -580,7 +764,9 @@ det(m1::AbstractMatrix) = _m_det(_m_m3(m1))
 """
     trace(matrix)
 
-Return the trace of a 3 by 3 matrix, as `trace_c`.
+Return the trace of a 3 by 3 matrix, as `trace_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if `matrix` is not 3 by 3.
 """
 function trace(matrix::AbstractMatrix)
     m = _m_m3(matrix)
@@ -590,9 +776,23 @@ end
 """
     invert(m) -> SMatrix{3,3}
 
-Return the inverse of a 3 by 3 matrix by the cofactor formula, as `invert_c`.
-Postcondition: a matrix whose determinant is below `1e-16` in absolute value gives the
-zero matrix, as in CSPICE.
+Return the inverse of a 3 by 3 matrix, as `invert_c` of CSPICE.
+
+A matrix whose determinant is below `1e-16` in absolute value counts as singular: the
+result is then the zero matrix, and no error is thrown.
+
+Throws `SpiceError(:badarg)` if `m` is not 3 by 3.
+
+# Examples
+```jldoctest
+julia> invert([2 0 0; 0 4 0; 0 0 1]) == [0.5 0 0; 0 0.25 0; 0 0 1]
+true
+
+julia> iszero(invert([1 2 3; 2 4 6; 0 0 1]))
+true
+```
+
+See also [`invort`](@ref), [`xpose`](@ref).
 """
 function invert(m1::AbstractMatrix)
     m = _m_m3(m1)
@@ -614,10 +814,17 @@ end
 """
     invort(m) -> SMatrix{3,3}
 
-Return the inverse of a matrix with orthogonal columns of any non-zero length, as
-`invort_c`: the transpose with each row divided by the squared length of the column.
-Throws `SpiceError(:zerolengthcolumn)` for a zero column and
-`SpiceError(:columntoosmall)` for a column whose length has no finite reciprocal.
+Return the inverse of a 3 by 3 matrix whose columns are orthogonal and have any
+non-zero length, as `invort_c` of CSPICE.
+
+The result is the transpose with each row divided by the squared length of the
+matching column. The columns are not checked to be orthogonal.
+
+Throws `SpiceError(:zerolengthcolumn)` if a column is zero. Throws
+`SpiceError(:columntoosmall)` if the length of a column has no finite reciprocal.
+Throws `SpiceError(:badarg)` if `m` is not 3 by 3.
+
+See also [`invert`](@ref).
 """
 function invort(m1::AbstractMatrix)
     m = _m_m3(m1)
@@ -635,9 +842,16 @@ end
 """
     isrot(m, ntol, dtol) -> Bool
 
-True if `m` is a rotation matrix: each column has a norm in `1 ± ntol` and the matrix of
-the unit columns has a determinant in `1 ± dtol`, as `isrot_c`. Requires `ntol >= 0`
-and `dtol >= 0` (`SpiceError(:valueoutofrange)` otherwise).
+Return `true` if the 3 by 3 matrix `m` is a rotation matrix within two tolerances, as
+`isrot_c` of CSPICE.
+
+Each column must have a norm in `1 ± ntol`, and the matrix of the unit columns must
+have a determinant in `1 ± dtol`.
+
+Throws `SpiceError(:valueoutofrange)` if `ntol` or `dtol` is negative, and
+`SpiceError(:badarg)` if `m` is not 3 by 3.
+
+See also [`sharpr`](@ref).
 """
 function isrot(m::AbstractMatrix, ntol::Real, dtol::Real)
     ntol >= 0 || throw(SpiceError(:valueoutofrange, "ntol should be non-negative; it is $ntol"))
@@ -648,33 +862,62 @@ end
 """
     ident() -> SMatrix{3,3,Float64}
 
-Return the 3 by 3 identity matrix, as `ident_c`.
+Return the 3 by 3 identity matrix, as `ident_c` of CSPICE.
 """
 ident() = SMatrix{3,3,Float64,9}(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
 
 """
     rotate(angle, iaxis) -> SMatrix{3,3}
 
-Return the matrix that rotates a coordinate system by `angle` radians about axis
-`iaxis` (1, 2, 3 for x, y, z), as `rotate_c`: the product with a vector gives the
-components of the vector in the rotated system. As in CSPICE any integer `iaxis` is
-taken modulo 3. Postcondition: the result is orthogonal with determinant 1.
+Return the matrix that rotates a coordinate system by `angle` radians about the axis
+`iaxis` (1, 2, 3 for x, y, z), as `rotate_c` of CSPICE.
+
+The product of the result and a vector gives the components of that vector in the
+rotated system. The vector itself is not rotated: [`axisar`](@ref) and [`vrotv`](@ref)
+do that, and their matrix is the transpose. As in CSPICE, any integer `iaxis` is taken
+modulo 3, so 4 is x and 0 is z.
+
+# Examples
+```jldoctest
+julia> Matrix(round.(rotate(pi / 2, 3); digits=12))
+3×3 Matrix{Float64}:
+  0.0  1.0  0.0
+ -1.0  0.0  0.0
+  0.0  0.0  1.0
+```
+
+See also [`rotmat`](@ref), [`rotvec`](@ref), [`eul2m`](@ref), [`axisar`](@ref).
 """
 rotate(angle::Real, iaxis::Integer) = _m_rotate(_m_f(angle), iaxis)
 
 """
     rotmat(m1, angle, iaxis) -> SMatrix{3,3}
 
-Return `rotate(angle, iaxis) * m1`, as `rotmat_c` (without the products that have a
-factor 0 or 1). Contract: `m1` is 3 by 3.
+Return `rotate(angle, iaxis) * m1` for a 3 by 3 matrix `m1`, as `rotmat_c` of CSPICE:
+the transformation `m1` followed by a rotation of the coordinate system by `angle`
+radians about the axis `iaxis`.
+
+Throws `SpiceError(:badarg)` if `m1` is not 3 by 3.
+
+See also [`rotate`](@ref), [`rotvec`](@ref).
 """
 rotmat(m1::AbstractMatrix, angle::Real, iaxis::Integer) = _m_rotmat(_m_m3(m1), _m_f(angle), iaxis)
 
 """
     rotvec(v1, angle, iaxis) -> SVector{3}
 
-Return `rotate(angle, iaxis) * v1`: the components of `v1` in a system rotated by
-`angle` about axis `iaxis`, as `rotvec_c`. Contract: `v1` has 3 elements.
+Return `rotate(angle, iaxis) * v1`, as `rotvec_c` of CSPICE: the components of the
+vector `v1` in a coordinate system rotated by `angle` radians about the axis `iaxis`.
+
+Throws `SpiceError(:badarg)` if `v1` does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> rotvec([1, 0, 0], pi / 2, 3) ≈ [0, -1, 0]
+true
+```
+
+See also [`rotate`](@ref), [`rotmat`](@ref), [`vrotv`](@ref).
 """
 function rotvec(v1::AbstractVector, angle::Real, iaxis::Integer)
     v = _m_v3(v1)
@@ -697,11 +940,30 @@ end
 """
     twovec(axdef, indexa, plndef, indexp) -> SMatrix{3,3}
 
-Return the matrix that transforms vectors to the right-handed frame whose axis `indexa`
-is along `axdef` and whose axis `indexp` is in the half plane of `axdef` that holds
-`plndef`, as `twovec_c`. Requires indexes in 1:3 (`SpiceError(:badindex)`) that differ
-(`SpiceError(:undefinedframe)`) and vectors that are not parallel
-(`SpiceError(:dependentvectors)`). Postcondition: the rows are the frame axes.
+Return the rotation matrix from the input frame to the right-handed frame that two
+vectors define, as `twovec_c` of CSPICE.
+
+Axis `indexa` of the new frame is along `axdef`. Axis `indexp` is in the plane of
+`axdef` and `plndef`, on the side of `plndef`. The rows of the result are the axes of
+the new frame, so the product with a vector gives its components in the new frame.
+
+Throws:
+- `SpiceError(:badindex)` if an index is not 1, 2 or 3.
+- `SpiceError(:undefinedframe)` if the indexes are equal.
+- `SpiceError(:dependentvectors)` if the vectors are parallel or one is zero.
+- `SpiceError(:badarg)` if a vector does not have 3 elements.
+
+# Examples
+The frame with z along the input x and with x toward the input y:
+```jldoctest
+julia> Matrix(twovec([2, 0, 0], 3, [1, 1, 0], 1))
+3×3 Matrix{Float64}:
+ 0.0  1.0  0.0
+ 0.0  0.0  1.0
+ 1.0  0.0  0.0
+```
+
+See also [`twovxf`](@ref).
 """
 function twovec(axdef::AbstractVector, indexa::Integer, plndef::AbstractVector, indexp::Integer)
     _m_check_twovec(indexa, indexp)
@@ -725,10 +987,16 @@ end
 """
     twovxf(axdef, indexa, plndef, indexp) -> SMatrix{6,6}
 
-Return the state transformation to the frame that `twovec` defines from the position
-parts of the states `axdef` and `plndef`, with the time derivative from their velocity
-parts, as `twovxf_c`. Errors as `twovec`. Postcondition: the upper left and lower right
-blocks are the `twovec` matrix and the upper right block is zero.
+Return the 6 by 6 state transformation to the frame that two states define, as
+`twovxf_c` of CSPICE.
+
+The position parts of the states `axdef` and `plndef` define the frame as in
+[`twovec`](@ref); the velocity parts give its time derivative. The upper left and lower
+right 3 by 3 blocks of the result are the `twovec` matrix. The lower left block is its
+time derivative. The upper right block is zero.
+
+Throws as [`twovec`](@ref), and `SpiceError(:badarg)` if a state does not have 6
+elements.
 """
 function twovxf(axdef::AbstractVector, indexa::Integer, plndef::AbstractVector, indexp::Integer)
     _m_check_twovec(indexa, indexp)
@@ -752,7 +1020,6 @@ function twovxf(axdef::AbstractVector, indexa::Integer, plndef::AbstractVector, 
     return _m_xform(r, d)
 end
 
-"State transformation with the rotation block `r` and the derivative block `d`."
 @inline function _m_xform(r::SMatrix{3,3}, d::SMatrix{3,3})
     z = zero(r[1, 1] + d[1, 1])
     return SMatrix{6,6}(ntuple(Val(36)) do k
@@ -762,7 +1029,6 @@ end
     end)
 end
 
-"The rotation block and the derivative block of the state transformation `x`."
 @inline function _m_blocks(x::SMatrix{6,6})
     r = SMatrix{3,3}(ntuple(k -> x[(k-1)%3+1, (k-1)÷3+1], Val(9)))
     d = SMatrix{3,3}(ntuple(k -> x[(k-1)%3+4, (k-1)÷3+1], Val(9)))
@@ -774,9 +1040,21 @@ end
 """
     dvhat(s1) -> SVector{6}
 
-Return the unit vector along the position of the state `s1` and its time derivative,
-as `dvhat_c`. Postcondition: a zero position gives a zero unit vector and the velocity
-unchanged.
+Return the unit vector along the position of the state `s1`, followed by the time
+derivative of that unit vector, as `dvhat_c` of CSPICE.
+
+A state has 6 elements: a position and a velocity. A zero position gives a zero unit
+vector and the velocity unchanged.
+
+Throws `SpiceError(:badarg)` if `s1` does not have 6 elements.
+
+# Examples
+```jldoctest
+julia> dvhat([2, 0, 0, 1, 2, 3]) == [1, 0, 0, 0, 1, 1.5]
+true
+```
+
+See also [`vhat`](@ref), [`dvnorm`](@ref), [`ducrss`](@ref).
 """
 dvhat(s1::AbstractVector) = _m_dvhat(_m_v6(s1))
 
@@ -784,7 +1062,11 @@ dvhat(s1::AbstractVector) = _m_dvhat(_m_v6(s1))
     dvdot(s1, s2)
 
 Return the time derivative of the dot product of the positions of two states, as
-`dvdot_c`. Contract: both states have 6 elements.
+`dvdot_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if a state does not have 6 elements.
+
+See also [`vdot`](@ref), [`dvcrss`](@ref).
 """
 function dvdot(s1::AbstractVector, s2::AbstractVector)
     a = _m_v6(s1)
@@ -795,27 +1077,40 @@ end
 """
     dvcrss(s1, s2) -> SVector{6}
 
-Return the cross product of the positions of two states and its time derivative, as
-`dvcrss_c`.
+Return the cross product of the positions of two states, followed by its time
+derivative, as `dvcrss_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if a state does not have 6 elements.
+
+See also [`vcrss`](@ref), [`ducrss`](@ref).
 """
 dvcrss(s1::AbstractVector, s2::AbstractVector) = _m_dvcrss(_m_v6(s1), _m_v6(s2))
 
 """
     ducrss(s1, s2) -> SVector{6}
 
-Return the unit vector along the cross product of the positions of two states and its
-time derivative, as `ducrss_c`. Each state is scaled by the largest position component
-first. Postcondition: parallel positions give a zero unit vector. If a scaled velocity
-or a product of the scaled states is not finite, the derivative part is NaN; CSPICE
-returns numbers without meaning there, because its `max` macro drops a NaN operand.
+Return the unit vector along the cross product of the positions of two states, followed
+by its time derivative, as `ducrss_c` of CSPICE.
+
+Each state is scaled by its largest position component first. Parallel positions give
+a zero unit vector. If a scaled velocity or a product of the scaled states is not
+finite, the derivative part is NaN; CSPICE returns numbers without meaning there.
+
+Throws `SpiceError(:badarg)` if a state does not have 6 elements.
+
+See also [`ucrss`](@ref), [`dvcrss`](@ref), [`dvhat`](@ref).
 """
 ducrss(s1::AbstractVector, s2::AbstractVector) = _m_ducrss(_m_v6(s1), _m_v6(s2))
 
 """
     dvnorm(state)
 
-Return the time derivative of the norm of the position of `state`, as `dvnorm_c`.
-Postcondition: a zero position gives 0.
+Return the time derivative of the norm of the position of `state`, as `dvnorm_c` of
+CSPICE. A zero position gives 0.
+
+Throws `SpiceError(:badarg)` if `state` does not have 6 elements.
+
+See also [`vnorm`](@ref), [`dvhat`](@ref).
 """
 function dvnorm(state::AbstractVector)
     p, v = _m_pv(_m_v6(state))
@@ -827,9 +1122,14 @@ end
 """
     dvsep(s1, s2)
 
-Return the time derivative of the angle between the positions of two states, as
-`dvsep_c`. Postcondition: parallel positions, or a zero position, give 0. Throws
-`SpiceError(:numericoverflow)` if the quotient is above the largest number.
+Return the time derivative of the angle between the positions of two states, in
+radians per time unit, as `dvsep_c` of CSPICE. Parallel positions, or a zero position,
+give 0.
+
+Throws `SpiceError(:numericoverflow)` if the result is above the largest number, and
+`SpiceError(:badarg)` if a state does not have 6 elements.
+
+See also [`vsep`](@ref).
 """
 function dvsep(s1::AbstractVector, s2::AbstractVector)
     u1, d1 = _m_pv(_m_dvhat(_m_v6(s1), false))
@@ -851,44 +1151,67 @@ end
 """
     vaddg(v1, v2)
 
-Return `v1 + v2` for vectors of any equal length, as `vaddg_c`. The result is static if
-both arguments are. Requires equal lengths (`SpiceError(:badarg)` otherwise).
+Return the sum `v1 + v2` of two vectors of any equal length, as `vaddg_c` of CSPICE.
+
+The `g` calls take no dimension argument: the arguments give the dimension. Two static
+vectors give a static vector. Integer elements are converted to `Float64`.
+
+Throws `SpiceError(:badarg)` if the lengths differ.
+
+See also [`vadd`](@ref), [`vsubg`](@ref), [`vlcomg`](@ref).
 """
 vaddg(v1::AbstractVector, v2::AbstractVector) = (_m_samelen(v1, v2); _m_f.(v1) .+ _m_f.(v2))
 
 """
     vsubg(v1, v2)
 
-Return `v1 - v2` for vectors of any equal length, as `vsubg_c`.
+Return the difference `v1 - v2` of two vectors of any equal length, as `vsubg_c` of
+CSPICE.
+
+Throws `SpiceError(:badarg)` if the lengths differ.
+
+See also [`vsub`](@ref), [`vaddg`](@ref).
 """
 vsubg(v1::AbstractVector, v2::AbstractVector) = (_m_samelen(v1, v2); _m_f.(v1) .- _m_f.(v2))
 
 """
     vsclg(s, v1)
 
-Return `s * v1` for a vector of any length, as `vsclg_c`.
+Return the product `s * v1` of a scalar and a vector of any length, as `vsclg_c` of
+CSPICE.
+
+See also [`vscl`](@ref).
 """
 vsclg(s::Real, v1::AbstractVector) = _m_f(s) .* _m_f.(v1)
 
 """
     vminug(vin)
 
-Return `-vin` for a vector of any length, as `vminug_c`.
+Return `-vin` for a vector of any length, as `vminug_c` of CSPICE.
+
+See also [`vminus`](@ref).
 """
 vminug(vin::AbstractVector) = .-_m_f.(vin)
 
 """
     vequg(vin)
 
-Return a copy of the vector `vin` of any length, as `vequg_c`.
+Return a copy of the vector `vin` of any length, with integer elements converted to
+`Float64`, as `vequg_c` of CSPICE.
+
+See also [`vequ`](@ref).
 """
 vequg(vin::AbstractVector) = _m_f.(vin)
 
 """
     vdotg(v1, v2)
 
-Return the dot product of two vectors of any equal length, as `vdotg_c` (terms added in
-index order, from zero). No allocation.
+Return the dot product of two vectors of any equal length, as `vdotg_c` of CSPICE. The
+terms are added in index order.
+
+Throws `SpiceError(:badarg)` if the lengths differ.
+
+See also [`vdot`](@ref).
 """
 function vdotg(v1::AbstractVector, v2::AbstractVector)
     _m_samelen(v1, v2)
@@ -899,7 +1222,6 @@ function vdotg(v1::AbstractVector, v2::AbstractVector)
     return dot
 end
 
-"Largest absolute plain value of the elements of `v`; 0 for an empty vector."
 @inline function _m_maxabsg(v::AbstractVector)
     scale = 0.0
     @inbounds for x in v                       # invariant: scale bounds the elements seen
@@ -911,8 +1233,11 @@ end
 """
     vnormg(v1)
 
-Return the Euclidean norm of a vector of any length, as `vnormg_c` (elements divided by
-the largest one before they are squared). No allocation.
+Return the Euclidean norm of a vector of any length, as `vnormg_c` of CSPICE. The
+elements are divided by the largest one before they are squared, as in
+[`vnorm`](@ref).
+
+See also [`unormg`](@ref), [`vdistg`](@ref).
 """
 function vnormg(v1::AbstractVector)
     scale = _m_maxabsg(v1)
@@ -928,15 +1253,20 @@ end
 """
     vhatg(v1)
 
-Return the unit vector along a vector of any length, as `vhatg_c`; the zero vector for a
-zero input.
+Return the unit vector along a vector of any length, as `vhatg_c` of CSPICE. The zero
+vector gives the zero vector.
+
+See also [`vhat`](@ref), [`unormg`](@ref).
 """
 vhatg(v1::AbstractVector) = unormg(v1)[1]
 
 """
     unormg(v1) -> (vout, vmag)
 
-Return the unit vector along a vector of any length and its norm, as `unormg_c`.
+Return the unit vector along a vector of any length and the norm of that vector, as
+`unormg_c` of CSPICE. The zero vector gives the zero vector and the norm 0.
+
+See also [`unorm`](@ref), [`vhatg`](@ref).
 """
 function unormg(v1::AbstractVector)
     vmag = vnormg(v1)
@@ -947,8 +1277,11 @@ end
 """
     vdistg(v1, v2)
 
-Return the distance between two points of any equal dimension, as `vdistg_c`. No
-allocation.
+Return the distance between two points of any equal dimension, as `vdistg_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if the lengths differ.
+
+See also [`vdist`](@ref).
 """
 function vdistg(v1::AbstractVector, v2::AbstractVector)
     _m_samelen(v1, v2)
@@ -968,12 +1301,14 @@ end
 """
     vsepg(v1, v2)
 
-Return the angle in radians between two vectors of any equal dimension, in [0, pi].
-The method is the one of `vsepg_` of SPICELIB and of `vsep_c`: the arcsine of half the
-distance between the unit vectors for an acute angle and of half the norm of their sum
-for an obtuse one. `vsepg_c` of CSPICE N0067 has the two cases exchanged, which is
-correct in exact arithmetic but loses up to half of the digits near 0 and pi; the
-result here differs from it by that error. Postcondition: 0 if a vector is zero.
+Return the angle between two vectors of any equal dimension, in radians in [0, pi].
+The result is 0 if a vector is zero.
+
+The method is the one of [`vsep`](@ref) and of `vsepg_` of SPICELIB. `vsepg_c` of
+CSPICE N0067 has the acute and the obtuse case exchanged, which loses up to half of the
+digits near 0 and pi; the result here differs from it by that error.
+
+Throws `SpiceError(:badarg)` if the lengths differ.
 """
 function vsepg(v1::AbstractVector, v2::AbstractVector)
     _m_samelen(v1, v2)
@@ -998,7 +1333,11 @@ end
     vrelg(v1, v2)
 
 Return the relative difference `|v1 - v2| / max(|v1|, |v2|)` of two vectors of any
-equal dimension, as `vrelg_c`; 0 for equal vectors.
+equal dimension, as `vrelg_c` of CSPICE. The result is 0 for equal vectors.
+
+Throws `SpiceError(:badarg)` if the lengths differ.
+
+See also [`vrel`](@ref).
 """
 function vrelg(v1::AbstractVector, v2::AbstractVector)
     nunorm = vdistg(v1, v2)
@@ -1011,8 +1350,12 @@ end
 """
     vprojg(a, b)
 
-Return the projection of `a` on `b` for vectors of any equal dimension, as `vprojg_`;
-the zero vector for a zero `b`.
+Return the projection of the vector `a` on the vector `b`, for any equal dimension, as
+`vprojg_` of SPICELIB. A zero `b` gives the zero vector.
+
+Throws `SpiceError(:badarg)` if the lengths differ.
+
+See also [`vproj`](@ref).
 """
 function vprojg(a::AbstractVector, b::AbstractVector)
     adotb = vdotg(a, b)
@@ -1024,7 +1367,12 @@ end
 """
     vlcomg(a, v1, b, v2)
 
-Return `a*v1 + b*v2` for vectors of any equal dimension, as `vlcomg_c`.
+Return the linear combination `a*v1 + b*v2` of two vectors of any equal dimension, as
+`vlcomg_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if the lengths differ.
+
+See also [`vlcom`](@ref).
 """
 vlcomg(a::Real, v1::AbstractVector, b::Real, v2::AbstractVector) =
     (_m_samelen(v1, v2); _m_f(a) .* _m_f.(v1) .+ _m_f(b) .* _m_f.(v2))
@@ -1032,7 +1380,10 @@ vlcomg(a::Real, v1::AbstractVector, b::Real, v2::AbstractVector) =
 """
     vzerog(v) -> Bool
 
-True if every element of `v` is zero, as `vzerog_c`. No allocation.
+Return `true` if every element of the vector `v` of any length is zero, as `vzerog_c`
+of CSPICE.
+
+See also [`vzero`](@ref).
 """
 vzerog(v::AbstractVector) = all(x -> primal(x) == 0.0, v)
 
@@ -1040,8 +1391,11 @@ vzerog(v::AbstractVector) = all(x -> primal(x) == 0.0, v)
     vtmvg(v1, matrix, v2)
 
 Return the bilinear form `v1' * matrix * v2` for any dimensions that fit, as `vtmvg_c`
-(terms added row by row). Requires `size(matrix) == (length(v1), length(v2))`
-(`SpiceError(:badarg)` otherwise). No allocation.
+of CSPICE. The terms are added row by row.
+
+Throws `SpiceError(:badarg)` if `size(matrix) != (length(v1), length(v2))`.
+
+See also [`vtmv`](@ref).
 """
 function vtmvg(v1::AbstractVector, matrix::AbstractMatrix, v2::AbstractVector)
     size(matrix) == (length(v1), length(v2)) ||
@@ -1058,9 +1412,23 @@ end
 """
     mxvg(m1, v2)
 
-Return the product `m1 * v2` for any dimensions that fit, as `mxvg_c` (terms added in
-index order). A static matrix and vector give a static result. Requires
-`size(m1, 2) == length(v2)` (`SpiceError(:badarg)` otherwise).
+Return the product `m1 * v2` of a matrix and a vector of any sizes that fit, as
+`mxvg_c` of CSPICE.
+
+The terms of each element are added in index order. A static matrix and a static
+vector give a static vector; this holds for the other `g` products in the same way.
+
+Throws `SpiceError(:badarg)` if `size(m1, 2) != length(v2)`.
+
+# Examples
+```jldoctest
+julia> mxvg([1 2 3; 4 5 6], [1, 1, 1])
+2-element Vector{Float64}:
+  6.0
+ 15.0
+```
+
+See also [`mxv`](@ref), [`mtxvg`](@ref), [`mxmg`](@ref).
 """
 function mxvg(m1::AbstractMatrix, v2::AbstractVector)
     size(m1, 2) == length(v2) || throw(SpiceError(:badarg, "the matrix and the vector do not fit"))
@@ -1083,8 +1451,12 @@ mxvg(m1::StaticMatrix{N,M}, v2::StaticVector{M}) where {N,M} =
 """
     mtxvg(m1, v2)
 
-Return the product of the transpose of `m1` and `v2` for any dimensions that fit, as
-`mtxvg_c`. Requires `size(m1, 1) == length(v2)`.
+Return the product of the transpose of `m1` and the vector `v2`, for any sizes that
+fit, as `mtxvg_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if `size(m1, 1) != length(v2)`.
+
+See also [`mtxv`](@ref), [`mxvg`](@ref).
 """
 function mtxvg(m1::AbstractMatrix, v2::AbstractVector)
     size(m1, 1) == length(v2) || throw(SpiceError(:badarg, "the matrix and the vector do not fit"))
@@ -1100,8 +1472,12 @@ mtxvg(m1::StaticMatrix{N,M}, v2::StaticVector{N}) where {N,M} =
 """
     mxmg(m1, m2)
 
-Return the product `m1 * m2` for any dimensions that fit, as `mxmg_c`. Requires
-`size(m1, 2) == size(m2, 1)` (`SpiceError(:badarg)` otherwise).
+Return the product `m1 * m2` of two matrices of any sizes that fit, as `mxmg_c` of
+CSPICE.
+
+Throws `SpiceError(:badarg)` if `size(m1, 2) != size(m2, 1)`.
+
+See also [`mxm`](@ref), [`mtxmg`](@ref), [`mxmtg`](@ref).
 """
 function mxmg(m1::AbstractMatrix, m2::AbstractMatrix)
     size(m1, 2) == size(m2, 1) || throw(SpiceError(:badarg, "the matrix sizes do not fit"))
@@ -1118,8 +1494,12 @@ mxmg(m1::StaticMatrix{N,M}, m2::StaticMatrix{M,P}) where {N,M,P} =
 """
     mtxmg(m1, m2)
 
-Return the product of the transpose of `m1` and `m2` for any dimensions that fit, as
-`mtxmg_c`. Requires `size(m1, 1) == size(m2, 1)`.
+Return the product of the transpose of `m1` and `m2`, for any sizes that fit, as
+`mtxmg_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if `size(m1, 1) != size(m2, 1)`.
+
+See also [`mtxm`](@ref), [`mxmg`](@ref).
 """
 function mtxmg(m1::AbstractMatrix, m2::AbstractMatrix)
     size(m1, 1) == size(m2, 1) || throw(SpiceError(:badarg, "the matrix sizes do not fit"))
@@ -1136,8 +1516,12 @@ mtxmg(m1::StaticMatrix{N,M}, m2::StaticMatrix{N,P}) where {N,M,P} =
 """
     mxmtg(m1, m2)
 
-Return the product of `m1` and the transpose of `m2` for any dimensions that fit, as
-`mxmtg_c`. Requires `size(m1, 2) == size(m2, 2)`.
+Return the product of `m1` and the transpose of `m2`, for any sizes that fit, as
+`mxmtg_c` of CSPICE.
+
+Throws `SpiceError(:badarg)` if `size(m1, 2) != size(m2, 2)`.
+
+See also [`mxmt`](@ref), [`mxmg`](@ref).
 """
 function mxmtg(m1::AbstractMatrix, m2::AbstractMatrix)
     size(m1, 2) == size(m2, 2) || throw(SpiceError(:badarg, "the matrix sizes do not fit"))
@@ -1154,8 +1538,10 @@ mxmtg(m1::StaticMatrix{N,M}, m2::StaticMatrix{P,M}) where {N,M,P} =
 """
     xposeg(matrix)
 
-Return the transpose of a matrix of any size, as `xposeg_c`. A static matrix gives a
-static result.
+Return the transpose of a matrix of any size, as `xposeg_c` of CSPICE. A static matrix
+gives a static matrix.
+
+See also [`xpose`](@ref), [`xpose6`](@ref).
 """
 xposeg(matrix::AbstractMatrix) = permutedims(_m_f.(matrix))
 xposeg(matrix::StaticMatrix) = SMatrix(transpose(_m_f.(matrix)))
