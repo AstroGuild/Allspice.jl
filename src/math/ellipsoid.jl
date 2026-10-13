@@ -462,7 +462,10 @@ function _m_nearpt(positn::SVector{3}, a::Real, b::Real, c::Real)
         end
         lam -= _with_primal(q, 0.0) / dq
     end
-    s = SVector(ntuple(i -> _with_primal(positn[i] * axs[i] * axs[i] / (axs[i] * axs[i] + lam), np0[i]), Val(3)))
+    # `lam` is assigned in the loop above; a closure that captured it would hold it in a box.
+    s = let lam = lam
+        SVector(ntuple(i -> _with_primal(positn[i] * axs[i] * axs[i] / (axs[i] * axs[i] + lam), np0[i]), Val(3)))
+    end
     n = _m_surfnm(axs[1], axs[2], axs[3], s)
     return s, _with_primal(_m_dot(positn - s, n), alt0)
 end

@@ -13,8 +13,8 @@ const _IPOW10 = (1.0, 0.1, 0.01, 0.001, 1e-4, 1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-1
 
 "Contract: `x >= 0`, `1 <= maxsig <= 14`; returns the first `maxsig` significant decimal digits of `x` (in a tuple of 14, the rest 0) and its decimal exponent, generated with the arithmetic of CSPICE `dpstr`. Zero gives digits 0 and exponent 0."
 function _dpstr_digits(x::Float64, maxsig::Int=14)
-    digits = ntuple(_ -> 0, 14)
-    x == 0.0 && return digits, 0
+    x == 0.0 && return ntuple(_ -> 0, Val(14)), 0
+    buf = zero(MVector{14,Int})
     copy = x
     exp10 = log10(copy)
     if exp10 < 0.0
@@ -43,12 +43,10 @@ function _dpstr_digits(x::Float64, maxsig::Int=14)
     # that digit n is its integer part.
     for n in 1:maxsig
         d = clamp(trunc(Int, copy), 0, 9)
-        digits = let d = d, n = n, old = digits
-            ntuple(i -> i == n ? d : old[i], Val(14))
-        end
+        buf[n] = d
         copy = (copy - d) * 10.0
     end
-    return digits, expont
+    return Tuple(buf), expont
 end
 
 """
@@ -187,12 +185,14 @@ function _dpfmt(x::Float64, pictur::AbstractString)::String
     y = abs(x)
     digits, expont = _dpstr_digits(y)
     # Exponent form, right justified in the width of the picture.
-    expform() = begin
+    expform = let sign = sign, sgnlen = sgnlen
+        () -> begin
         sigdig = lastch - sgnlen - (min(1, div(expont, 1000)) + 4 + min(1, div(expont, 100))) - 1
         sigdig < 1 && return stars
         e = _dpstr(x, sigdig)
         e = lstrip(string(sign, SubString(e, 2)), ' ')
         ncodeunits(e) >= lastch ? String(first(e, lastch)) : lpad(e, lastch)
+        end
     end
     (expont >= intlen && y != 0.0) && return expform()
     ((intlen == 0 && declen == 0) || -intlen > declen) && return stars
@@ -304,6 +304,16 @@ function _to_format(type::Int)
     type == _TC_SC && return "0S", 2
     type == _TC_JD && return "XXXXXXX", 7
     return "XXXXXXXXXXX", 11
+end
+
+"Contract: returns the elements `v[i]` for which `keep[i]` is true, in order."
+function _to_keep(v::Vector{Int}, keep::Vector{Bool})
+    @assert length(v) == length(keep)
+    out = Int[]
+    for i in eachindex(v)           # invariant: `out` holds the kept elements of v[1:i-1]
+        keep[i] && push!(out, v[i])
+    end
+    return out
 end
 
 const _WEEKDAY_NAMES = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
@@ -436,17 +446,18 @@ function timout(ks::KernelSet, et::Real, pictur::AbstractString,
     # Remove the marks that write nothing.
     keep = [!(_to_class(id) == _TC_SYSTEM || _to_class(id) == _TC_CAL || id == _ID_RND ||
               id == 32) for id in ident]
-    kept = [i for i in eachindex(ident) if keep[i]]
-    ident, beg, fin = [ident[i] for i in kept], [beg[i] for i in kept], [fin[i] for i in kept]
+    ident, beg, fin = _to_keep(ident, keep), _to_keep(beg, keep), _to_keep(fin, keep)
     ntokns = length(ident)
-    class(i) = i <= ntokns ? _to_class(ident[i]) : _TC_TEXT
+    # The closures take the variables that change as arguments: a captured variable
+    # that is assigned again is kept in a box, which allocates on each use.
+    class(ident, i) = i <= length(ident) ? _to_class(ident[i]) : _TC_TEXT
 
     # With `::RND`, add half of the smallest unit that the picture shows.
     timpad = 0.0
     if pumpup
         i = 1
         while i <= ntokns
-            type = class(i)
+            type = class(ident, i)
             if type == _TC_TEXT || type == _TC_POINT || type == _TC_PLACE || type == _TC_AMPM ||
                type == _TC_ERA || type == _TC_MONTH || type == _TC_WKDAY
                 i += 1
@@ -454,7 +465,7 @@ function timout(ks::KernelSet, et::Real, pictur::AbstractString,
                 factor = 1.0
                 incr = _to_pad(type)
                 i += 1
-                if class(i) == _TC_POINT
+                if class(ident, i) == _TC_POINT
                     factor *= 0.1
                     i += 1
                     while i <= ntokns && ident[i] == _ID_HASH
@@ -494,7 +505,7 @@ function timout(ks::KernelSet, et::Real, pictur::AbstractString,
     out = fill(_BLANK, 256)
     appnd = 1
     # Write `text` at `appnd`; the Fortran assignment also blanks the rest of the line.
-    put(text) = appnd <= 256 && _assign!(out, appnd, 256, text)
+    put(appnd, text) = appnd <= 256 && _assign!(out, appnd, 256, text)
     making = false
     go2jul = false
     fmt = ""
@@ -510,7 +521,7 @@ function timout(ks::KernelSet, et::Real, pictur::AbstractString,
     # Loop invariant: tokens `1:i-1` are written to `out[1:appnd-1]`, except a numeric
     # component that is still collecting its decimals (`making`, with picture `fmt`).
     for i in 1:ntokns
-        type = class(i)
+        type = class(ident, i)
         text = @view mystr[beg[i]:fin[i]]
         len = fin[i] - beg[i] + 1
         if type != _TC_PLACE && making && (type != _TC_POINT || have[_TC_POINT])
@@ -525,13 +536,13 @@ function timout(ks::KernelSet, et::Real, pictur::AbstractString,
             end
             intmed = (trunc(frac * _POW10[trncat+1]) - 0.125) / _POW10[trncat+1]
             value = trunc(value) + clamp(intmed, 0.0, 1.0)
-            put(_dpfmt(value, fmt))
+            put(appnd, _dpfmt(value, fmt))
             appnd += width
             have[_TC_POINT] = false
             making = false
         end
         if type == _TC_TEXT
-            put(text)
+            put(appnd, text)
             appnd += len
         elseif type == _TC_PLACE
             if making
@@ -543,7 +554,7 @@ function timout(ks::KernelSet, et::Real, pictur::AbstractString,
             end
         elseif type == _TC_POINT
             if !making
-                put(text)
+                put(appnd, text)
                 appnd += len
                 have[_TC_POINT] = false
             else
@@ -629,28 +640,28 @@ function timout(ks::KernelSet, et::Real, pictur::AbstractString,
                 style = (ident[i] - (type == _TC_MONTH ? 4 : 12))   # 0..5, as the marks are listed
                 style < 3 && (name = first(name, 3))
                 name = style % 3 == 0 ? uppercase(name) : (style % 3 == 2 ? lowercase(name) : name)
-                put(name)
+                put(appnd, name)
                 appnd += ncodeunits(name)
                 making = false
             elseif type == _TC_ERA
                 upper = ident[i] == 33 || ident[i] == 35
                 ad = values[_TC_ERA] == 2.0
-                put(ad ? (upper ? " A.D." : " a.d.") : (upper ? " B.C." : " b.c."))
+                put(appnd, ad ? (upper ? " A.D." : " a.d.") : (upper ? " B.C." : " b.c."))
                 if ident[i] >= 35
                     if vanish
-                        put(" ")
+                        put(appnd, " ")
                         appnd += 1
                     else
                         appnd += 6
                     end
                 else
-                    appnd <= 256 && put(lstrip(String(out[appnd:256]), ' '))
+                    appnd <= 256 && put(appnd, lstrip(String(out[appnd:256]), ' '))
                     appnd += 4
                 end
                 making = false
             elseif type == _TC_AMPM
                 pm = values[_TC_HR] >= 12.0
-                put(ident[i] == 37 ? (pm ? "P.M." : "A.M.") : (pm ? "p.m." : "a.m."))
+                put(appnd, ident[i] == 37 ? (pm ? "P.M." : "A.M.") : (pm ? "p.m." : "a.m."))
                 appnd += 4
                 making = false
             else

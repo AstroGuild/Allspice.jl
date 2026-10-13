@@ -261,11 +261,14 @@ function _gf_vecstate(v::GFInterceptVector, et::Float64)
     res === nothing && return _GF_ZERO6, false
     spoint, trgepc, _ = res
     return _gf_ltstate(ks, v.targ, v.obs, v.ref, corr, et, spoint, trgepc, 3,
+        let j2r = j2r, j2v = j2v      # assigned in two branches: bind them for the closure
         function (or, ov, R, dR)
+            local dr, dv, st            # not the variables of the same names above
             dr, dv = _gf_xf(R, dR, j2r, j2v)
             st = surfpv(vcat(or, ov), vcat(dr, dv), a, b, c)
             st === nothing && return nothing
             return _gf_pv(SVector{6,Float64}(st))
+        end
         end)
 end
 

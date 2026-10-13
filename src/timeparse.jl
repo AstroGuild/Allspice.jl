@@ -760,6 +760,7 @@ function _tpartv(str::AbstractString, modlen::Int)::_TimeParts
     _zzvalt!(st, 1000, Int(typemax(Int32)), 'Y')
 
     finish(mods, yabbrv) = begin
+        local ok, tvec, ntvec, type, pictur, error    # not the variables of the same names above
         ok, tvec, ntvec, type, pictur, error = _zzunpck(st, yabbrv)
         pictur = _picture_suffix(pictur, ".#", modify, true)
         _TimeParts(ok, tvec, ntvec, type, modify, mods, yabbrv, pictur, error)
