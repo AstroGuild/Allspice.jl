@@ -1,6 +1,6 @@
 # Ephemeris and rotation tables
 
-An optimizer or a GPU kernel that needs the position of a body many times on a known interval of time does not need the kernels in its inner loop. [`ephemeris_table`](@ref) extracts the position of one body relative to another on that interval into an [`EphemerisTable`](@ref), which is one flat array of Chebyshev coefficients on intervals of equal length together with a few numbers. The evaluation then needs no kernel set, no search for a segment and no chain of bodies.
+An optimizer or a GPU function that needs the position of a body many times on a known interval of time does not need the SPICE kernels in its inner loop. [`ephemeris_table`](@ref) extracts the position of one body relative to another on that interval into an [`EphemerisTable`](@ref), which is one flat array of Chebyshev coefficients on intervals of equal length. The evaluation then needs no kernel set, no search for a segment and no chain of bodies.
 
 ```@setup tab
 using Allspice
@@ -16,10 +16,10 @@ using Allspice
 t0 = str2et("2025 MAR 01 12:00:00 UTC")
 t1 = t0 + 86400.0
 tab = ephemeris_table("PROBE", t0, t1, "J2000", "NONE", "EARTH"; tol=1e-6)
-(tab.nint, tab.ncoef, tab.maxerr)           # intervals, coefficients, measured error in km
+(tab.nint, tab.ncoef, tab.maxerr)           # intervals, coefficients per interval, measured error in km
 ```
 
-[`table_position`](@ref) returns the position, [`table_state`](@ref) the position and the velocity, and [`table_jet`](@ref) the position with its derivatives to any order.
+The keyword `tol` is the accepted error in kilometres; without it the goal is 1e-12 times the largest distance in the table. [`table_position`](@ref) returns the position, [`table_state`](@ref) the position and the velocity, and [`table_jet`](@ref) the position with its derivatives to any order.
 
 ```@example tab
 et = t0 + 3600.0
@@ -33,13 +33,15 @@ acceleration                                # km/s^2
 
 ## How the table is built
 
-The function has two methods. For a geometric position in an inertial frame from SPK type 2 data, which is the case of the planetary ephemerides, the position is one polynomial for each record of the kernels; the table then takes the record length and the degree of the kernels and agrees with `spkpos` to rounding. In all other cases (a rotating frame, an aberration correction, another SPK type) the function interpolates and doubles the number of intervals until the measured error is below the tolerance `tol`, and the field `maxerr` of the table records the error that it measured. The velocity of a table is always the derivative of its position, and an epoch can be a `ForwardDiff.Dual` number, also on the GPU.
+The function builds the table in one of two ways. For a geometric position in an inertial frame from SPK type 2 data, which is the case of the planetary ephemerides, the position is one polynomial for each record of the kernels; the table then takes the record length and the degree of the kernels and agrees with `spkpos` to rounding. In all other cases (a rotating frame, an aberration correction, another SPK type) the function interpolates and doubles the number of intervals until the measured error is below the tolerance `tol`, and the field `maxerr` of the table records the error that it measured.
 
-A query checks that the epoch is inside the table and throws `SpiceError(:nocoverage)` if it is not. The check is a bounds check, so `@inbounds` removes it, as a GPU kernel requires; an epoch outside the table then gives the extrapolation of the nearest interval.
+The velocity of a table is always the derivative of its position, so that it can differ in the last digits from the velocity of `spkezr` for SPK types that store a separate velocity. An epoch can be a `ForwardDiff.Dual` number, also on the GPU.
+
+A query checks that the epoch is inside the table and throws `SpiceError(:nocoverage)` if it is not. The check is a bounds check, so `@inbounds` removes it, as a GPU function requires; an epoch outside the table then gives the extrapolation of the nearest interval.
 
 ## On a GPU
 
-The table is a parametric type over its array, and Adapt.jl moves it to a device. The evaluation is plain arithmetic on the coefficients, so that it compiles inside a GPU kernel.
+The table is a parametric type over its array, and Adapt.jl moves it to a device. The evaluation is plain arithmetic on the coefficients, so that it compiles inside a GPU function. In the block below, `epochs` is a vector of `Float64` epochs. The epochs and the bounds of the table stay `Float64` also when the coefficients are `Float32`, because a `Float32` number of seconds past J2000 has a resolution of about one minute.
 
 ```julia
 using CUDA, Adapt
@@ -50,7 +52,7 @@ states = map(et -> @inbounds(table_state(gpu, et)), CuArray(epochs))
 
 ## Measured accuracy and speed
 
-The table below gives measured values for 400 days of de440s.bsp (Intel CPU, one thread; NVIDIA RTX 3090 with 4,000,000 epochs; `bench/table_gpu.jl`). The error is the largest difference from the kernels in km.
+The table below gives measured values for 400 days of de440s.bsp, from `bench/table_gpu.jl`: one thread of an Intel CPU, and an NVIDIA RTX 3090 with 4,000,000 epochs. The error is the largest difference from the kernels in km, and the tolerance is the default unless the row names one.
 
 | Case | Intervals | Error (km) | Table (ns per epoch) | `spkezr` (ns per epoch) |
 |---|---:|---:|---:|---:|
@@ -62,11 +64,13 @@ The table below gives measured values for 400 days of de440s.bsp (Intel CPU, one
 | Earth relative to Sun, J2000, GPU, `Float64` | 101 | 1.2e-7 | 1.2 | |
 | Earth relative to Sun, J2000, GPU, `Float32` | 101 | 16 | 0.33 | |
 
-Two limits come from the source and not from the table. The Earth has turned about 50,000 radians since the reference epoch, so that the rounding of its rotation angle moves the Sun by some metres in the IAU_EARTH frame, and no table can be more accurate than that. An aberration-corrected position has steps of some millimetres at the record boundaries of the kernels, because the light-time correction evaluates one body on each side of a boundary. With coefficients of type `Float32` a position keeps about seven digits, which is 16 km at the distance of the Sun.
+Two limits come from the source and not from the table. The rounding of the rotation angle of the Earth moves the Sun by some metres in the `IAU_EARTH` frame (see [Known limits of accuracy](@ref)), and no table can be more accurate than that. An aberration-corrected position has steps of some millimetres at the record boundaries of the kernels, because the target is evaluated at an earlier epoch than the observer, so that the two cross a boundary at different times.
+
+With coefficients of type `Float32` a position keeps about seven digits, which is 16 km at the distance of the Sun.
 
 ## Save a table as a kernel
 
-A table of a geometric position can leave the session as a kernel: [`table_to_spk`](@ref)`(handle, tab, segid)` adds it to an SPK file as one segment of type 2 whose records are the records of the table, so that `spkezr` of this package and of CSPICE return the state of the table to rounding (measured 2e-16 relative for the Moon from the Earth on 200 days).
+[`table_to_spk`](@ref) adds a table of a geometric position to an SPK file as one segment of type 2, whose records are the records of the table. `spkezr` of this package and of CSPICE then return the state of the table to rounding; the measured difference is 2e-16 relative for the Moon from the Earth on 200 days.
 
 ```@example tab
 path = joinpath(mktempdir(), "table.bsp")
@@ -78,7 +82,14 @@ spkobj(path)
 
 ## Rotations
 
-[`rotation_table`](@ref)`(from, to, t0, t1)` does for `pxform` what `ephemeris_table` does for `spkpos`. It interpolates the nine elements of the rotation matrix, [`table_rotation`](@ref) returns the matrix, and [`table_rotation_jet`](@ref) returns the matrix with its time derivatives, of which the first is the derivative block of `sxform`. The matrix is not made orthogonal again, because its distance from an orthogonal matrix is of the size of the measured error of the table, which the next table gives for six days from 2022-03-08 with the default arguments.
+[`rotation_table`](@ref) does for `pxform` what `ephemeris_table` does for `spkpos`: it interpolates the nine elements of the rotation matrix. [`table_rotation`](@ref) returns the matrix, and [`table_rotation_jet`](@ref) returns the matrix with its time derivatives.
+
+```@example tab
+rtab = rotation_table("J2000", "IAU_EARTH", t0, t1)
+maximum(abs, table_rotation(rtab, et) - pxform("J2000", "IAU_EARTH", et))
+```
+
+The matrix is not made orthogonal again, because its distance from an orthogonal matrix is of the size of the measured error of the table. The next table gives that error for six days from 2022-03-08 with the default arguments.
 
 | From | To | Intervals | Measured error of the table | Difference from CSPICE `pxform` |
 |---|---|---:|---:|---:|
@@ -87,9 +98,4 @@ spkobj(path)
 | `J2000` | `IAU_EARTH` | 16 | 1.5e-11 | 2.0e-11 |
 | `MOON_PA` | `IAU_EARTH` | 16 | 1.6e-11 | 1.9e-11 |
 
-The errors are Frobenius norms (the root of the sum of the squares of the nine differences) and have no unit. The two tables that reach the Earth stop at 1.5e-11 because the rotation angle of the Earth is a number of many turns, whose rounding limits the source.
-
-```@example tab
-rtab = rotation_table("J2000", "IAU_EARTH", t0, t1)
-maximum(abs, table_rotation(rtab, et) - pxform("J2000", "IAU_EARTH", et))
-```
+The errors are Frobenius norms (the root of the sum of the squares of the nine differences) and have no unit; the last column compares the table with `pxform` of CSPICE. `MOON_PA` is the principal-axis frame of the Moon from the lunar orientation kernel of NAIF. The two tables that reach the Earth stop at 1.5e-11 because of the same rounding of the rotation angle of the Earth.

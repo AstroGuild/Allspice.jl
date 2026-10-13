@@ -21,9 +21,20 @@ wninsd!(search, start, start + 2 * 86400.0)
 wncard(search)
 ```
 
+## The step
+
+Every search samples its quantity at the step that the caller gives and then refines each change that it finds, to a tolerance of one microsecond unless the keyword `tol` changes it. A long step is fast, and a step that is too long loses events:
+
+| Search | The step must be shorter than |
+|---|---|
+| A condition that holds or not (`"="`, `"<"`, `">"`, an occultation, a field of view) | the shortest interval on which the condition holds, and the shortest gap between two such intervals |
+| An extremum (`"LOCMIN"`, `"LOCMAX"`, `"ABSMIN"`, `"ABSMAX"`) | the shortest interval on which the quantity only increases or only decreases |
+
+An event that begins and ends between two samples is not found, and the search gives no warning.
+
 ## Eclipses
 
-[`gfoclt`](@ref) finds the times at which one body hides another from an observer. The spacecraft of the examples is in the shadow of the Earth when the Earth occults the Sun as seen from the spacecraft.
+[`gfoclt`](@ref) finds the times at which one body hides another from an observer. The spacecraft of the examples is in the shadow of the Earth when the Earth occults the Sun as seen from the spacecraft. The arguments are the kind of occultation (`"ANY"` accepts partial and full), then the name, the shape and the body-fixed frame of the front body and of the back body, the aberration correction, the observer, the step and the window. The first eclipse below lasts less than two minutes, so the step is 60 seconds; with 300 seconds the samples can fall on both sides of it, and the search then does not report it.
 
 ```@example gf
 eclipses = gfoclt("ANY", "EARTH", "ELLIPSOID", "IAU_EARTH",
@@ -37,7 +48,7 @@ end
 
 ## A condition on a coordinate
 
-[`gfposc`](@ref) searches on one coordinate of a position. The search below finds when the spacecraft is north of 20 degrees of latitude, and [`wnsumd`](@ref) gives the total duration.
+[`gfposc`](@ref) searches on one coordinate of a position. The search below finds when the spacecraft is north of 20 degrees of latitude; `rpd()` is the number of radians in a degree. After the relation come the reference value, an adjustment that only the absolute extrema use, and the step. The first result of [`wnsumd`](@ref) is the total duration.
 
 ```@example gf
 north = gfposc("PROBE", "IAU_EARTH", "NONE", "EARTH", "LATITUDINAL", "LATITUDE",
@@ -47,7 +58,7 @@ wnsumd(north)[1] / 3600                     # hours
 
 ## A function of your own
 
-[`gfuds`](@ref) searches on any scalar function of time. It needs the function and a second function that says whether the first one decreases at an epoch; [`uddc`](@ref) builds that answer from a numerical derivative.
+[`gfuds`](@ref) searches on any scalar function of time. It needs the function and a second function that says whether the first one decreases at an epoch; [`uddc`](@ref) builds that answer from a numerical derivative over the interval that its third argument gives, here 10 seconds.
 
 ```@example gf
 speed(t) = vnorm(spkezr("PROBE", t, "J2000", "NONE", "EARTH")[1][4:6])
@@ -55,8 +66,6 @@ fast = gfuds(speed, t -> uddc(speed, t, 10.0), ">", 8.0, 0.0, 600.0, search)
 wncard(fast)                                # intervals with a speed above 8 km/s
 ```
 
-## The step
+## Several threads
 
-Every search samples the condition at the step that the caller gives and then refines each change that it finds. The step must be shorter than the shortest interval on which the condition holds and shorter than the shortest gap between two such intervals; an event that begins and ends between two samples is not found. A long step is fast and a short step is safe, and the right value follows from the dynamics. The first eclipse above lasts less than two minutes, so the search uses a step of 60 seconds; with a step of 300 seconds the samples can fall on both sides of that eclipse, and the search then does not report it.
-
-The relations are `"="`, `"<"`, `">"`, `"LOCMIN"`, `"LOCMAX"`, `"ABSMIN"` and `"ABSMAX"`. The convergence tolerance is one microsecond unless the keyword `tol` changes it.
+Every search accepts the keyword `threads=true`, which makes one search use several threads when the confinement window has several intervals. A function given to `gfuds` is then called from several threads.

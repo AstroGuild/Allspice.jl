@@ -2,7 +2,7 @@
 
 Allspice.jl reads SPICE kernels and answers the questions that the CSPICE toolkit answers (where a body is, how a frame is oriented, when an event occurs), in Julia code with no C library behind it. The calls keep the names and the argument order of CSPICE, so that a program written for CSPICE or SPICE.jl needs few changes.
 
-The package is for work that CSPICE makes hard. Queries are safe from many threads at once, because all loaded data belong to a context object and no call keeps hidden state. The epoch can be a dual number of ForwardDiff.jl, and `spkder` and `pxder` return time derivatives of any order, so that a state can go into an optimizer or an integrator without finite differences. A trajectory or a rotation can be extracted into a flat array of coefficients that a GPU evaluates.
+Queries are safe from many threads at once, because all loaded data belong to a context object and no call keeps hidden state. The epoch can be a dual number of ForwardDiff.jl, and `spkder` and `pxder` return time derivatives of any order, so that a state can go into an optimizer or an integrator without finite differences. A trajectory or a rotation can be extracted into a flat array of coefficients that a GPU evaluates.
 
 ## Installation
 
@@ -20,7 +20,7 @@ Pkg.add("Allspice")
 | A first session from kernels to an event search | [First session](@ref) |
 | Use from several threads, or several kernel sets at once | [Contexts and threads](@ref) |
 | Velocity, acceleration and higher derivatives | [Time derivatives](@ref) |
-| Positions inside an optimizer or on a GPU | [Ephemeris and rotation tables](@ref) |
+| Many positions on a known interval, in an inner loop or on a GPU | [Ephemeris and rotation tables](@ref) |
 | Write an SPK, a CK or another kernel | [Writing kernels](@ref) |
 | Times of closest approach, eclipses, visibility | [Event searches](@ref) |
 | What behaves differently from CSPICE | [Differences from CSPICE](@ref) |

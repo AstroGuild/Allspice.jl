@@ -1,6 +1,6 @@
 # First session
 
-This page goes through one complete session: it loads kernels, converts a time, asks for a state and a rotation, finds the point of the Earth below a spacecraft, and searches for the times of perigee. Each step is one call with the name that it has in CSPICE.
+This page goes through one complete session: it loads kernels, converts a time, asks for a state and a rotation, finds the point of the Earth below a spacecraft, and searches for the times of perigee. Each call has the name that it has in CSPICE, without the `_c` suffix.
 
 ```@setup first
 using Allspice
@@ -10,7 +10,7 @@ kernels = DocKernels.write(mktempdir())
 
 ## Load kernels
 
-A kernel is a file of data: an SPK holds trajectories, a text kernel holds constants such as leap seconds and body radii. [`furnsh`](@ref) loads a kernel of any kind, and [`ktotal`](@ref) counts what is loaded.
+A kernel is a file of data: an SPK holds trajectories, a text kernel holds constants such as leap seconds and body radii. [`furnsh`](@ref) loads a kernel of any kind, and [`ktotal`](@ref) counts the loaded kernels of one kind or of all kinds. In the block below, `kernels` is a vector of three paths.
 
 ```@example first
 using Allspice
@@ -19,11 +19,11 @@ foreach(furnsh, kernels)      # leap seconds, constants of the Earth, an SPK
 ktotal("ALL")
 ```
 
-Here `kernels` is a vector of three paths. A meta-kernel, which is a text kernel that lists other kernels, works as in CSPICE, so that one `furnsh` call can load a whole set.
+A meta-kernel, which is a text kernel that lists other kernels, works as in CSPICE, so that one `furnsh` call can load a whole set.
 
 ## Convert a time
 
-All calls take an epoch as seconds past J2000 in Barycentric Dynamical Time (TDB), which SPICE calls ET. [`str2et`](@ref) converts a calendar string to that number and [`timout`](@ref) converts back with a format picture.
+All calls take an epoch as seconds past J2000 in Barycentric Dynamical Time (TDB), which SPICE calls ET. [`str2et`](@ref) converts a calendar string to that number. [`timout`](@ref) converts back with a picture, which is a string that shows the wanted format; the marker `::TDB` asks for the TDB time scale.
 
 ```@example first
 et = str2et("2025 MAR 01 12:00:00 UTC")
@@ -33,7 +33,7 @@ et = str2et("2025 MAR 01 12:00:00 UTC")
 timout(et, "YYYY Mon DD HR:MN:SC.### ::TDB")
 ```
 
-The two times differ by 69.185 seconds, which is the difference between TDB and UTC at that date.
+The input string and the output string differ by 69.185 seconds, which is the difference between TDB and UTC at that date.
 
 ## State of a body
 
@@ -47,8 +47,8 @@ state
 The result is a static vector of six numbers, so the call allocates nothing. [`spkpos`](@ref) returns the position alone:
 
 ```@example first
-sun, lt = spkpos("SUN", et, "J2000", "LT+S", "PROBE")
-lt                            # seconds from the Sun to the spacecraft
+sun, lt_sun = spkpos("SUN", et, "J2000", "LT+S", "PROBE")
+lt_sun                        # seconds from the Sun to the spacecraft
 ```
 
 ## Rotation between frames
@@ -62,7 +62,7 @@ r * state[1:3]                # the position in the rotating frame, km
 
 ## The point below the spacecraft
 
-[`subpnt`](@ref) returns the point of a body that is nearest to an observer, in the body-fixed frame. [`reclat`](@ref) converts it to radius, longitude and latitude in radians, and `dpr()` is the number of degrees in a radian.
+[`subpnt`](@ref) returns the point of a body that is nearest to an observer, in the body-fixed frame; the method string selects the nearest point on the ellipsoid whose radii the constants kernel gives. The call also returns the epoch at the body and the vector from the observer to the point. [`reclat`](@ref) converts it to radius, longitude and latitude in radians, and `dpr()` is the number of degrees in a radian.
 
 ```@example first
 point, epoch, vector = subpnt("NEAR POINT/ELLIPSOID", "EARTH", et, "IAU_EARTH", "NONE", "PROBE")
@@ -72,7 +72,7 @@ radius, lon, lat = reclat(point)
 
 ## Search for an event
 
-The geometry finder calls (names that begin with `gf`) search an interval of time for the epochs at which a quantity meets a condition. The interval and the result are both a [`Window`](@ref), which is a list of disjoint intervals. The search below looks for the local minima of the distance from the Earth during one day; the step of 600 seconds must be shorter than the time between two events of interest.
+The geometry finder calls (names that begin with `gf`) search an interval of time for the epochs at which a quantity meets a condition. The interval and the result are both a [`Window`](@ref), which is a list of disjoint intervals. The search below looks for the local minima (`"LOCMIN"`) of the distance from the Earth during one day. The two zeros are a reference value and an adjustment, which this relation does not use, and 600 seconds is the step of the search; [The step](@ref) says how to choose it.
 
 ```@example first
 search = Window()
@@ -97,7 +97,9 @@ kclear()
 ktotal("ALL")
 ```
 
-A call that cannot answer throws a [`SpiceError`](@ref) whose `kind` field names the reason; CSPICE would set its error flag instead.
+## Errors
+
+A call that cannot answer throws a [`SpiceError`](@ref) whose `kind` field names the reason and whose `msg` field holds the text; CSPICE would set its error flag instead. With no kernel loaded, the name of the spacecraft is unknown:
 
 ```@example first
 try
@@ -107,8 +109,4 @@ catch err
 end
 ```
 
-## Next
-
-- [Contexts and threads](@ref) shows how to keep several kernel sets and how to query from many threads.
-- [Time derivatives](@ref) shows `spkder`, `pxder` and dual-number epochs.
-- [Differences from CSPICE](@ref) lists what a CSPICE user must know before a port.
+The task pages in the menu continue from here, and [Differences from CSPICE](@ref) lists what a CSPICE user must know before a port.

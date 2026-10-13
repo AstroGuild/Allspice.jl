@@ -30,15 +30,15 @@ CSPICE itself is the reference. The test suite calls each routine of this packag
 |---|---|
 | Differential | A result of this package with the result of CSPICE for the same call |
 | File | A kernel that this package wrote with the kernel that CSPICE wrote, byte for byte |
-| Derivative | A derivative of order 2 or more with automatic differentiation of the lower order |
+| Derivative | The first derivative with the velocity of CSPICE, and each higher derivative with automatic differentiation of the one below it |
 | Error | The kind of the error, and the text of the message where a program can depend on it |
 | Concurrency | Answers from many threads during changes of the kernel set with the answers of one thread |
-| Allocation | A static proof (AllocCheck.jl) that 61 numeric kernels cannot allocate |
+| Allocation | A static proof (AllocCheck.jl) that 61 numeric routines cannot allocate |
 
 | Measure | Value |
 |---|---|
 | Comparisons in the default run | about 80,000 |
-| Comparisons in the exhaustive run | about 100,000 |
+| Comparisons in the exhaustive run (`ALLSPICE_TEST_FULL=1`) | about 100,000 |
 | Line coverage of `src/` | 96.3 % |
 | Julia versions tested | 1.10 and 1.13 |
 
@@ -50,4 +50,4 @@ A result that differs from CSPICE differs by rounding. For the states of the Moo
 |---|---|---|
 | Position, velocity and light time | all nine (`NONE` to `XCN+S`) | 7.3e-16 |
 
-Some limits belong to the data and not to this package. The rotation angle of the Earth is a number of about 50,000 radians, whose rounding moves the Sun by some metres in the `IAU_EARTH` frame, in CSPICE and here. `spkezr` and `spkpos` differ from each other by up to 2e-11 relative with converged light time, also in both, because the two routines stop their iterations by different rules.
+Some limits belong to the data and not to this package. The rotation angle of the Earth is a number of about 50,000 radians, whose rounding moves the Sun by some metres in the `IAU_EARTH` frame, in CSPICE and here. `spkezr` and `spkpos` differ from each other by up to 2e-11 relative with the converged corrections (`CN`, `CN+S`), in CSPICE as well as in this package, because the two routines stop their iterations by different rules.

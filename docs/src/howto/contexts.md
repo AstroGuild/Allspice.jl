@@ -1,6 +1,6 @@
 # Contexts and threads
 
-All loaded kernels belong to a [`SpiceContext`](@ref). Every call exists in two forms: with a context as the first argument, and without one, in which case the call uses the context that [`default_context`](@ref) returns. A program that loads one set of kernels and uses one thread never needs to name a context.
+All loaded kernels belong to a [`SpiceContext`](@ref). Every call exists in two forms: with a context as the first argument, and without one, in which case the call uses the context that [`default_context`](@ref) returns, which is one object for the whole process and is as safe to share as any other. A program that loads one set of kernels and uses one thread never needs to name a context.
 
 ```@setup ctx
 using Allspice
@@ -10,7 +10,7 @@ kernels = DocKernels.write(mktempdir())
 
 ## Several kernel sets
 
-A second context is an independent kernel set, with its own kernel pool and its own time defaults. This is how a program compares two versions of an ephemeris, or keeps the kernels of two missions apart.
+A second context is an independent kernel set, with its own kernel pool (the variables that text kernels define) and its own settings, such as the defaults of [`timdef`](@ref). This is how a program compares two versions of an ephemeris, or keeps the kernels of two missions apart.
 
 ```@example ctx
 using Allspice
@@ -38,8 +38,8 @@ end
 extrema(distance)                           # km
 ```
 
-A thread can also load or unload a kernel while other threads query. [`furnsh`](@ref), [`unload`](@ref) and the calls that change the kernel pool build a new snapshot and replace the old one in one step, so that a reader sees the set before the change or after it and never a mixture. Two changes at the same time wait for each other.
+A thread can also load or unload a kernel while other threads query. [`furnsh`](@ref), [`unload`](@ref) and the calls that change the kernel pool build a new snapshot and replace the old one in one step, so that a reader sees the set before the change or after it and never a mixture. Two changes at the same time wait for each other. Two consecutive queries of one thread can therefore see different kernel sets if another thread changes the set between them.
 
-## What is not shared
+## What must not be shared
 
-A file that is open for direct access (a handle from `dafopr`, `dasopr`, `spkopn` and similar calls) belongs to the code that opened it, and one handle must not be used from two threads at once. The geometry finder searches accept `threads=true`, which makes one search use several threads.
+A file that is open for direct access (a handle from `dafopr`, `dasopr`, `spkopn` and similar calls) belongs to the code that opened it, and one handle must not be used from two threads at once. The same holds for a [`Window`](@ref) that a thread changes. A table of [Ephemeris and rotation tables](@ref) is immutable and can be shared.
