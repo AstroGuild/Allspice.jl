@@ -246,6 +246,8 @@ end
         for bnd in (star, [1.0, 0.0, 9.0, 2.0, 0.0, 18.0, 0.0, 1.0, 9.0],              # two parallel vectors
                 [1.0, 0.0, 0.1, -1.0, 0.0, 0.1, 0.0, 1.0, -0.1, 0.0, -1.0, -0.1],          # not in one half space
                 [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, -1.0, 0.0, 0.0, 0.0, -1.0, 0.0],            # in a plane
+                [1.0, 0.0, 0.01, -1.0, 0.0, 0.01, 0.3, 1.5e-12, 1.0],      # a corner in the plane of a side
+                [1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0, 1.0, -1.0, -1.0, -1.0, 0.9],        # no side has the other corners on one side
                 [1.0, 0.0, 0.02, 0.0, 1.0, 0.02, -1.0, 0.0, 0.02, 0.0, -1.0, 0.02])        # wide, but valid
             fov_define!(ctx, F, "FOV_SHAPE" => "POLYGON", B, "FOV_BOUNDARY" => bnd)
             kc = c_kind(() -> g_fovray(S, z, "GEO_CAM", "NONE", "EARTH", et))
@@ -259,6 +261,9 @@ end
             kc2 = c_kind(() -> g_fovtrg(S, "MOON", "ELLIPSOID", "IAU_MOON", "LT", "EARTH", et))
             kn2 = neo_kind(() -> fovtrg(ctx, S, "MOON", "ELLIPSOID", "IAU_MOON", "LT", "EARTH", et))
             @test kc2 == kn2
+            # the two kinds of the hull search, which no other case reaches
+            length(bnd) == 9 && bnd[8] == 1.5e-12 && @test kn === kn2 === :notsupported
+            bnd[end] == 0.9 && @test kn === kn2 === :facenotfound
         end
         fov_define!(ctx)
     end

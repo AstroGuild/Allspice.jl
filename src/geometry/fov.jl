@@ -640,8 +640,9 @@ Throws `SpiceError` with the kind
 - `:fovtoowide` if the angular radius of the field of view about its axis is not below
   90 degrees minus 1e-6 rad;
 - for a rectangle or a polygon: `:degeneratecase` if two neighbour boundary vectors are
-  parallel, `:facenotfound` or `:notsupported` if no axis is less than 90 degrees from
-  every boundary vector, `:invalidfov` if a vector is 90 degrees or more from the axis;
+  parallel, `:facenotfound` if the boundary vectors are not in one half space,
+  `:notsupported` if a boundary vector is within 2e-12 rad of the plane of a side of
+  the convex hull, `:invalidfov` if a vector is 90 degrees or more from the axis;
 - for a circle or an ellipse: `:degeneratecase` if a semi-axis is zero;
 - `:notdisjoint` if the observer is inside the target ellipsoid.
 
