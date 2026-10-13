@@ -72,6 +72,20 @@ Feature: Write an EK file through a handle that the caller owns
     And the handle can still be used
     And the two files are still equal word for word
 
+  Scenario: A call that throws leaves the entry as it was
+    Given a record whose entries are written
+    When "ekucec", "ekuced" or "ekucei" gets a null for a column without nulls, or a wrong count of values
+    Then the error is that of CSPICE, and the entry keeps its old value (CSPICE loses it)
+    When "ekacec", "ekaced" or "ekacei" is called for an entry that is written already
+    Then the error "nonemptyentry" occurs for every column class (CSPICE checks scalar numeric columns only)
+
+  Scenario: A fast load stores each column once
+    Given a fast load that "ekifld" started
+    When a column is stored a second time
+    Then the error "columnstoredtwice" occurs (CSPICE has no check)
+    When "ekffld" is called before every column is stored
+    Then the error "invalidaddress" occurs, also for a segment with fixed-count columns
+
   Scenario: A new record has no entries until they are written
     Given a record that ekappr added and whose entries are not written
     When ekrcei or ekrcec reads an entry of the record

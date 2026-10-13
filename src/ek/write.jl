@@ -662,11 +662,20 @@ function _ekw_entry_c(h::DASHandle, who::AbstractString, update::Bool, segno::In
         recno::Integer, column::AbstractString, vals::AbstractVector, isnull::Bool)
     segdsc, coldsc, recptr = _ekw_locate(h, who, segno, recno, column, (_EK_CHR,))
     class = coldsc[_EK_CLSIDX]
+    # An update checks the new entry before it deletes the old one, so that a call that
+    # throws leaves the entry as it was. CSPICE deletes first and loses the old entry.
     if class == 3
-        update && _ekw_de03(h, segdsc, coldsc, recptr)
+        if update
+            _ekw_entry_checks(segdsc, coldsc, isnull)
+            _ekw_de03(h, segdsc, coldsc, recptr)
+        end
         _ekw_ad03(h, segdsc, coldsc, recptr, _ekw_cval1(vals), isnull)
     elseif class == 6
-        update && _ekw_de456(h, segdsc, coldsc, recptr)
+        if update
+            _ekw_entry_checks(segdsc, coldsc, isnull)
+            _ekw_count_checks(segdsc, coldsc, length(vals))
+            _ekw_de456(h, segdsc, coldsc, recptr)
+        end
         _ekw_ad06(h, segdsc, coldsc, recptr, _ekw_cvals(vals), isnull)
     else
         _ekw_noclass(h, coldsc, "character", column, recno, segno)
@@ -688,7 +697,11 @@ function _ekw_entry_n(h::DASHandle, who::AbstractString, update::Bool, ::Type{T}
         end
     elseif class == 4 || class == 5
         nvals = _ekw_nvals(T, vals)
-        update && _ekw_de456(h, segdsc, coldsc, recptr)
+        if update                        # checks before the delete, as in `_ekw_entry_c`
+            _ekw_entry_checks(segdsc, coldsc, isnull)
+            _ekw_count_checks(segdsc, coldsc, length(nvals))
+            _ekw_de456(h, segdsc, coldsc, recptr)
+        end
         _ekw_ad45(h, segdsc, coldsc, recptr, nvals, isnull)
     else
         _ekw_noclass(h, coldsc, T === Int32 ? "integer" : "d.p.", column, recno, segno)
@@ -709,9 +722,9 @@ do not count, and a string longer than the string length of the column is cut. W
 any case.
 
 Use the call for an entry that is not written yet, and [`ekucec`](@ref) to replace an
-entry. As in CSPICE, the call does not check that: a second call replaces the entry
-without an error, where [`ekaced`](@ref) and [`ekacei`](@ref) throw for a scalar
-column.
+entry. A second call for one entry throws. CSPICE makes this check only for a scalar
+numeric column; for the other columns it writes the entry again and leaves the pages of
+the first one in use.
 
 Throws `SpiceError` with the kind:
 - `:dasnosuchhandle` or `:dasinvalidaccess` if the handle is closed or open for read;
@@ -721,7 +734,8 @@ Throws `SpiceError` with the kind:
 - `:indexoutofrange` if there is no row `recno`;
 - `:badattribute` if `isnull` is true and the column does not allow nulls;
 - `:invalidcount` if an array column gets no string, or not as many as its declared
-  entry size.
+  entry size;
+- `:nonemptyentry` if the entry is written already.
 
 See the example of [`ekopn`](@ref). See also [`ekaced`](@ref), [`ekacei`](@ref),
 [`ekrcec`](@ref).
@@ -741,8 +755,7 @@ TDB. A scalar column takes the first value (zero if `dvals` is empty); an array
 column takes all of them. The other arguments are those of [`ekacec`](@ref).
 
 Throws the errors of [`ekacec`](@ref), with `:wrongdatatype` for a column of another
-type, and `SpiceError(:nonemptyentry)` if the entry of a scalar column is written
-already.
+type.
 
 See also [`ekuced`](@ref), [`ekrced`](@ref).
 """
@@ -775,9 +788,9 @@ as `ekucec_c` of CSPICE.
 The new entry can have another size than the old one, and it can be null. The
 arguments are those of [`ekacec`](@ref).
 
-Throws the errors of [`ekacec`](@ref). The old entry is deleted before the new one is
-checked: after `:badattribute` or `:invalidcount` the old value is lost and the entry
-is as one that was never written.
+Throws the errors of [`ekacec`](@ref), without `:nonemptyentry`. A call that throws
+leaves the entry as it was. CSPICE deletes the old entry before it checks the new one,
+so that the old value is lost after `:badattribute` or `:invalidcount`.
 
 See also [`ekuced`](@ref), [`ekucei`](@ref).
 """
@@ -795,9 +808,8 @@ The arguments are those of [`ekaced`](@ref). An entry that was never written is
 written. In a scalar column, a value can be replaced by null also if the column does
 not allow nulls: that case has no check, as in CSPICE.
 
-Throws the errors of [`ekacec`](@ref), with `:wrongdatatype` for a column of another
-type. For an array column the old entry is deleted before the new one is checked, as
-for [`ekucec`](@ref).
+Throws the errors of [`ekucec`](@ref), with `:wrongdatatype` for a column of another
+type. A call that throws leaves the entry as it was.
 
 See also [`ekucei`](@ref), [`ekrced`](@ref).
 """
@@ -831,13 +843,14 @@ The state of one fast load: the second result of [`ekifld`](@ref), which
 A fast load writes a segment column by column, where [`ekappr`](@ref) and
 [`ekacec`](@ref) write it row by row. The value takes the place of the `rcptrs` array
 of CSPICE: pass it on unchanged. CSPICE can do one fast load at a time; here every
-load has its own state, so several can run at once.
+load has its own state, so several can run at once. Each column is stored once.
 """
 struct EKFastLoad <: AbstractVector{Int32}
     handle::DASHandle
     segno::Int
     ptrs::Vector{Int32}
     stack::Vector{Int32}
+    stored::Vector{Int32}                # ordinal positions of the columns stored so far
 end
 Base.size(r::EKFastLoad) = size(r.ptrs)
 Base.getindex(r::EKFastLoad, i::Int) = r.ptrs[i]
@@ -918,7 +931,7 @@ function ekifld(h::DASHandle, tabnam::AbstractString, nrows::Integer,
             offset += 2
         end
     end
-    return segno, EKFastLoad(h, Int(segno), ptrs, Int32[])
+    return segno, EKFastLoad(h, Int(segno), ptrs, Int32[], Int32[])
 end
 
 """
@@ -969,6 +982,20 @@ function _ekw_fast_counts(who::AbstractString, segdsc::Vector{Int32}, coldsc::Ve
     return nothing
 end
 
+"""
+    _ekw_fast_once(who, coldsc, column, rcptrs) -> Nothing
+
+Throws `SpiceError(:columnstoredtwice)` if the fast load `rcptrs` stored the column
+already. CSPICE has no such check: `zzekff01` then takes the record pointers of the
+column that was not stored from another column.
+"""
+function _ekw_fast_once(who::AbstractString, coldsc::Vector{Int32}, column::AbstractString,
+        rcptrs::EKFastLoad)
+    coldsc[_EK_ORDIDX] in rcptrs.stored && throw(SpiceError(:columnstoredtwice,
+        "$who: the column $column was stored already in this fast load"))
+    return nothing
+end
+
 @noinline _ekw_notsupported(coldsc, column) = throw(SpiceError(:notsupported, "Unsupported " *
     "column class code $(coldsc[_EK_CLSIDX]) found in descriptor for column $column."))
 
@@ -999,6 +1026,8 @@ Throws `SpiceError` with the kind:
   the column does not have character type;
 - `:invalidcount` if `cvals`, `entszs` or `nlflgs` do not hold all rows (CSPICE
   cannot make this check);
+- `:columnstoredtwice` if this fast load stored the column already (CSPICE has no
+  check and writes a segment that cannot be read);
 - `:invalidsize` if a fixed-count column has a string length outside 1 to 1014.
 
 See also [`ekacld`](@ref), [`ekacli`](@ref), [`ekffld`](@ref).
@@ -1009,6 +1038,7 @@ function ekaclc(h::DASHandle, segno::Integer, column::AbstractString, cvals::Abs
     class = coldsc[_EK_CLSIDX]
     (class == 3 || class == 6 || class == 9) || _ekw_notsupported(coldsc, column)
     _ekw_fast_counts("ekaclc", segdsc, coldsc, length(cvals), entszs, nlflgs)
+    _ekw_fast_once("ekaclc", coldsc, column, rcptrs)
     vals = _ekw_cvals(cvals)
     flags = _ekw_flags(nlflgs)
     if class == 3
@@ -1018,6 +1048,7 @@ function ekaclc(h::DASHandle, segno::Integer, column::AbstractString, cvals::Abs
     else
         _ekw_ac09(h, segdsc, coldsc, vals, flags)
     end
+    push!(rcptrs.stored, coldsc[_EK_ORDIDX])
     return nothing
 end
 
@@ -1030,6 +1061,7 @@ function _ekw_fast_n(h::DASHandle, who::AbstractString, ::Type{T}, types::Tuple,
            class == 7 || class == 8 ? 3 : 0
     kind == 0 && _ekw_notsupported(coldsc, column)
     _ekw_fast_counts(who, segdsc, coldsc, length(nvals), entszs, nlflgs)
+    _ekw_fast_once(who, coldsc, column, rcptrs)
     vals = _ekw_nvals(T, nvals)
     flags = _ekw_flags(nlflgs)
     if kind == 1
@@ -1039,6 +1071,7 @@ function _ekw_fast_n(h::DASHandle, who::AbstractString, ::Type{T}, types::Tuple,
     else
         _ekw_ac78(h, segdsc, coldsc, vals, flags)
     end
+    push!(rcptrs.stored, coldsc[_EK_ORDIDX])
     return nothing
 end
 
@@ -1141,8 +1174,6 @@ Throws `SpiceError(:dasnosuchhandle)` or `SpiceError(:dasinvalidaccess)` if the
 handle is closed or open for read, `SpiceError(:invalidindex)` if there is no segment
 `segno`, `SpiceError(:wrongsegment)` if `rcptrs` is not the result of the `ekifld`
 call for this segment, and `SpiceError(:invalidaddress)` if a column was not stored.
-A column that was stored twice is not always detected. A segment with fixed-count
-columns has no check of its columns.
 
 See the example of [`ekifld`](@ref).
 """
@@ -1156,7 +1187,11 @@ function ekffld(h::DASHandle, segno::Integer, rcptrs::EKFastLoad)
         "file is $(rcptrs.handle.path)."))
     if stype == 1
         _ekw_ff01(h, segno, rcptrs)
-    elseif stype != 2
+    elseif stype == 2
+        ncols = Int(segdsc[_EK_NCIDX])
+        length(rcptrs.stored) == ncols || throw(SpiceError(:invalidaddress,
+            "ekffld: $(length(rcptrs.stored)) of the $ncols columns of segment $segno were stored"))
+    else
         _ekw_bug("Segment type $stype is not currently supported.")
     end
     return nothing

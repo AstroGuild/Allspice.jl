@@ -439,6 +439,22 @@ segment (`:invalidindex`) and a null entry is given only to a column that allows
     return colidx
 end
 
+"""
+    _ekw_empty_check(h, segdsc, colidx, ptrloc) -> Nothing
+
+Throws `SpiceError(:nonemptyentry)` unless the entry whose data pointer is at `ptrloc`
+was never written. `zzekad01` and `zzekad02` make this check; `zzekad03` to `zzekad06`
+do not, and a second write then leaves the pages of the first entry linked and puts the
+record into the index of the column twice.
+"""
+@inline function _ekw_empty_check(h::DASHandle, segdsc::Vector{Int32}, colidx::Int, ptrloc::Int)
+    datptr = Int(h.ints[ptrloc])
+    (datptr == _EK_UNINIT || datptr == _EK_NOBACK) || throw(SpiceError(:nonemptyentry,
+        "Column having index $colidx in segment $(segdsc[_EK_SNOIDX]) has non-empty " *
+        "element in the record."))
+    return nothing
+end
+
 "The count checks of `zzekad04`, `zzekad05` and `zzekad06` (`:invalidcount`)."
 @inline function _ekw_count_checks(segdsc::Vector{Int32}, coldsc::Vector{Int32}, nvals::Int)
     nvals < 1 && throw(SpiceError(:invalidcount, "COLIDX = $(coldsc[_EK_ORDIDX]);  segment " *
@@ -483,10 +499,8 @@ function _ekw_ad12(h::DASHandle, segdsc::Vector{Int32}, coldsc::Vector{Int32}, r
     ints = h.ints
     colidx = _ekw_entry_checks(segdsc, coldsc, isnull)
     ptrloc = recptr + _EK_DPTBAS + colidx
+    _ekw_empty_check(h, segdsc, colidx, ptrloc)
     datptr = Int(ints[ptrloc])
-    (datptr == _EK_UNINIT || datptr == _EK_NOBACK) || throw(SpiceError(:nonemptyentry,
-        "Column having index $colidx in segment $(segdsc[_EK_SNOIDX]) has non-empty " *
-        "element in the record."))
     if isnull
         ints[ptrloc] = _EK_NULL
     else
@@ -520,8 +534,8 @@ Add the string `cval` (or null) of a scalar character column (class 3) to the re
 without trailing blanks (at least one; at most the string length of the column); the
 string starts on the last character data page if that has room for the count and one
 character, and continues on new pages. The index compares the whole of `cval`, as in
-CSPICE, also if the column stores less of it. Preconditions: as `_ekw_ad12`, but
-CSPICE does not check that the entry is empty.
+CSPICE, also if the column stores less of it. Preconditions: as `_ekw_ad12`; CSPICE
+does not check that the entry is empty (see `_ekw_empty_check`).
 """
 function _ekw_ad03(h::DASHandle, segdsc::Vector{Int32}, coldsc::Vector{Int32}, recptr::Int,
         cval::Vector{UInt8}, isnull::Bool)
@@ -530,6 +544,7 @@ function _ekw_ad03(h::DASHandle, segdsc::Vector{Int32}, coldsc::Vector{Int32}, r
     lnb = max(1, length(cval))
     strlen = coldsc[_EK_LENIDX] != -1 ? min(Int(coldsc[_EK_LENIDX]), lnb) : lnb
     ptrloc = recptr + _EK_DPTBAS + colidx
+    _ekw_empty_check(h, segdsc, colidx, ptrloc)
     if isnull
         ints[ptrloc] = _EK_NULL
     else
@@ -587,7 +602,7 @@ count and then the elements; the entry starts on the last data page of its type 
 that has two free words, and continues on new pages that the forward pointers link.
 Preconditions: valid column position (`:invalidindex`), null allowed
 (`:badattribute`), `length(vals) >= 1` and equal to a fixed entry size
-(`:invalidcount`).
+(`:invalidcount`), entry not written yet (`:nonemptyentry`).
 """
 function _ekw_ad45(h::DASHandle, segdsc::Vector{Int32}, coldsc::Vector{Int32}, recptr::Int,
         vals::AbstractVector{<:Real}, isnull::Bool)
@@ -596,6 +611,7 @@ function _ekw_ad45(h::DASHandle, segdsc::Vector{Int32}, coldsc::Vector{Int32}, r
     nvals = length(vals)
     _ekw_count_checks(segdsc, coldsc, nvals)
     ptrloc = recptr + _EK_DPTBAS + colidx
+    _ekw_empty_check(h, segdsc, colidx, ptrloc)
     if isnull
         h.ints[ptrloc] = _EK_NULL
     else
@@ -664,6 +680,7 @@ function _ekw_ad06(h::DASHandle, segdsc::Vector{Int32}, coldsc::Vector{Int32}, r
     nvals = length(cvals)
     _ekw_count_checks(segdsc, coldsc, nvals)
     ptrloc = recptr + _EK_DPTBAS + colidx
+    _ekw_empty_check(h, segdsc, colidx, ptrloc)
     if isnull
         h.ints[ptrloc] = _EK_NULL
     else

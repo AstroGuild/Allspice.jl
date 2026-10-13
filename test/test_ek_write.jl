@@ -984,10 +984,31 @@ group("EK write: input checks give the errors of CSPICE") do
         expect=:invalidcount)
     same("wrong entry size (strings)", :ekacec, 1, 13, "CA", ["a", "b", "c"], false;
         expect=:invalidcount)
+    # (fault fixed: an update that throws deleted the old entry first, as CSPICE does;
+    # the entry is now as it was. A valid update then brings the two files together
+    # again: CSPICE has deleted the old entry already, Allspice deletes it now.)
+    old_ia = Allspice.ekrcei(hn, 1, 2, "IA")
+    old_c = Allspice.ekrcec(hn, 1, 3, "C")
+    old_ca = Allspice.ekrcec(hn, 1, 3, "CA")
     same("wrong entry size in update", :ekucei, 1, 2, "IA", [1, 2, 3, 4], false;
         expect=:invalidcount)
     same("update to null without nulls", :ekucec, 1, 3, "C", [" "], true;
         expect=:badattribute)
+    same("wrong entry size in update (strings)", :ekucec, 1, 3, "CA", ["a"], false;
+        expect=:invalidcount)
+    @test Allspice.ekrcei(hn, 1, 2, "IA") == old_ia
+    @test Allspice.ekrcec(hn, 1, 3, "C") == old_c
+    @test Allspice.ekrcec(hn, 1, 3, "CA") == old_ca
+    both((w, h) -> w.ekucei(h, 1, 2, "IA", [4, 5, 6], false))
+    both((w, h) -> w.ekucec(h, 1, 3, "C", ["new"], false))
+    both((w, h) -> w.ekucec(h, 1, 3, "CA", ["p", "q"], false))
+    # (fault fixed: a second `ekacec`, or a second `ekacei`/`ekaced` of an array column,
+    # wrote the entry again and left the pages of the first one in use, as CSPICE does;
+    # the three calls now throw for every column class. Allspice only: CSPICE has no check.)
+    for (fname, col, vals) in ((:ekacec, "C", ["x"]), (:ekacec, "CA", ["x", "y"]),
+        (:ekacei, "IA", [1, 2, 3]), (:ekaced, "DA", [1.0]))
+        @test neo_kind(EKWCall(EKW_N[fname], (hn, 1, 1, col, vals, false))) === :nonemptyentry
+    end
     # Fast writers.
     same("ekifld without rows", :ekifld, "T", 0, ["A"], one; expect=:invalidcount)
     same("ekifld with bad name", :ekifld, "T T", 3, ["A"], one; expect=:invalidname)
@@ -1033,12 +1054,17 @@ group("EK write: input checks give the errors of CSPICE") do
     @test neo_kind(() -> Allspice.ekacli(h, s1 + 1, "K", [1, 2, 3], [1, 1, 1], falses(3), r1)) === :invalidindex
     Allspice.ekacli(h, s1, "K", [1, 2, 3], [1, 1, 1], falses(3), r1)
     @test neo_kind(() -> Allspice.ekffld(h, s1, r1)) === :invalidaddress     # a column is missing
+    # (fault fixed: a column stored twice was not detected when every column was stored
+    # before; `ekffld` of CSPICE then reads the pointers of one column for another)
+    @test neo_kind(() -> Allspice.ekacli(h, s1, "K", [1, 2, 3], [1, 1, 1], falses(3), r1)) === :columnstoredtwice
     Allspice.ekacld(h, s1, "D", [1.0, 2.0, 3.0], [1, 1, 1], falses(3), r1)
     Allspice.ekffld(h, s1, r1)
     s2, r2 = Allspice.ekifld(h, "B", 2, ["K"], ["DATATYPE = INTEGER, FIXED_COUNT = TRUE"])
     @test neo_kind(() -> Allspice.ekacli(h, s2, "K", [1, 2], [1, 1], falses(2), r1)) === :wrongsegment
     @test neo_kind(() -> Allspice.ekffld(h, s2, r1)) === :wrongsegment
+    @test neo_kind(() -> Allspice.ekffld(h, s2, r2)) === :invalidaddress     # fixed count: a column is missing
     Allspice.ekacli(h, s2, "K", [7, 8], Int[], Bool[], r2)
+    @test neo_kind(() -> Allspice.ekacli(h, s2, "K", [7, 8], Int[], Bool[], r2)) === :columnstoredtwice
     Allspice.ekffld(h, s2, r2)
     # Records of a segment with fixed-count columns cannot be changed (CSPICE damages the file).
     @test neo_kind(() -> Allspice.ekappr(h, s2)) === :invalidtype
