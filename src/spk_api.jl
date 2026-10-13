@@ -8,6 +8,21 @@ const CLIGHT = 299792.458
 const MAXCHAIN = 10
 
 """
+    _mxv(m, v) -> SVector{3}
+
+Contract: the product of the 3 by 3 matrix `m` and the vector `v`, each component the
+sum of its three products from left to right, as `mxv_c`. The product `m * v` of
+StaticArrays lets the compiler join a multiplication and an addition into one fused
+operation, and compilers differ in where they do so; the result of this function does
+not depend on the compiler, which matters where a component is a small difference of
+large products.
+"""
+@inline _mxv(m::SMatrix{3,3}, v::SVector{3}) = SVector(
+    m[1, 1] * v[1] + m[1, 2] * v[2] + m[1, 3] * v[3],
+    m[2, 1] * v[1] + m[2, 2] * v[2] + m[2, 3] * v[3],
+    m[3, 1] * v[1] + m[3, 2] * v[2] + m[3, 3] * v[3])
+
+"""
     rotate_jet(Rjet::NTuple{M}, rjet::NTuple{M}) -> NTuple{M}
 
 Return the jet of the product `R(t) * r(t)` from the jets of `R` and `r` (ordinary
@@ -16,9 +31,9 @@ derivatives, orders 0 to M-1), by the Leibniz rule.
 @inline function rotate_jet(Rjet::NTuple{M,Any}, rjet::NTuple{M,Any}) where {M}
     return ntuple(Val(M)) do i
         k = i - 1
-        acc = Rjet[1] * rjet[i]
+        acc = _mxv(Rjet[1], rjet[i])
         for j in 1:k
-            acc += binomial(k, j) * (Rjet[j+1] * rjet[i-j])
+            acc += binomial(k, j) * _mxv(Rjet[j+1], rjet[i-j])
         end
         acc
     end

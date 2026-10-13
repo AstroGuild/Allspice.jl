@@ -394,7 +394,7 @@ into memory; all changes are on disk when `dascls` returns. Contract and errors 
 """
 function dasopw(path::AbstractString)
     h = _das_load(path, "dasopw", true)
-    iswritable(path) || throw(SpiceError(:fileopenfailed,
+    (uperm(path) & 0x02) != 0 || throw(SpiceError(:fileopenfailed,
         "dasopw: the file $path cannot be opened for write"))
     return h
 end
