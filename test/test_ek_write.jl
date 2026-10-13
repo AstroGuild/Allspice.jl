@@ -888,8 +888,15 @@ group("EK write: input checks give the errors of CSPICE") do
     # Both engines must fail with the same kind. The call is `w.fname(h, args...)`, or
     # `w.fname(args...)` with `handle=false`. It is given as data and not as a closure:
     # the 100 closures of the checks took 2.3 s to compile.
-    function same(name, fname::Symbol, @nospecialize(args...); expect=nothing, handle::Bool=true)
-        kc = c_kind(EKWCall(EKW_C[fname], handle ? (hc, args...) : args))
+    # `oracle=false` omits the call of CSPICE and takes `expect` as its answer: `ekacei_`
+    # and `ekucei_` read the column descriptor through a segment descriptor that
+    # `zzeksdsc_` did not set when the segment number is bad, and only then look at the
+    # error state. The read uses the garbage of the stack as a DAS address, and its
+    # search took 525 s in one run on Julia 1.10.
+    function same(name, fname::Symbol, @nospecialize(args...); expect=nothing, handle::Bool=true,
+            oracle::Bool=true)
+        @assert oracle || expect !== nothing "a check without CSPICE needs the expected kind"
+        kc = oracle ? c_kind(EKWCall(EKW_C[fname], handle ? (hc, args...) : args)) : expect
         kn = neo_kind(EKWCall(EKW_N[fname], handle ? (hn, args...) : args))
         (kc == kn && kc !== nothing) || push!(mismatch, "$name: CSPICE $kc, Allspice $kn")
         @test kc == kn
@@ -943,8 +950,8 @@ group("EK write: input checks give the errors of CSPICE") do
         same("ekappr segment $segno", :ekappr, segno; expect=:invalidindex)
         same("ekinsr segment $segno", :ekinsr, segno, 1; expect=:invalidindex)
         same("ekdelr segment $segno", :ekdelr, segno, 1; expect=:invalidindex)
-        same("ekacei segment $segno", :ekacei, segno, 1, "I", [1], false; expect=:invalidindex)
-        same("ekucei segment $segno", :ekucei, segno, 1, "I", [1], false; expect=:invalidindex)
+        same("ekacei segment $segno", :ekacei, segno, 1, "I", [1], false; expect=:invalidindex, oracle=false)
+        same("ekucei segment $segno", :ekucei, segno, 1, "I", [1], false; expect=:invalidindex, oracle=false)
     end
     for recno in (0, 14, -1)
         same("ekinsr row $recno", :ekinsr, 1, recno; expect=:invalidindex)
