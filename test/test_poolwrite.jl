@@ -486,6 +486,9 @@ group("18. kernel-pool edits and watchers against CSPICE", Kernels.LSK, Kernels.
                         v >= last || Threads.atomic_add!(wrong, 1)
                         last = v
                         Threads.atomic_add!(reads, 1)
+                        # The root task stays on thread 1: a reader that never yields there
+                        # keeps it from setting `stop` (seen on Julia 1.10).
+                        yield()
                     end
                 end
             end

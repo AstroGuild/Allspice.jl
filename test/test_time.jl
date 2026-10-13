@@ -861,6 +861,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
                     p = timout(c2, 0.0, "HR:MN:SC")
                     (v == a || v == b) && (p == pa || p == pb) || Threads.atomic_add!(wrong, 1)
                     Threads.atomic_add!(count, 1)
+                    yield()    # the root task stays on thread 1 and must get it back
                 end
             end for _ in 1:max(2, Threads.nthreads() - 1)]
             changes = 0
