@@ -21,6 +21,7 @@ export dafbfs, dafbbs, daffna, daffpa, dafgs, dafgn, dafps, dafus, dafgda, dafgs
 export dafbna, dafada, dafena, dafws, dafrs, dafrn, dafac, dafec, dafdc
 export spkopn, spkopa, spkcls, spkpds, spkw01, spkw02, spkw03, spkw05, spkw08, spkw09
 export spkw12, spkw13, spkw15, spkw17, spkw18, spkw19, spkw20, spkw21
+export spk14b, spk14a, spk14e, SPK14Writer
 export getelm, evsgp4, spkw10
 export ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
 export spkobj, spkobj!, spkcov, spkcov!, kinfo, kdata, tkvrsn

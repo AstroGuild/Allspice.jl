@@ -60,6 +60,34 @@ function c_spkw01(h, a)
     SPICE.handleerror()
 end
 
+"Type 14 through the three calls of CSPICE; the records go in two additions when `a.cut > 0`."
+function c_spk14(h, a)
+    ccall((:spk14b_c, LIBCSPICE), Cvoid, (Cint, Cstring, Cint, Cint, Cstring, Cdouble, Cdouble,
+        Cint), h, a.segid, a.body, a.center, a.frame, a.first, a.last, a.degree)
+    SPICE.handleerror()
+    n = length(a.epochs)
+    for r in (a.cut > 0 ? (1:a.cut, a.cut+1:n) : (1:n,))
+        ccall((:spk14a_c, LIBCSPICE), Cvoid, (Cint, Cint, Ptr{Cdouble}, Ptr{Cdouble}), h,
+            length(r), a.coeffs[:, r], a.epochs[r])
+        SPICE.handleerror()
+    end
+    ccall((:spk14e_c, LIBCSPICE), Cvoid, (Cint,), h)
+    SPICE.handleerror()
+end
+
+"The same segment with the writer object of the package."
+function n_spk14(h, a)
+    w = spk14b(h, a.segid, a.body, a.center, a.frame, a.first, a.last, a.degree)
+    n = length(a.epochs)
+    if a.cut > 0
+        spk14a(w, a.cut, a.coeffs[:, 1:a.cut], a.epochs[1:a.cut])
+        spk14a(w, vec(a.coeffs[:, a.cut+1:n]), a.epochs[a.cut+1:n])
+    else
+        spk14a(w, n, a.coeffs, a.epochs)
+    end
+    spk14e(w)
+end
+
 function c_spkw21(h, a)
     ccall((:spkw21_, LIBCSPICE), Cint, (Ref{Cint}, Ref{Cint}, Ref{Cint}, Ptr{UInt8},
         Ref{Cdouble}, Ref{Cdouble}, Ptr{UInt8}, Ref{Cint}, Ref{Cint}, Ptr{Cdouble},
@@ -329,6 +357,32 @@ function gen_w13(rng, k)
     epochs = inc_epochs(rng, n)
     first, last = rand_bounds(rng, epochs)
     return (; spk_ids(k)..., first, last, segid=rand_segid(rng, "T13"), degree, states=rand_states(rng, n), epochs)
+end
+function gen_w14(rng, k)
+    n = rand_n(rng, 1)
+    degree = rand(rng, 0:12)
+    bounds = inc_epochs(rng, n + 1)
+    coeffs = randn(rng, 2 + 6 * (degree + 1), n)
+    for i in 1:n
+        coeffs[1, i] = (bounds[i] + bounds[i+1]) / 2
+        coeffs[2, i] = (bounds[i+1] - bounds[i]) / 2
+    end
+    return (; spk_ids(k)..., first=bounds[1], last=bounds[end], segid=rand_segid(rng, "T14"), degree,
+        coeffs, epochs=bounds[1:n], cut=n > 1 ? rand(rng, 0:n-1) : 0)
+end
+function bad_w14(a)
+    out = Any[bad_ids(a)..., bad_pds(a)...,
+        ("negative degree", merge(a, (degree=-1,)), :invalidargument, true)]
+    if length(a.epochs) >= 3
+        dup = copy(a.epochs)
+        dup[3] = dup[2]
+        # Not sent to CSPICE (SPICE(UNORDEREDREFS) in `sgwfpk_`): a rejected `spk14a_c`
+        # leaves the segment that `spk14b_c` began in the file, and it cannot be removed.
+        push!(out, ("repeated epoch", merge(a, (epochs=dup, cut=0)), :unorderedrefs, false))
+        push!(out, ("second addition not after the first", merge(a, (epochs=dup, cut=2)), :unorderedrefs, false))
+        push!(out, ("epochs shorter than records", merge(a, (epochs=a.epochs[1:end-1], cut=0)), :badarg, false))
+    end
+    return out
 end
 function bad_w13(a)
     dup = copy(a.epochs)
@@ -877,6 +931,7 @@ const WRITER_CASES = WriterCase[
     WriterCase("spkw21", :spk, (rng, k) -> gen_w0121(rng, k, true),
         (h, a) -> spkw21(h, a.body, a.center, a.frame, a.first, a.last, a.segid, a.dlines, a.epochs),
         c_spkw21, a -> bad_w0121(a, true)),
+    WriterCase("spk14", :spk, gen_w14, n_spk14, c_spk14, bad_w14),
     WriterCase("spkw19", :spk, gen_w19,
         (h, a) -> spkw19(h, a.body, a.center, a.frame, a.first, a.last, a.segid, a.npkts, a.subtps, a.degres, a.packts, a.epochs, a.ivlbds, a.sellst),
         c_spkw19, bad_w19),
@@ -1201,6 +1256,31 @@ group("9. DAF access, SPK and CK writers") do
                 @test read(pn) == read(pref)
             end
         end
+    end
+
+    @apart @testset "spk14: the writer object" begin
+        a = writer_case("spk14").gen(rng, 3)
+        p = joinpath(dir, "w14_object.bsp")
+        h = neo_open(:spk, p, "W14")
+        w = spk14b(h, a.segid, a.body, a.center, a.frame, a.first, a.last, a.degree)
+        @test throws_kind(() -> spk14a(w, 0, Float64[], Float64[]), :invalidargument)
+        @test occursin("0 records", sprint(show, w))
+        spk14a(w, a.coeffs, a.epochs)
+        spk14e(w)
+        @test occursin("ended", sprint(show, w))
+        @test throws_kind(() -> spk14e(w), :segmentnotopen)
+        @test throws_kind(() -> spk14a(w, a.coeffs, a.epochs), :segmentnotopen)
+        neo_close(:spk, h)
+        # The segment that was written gives the series of its records.
+        ctx = neo_context([p])
+        i = length(a.epochs)
+        mid, rad = a.coeffs[1, i], a.coeffs[2, i]
+        st = spkgeo(ctx, a.body, mid, a.frame, a.center)[1]
+        nc = a.degree + 1
+        # At the midpoint the series is the sum of its even coefficients with changing sign.
+        expect(k) = sum(a.coeffs[2+(k-1)*nc+j+1, i] * (iseven(j ÷ 2) ? 1.0 : -1.0) for j in 0:2:a.degree)
+        @test all(isapprox(st[k], expect(k); rtol=1e-12, atol=1e-12) for k in 1:6)
+        @test rad > 0
     end
 
     @apart @testset "many segments in one file: past one summary record, and appending" begin

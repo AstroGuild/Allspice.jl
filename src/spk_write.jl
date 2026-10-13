@@ -963,3 +963,128 @@ function spkw19(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
     _spk_add!(h, body, center, refcod, 19, first, last, segid, data)
     return nothing
 end
+
+"""
+    SPK14Writer
+
+A type 14 segment that is open for the addition of records: the result of
+[`spk14b`](@ref), the first argument of [`spk14a`](@ref) and [`spk14e`](@ref). CSPICE
+keeps this state in a table of the files that have a generic segment in work; here the
+caller owns it. The file gets the segment when `spk14e` runs, so a segment that is
+never ended leaves the file unchanged.
+"""
+mutable struct SPK14Writer
+    const handle::DAFHandle
+    const descr::Vector{Float64}
+    const segid::String
+    const ncoef::Int
+    const packets::Vector{Float64}      # (reference, packet) pairs, as `sgwfpk` writes them
+    const refs::Vector{Float64}
+    open::Bool
+end
+
+Base.show(io::IO, w::SPK14Writer) = print(io, "SPK14Writer(\"", w.segid, "\", ",
+    length(w.refs), " records", w.open ? "" : ", ended", ")")
+
+"""
+    spk14b(handle, segid, body, center, frame, first, last, chbdeg; ctx=default_context()) -> SPK14Writer
+
+Begin an SPK segment of type 14 (Chebyshev series for position and velocity on
+intervals of unequal length), as `spk14b_c`. `chbdeg` is the degree of the series.
+
+Preconditions (each throws `SpiceError`): `chbdeg >= 0` (`:invalidargument`), the
+checks of [`spkpds`](@ref), a `segid` of at most 40 printable characters
+(`:segidtoolong`, `:nonprintablechars`), a file that is open for writing. An empty
+`frame` or `segid` throws `:emptystring`, as the C wrapper does.
+"""
+function spk14b(h::DAFHandle, segid::AbstractString, body::Integer, center::Integer,
+        frame::SegFrame, first::Real, last::Real, chbdeg::Integer;
+        ctx::SegContext=default_context())
+    who = "spk14b"
+    _daf_check_write(h, who)
+    frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
+    _seg_chkfstr(who, "segid", segid)
+    chbdeg < 0 && throw(SpiceError(:invalidargument, "$who: the degree of the " *
+        "Chebyshev polynomial was negative, $chbdeg; the degree must be greater than or equal to zero"))
+    descr = spkpds(body, center, frame, 14, first, last; ctx=ctx)
+    _seg_idlen(who, segid)
+    _seg_idchars(who, segid)
+    return SPK14Writer(h, descr, String(segid), Int(chbdeg) + 1, Float64[], Float64[], true)
+end
+
+"""
+    spk14a(writer, ncsets, coeffs, epochs) -> Nothing
+    spk14a(writer, coeffs, epochs)
+
+Add `ncsets` records to the type 14 segment `writer`, as `spk14a_c`. A record has
+`2 + 6 * (chbdeg + 1)` numbers: the midpoint and the radius of its interval (seconds),
+then the coefficients of x, y, z (km) and of dx, dy, dz (km/s); `coeffs` holds the
+records one after the other (a vector, or a matrix with one record in each column).
+`epochs[i]` is the start of the interval of record `i`.
+
+Preconditions (each throws `SpiceError`): a writer that `spk14e` did not end
+(`:segmentnotopen`), `ncsets > 0` (`:invalidargument`), strictly increasing `epochs`
+whose first value is after the last epoch of the call before (`:unorderedrefs`).
+"""
+function spk14a(w::SPK14Writer, ncsets::Integer, coeffs, epochs)
+    who = "spk14a"
+    w.open || throw(SpiceError(:segmentnotopen, "$who: the segment '$(w.segid)' was ended"))
+    _daf_check_write(w.handle, who)
+    ncsets <= 0 && throw(SpiceError(:invalidargument, "$who: the number of coefficient " *
+        "sets and epochs to be added to the SPK segment was not positive; its value was $ncsets"))
+    n = Int(ncsets)
+    pktsiz = 2 + 6 * w.ncoef
+    cf = _seg_vec(who, "coeffs", vec(collect(Float64, coeffs)), n * pktsiz)
+    ep = _seg_vec(who, "epochs", epochs, n)
+    if !isempty(w.refs) && w.refs[end] >= ep[1]
+        throw(SpiceError(:unorderedrefs, "$who: the epoch $(ep[1]) is not after the " *
+            "last epoch $(w.refs[end]) of the addition of records before"))
+    end
+    for i in 2:n                    # invariant: ep[1:i-1] is strictly increasing
+        ep[i-1] >= ep[i] && throw(SpiceError(:unorderedrefs,
+            "$who: the epoch $(ep[i]) having index $i is not after its predecessor $(ep[i-1])"))
+    end
+    for i in 1:n                    # invariant: records 1:i-1 are in `w.packets`, each after its epoch
+        push!(w.packets, ep[i])
+        append!(w.packets, @view cf[(i-1)*pktsiz+1:i*pktsiz])
+    end
+    append!(w.refs, ep)
+    @assert length(w.packets) == length(w.refs) * (pktsiz + 1)
+    return nothing
+end
+spk14a(w::SPK14Writer, coeffs, epochs) = spk14a(w, length(epochs), coeffs, epochs)
+
+"""
+    spk14e(writer) -> Nothing
+
+End the type 14 segment `writer` and add it to its file, as `spk14e_c`.
+
+Postcondition: the file has one more segment with the data area of the generic segment
+writer of CSPICE: the number of coefficients of a series; each record after its epoch;
+the epochs; every 100th epoch for the first `(n-1) ÷ 100` hundreds; the 17 meta data
+items. Throws `SpiceError(:segmentnotopen)` for a writer that was ended before.
+"""
+function spk14e(w::SPK14Writer)
+    who = "spk14e"
+    w.open || throw(SpiceError(:segmentnotopen, "$who: the segment '$(w.segid)' was ended"))
+    _daf_check_write(w.handle, who)
+    n = length(w.refs)
+    pktsiz = 2 + 6 * w.ncoef
+    data = Float64[w.ncoef]
+    append!(data, w.packets)
+    append!(data, w.refs)
+    ndir = n > 100 ? (n - 1) ÷ 100 : 0
+    _seg_directory!(data, w.refs, ndir)
+    pktbas = 1
+    refbas = pktbas + n * (pktsiz + 1)
+    # Meta data of `sgwes` for packets of fixed size with explicit reference values:
+    # CONBAS, NCON, RDRBAS, NRDR, RDRTYP, REFBAS, NREF, PDRBAS, NPDR, PDRTYP, PKTBAS,
+    # NPKT, RSVBAS, NRSV, PKTSZ, PKTOFF, NMETA.
+    append!(data, Float64[0, 1, refbas + n, ndir, 3, refbas, n, 0, 0, 0, pktbas, n, 0, 0,
+        pktsiz, 1, 17])
+    dafbna(w.handle, w.descr, w.segid)
+    dafada(w.handle, data)
+    dafena(w.handle)
+    w.open = false
+    return nothing
+end
