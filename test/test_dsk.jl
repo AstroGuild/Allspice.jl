@@ -803,11 +803,11 @@ function dsk_part_11(env)
         @test (item, start, neo_kind(() -> dski02(h, d, item, start, room))) == (item, start, c_i02_kind(item, start, room))
     end
     # Item 1 (the number of vertices) has one element. For a start index above 1 the
-    # answer of CSPICE is not stable: the same call gives SPICE(INDEXOUTOFRANGE) or
-    # SPICE(DASNOSUCHADDRESS), and which one depends on the calls before it (three equal
-    # calls in a row gave both). Allspice always gives the first one.
+    # answer of CSPICE is not stable: the same call gives SPICE(INDEXOUTOFRANGE),
+    # SPICE(DASNOSUCHADDRESS) or no error, and which one depends on the calls before it
+    # (three equal calls in a row gave two of them). Allspice always gives the first one,
+    # and CSPICE is not asked: it is no oracle here.
     @test neo_kind(() -> dski02(h, d, 1, 2, 1)) === :indexoutofrange
-    @test c_i02_kind(1, 2, 1) in (:indexoutofrange, :dasnosuchaddress)
     for (item, start, room) in ((19, 1, 0), (14, 1, 1), (20, 1, 1), (19, 0, 1), (19, 3 * nv + 1, 1),
             (15, 25, 1), (16, 7, 1), (17, 4, 1), (18, 2, 1))
         @test (item, start, neo_kind(() -> dskd02(h, d, item, start, room))) == (item, start, c_d02_kind(item, start, room))
