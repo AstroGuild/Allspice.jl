@@ -187,7 +187,7 @@ position at first order (the observer moves with the point).
         corr::Aberration, f::_GeoFixed, point::SVector{3})
     st, lt = _geo_cvo(ks, targ, et, fixfid, _GEO_AT_OBSERVER, corr, f)
     d = point - f.pos
-    return vcat(SVector(st[1], st[2], st[3]) - d, SVector(st[4], st[5], st[6]) + zero(d)), lt
+    return vcat(SVector(st[1], st[2], st[3]) - d, SVector(st[4], st[5], st[6]) - zero(d)), lt
 end
 
 "`spkcpt` for the target at the surface point `point` of the body `f.ctr`, with the locus `TARGET`; see `_geo_cvo_point`."
@@ -197,7 +197,7 @@ end
         corr::Aberration, obs::Int32, point::SVector{3})
     st, lt = _geo_cvt(ks, f, et, fixfid, _GEO_AT_TARGET, corr, obs)
     d = point - f.pos
-    return vcat(SVector(st[1], st[2], st[3]) + d, SVector(st[4], st[5], st[6]) + zero(d)), lt
+    return vcat(SVector(st[1], st[2], st[3]) + d, SVector(st[4], st[5], st[6]) - zero(d)), lt
 end
 
 # --- public interface -------------------------------------------------------------------

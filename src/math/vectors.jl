@@ -101,7 +101,7 @@ the largest component (`vproj_c`); without it the scaling is a division (`vproj_
 @inline function _m_proj(a::SVector{3}, b::SVector{3}, recip::Bool)
     biga = _m_maxabs(a)
     bigb = _m_maxabs(b)
-    (biga == 0.0 || bigb == 0.0) && return zero(a) + zero(b)
+    (biga == 0.0 || bigb == 0.0) && return zero(a) - zero(b)
     t = recip ? (1.0 / biga) * a : a / biga
     r = recip ? (1.0 / bigb) * b : b / bigb
     scale = _m_dot(t, r) * biga / _m_dot(r, r)
@@ -115,8 +115,8 @@ gives `a`, as `vperp_` of SPICELIB and the text of `vperp_c` say.
 @inline function _m_perp(a::SVector{3}, b::SVector{3}, recip::Bool)
     biga = _m_maxabs(a)
     bigb = _m_maxabs(b)
-    biga == 0.0 && return zero(a) + zero(b)
-    bigb == 0.0 && return a + zero(b)
+    biga == 0.0 && return zero(a) - zero(b)
+    bigb == 0.0 && return a - zero(b)
     t = recip ? (1.0 / biga) * a : a / biga
     r = recip ? (1.0 / bigb) * b : b / bigb
     # `vproj_c` and `vproj_` scale their arguments again; t and r have largest
@@ -136,7 +136,7 @@ end
 
 "Rotation of `v` about `axis` by `theta`, as `vrotv_`."
 @inline function _m_vrotv(v::SVector{3}, axis::SVector{3}, theta)
-    primal(_m_norm(axis)) == 0.0 && return v + zero(axis) * zero(theta)
+    primal(_m_norm(axis)) == 0.0 && return v - zero(axis) * zero(theta)
     x = _m_hat(axis)
     p = _m_proj(v, x, false)
     v1 = v - p
@@ -215,7 +215,7 @@ end
     i1, i2, i3 = _m_axes(iaxis)
     return SMatrix{3,3}(ntuple(Val(9)) do k
         i, j = _m_rowcol(k)
-        i == i1 ? m[i1, j] + zero(c) :
+        i == i1 ? m[i1, j] - zero(c) :
         i == i2 ? c * m[i2, j] + s * m[i3, j] : -s * m[i2, j] + c * m[i3, j]
     end)
 end
@@ -244,7 +244,7 @@ velocity as it is.
 @inline function _m_dvhat(s::SVector{6}, recip::Bool=true)
     p, v = _m_pv(s)
     u, len = _m_unorm(p)
-    primal(len) == 0.0 && return _m_state(u, v + zero(u))
+    primal(len) == 0.0 && return _m_state(u, v - zero(u))
     return _m_state(u, (1.0 / len) * _m_perp(v, u, recip))
 end
 
@@ -370,7 +370,7 @@ vdist(v1::AbstractVector, v2::AbstractVector) = _m_norm(_m_v3(v1) - _m_v3(v2))
     elseif d < 0.0
         return Float64(pi) - 2.0 * asin(0.5 * _m_norm(u1 + u2))
     end
-    return Float64(pi) / 2 + zero(_m_dot(u1, u2))
+    return Float64(pi) / 2 - zero(_m_dot(u1, u2))
 end
 
 """
@@ -668,7 +668,7 @@ function rotvec(v1::AbstractVector, angle::Real, iaxis::Integer)
     v = _m_v3(v1)
     s, c = sincos(_m_f(angle))
     i1, i2, i3 = _m_axes(iaxis)
-    a = v[i1] + zero(c)
+    a = v[i1] - zero(c)
     b = c * v[i2] + s * v[i3]
     d = -s * v[i2] + c * v[i3]
     return i1 == 1 ? SVector(a, b, d) : i1 == 2 ? SVector(d, a, b) : SVector(b, d, a)
@@ -697,7 +697,7 @@ function twovec(axdef::AbstractVector, indexa::Integer, plndef::AbstractVector, 
     p = _m_v3(plndef)
     i1 = Int(indexa)
     i2 = i1 % 3 + 1
-    r1 = _m_hat(a) + zero(p)
+    r1 = _m_hat(a) - zero(p)
     if indexp == i2
         r3 = _m_ucrss(a, p)
         r2 = _m_ucrss(r3, a)
@@ -724,7 +724,7 @@ function twovxf(axdef::AbstractVector, indexa::Integer, plndef::AbstractVector, 
     p = _m_v6(plndef)
     i1 = Int(indexa)
     i2 = i1 % 3 + 1
-    s1 = _m_dvhat(a, false) + zero(p)
+    s1 = _m_dvhat(a, false) - zero(p)
     if indexp == i2
         s3 = _m_ducrss(a, p)
         s2 = _m_ducrss(s3, a)
@@ -971,7 +971,7 @@ function vsepg(v1::AbstractVector, v2::AbstractVector)
     d = primal(vdotg(v1, v2))
     r1 = 1.0 / mag1
     r2 = 1.0 / mag2
-    d == 0.0 && return Float64(pi) / 2 + zero(asin(zero(mag1 * mag2)))
+    d == 0.0 && return Float64(pi) / 2 - zero(asin(zero(mag1 * mag2)))
     sgn = d > 0.0 ? -1.0 : 1.0
     acc = zero(mag1 * mag2)
     @inbounds for i in eachindex(v1, v2)       # invariant: acc is the sum of squares seen

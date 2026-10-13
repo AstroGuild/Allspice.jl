@@ -133,14 +133,14 @@ end
         inc = zero(inc)
         n = SVector(one(z0), z0, z0)
     elseif abs(primal(inc) - Float64(pi)) < 1.0e-10
-        inc = Float64(pi) + zero(inc)
+        inc = Float64(pi) - zero(inc)
         n = SVector(one(z0), z0, z0)
     end
     lnode = atan(n[2], n[1])
     primal(lnode) < 0.0 && (lnode += _M_TWOPI)
     argp = zero(inc)
     if primal(ecc) != 0.0
-        argp = vsep(n, e) + zero(inc)
+        argp = vsep(n, e) - zero(inc)
         if primal(argp) != 0.0
             if primal(inc) == 0.0 || primal(inc) == Float64(pi)
                 primal(_m_dot(e, _m_ucrss(h, n))) < 0.0 && (argp = _M_TWOPI - argp)
@@ -216,7 +216,7 @@ function oscltx(state::AbstractVector, et::Real, mu::Real)
         xmat = _m_rows(_m_hat(eccvec), ax2, _m_ucrss(eccvec, ax2))
         rperi = _m_mxv(xmat, pos)
         _, lon, _ = _m_reclat(rperi, false)
-        nu = (primal(lon) < 0.0 ? lon + _M_TWOPI : lon) + zero(T)
+        nu = (primal(lon) < 0.0 ? lon + _M_TWOPI : lon) - zero(T)
     else
         nu = el[6]
     end
@@ -225,12 +225,12 @@ function oscltx(state::AbstractVector, et::Real, mu::Real)
     if primal(el[2]) != 1.0 && primal(rmag) > primal(mu) / limit
         e = vmag * vmag * 0.5 - mu / rmag
         if abs(primal(e)) >= abs(primal(mu)) / limit
-            a = -mu / (e * 2.0) + zero(T)
+            a = -mu / (e * 2.0) - zero(T)
             if primal(el[2]) < 1.0
                 b = (limit / _M_TWOPI)^0.66666666666666663
                 mucubr = mu^0.33333333333333331
                 cmptau = primal(mu) >= 1.0 ? primal(a / mucubr) < b : primal(a) < b * primal(mucubr)
-                cmptau && (tau = _M_TWOPI * (a / mucubr)^1.5 + zero(T))
+                cmptau && (tau = _M_TWOPI * (a / mucubr)^1.5 - zero(T))
             end
         end
     end

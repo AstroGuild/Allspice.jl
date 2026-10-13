@@ -29,7 +29,7 @@ state transformation from `f.ref` to `ref` at `et`.
 """
 @inline function _geo_cvx(ks::KernelSet, f::_GeoFixed, et, ref::Int32)
     x = f.pos + (et - f.epoch) * f.vel
-    v = f.vel + zero(x)
+    v = f.vel - zero(x)
     f.ref == ref && return x, v
     R, dR = frame_jet(ks, f.ref, ref, et, Val(1))
     return R * x, dR * x + R * v

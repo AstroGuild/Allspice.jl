@@ -131,7 +131,7 @@ reccyl(rectan::AbstractVector) = _m_reccyl(_m_v3(rectan))
 
 @inline function _m_cylrec(r, clon, z)
     s, c = sincos(clon)
-    return SVector(r * c, r * s, z + zero(r * c))
+    return SVector(r * c, r * s, z - zero(r * c))
 end
 
 """
@@ -161,7 +161,7 @@ function cyllat(r::Real, clon::Real, z::Real)
     r, clon, z = promote(_m_f(r), _m_f(clon), _m_f(z))
     rho = _m_hypot(r, z)
     lat = primal(rho) == 0.0 ? zero(atan(z, r)) : atan(z, r)
-    return rho + zero(lat), clon + zero(lat), lat
+    return rho - zero(lat), clon - zero(lat), lat
 end
 
 """
@@ -172,7 +172,7 @@ Convert latitudinal coordinates to cylindrical coordinates, as `latcyl_c`.
 function latcyl(radius::Real, lon::Real, lat::Real)
     radius, lon, lat = promote(_m_f(radius), _m_f(lon), _m_f(lat))
     s, c = sincos(lat)
-    return radius * c, lon + zero(c), radius * s
+    return radius * c, lon - zero(c), radius * s
 end
 
 """
@@ -184,7 +184,7 @@ function cylsph(r::Real, clon::Real, z::Real)
     r, clon, z = promote(_m_f(r), _m_f(clon), _m_f(z))
     rh = _m_hypot(r, z)
     th = primal(rh) == 0.0 ? zero(atan(r, z)) : atan(r, z)
-    return rh + zero(th), th, clon + zero(th)
+    return rh - zero(th), th, clon - zero(th)
 end
 
 """
@@ -195,7 +195,7 @@ Convert spherical coordinates to cylindrical coordinates, as `sphcyl_c`.
 function sphcyl(radius::Real, colat::Real, slon::Real)
     radius, colat, slon = promote(_m_f(radius), _m_f(colat), _m_f(slon))
     s, c = sincos(colat)
-    return radius * s, slon + zero(c), radius * c
+    return radius * s, slon - zero(c), radius * c
 end
 
 """
@@ -234,8 +234,8 @@ end
     base, alt = _m_nearpt(v, re, re, c)
     normal = _m_surfnm(re, re, c, base)
     _, _, lat = _m_reclat(normal, false)
-    lon = (primal(v[1]) == 0.0 && primal(v[2]) == 0.0) ? zero(lat) : atan(v[2], v[1]) + zero(lat)
-    return lon, lat, alt + zero(lat)
+    lon = (primal(v[1]) == 0.0 && primal(v[2]) == 0.0) ? zero(lat) : atan(v[2], v[1]) - zero(lat)
+    return lon, lat, alt - zero(lat)
 end
 
 """
@@ -323,7 +323,7 @@ function recpgr(ks::KernelSet, body::NameOrID, rectan::AbstractVector, re::Real,
     lon = sense * lon
     primal(lon) < 0.0 && (lon += _M_TWOPI)
     primal(lon) < 0.0 && (lon = zero(lon))
-    primal(lon) > _M_TWOPI && (lon = _M_TWOPI + zero(lon))
+    primal(lon) > _M_TWOPI && (lon = _M_TWOPI - zero(lon))
     return lon, lat, alt
 end
 
@@ -355,7 +355,7 @@ end
 @inline function _m_drdlat(r, lon, lat)
     slon, clon = sincos(lon)
     slat, clat = sincos(lat)
-    return SMatrix{3,3}(clon * clat, slon * clat, slat + zero(r),
+    return SMatrix{3,3}(clon * clat, slon * clat, slat - zero(r),
         -r * slon * clat, r * clon * clat, zero(r * clat),
         -r * clon * slat, -r * slon * slat, r * clat)
 end
@@ -398,7 +398,7 @@ end
 @inline function _m_drdsph(r, colat, slon)
     scolat, ccolat = sincos(colat)
     slong, clong = sincos(slon)
-    return SMatrix{3,3}(clong * scolat, slong * scolat, ccolat + zero(r),
+    return SMatrix{3,3}(clong * scolat, slong * scolat, ccolat - zero(r),
         r * clong * ccolat, r * slong * ccolat, -r * scolat,
         -r * slong * scolat, r * clong * scolat, zero(r * scolat))
 end
@@ -471,9 +471,9 @@ end
         -re * dgdlat / g2 * clon * clat - (alt + re / g) * clon * slat,
         -re * dgdlat / g2 * slon * clat - (alt + re / g) * slon * slat,
         -flat2 * re * dgdlat / g2 * slat + (alt + flat2 * re / g) * clat,
-        clon * clat + zero(alt + re / g),
-        slon * clat + zero(alt + re / g),
-        slat + zero(alt + re / g))
+        clon * clat - zero(alt + re / g),
+        slon * clat - zero(alt + re / g),
+        slat - zero(alt + re / g))
 end
 
 """

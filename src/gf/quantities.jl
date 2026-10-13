@@ -242,7 +242,7 @@ the derivative of the state is the difference quotient of the states at `et - dt
     s2 = _gf_spkez(q.ks, q.targ, et + q.dt, _GF_J2000, q.corr, q.obs)[1]
     dfdt = (0.5 / q.dt) * s2 + (-0.5 / q.dt) * s0
     s = _gf_spkez(q.ks, q.targ, et, _GF_J2000, q.corr, q.obs)[1]
-    srhat = SVector{6,Float64}(dvhat(s))
+    srhat = _m_dvhat(SVector{6,Float64}(s), false)   # f2c `dvhat_`: division, as zzgfrru
     drvel = vdot(_gf_pv(dfdt)[2], _gf_pv(srhat)[1]) + vdot(_gf_pv(s)[2], _gf_pv(srhat)[2])
     return drvel < 0.0
 end

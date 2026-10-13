@@ -66,9 +66,9 @@ end
             abs(primal(t[9])) == 1.0
         angle2 = _m_acos(t[9])
         if degen
-            return zero(angle2), angle2, atan(t[4], t[1]) + zero(angle2)
+            return zero(angle2), angle2, atan(t[4], t[1]) - zero(angle2)
         end
-        return atan(t[7], t[8]) + zero(angle2), angle2, atan(t[3], -t[6]) + zero(angle2)
+        return atan(t[7], t[8]) - zero(angle2), angle2, atan(t[3], -t[6]) - zero(angle2)
     end
     # a-b-c sequence: the factorization of a 1-2-3 rotation after the axis change
     change = _m_change(Int(axis3), 1.0, Int(axis2), 1.0, Int(axis1), sign)
@@ -78,9 +78,9 @@ end
         abs(primal(t[7])) == 1.0
     angle2 = _m_asin(-t[7])
     if degen
-        return zero(angle2), angle2, sign * atan(-t[2], t[5]) + zero(angle2)
+        return zero(angle2), angle2, sign * atan(-t[2], t[5]) - zero(angle2)
     end
-    return atan(t[8], t[9]) + zero(angle2), angle2, sign * atan(t[4], t[1]) + zero(angle2)
+    return atan(t[8], t[9]) - zero(angle2), angle2, sign * atan(t[4], t[1]) - zero(angle2)
 end
 
 """
@@ -173,12 +173,12 @@ function xf2eul(xform::AbstractMatrix, axisa::Integer, axisb::Integer, axisc::In
     abs(primal(u)) == 1.0 && (v = zero(v))
     if primal(v) == 0.0
         r5 = abs(primal(ca)) > abs(primal(sa)) ? -o2 / ca : d * o3 / sa
-        return SVector(e1 + zero(o1), e2 + zero(o1), e3 + zero(o1), zero(o1), r5, -u * o1), false
+        return SVector(e1 - zero(o1), e2 - zero(o1), e3 - zero(o1), zero(o1), r5, -u * o1), false
     end
     r4 = -o1 + (u * d * sa / v) * o2 + (u * ca / v) * o3
     r5 = -ca * o2 + (d * sa) * o3
     r6 = (-d * sa / v) * o2 + (-ca / v) * o3
-    return SVector(e1 + zero(r4), e2 + zero(r4), e3 + zero(r4), r4, r5, r6), true
+    return SVector(e1 - zero(r4), e2 - zero(r4), e3 - zero(r4), r4, r5, r6), true
 end
 
 """
@@ -360,7 +360,7 @@ function raxisa(matrix::AbstractMatrix)
     if _m_iszero(v)
         return SVector(zero(q[1]), zero(q[1]), one(q[1])), zero(atan(q[1]))
     elseif primal(q[1]) == 0.0
-        return v, Float64(pi) + zero(atan(q[1]))
+        return v, Float64(pi) - zero(atan(q[1]))
     end
     return _m_hat(v), 2.0 * atan(_m_norm(v), q[1])
 end

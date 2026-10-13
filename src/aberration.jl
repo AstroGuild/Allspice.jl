@@ -146,15 +146,15 @@ end
 "Component of `a` perpendicular to `b`; `a` itself if `b` is zero, as `vperp`."
 @inline function _vperp(a, b)
     bb = _dot3(b, b)
-    return primal(bb) == 0 ? a + zero(b) : a - (_dot3(a, b) / bb) * b
+    return primal(bb) == 0 ? a - zero(b) : a - (_dot3(a, b) / bb) * b
 end
 
 "Unit vector along `r` and its time derivative for the velocity `v`, as `dvhat`."
 @inline function _dvhat(r, v)
     n = _norm3(r)
-    primal(n) == 0 && return zero(r) + zero(v), v + zero(r)
+    primal(n) == 0 && return zero(r) - zero(v), v - zero(r)
     u = r / n
-    return u + zero(v), _vperp(v, u) / n
+    return u - zero(v), _vperp(v, u) / n
 end
 
 "State of `body` relative to the solar system barycenter in the inertial frame `iref`."
@@ -276,7 +276,7 @@ The computation of `stelab`: `pobj` rotated by the angle `asin(|u × vobs/c|)` a
     primal(_dot3(vbyc, vbyc)) >= 1 && _throw_vobs()
     h = cross(u, vbyc)
     sinphi = _norm3(h)
-    primal(sinphi) == 0 && return pobj + zero(h)
+    primal(sinphi) == 0 && return pobj - zero(h)
     phi = asin(sinphi)
     # `vrotv`: rotate `pobj` about the axis `h` by `phi`.
     x = h / sinphi

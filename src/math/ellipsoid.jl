@@ -507,7 +507,7 @@ function dnearp(state::AbstractVector, a::Real, b::Real, c::Real)
     lprime = (grad[1] * m[1] * vel[1] + grad[2] * m[2] * vel[2] + grad[3] * m[3] * vel[3]) / denom
     temp = 1.0 * vel + (-lprime) * grad
     dn = SVector(m[1] * temp[1], m[2] * temp[2], m[3] * temp[3])
-    return _m_state(nearp + zero(dn), dn), SVector(alt + zero(l), _m_dot(norml, vel))
+    return _m_state(nearp - zero(dn), dn), SVector(alt - zero(l), _m_dot(norml, vel))
 end
 
 """
@@ -543,7 +543,7 @@ function surfpv(stvrtx::AbstractVector, stdir::AbstractVector, a::Real, b::Real,
     m > floatmax(Float64) / 10.0 * (primal(udn) * primal(udn)) && return nothing
     r = 1.0 / udn
     dx = 1.0 * dv + (-r) * second + (-(r * r)) * third
-    return _m_state(x + zero(dx), dx)
+    return _m_state(x - zero(dx), dx)
 end
 
 # --- planes -------------------------------------------------------------------------------
@@ -698,13 +698,13 @@ function inrypl(vertex::AbstractVector, dir::AbstractVector, plane::SpicePlane)
         "the plane is too far from the origin"))
     udir = _m_hat(d)
     _m_iszero(udir) && throw(SpiceError(:zerovector, "the direction of the ray is the zero vector"))
-    mscale = _m_max(_m_abs(constant) + zero(vnrm), _m_abs(vnrm) + zero(constant))
+    mscale = _m_max(_m_abs(constant) - zero(vnrm), _m_abs(vnrm) - zero(constant))
     if primal(mscale) != 0.0
         sclvtx = (1.0 / mscale) * vtx
         sclcon = constant / mscale
     else
-        sclvtx = vtx + zero(SVector{3,typeof(mscale)})
-        sclcon = constant + zero(mscale)
+        sclvtx = vtx - zero(SVector{3,typeof(mscale)})
+        sclcon = constant - zero(mscale)
     end
     primal(mscale) > 1.0 && (toobig = toobig / primal(mscale))
     prjdif = sclcon - _m_dot(sclvtx, normal)
@@ -759,7 +759,7 @@ end
 "Unit vector of two components with the scaling of `vhatg_c`."
 @inline function _m_hat2(x, y)
     scale = max(abs(primal(x)), abs(primal(y)))
-    scale == 0.0 && return zero(x) + zero(y), zero(x) + zero(y)
+    scale == 0.0 && return zero(x) - zero(y), zero(x) - zero(y)
     t1 = x / scale
     t2 = y / scale
     vmag = scale * sqrt(t1 * t1 + t2 * t2)
@@ -794,9 +794,9 @@ end
     n1 = _m_norm(vec1)
     n2 = _m_norm(vec2)
     scale = max(abs(primal(n1)), abs(primal(n2)))
-    scale == 0.0 && return zero(vec1) + zero(vec2), zero(vec1) + zero(vec2)
-    t1 = vec1 / scale + zero(vec2)
-    t2 = vec2 / scale + zero(vec1)
+    scale == 0.0 && return zero(vec1) - zero(vec2), zero(vec1) - zero(vec2)
+    t1 = vec1 / scale - zero(vec2)
+    t2 = vec2 / scale - zero(vec1)
     s12 = _m_dot(t1, t2)
     d1, d2, c = _m_diags2(_m_dot(t1, t1), s12, _m_dot(t2, t2))
     # column `major` of the rotation gives the major axis
@@ -894,7 +894,7 @@ function inelpl(ellips::SpiceEllipse, plane::SpicePlane)
         abs(sep - Float64(pi) / 2) > 1.0e-9 && throw(SpiceError(:invalidellipse,
             "the ellipse has semi-axes that are not orthogonal; their separation is $sep rad"))
     end
-    none = zero(center) + zero(normal)
+    none = zero(center) - zero(normal)
     if _m_iszero(smajor)
         primal(_m_dot(center, normal)) == primal(inpcon) && return 1, center + none, center + none
         return 0, none, none
@@ -929,7 +929,7 @@ end
 
 @inline function _m_pjelpl(elin::SpiceEllipse, plane::SpicePlane)
     # `vperp_c` gives zero for a zero second argument
-    perp(v) = _m_iszero(plane.normal) ? zero(v) + zero(plane.normal) : _m_perp(v, plane.normal, true)
+    perp(v) = _m_iszero(plane.normal) ? zero(v) - zero(plane.normal) : _m_perp(v, plane.normal, true)
     return _m_cgv2el(_m_vprjp(elin.center, plane), perp(elin.semimajor), perp(elin.semiminor))
 end
 
