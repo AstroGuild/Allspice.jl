@@ -166,6 +166,18 @@ group("11. DAS files and DLA segment lists") do
         @test SPICE.getfat(path) == ("DAS", "TEST") == getfat(path)
         @test neo_das_data(path) == (ints, dps, chars) || bits_equal(neo_das_data(path)[2], dps)
 
+        # A scratch file (`dasops`) holds its data in memory only: it has no path, reads
+        # back what was added, and its close (also through `dasllc`) writes no file.
+        before = Set(readdir(dir))
+        hs = dasops()
+        @test isopen(hs) && dashfn(hs) == "" && dasrfr(hs)[1] == "DAS/SCR"
+        dasadi(hs, Cint[7, 8, 9])
+        dasadd(hs, [1.5, -2.5])
+        @test dasrdi(hs, 2, 3) == [8, 9] && dasrdd(hs, 1, 2) == [1.5, -2.5] && daslla(hs) == (0, 2, 3)
+        dasllc(hs)
+        @test !isopen(hs) && Set(readdir(dir)) == before
+        @test neo_kind(() -> dasrdi(hs, 1, 1)) === :dasnosuchhandle
+
         # An empty file, and a file with one data type only.
         e = joinpath(dir, "empty.das")
         dascls(dasonw(e, "TEST", "", 0))

@@ -209,7 +209,11 @@ function dsk_part_1(env)
     (; rng, dir, tk, spk, specs_a, specs_b, specs_c, files, wctx, comments) = env
     nident = 0
     for (name, specs) in ((:a, specs_a), (:b, specs_b), (:c, specs_c))
-        for s in specs, makvtl in (true, false)
+        # The file comparison below holds the spatial index of every segment (with the
+        # vertex-plate list). The direct comparison of `dskmi2`, with and without that
+        # list and in the matrix form, runs on the first segment of each file in the
+        # default run and on every segment in the exhaustive run.
+        for s in (FULL ? specs : specs[1:1]), makvtl in (true, false)
             z = index_sizes(s)
             cd, ci = c_dskmi2(s; makvtl)
             nd, ni = dskmi2(s.verts, s.plates, s.finscl, s.corscl, z.worksz, z.voxpsz,
@@ -221,7 +225,9 @@ function dsk_part_1(env)
                 z.worksz, z.voxpsz, z.voxlsz, makvtl, index_spxisz(s))
             @test bits_equal(md, nd) && mi == ni
         end
-        for s in specs, (corsys, corpar) in ((1, zeros(10)), (3, zeros(10)),
+        # The coordinate system is the branch of `dskrb2`; the shapes of file `a` (ellipsoid,
+        # rough surface, cube) are the default sample.
+        for s in (FULL || name === :a ? specs : specs[1:1]), (corsys, corpar) in ((1, zeros(10)), (3, zeros(10)),
                 (4, [3.0, 1 / 3, 0, 0, 0, 0, 0, 0, 0, 0]), (4, [2.0, -0.4, 0, 0, 0, 0, 0, 0, 0, 0]))
             c3 = c_dskrb2(s.verts, s.plates, corsys, corpar)
             n3 = dskrb2(s.verts, s.plates, corsys, corpar)
@@ -268,7 +274,9 @@ end
 "Part of group 12: (b) access calls."
 function dsk_part_2(env)
     (; rng, dir, tk, spk, specs_a, specs_b, specs_c, files, wctx, comments) = env
-    for name in (:a, :b, :c), path in files[name]
+    # The two files of a pair hold the same integers and doubles (part a), so the default
+    # run reads the CSPICE file of each pair and the Allspice file of the first pair only.
+    for name in (:a, :b, :c), path in (FULL || name === :a ? files[name] : files[name][1:1])
         @test dskobj(path) == collect(SPICE.dskobj!(SPICE.SpiceIntCell(10), path))
         for body in (499, 401, 5)
             @test dsksrf(path, body) == collect(SPICE.dsksrf!(SPICE.SpiceIntCell(10), path, body))
@@ -335,7 +343,7 @@ function dsk_part_3(env)
         cd = SPICE.dlabfs(ch)
         for s in specs
             scale = maximum(norm, s.verts) / 3
-            for k in 1:nsample(250, 2500)
+            for k in 1:nsample(100, 2500)
                 v, dirv = dsk_ray(rng, rand(rng, 1:5), (s.verts, s.plates))
                 kind_scale = k % 2 == 0 ? scale : 1.0
                 v *= kind_scale
@@ -355,11 +363,11 @@ function dsk_part_3(env)
         c_dascls(ch)
         dascls(h)
     end
-    measured(@sprintf("  dskx02: %d rays on 13 segments, %d intercepts, %d differences in found or plate, max |dxpt| = %.3e km",
+    measured(@sprintf("  dskx02: %d rays on 10 segments, %d intercepts, %d differences in found or plate, max |dxpt| = %.3e km",
         nray, nhit, nbad, maxerr))
     @test nbad == 0
     @test maxerr == 0.0
-    @test nhit > nsample(800, 8_000)
+    @test nhit > nsample(250, 8_000)
     return nothing
 end
 
@@ -371,7 +379,7 @@ function dsk_part_4(env)
         [7, 6, 5, 4, 3, 2, 1])
     rows = Tuple{String,Int,Int,Int,Int,Int,Float64,Float64}[]
     function run_case(label, nfull, fixref, kinds, shapes, epochs, tol)
-        n = nsample(nfull ÷ 10, nfull)
+        n = nsample(nfull ÷ 25, nfull)
         nhit = 0; nfound = 0; nplate = 0; nstale = 0; maxerr = 0.0; maxrot = 0.0; maxacr = 0.0
         for k in 1:n
             srf = surface_lists[rand(rng, 1:length(surface_lists))]
@@ -604,7 +612,7 @@ end
 function dsk_part_8(env)
     (; rng, dir, tk, spk, specs_a, specs_b, specs_c, files, wctx, comments) = env
     (; loadlist, ctx, ks, shape_e, shape_r, shape_w) = env
-    lonlat = [[2pi * rand(rng) - pi, pi * rand(rng) - pi / 2] for _ in 1:400]
+    lonlat = [[2pi * rand(rng) - pi, pi * rand(rng) - pi / 2] for _ in 1:nsample(100, 400)]
     push!(lonlat, [0.0, pi / 2], [0.0, -pi / 2], [pi, 0.0], [-pi, 0.0])
     for (method, target, fixref, tol) in (("ELLIPSOID", "MARS", "IAU_MARS", 1e-13),
             ("ellipsoid", "499", "MARS_TILT", 1e-13),
@@ -690,7 +698,7 @@ function dsk_part_9(env)
     # same way in both engines; another context keeps the default values.
     other = neo_context(loadlist)
     vtx = V3[]; dirs = V3[]
-    for k in 1:3000
+    for k in 1:nsample(1000, 3000)
         v, d = dsk_ray(rng, 4, shape_w)
         push!(vtx, v); push!(dirs, d)
     end

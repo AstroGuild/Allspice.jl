@@ -59,7 +59,7 @@ end
 
 group("13. math: rotations") do
     rng = MersenneTwister(SEED + 13)
-    n = 400
+    n = nsample(100, 400)
     t = Tally()
     rang() = 2pi * rand(rng) - pi
     specials = special_rotations()

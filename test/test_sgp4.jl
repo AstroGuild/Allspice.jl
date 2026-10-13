@@ -433,7 +433,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
             ep, el = parsed[id]
             worst, mismatch, valid = 0.0, 0, 0
             minutes = vcat(0.0, 5.0, -5.0, 720.0, -720.0, 1440.0, -1440.0,
-                [2880.0 * (2 * rand(rng) - 1) for _ in 1:400])
+                [2880.0 * (2 * rand(rng) - 1) for _ in 1:nsample(100, 400)])
             for dt in minutes
                 et = ep + 60 * dt
                 sc = sgp4_oracle(() -> sgp4_c_evsgp4(et, geophs, el))
@@ -535,7 +535,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
             mids = [(e[1] + e[2]) / 2, (e[2] + e[3]) / 2]
             special = vcat(s.t0, s.t1, e, prevfloat.(e), nextfloat.(e), mids, prevfloat.(mids),
                 nextfloat.(mids))
-            ets = vcat(special, random_epochs(rng, 300, s.t0, s.t1))
+            ets = vcat(special, random_epochs(rng, nsample(60, 300), s.t0, s.t1))
             w2, wb, mismatch, valid = 0.0, 0.0, 0, 0
             for et in ets
                 sc = sgp4_oracle(() -> SPICE.spkgeo(body, et, "J2000", 399)[1])
@@ -853,7 +853,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
             et = (s.epochs[1] + s.epochs[2]) / 2 + 100.0
             ep, el = parsed[id]
             g8, e10 = SVector{8}(geophs), SVector{10}(el)
-            for n in (200, nsample(2000, 20000))         # the first pass compiles
+            for n in (200, nsample(500, 20000))         # the first pass compiles
                 a = sgp4_time(sgp4_neo_x, n, et, ctx, body)
                 b = sgp4_time(sgp4_c_x, n, et, body)
                 c = sgp4_time(sgp4_neo_x3, n, et, ctx, body)

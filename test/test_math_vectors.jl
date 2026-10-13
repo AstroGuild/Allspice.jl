@@ -76,7 +76,7 @@ end
 
 group("12. math: vectors and matrices") do
     rng = MersenneTwister(SEED + 12)
-    n = 400
+    n = nsample(100, 400)
     t = Tally()
     rs() = rmag(rng) * randn(rng)
     rm3() = rand(rng) < 0.2 ? Matrix(rrot(rng)) : rmag(rng) * randn(rng, 3, 3)

@@ -21,7 +21,7 @@ isdefined(@__MODULE__, :CS) || include("mathoracle.jl")
 
 group("16. math: conics") do
     rng = MersenneTwister(SEED + 16)
-    n = 400
+    n = nsample(100, 400)
     t = Tally()
     r3() = SVector(randn(rng), randn(rng), randn(rng))
     rmu() = rand(rng, (398600.4418, 1.32712440018e11, 4902.800066, 1.0, 1e-3, 3.986e5))
@@ -106,6 +106,14 @@ group("16. math: conics") do
                     @test abs((v1 ⋅ v1) / 2 - mu / vnorm(p1) - e0) <= 1e-8 * ((v0 ⋅ v0) / 2 + mu / vnorm(p0))
                 end
             end
+        end
+        # Fixed cases of the bracket search: for this circular orbit the first value of the
+        # Kepler function is on the wrong side of the time interval by rounding, so the
+        # bound of the bracket is doubled (forward and backward in time). A random state
+        # reaches these loops about once in a hundred.
+        sc = SVector(1.0e5, 0.0, 0.0, 0.0, sqrt(1.0e-5), 0.0)
+        for dt in (7.0, -7.0)
+            versus!(t, :prop2b, () -> prop2b(1.0, sc, dt), () -> CS.prop2b(1.0, sc, dt))
         end
         mu = 398600.4418
         s = SVector(7000.0, 100.0, -300.0, 0.3, 7.2, 1.9)

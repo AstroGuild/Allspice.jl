@@ -28,7 +28,7 @@ const SPECIAL_POINTS = (SVector(0.0, 0.0, 0.0), SVector(0.0, 0.0, 1.0), SVector(
 
 group("14. math: coordinates", Kernels.PCK11) do
     rng = MersenneTwister(SEED + 14)
-    n = 400
+    n = nsample(100, 400)
     t = Tally()
     oracle_load((Kernels.PCK11,))
     ctx = neo_context((Kernels.PCK11,))
@@ -111,6 +111,9 @@ group("14. math: coordinates", Kernels.PCK11) do
                 @test vdist(georec(g..., re, f), p) <= 1e-9 * max(vnorm(p), re)
             end
         end
+        # Fixed case: the centre of the spheroid, where the near point is not unique.
+        versus!(t, :recgeo, () -> recgeo([0.0, 0.0, 0.0], 6378.1366, 1 / 298.25642),
+            () -> CS.recgeo([0.0, 0.0, 0.0], 6378.1366, 1 / 298.25642))
         @test throws_kind(() -> recgeo([1.0, 2.0, 3.0], -1.0, 0.1), :valueoutofrange)
         @test throws_kind(() -> georec(0.1, 0.2, 3.0, 1.0, 1.0), :valueoutofrange)
         @test throws_kind(() -> drdgeo(0.1, 0.2, 3.0, -1.0, 0.5), :badradius)
@@ -222,9 +225,16 @@ group("14. math: coordinates", Kernels.PCK11) do
             "METERS", "KM", "CM", "MM", "LIGHTSECS", "AU", "M", "KILOMETERS", "CENTIMETERS", "MILLIMETERS",
             "FEET", "INCHES", "STATUTE_MILES", "NAUTICAL_MILES", "YARDS", "LIGHTYEARS", "PARSECS", "SECONDS",
             "MINUTES", "HOURS", "DAYS", "JULIAN_YEARS", "TROPICAL_YEARS", "YEARS", "FURLONGS", "km", "Degrees ")
-        for a in units, b in units
+        # `convrt` multiplies by the factor of the input unit and divides by the factor of
+        # the output unit, after the check that the two units have one class. The default
+        # run therefore takes each unit as input and as output against one unit of each
+        # class (angle, distance, time) and against itself; the exhaustive run takes every
+        # pair.
+        pairs = FULL ? [(a, b) for a in units for b in units] :
+                [p for a in units for b in ("RADIANS", "KM", "SECONDS", a) for p in ((a, b), (b, a))]
+        for (from, to) in pairs
             x = rmag(rng) * randn(rng)
-            versus!(t, :convrt, () -> convrt(x, a, b), () -> CS.convrt(x, a, b))
+            versus!(t, :convrt, () -> convrt(x, from, to), () -> CS.convrt(x, from, to))
         end
         @test convrt(180.0, "DEGREES", "RADIANS") == Float64(pi)
         @test convrt(1.0, "AU", "KM") == CS.convrt(1.0, "AU", "KM") ≈ 149597870.613689

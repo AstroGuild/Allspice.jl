@@ -1108,7 +1108,9 @@ group("9. DAF access, SPK and CK writers") do
     sclk = write_sclk(dir)
 
     @apart @testset "writers: data area, descriptors, names and read-back against CSPICE" begin
-        ntrial = 6
+        # Files of each writer. Three files of one to three segments reach each layout
+        # branch of each writer in the default run (measured with line coverage).
+        ntrial = nsample(3, 6)
         measured(@sprintf("  %-8s %5s %9s %9s %5s %5s %6s %8s", "writer", "segs", "doubles", "bit diff",
             "descr", "names", "bytes", "readback"))
         for c in WRITER_CASES
@@ -1286,7 +1288,11 @@ group("9. DAF access, SPK and CK writers") do
     @apart @testset "many segments in one file: past one summary record, and appending" begin
         c13 = writer_case("spkw13")
         c03 = writer_case("ckw03")
-        for (c, counts) in ((c13, (24, 25, 26, 50, 51, 77)), (c03, (25, 26, 60)))
+        # A summary record holds 25 summaries. Default run: a full record, one summary in
+        # the second record and one in the third record for SPK; the CK files have the
+        # same summary format, so one count shows that `ckcls` closes such a file.
+        plan = FULL ? ((c13, (24, 25, 26, 50, 51, 77)), (c03, (25, 26, 60))) : ((c13, (25, 26, 51)), (c03, (26,)))
+        for (c, counts) in plan
             for nseg in counts
                 segs = [merge(c.gen(rng, k), c.kind === :spk ? (states=rand_states(rng, 4), epochs=[0.0, 1.0, 2.0, 3.0],
                     first=0.0, last=3.0, degree=3) : (;)) for k in 1:nseg]
@@ -1337,9 +1343,16 @@ group("9. DAF access, SPK and CK writers") do
         seg(k) = merge(c.gen(rng, k), (states=rand_states(rng, 30), epochs=collect(0.0:29.0), first=0.0, last=29.0, degree=3))
         nbytes = 0
         nfiles = 0
-        for (i, ncomch) in enumerate((0, 1, 999, 1000, 1001, 2500, 6000, 0, 0, 3000))
-            before = i == 8 ? String[] : rand_comments(rng, rand(rng, 1:30))
-            after = i == 9 ? ["x"^999, "y"^1000, "", "z"^1000, "w"] : rand_comments(rng, rand(rng, 1:60); maxlen=400)
+        # (reserved characters, comments before the segments, lines of 1000 characters).
+        # In the last case the first line and its end mark fill one comment record exactly.
+        # A comment record holds 1000 characters: no record, one full record, one character
+        # in the second record, and several records. The exhaustive run adds more sizes.
+        cases = [(0, true, false), (1000, true, false), (1001, true, false), (2500, true, false),
+            (0, false, false), (0, false, true)]
+        FULL && append!(cases, [(1, true, false), (999, true, false), (6000, true, false), (3000, true, false)])
+        for (i, (ncomch, early, longlines)) in enumerate(cases)
+            before = early ? rand_comments(rng, rand(rng, 1:30)) : String[]
+            after = longlines ? ["x"^999, "y"^1000, "", "z"^1000, "w"] : rand_comments(rng, rand(rng, 1:60); maxlen=400)
             last = ["one more line", ""]
             segs = [seg(k) for k in 1:rand(rng, (1, 3, 30))]
             pc = joinpath(dir, "com_c_$i.bsp")
@@ -1418,7 +1431,12 @@ group("9. DAF access, SPK and CK writers") do
     end
 
     @apart @testset "empty files, open and close" begin
-        for (kind, ext) in ((:spk, ".bsp"), (:ck, ".bc")), ncomch in (0, 1, 1000, 1001, 5000)
+        # The reserved comment records are the layout branch: none, one, two. The CK file
+        # differs from the SPK file in the identification word only.
+        plan = FULL ? [(k, n) for k in (:spk, :ck) for n in (0, 1, 1000, 1001, 5000)] :
+               [(:spk, 0), (:spk, 1000), (:spk, 1001), (:ck, 0)]
+        for (kind, ncomch) in plan
+            ext = kind === :spk ? ".bsp" : ".bc"
             pc = joinpath(dir, "empty_c_$(kind)_$ncomch$ext")
             pn = joinpath(dir, "empty_n_$(kind)_$ncomch$ext")
             hc = c_open(kind, pc, "EMPTY FILE", ncomch)
@@ -1789,7 +1807,7 @@ group("9. DAF access, SPK and CK writers") do
 
     @apart @testset "handles on different tasks" begin
         c = writer_case("spkw13")
-        jobs = [(seed=SEED + 900 + i, nseg=rand(rng, (3, 26, 40))) for i in 1:16]
+        jobs = [(seed=SEED + 900 + i, nseg=rand(rng, (3, 26, 40))) for i in 1:nsample(6, 16)]
         function job(tag, j)
             local r = MersenneTwister(j.seed)   # `local`: the test set has a variable `r` too
             p = joinpath(dir, "task_$(tag)_$(j.seed).bsp")

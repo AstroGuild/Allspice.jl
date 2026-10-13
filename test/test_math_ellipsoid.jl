@@ -41,7 +41,7 @@ ray_overflows(u, a, b, c) = a > 0 && b > 0 && c > 0 && !all(isfinite, (u[1] / a,
 
 group("15. math: ellipsoids, planes and ellipses", Kernels.FULL_SET_FILES...) do
     rng = MersenneTwister(SEED + 15)
-    n = 400
+    n = nsample(100, 400)
     t = Tally()
     r3() = SVector(randn(rng), randn(rng), randn(rng))
     "Semi-axes: triaxial, spheroid or sphere, of any size; rarely not valid."

@@ -47,7 +47,7 @@ end
 
 group("10. windows") do
     rng = MersenneTwister(SEED + 10)
-    ntrial = 400
+    ntrial = nsample(100, 400)
 
     @apart @testset "wninsd! and wnvald! build the window of CSPICE" begin
         bad = 0

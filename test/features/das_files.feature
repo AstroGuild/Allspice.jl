@@ -60,6 +60,12 @@ Feature: Read and write DAS files through a handle that the caller owns
     And the backward list is the reverse of the forward list
     And a file without segments gives no descriptor
 
+  Scenario: A scratch file exists in memory only
+    Given a handle from dasops
+    When integers and doubles are added and the handle is closed with dasllc
+    Then the handle has no path and reads back the data that were added
+    And no file is created
+
   Scenario Outline: Refuse bad input
     When <call> is made with <input>
     Then a SpiceError of kind <kind> is thrown
