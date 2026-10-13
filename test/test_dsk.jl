@@ -670,6 +670,8 @@ function dsk_part_8(env)
         ck = c_latsrf_kind(method, target, fixref)
         @test (method, nk) == (method, ck)
     end
+    # (regression: a pair with three components threw `ArgumentError`, not a `SpiceError`)
+    @test neo_kind(() -> latsrf(ctx, "ELLIPSOID", "MARS", 0.0, "IAU_MARS", [[0.1, 0.2, 0.3]])) === :badarg
     on = c_latsrf("ELLIPSOID", "MARS", 0.0, "IAU_MARS", [[0.3, 0.4]])[1]
     for (method, p) in (("ELLIPSOID", on * 1.01), ("ELLIPSOID", on * (1 + 1e-9)),
             ("DSK/UNPRIORITIZED/SURFACES = 1", on * 1.5),

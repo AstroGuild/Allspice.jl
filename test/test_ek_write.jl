@@ -1116,6 +1116,13 @@ group("EK write: a new record has no entries until they are written") do
         w.ekcls(h)
     end
     @test kinds["n"] == kinds["c"] == (:uninitializedvalue, :uninitialized)
+    # (regression: an integer outside `Int32` threw `InexactError`; it is a `SpiceError`
+    # now, and the entry stays unwritten)
+    h = ekopw(cp(paths["n"], joinpath(dir, "n_range.bes")))
+    r = ekappr(h, 1)
+    @test neo_kind(() -> ekacei(h, 1, r, "I", [2^31], false)) === :valueoutofrange
+    @test neo_kind(() -> ekrcei(h, 1, r, "I")) === :uninitializedvalue
+    dascls(h)
     @test ekw_diff(paths["c"], paths["n"])[1] == 0
     nent, bad = ekw_read_check(paths["n"], [EKSegSpec("T", cols, rows, false)])
     @test bad == 0 && nent == 8

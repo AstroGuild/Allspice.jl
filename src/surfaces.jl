@@ -408,11 +408,11 @@ end
 @inline _dsk_get2(a::AbstractMatrix, i::Int) = (Float64(a[1, i]), Float64(a[2, i]))
 @inline function _dsk_get2(a::AbstractVector, i::Int)
     e = a[begin+i-1]
-    length(e) == 2 || throw(ArgumentError("element $i does not have 2 components"))
+    length(e) == 2 || throw(SpiceError(:badarg, "element $i does not have 2 components"))
     return Float64(e[begin]), Float64(e[begin+1])
 end
 function _dsk_count2(a::AbstractMatrix)
-    size(a, 1) == 2 || throw(ArgumentError("a 2 x n matrix is required, got $(size(a))"))
+    size(a, 1) == 2 || throw(SpiceError(:badarg, "a 2 x n matrix is required, got $(size(a))"))
     return size(a, 2)
 end
 _dsk_count2(a::AbstractVector) = length(a)

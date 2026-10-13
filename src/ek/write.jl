@@ -654,9 +654,17 @@ end
 
 _ekw_cvals(vals::AbstractVector) = Vector{UInt8}[_ekw_bytes(v) for v in vals]
 _ekw_cval1(vals::AbstractVector) = isempty(vals) ? UInt8[] : _ekw_bytes(first(vals))
+# A value that the file type `T` cannot hold is an error before anything is written.
+_ekw_num(::Type{T}, v) where {T} = convert(T, v)
+function _ekw_num(::Type{Int32}, v::Integer)
+    typemin(Int32) <= v <= typemax(Int32) || throw(SpiceError(:valueoutofrange,
+        "the integer $v does not fit the 32-bit integers of an EK file"))
+    return v % Int32
+end
 _ekw_nval1(::Type{T}, vals::AbstractVector) where {T} = isempty(vals) ? zero(T) :
-                                                         convert(T, first(vals))
-_ekw_nvals(::Type{T}, vals::AbstractVector) where {T} = vals isa Vector{T} ? vals : T[v for v in vals]
+                                                         _ekw_num(T, first(vals))
+_ekw_nvals(::Type{T}, vals::AbstractVector) where {T} = vals isa Vector{T} ? vals :
+                                                         T[_ekw_num(T, v) for v in vals]
 
 function _ekw_entry_c(h::DASHandle, who::AbstractString, update::Bool, segno::Integer,
         recno::Integer, column::AbstractString, vals::AbstractVector, isnull::Bool)
@@ -770,7 +778,7 @@ Write the entry of the integer column `column` in row `recno` of segment `segno`
 `ekacei_c` of CSPICE.
 
 `ivals` is a vector with the values of the entry. The file stores 32-bit integers: a
-value that `Int32` cannot hold throws `InexactError`. The other arguments and the
+value that `Int32` cannot hold throws `SpiceError(:valueoutofrange)`. The other arguments and the
 errors are those of [`ekaced`](@ref).
 
 See also [`ekucei`](@ref), [`ekrcei`](@ref).
@@ -1099,7 +1107,7 @@ Store the whole integer column `column` of the segment that [`ekifld`](@ref) sta
 as `ekacli_c` of CSPICE.
 
 `ivals` holds the values of all rows in row order. The file stores 32-bit integers: a
-value that `Int32` cannot hold throws `InexactError`. The other arguments and the
+value that `Int32` cannot hold throws `SpiceError(:valueoutofrange)`. The other arguments and the
 errors are those of [`ekaclc`](@ref), with `:wrongdatatype` for a column of another
 type.
 

@@ -577,7 +577,7 @@ of orders 1 to N (element `k+1` is the derivative of order `k`, per second^k).
     (frame_rotation(ks, Int32(from), Int32(to), et),)
 
 function rotation_jet(ks::KernelSet, from::Integer, to::Integer, et::Real, v::Val{N}) where {N}
-    N isa Integer && N >= 0 || throw(ArgumentError("derivative order must be a non-negative integer"))
+    N isa Integer && N >= 0 || throw(SpiceError(:badarg, "the derivative order must be an integer >= 0"))
     r = frame_rotation(ks, Int32(from), Int32(to), taylor_var(et, v))
     d = map(derivatives, r)
     return ntuple(k -> map(x -> x[k], d), Val(N + 1))
