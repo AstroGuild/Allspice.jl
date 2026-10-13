@@ -204,6 +204,10 @@ default context. The conversions need a leap-second kernel (`SpiceError(:nolsk)`
   and `ZONE` are an immutable `TimeDefaults` in an atomic field of the `SpiceContext`.
   A reader loads it once with `timedefaults(ctx)` and takes no lock; `SET` builds a new
   object under the lock of the context. `kclear` and `furnsh` do not change it.
+- `tsetyr([ctx], year)` sets the field `yearbound` of the `TimeDefaults` of the context:
+  the first year of the 100 years that a year of two digits abbreviates (1969 at
+  start). `str2et`, `utc2et` and the context form of `tparse` use it; the forms on a
+  `KernelSet` take the defaults as an argument, and `tparse(s)` uses 1969.
 - `jul2gr(y, m, d)`, `gr2jul(y, m, d) -> (year, month, day, doy)`.
 - Constants: `j1900 j1950 j2000 j2100 jyear tyear spd b1900 b1950 clight halfpi twopi
   rpd dpr`, each a function without arguments.
@@ -427,6 +431,12 @@ from the same input.
   does: a file that is open for write must hold a segment (`:nosegmentsfound`).
 - Deviation from SPICE.jl 0.2.5: the record count of `ckw02` and `ckw03` is always the
   length of the input (that version passes one record less to CSPICE).
+- Type 14 has three calls, as in CSPICE: `spk14b(handle, segid, body, center, frame,
+  first, last, chbdeg) -> SPK14Writer`, `spk14a(writer, [ncsets,] coeffs, epochs)` and
+  `spk14e(writer)`. CSPICE keeps the segment in work in a table of files; here the
+  `SPK14Writer` holds it, and the file changes only when `spk14e` runs. The data area
+  is the one of the generic segment writer `sgwes_` (constant, each record after its
+  epoch, epochs, directory, 17 meta data items), equal word for word.
 
 ## `das.jl`, `dla.jl`
 
@@ -442,6 +452,9 @@ DAS file.
 - `dascls` of a write handle writes the complete, segregated file and moves it into
   place in one step, so a reader that has the old file mapped keeps a consistent
   image. One handle is not safe for concurrent use.
+- `dasops()` gives a scratch handle: a write handle with an empty path, which `dascls`
+  discards without a file. `ekops()` is the scratch EK on it (CSPICE makes a temporary
+  file for both).
 - `_das_load(path, who, writable) -> DASHandle` reads a file of either byte order and
   throws `SpiceError(:baddasdirectory)` for a directory that is not consistent.
   `_das_check_open` throws `:dasnosuchhandle`, and `_das_check_write` throws that kind
@@ -648,7 +661,18 @@ length. A query needs no kernel set, so it suits the inner loop of an optimizer.
   `table_state` and `table_span` read it without allocation and without kernel access.
   The range check throws `SpiceError(:nocoverage)` and is a bounds check: under
   `@inbounds` it is removed, and an epoch outside the table is then extrapolated.
-- `AllspiceAdaptExt` defines `Adapt.adapt_structure(to, tab::EphemerisTable)`, which
+- `table_to_spk(handle, tab, segid; first, last, ctx)` writes the table as one SPK
+  segment of type 2 through `spkw02`, with the records of the table as its records.
+- `RotationTable{T,A}` (fields `coef`, `t0`, `dt`, `nint`, `ncoef`, `from`, `to`,
+  `maxerr`; `length(coef) == 9 ncoef nint`, the nine matrix elements column after
+  column) is the counterpart for `pxform`: `rotation_table(from, to, t0, t1; tol,
+  ncoef, maxintervals)` builds it, and `table_rotation(tab, et)` and
+  `table_rotation_jet(tab, et, Val(N)) -> NTuple{N+1,SMatrix{3,3}}` read it with the
+  contract of `table_jet`. `maxerr` is a Frobenius norm; the matrix is not made
+  orthogonal again.
+- `_tab_fit(f, start, dt, nint, ncoef, Val(C))` fits a function of `3C` components and
+  `_tab_refine(...)` doubles the number of intervals; both table types use them.
+- `AllspiceAdaptExt` defines `Adapt.adapt_structure` for both table types, which
   moves `coef` to another array type. `AllspiceForwardDiffExt` adds methods for a
   dual-number epoch to `primal`, `spk_jet`, `frame_rotation`, `frame_jet`, `abcorr_jet`,
   `abcorr_position`, `abcorr_state`, `_ad_order` and `_with_primal`: a query takes the
