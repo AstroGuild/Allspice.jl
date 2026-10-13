@@ -39,6 +39,13 @@
 #       segment vector of the conjunction gets the rows of the one before it: the rows
 #       of the next segment are lost, and the rows after it are read from a wrong
 #       segment.
+#
+# A fourth difference is not a defect of the search. The scanner of CSPICE reads a number
+# of a query with `nparsd`, whose result can be one unit in the last place away from the
+# correctly rounded double ("2.756" gives the double after 2.756), so that a row with
+# the value 2.756 is not equal to the number 2.756 of a query. The public calls compare
+# with the correctly rounded double (`dexact` of a constraint); with `compat` the search
+# compares with the double of `nparsd` (`dval`).
 
 # Operator codes (`ekopcd.inc`) and the codes of a comparison result.
 const _EK_EQ = 1
@@ -890,6 +897,10 @@ Base.show(io::IO, r::EKResult) = print(io, "EKResult(", r.nmrows, " rows, column
 _ek_empty_result() = EKResult(0, 0, _EKQSeg[], Matrix{Int32}(undef, 0, 0),
     Matrix{Int32}(undef, 0, 0), Int[], Int[], Symbol[], String[])
 
+"Contract: returns `c` with the correctly rounded value `c.dexact` in place of `c.dval`."
+_ek_exact_constraint(c::_EKQConstraint) = c.dval === c.dexact ? c :
+    _EKQConstraint(c.cnstyp, c.lhs, c.opcode, c.rhs, c.dtype, c.cval, c.dexact, c.ival, c.dexact)
+
 """
     _ek_search(ks, q; compat=false) -> EKResult
 
@@ -920,6 +931,8 @@ function _ek_search(ks::KernelSet, q; compat::Bool=false)
     for conj in 1:max(1, nconj)
         cjsize = nconj == 0 ? 0 : q.conjsizes[conj]
         cons = q.constraints[cjend+1:cjend+cjsize]
+        # The public search compares with the correctly rounded number of the query.
+        compat || (cons = map(_ek_exact_constraint, cons))
         cjend += cjsize
         res = _ek_table_rows(segs, tabsegs[1], 1, cons, compat)
         for t in 2:ntab

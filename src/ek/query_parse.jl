@@ -179,6 +179,9 @@ codes 1 to 10 (EQ, GE, GT, LE, LT, NE, LIKE, UNLIKE, ISNULL, NOTNUL). For a valu
 ISNULL and NOTNUL and for a column on the right side), `cval` the string of type 1 as
 written between the quotes (blanks kept), `dval` the stored double of types 2, 3 and 4
 (for 4 the ephemeris time), and `ival` the integer of type 3 as `zzekqcon` gives it.
+`dval` is the double that the number parser of CSPICE (`nparsd`) gives for the text of
+the query, which can be one unit in the last place off; `dexact` is the correctly
+rounded double of the same text, and the public search compares with it.
 """
 struct _EKQConstraint
     cnstyp::Int
@@ -189,7 +192,12 @@ struct _EKQConstraint
     cval::String
     dval::Float64
     ival::Int
+    dexact::Float64
 end
+
+# Without `dexact` the correctly rounded value is the value of CSPICE.
+_EKQConstraint(cnstyp, lhs, opcode, rhs, dtype, cval, dval, ival) =
+    _EKQConstraint(cnstyp, lhs, opcode, rhs, dtype, cval, dval, ival, dval)
 
 """
     _EKQuery
@@ -267,6 +275,7 @@ struct _EKQEnc
     i::Vector{Int32}
     c::Vector{UInt8}
     d::Vector{Float64}
+    dx::Vector{Float64}     # the correctly rounded value of each element of `d`
 end
 
 "Contract: returns a new encoded query in the state that `zzekqini_` gives."
@@ -282,7 +291,8 @@ function _ek_qini()
     i[15] = _EKQ_CSIZE
     i[16] = 1
     sizehint!(i, 256)
-    return _EKQEnc(i, fill(UInt8(' '), _EKQ_CSIZE), zeros(Float64, _EKQ_MAXNUM))
+    return _EKQEnc(i, fill(UInt8(' '), _EKQ_CSIZE), zeros(Float64, _EKQ_MAXNUM),
+        zeros(Float64, _EKQ_MAXNUM))
 end
 
 # The functions of f2c index the cell from its control area: C element `k` is the cell
@@ -334,15 +344,18 @@ end
     _ek_qinqn!(q, value, type, lxb, lxe) -> NTuple{6,Int}
 
 Contract: stores the number `value` of type code `type` in the double buffer of `q` and
-returns its descriptor (`zzekinqn_`). Throws `SpiceError(:buffertoosmall)` if the
+returns its descriptor (`zzekinqn_`); `exact` is the correctly rounded value of the same
+text. Throws `SpiceError(:buffertoosmall)` if the
 buffer is full.
 """
-function _ek_qinqn!(q::_EKQEnc, value::Float64, type::Int, lxb::Int, lxe::Int)
+function _ek_qinqn!(q::_EKQEnc, value::Float64, type::Int, lxb::Int, lxe::Int,
+        exact::Float64=value)
     free = Int(q.i[14])
     size = Int(q.i[13])
     size - free + 1 <= 0 && _ek_qsignal(:buffertoosmall, "Out of room in numeric " *
         "portion of encoded query; only $size elements were available.")
     q.d[free] = value
+    q.dx[free] = exact
     q.i[14] = free + 1
     return (type, lxb, lxe, free, 0, 0)
 end
@@ -370,6 +383,7 @@ struct _EKQTokens
     lxbegs::Vector{Int}
     lxends::Vector{Int}
     numvls::Vector{Float64}
+    numexact::Vector{Float64}
     chrbuf::Vector{UInt8}
     chbegs::Vector{Int}
     chends::Vector{Int}
@@ -520,6 +534,21 @@ function _ek_qparsqs(s::AbstractVector{UInt8}, qchar::UInt8, outlen::Int)
 end
 
 """
+    _ek_qexact(lexeme, x) -> Float64
+
+Contract: `lexeme` is a numeric token that `nparsd` reads as `x`. Returns the correctly
+rounded double of the token, or `x` if the token has a form that Julia does not read
+(the result then is the value of CSPICE). The two values differ by a few units in the
+last place at most, so a result farther from `x` is not accepted.
+"""
+function _ek_qexact(lexeme::AbstractVector{UInt8}, x::Float64)::Float64
+    text = replace(String(copy(lexeme)), r"[dD]" => "e", ' ' => "", ',' => "")
+    v = tryparse(Float64, text)
+    (v === nothing || !isfinite(v)) && return x
+    return abs(v - x) <= 8 * eps(abs(x)) ? v : x
+end
+
+"""
     _ek_qnparsd(s) -> (value, error, ptr)
 
 Contract: `s` is a numeric token of `_ek_qlx4num`. Returns its value with an empty
@@ -586,6 +615,7 @@ function _ek_qscan(qb::AbstractVector{UInt8}, maxntk::Int, maxnum::Int, buflen::
     lxbegs = Int[]
     lxends = Int[]
     numvls = Float64[]
+    numexact = Float64[]
     chrbuf = UInt8[]
     chbegs = Int[]
     chends = Int[]
@@ -659,6 +689,7 @@ function _ek_qscan(qb::AbstractVector{UInt8}, maxntk::Int, maxnum::Int, buflen::
                 return nothing, string(_ek_qrep(msg, cptr + ptr - 1), "  ", nerr)
             end
             push!(numvls, x)
+            push!(numexact, _ek_qexact(lexeme, x))
             # BEINT: an optional sign and then digits only.
             b = (lexeme[1] == UInt8('+') || lexeme[1] == UInt8('-')) ? 2 : 1
             isint = b <= length(lexeme) && all(_ek_qisdigit, view(lexeme, b:length(lexeme)))
@@ -710,7 +741,7 @@ function _ek_qscan(qb::AbstractVector{UInt8}, maxntk::Int, maxnum::Int, buflen::
             end
         end
     end
-    return _EKQTokens(length(tokens), tokens, values, lxbegs, lxends, numvls, chrbuf,
+    return _EKQTokens(length(tokens), tokens, values, lxbegs, lxends, numvls, numexact, chrbuf,
         chbegs, chends), ""
 end
 
@@ -950,7 +981,7 @@ function _ek_qnrml!(q::_EKQEnc, qb::AbstractVector{UInt8}, tk::_EKQTokens)
             mtcode[node] = _EKQ_MVALUE
             mtexpr[node] = _ek_qlnkan!(dspool)
             d = _ek_qinqn!(q, tk.numvls[values[i]], t == _EKQ_TKINT ? 3 : 2,
-                tk.lxbegs[i], tk.lxends[i])
+                tk.lxbegs[i], tk.lxends[i], tk.numexact[values[i]])
             setdsc!(mtexpr[node], d, _EKQ_MVALUE)
         elseif t == _EKQ_TKQSTR || t == _EKQ_TKID
             code = t == _EKQ_TKQSTR ? _EKQ_MVALUE : _EKQ_MIDENT
@@ -2221,7 +2252,8 @@ function _ek_qdecode(q::_EKQEnc, tabcat::Vector{Int})
             dval = dtype == _EK_CHR ? 0.0 : q.d[p]
             ival = dtype == _EK_INT ? _ek_qnint(dval) : 0
             push!(constraints,
-                _EKQConstraint(cnstyp, lhs, opcode, _EKQ_NOCOL, dtype, cval, dval, ival))
+                _EKQConstraint(cnstyp, lhs, opcode, _EKQ_NOCOL, dtype, cval, dval, ival,
+                    dtype == _EK_CHR ? 0.0 : q.dx[p]))
         end
     end
     conjsizes = [Int(q.i[cbase+ncns*26+n]) for n in 1:ncnj]

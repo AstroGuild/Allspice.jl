@@ -224,10 +224,10 @@ function ekq_literal(rng, ctx, tab::EKQTable, c::Int)
     elseif col.dtype === :DP
         v === nothing && (v = round(500 * randn(rng); digits=1))
         rand(rng) < 0.15 && isinteger(v) && return v, string(Int(v))
-        # The model compares with the value of the text in the query language, which can
-        # be one unit in the last place away from `v` (see `ekq_number`); an equality with
-        # such a value finds no row in both engines.
-        return ekq_number(string(v)), string(v)
+        # The public search reads the text as the correctly rounded double, which is `v`.
+        # CSPICE and the compatibility mode read it with `nparsd` (see `ekq_number`), which
+        # can be one unit in the last place away, so they can find other rows.
+        return v, string(v)
     elseif col.dtype === :TIME
         if v !== nothing && rand(rng) < 0.6
             text = timout(ctx, v, "YYYY MON DD HR:MN:SC.###### TDB ::TDB")
@@ -863,21 +863,28 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
         @test sort(ekcolumn(res, 1)) == sort(filter(>(50), gids))
     end
 
-    ek_part("a number of a query has the value that nparsd gives") do
-        # Fixed case of the seed 777: `nparsd` (zzekscan.c line 900) reads "2.756" as the
-        # double after 2.756, and NeoSpice reads the same double on purpose. A row with the
-        # value 2.756 (shortest decimal form "2.756") is thus not equal to the number 2.756
-        # of a query, and the model must compare with `ekq_number`.
+    ek_part("a number of a query: correctly rounded in ekfind, as nparsd in the compatibility mode") do
+        # `nparsd` (zzekscan.c line 900) reads "2.756" as the double after 2.756, so in
+        # CSPICE a row with the value 2.756 is not equal to the number 2.756 of a query.
+        # The public search compares with the correctly rounded double; the compatibility
+        # mode keeps the value of CSPICE. Seed 777 has such a row.
         x = ekq_number("2.756")
         @test x === nextfloat(2.756)
         @test NeoSpice._nparsd("2.756") === x
+        @test NeoSpice._ek_qexact(codeunits("2.756"), x) === 2.756
+        @test NeoSpice._ek_qexact(codeunits("2.756D0"), x) === 2.756
+        @test NeoSpice._ek_qexact(codeunits("17"), 17.0) === 17.0
+        ks = NeoSpice.kernelset(ctx)
         vcol = findfirst(c -> c.name == "VAL", events.cols)
         vals = Float64[r[vcol][1] for r in events.rows if r[vcol] !== nothing]
-        for (op, pred) in (("=", ==(x)), (">=", >=(x)), (">", >(x)))
+        for (op, f) in (("=", ==), (">=", >=), (">", >))
             q = "SELECT ID FROM EVENTS WHERE VAL $op 2.756"
-            res, err, _ = ekfind(ctx, q)
+            eq, err, _ = NeoSpice._ek_encode_query(ks.ektables, ks, NeoSpice.timedefaults(ctx), q)
             @test !err
-            @test res.nmrows == count(pred, vals) == c_ekfind(q)[1]
+            con = only(eq.constraints)
+            @test con.dval === x && con.dexact === 2.756
+            @test ekfind(ctx, q)[1].nmrows == count(v -> f(v, 2.756), vals)
+            @test NeoSpice._ek_search(ks, eq; compat=true).nmrows == count(v -> f(v, x), vals) == c_ekfind(q)[1]
         end
     end
 
