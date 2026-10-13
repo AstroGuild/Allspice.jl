@@ -884,6 +884,15 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
             finally
                 SPICE.tsetyr(1969)
             end
+            # Regression: `tparse(s)` did not read the interval of the default context
+            # (it stayed at 1969), where `str2et(s)` did and `tparse_c` follows `tsetyr_c`.
+            try
+                tsetyr(1980)
+                @test tparse("79 Jan 1") == tparse("2079 Jan 1")
+                @test tparse(Allspice.kernelset(yctx), "79 Jan 1") == tparse("1979 Jan 1")   # no context: 1969
+            finally
+                tsetyr(1969)
+            end
             # `kclear` does not reset the defaults, as in CSPICE.
             kclear(other); timdef(other, "SET", "ZONE", "PST"); furnsh(other, Kernels.LSK)
             @test timdef(other, "GET", "ZONE") == "UTC-8" && timdef(other, "GET", "SYSTEM") == ""

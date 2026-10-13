@@ -36,7 +36,7 @@ const KERNEL_KINDS = ("SPK", "CK", "PCK", "DSK", "EK", "TEXT", "META")
 """
     kernel_filetype(entry::Loaded) -> String
 
-Type of a load-list entry as CSPICE reports it: `"SPK"`, `"CK"`, `"PCK"`, `"DSK"` for a
+Type of a load-list entry as CSPICE reports it: `"SPK"`, `"CK"`, `"PCK"`, `"DSK"`, `"EK"` for a
 binary kernel, `"META"` for a text kernel that assigns `KERNELS_TO_LOAD`, `"TEXT"` for every
 other text kernel.
 """

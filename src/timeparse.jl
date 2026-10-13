@@ -1282,9 +1282,8 @@ the call needs no kernel. The result is not an epoch of a time scale; it is the 
 that [`etcal`](@ref) writes back. `s` has a form that [`str2et`](@ref) accepts,
 without a time zone, a time system, or `A.M.` and `P.M.`.
 
-With `ctx`, a year of two digits follows [`tsetyr`](@ref) of that context. Without
-`ctx` the call does not read the default context: the year 69 is 1969 and the year 68
-is 2068.
+A year of two digits follows [`tsetyr`](@ref) of the context: at start the year 69 is
+1969 and the year 68 is 2068.
 
 Throws `SpiceError(:badtime)` if the string cannot be parsed; the message is the one
 that `tparse_c` returns in `errmsg`.
@@ -1298,7 +1297,7 @@ julia> tparse("2 JAN 2000")
 43200.0
 ```
 """
-function tparse(s::AbstractString, defs::TimeDefaults=TimeDefaults())::Float64
+function tparse(s::AbstractString, defs::TimeDefaults)::Float64
     p = _tpartv(s, 8)
     p.ok || _badtime(s, p.error)
     modify = p.modify

@@ -100,8 +100,7 @@ Set the first year of the 100 years that a year of two digits stands for, as
 
 At start the value is 1969: the year 69 is 1969 and the year 68 is 2068. After
 `tsetyr(ctx, 1980)` the year 80 is 1980 and the year 79 is 2079. The value applies to
-[`str2et`](@ref) and [`utc2et`](@ref) on the context, to [`tparse`](@ref) when the
-context is passed to it, and to the `@`
+[`str2et`](@ref), [`utc2et`](@ref) and [`tparse`](@ref) on the context, and to the `@`
 dates of the text kernels that the context loads afterwards ([`furnsh`](@ref),
 [`ldpool`](@ref), [`lmpool`](@ref)). A `year` that is not positive changes nothing, as
 in CSPICE. The value belongs to the context; CSPICE keeps one for the process.
@@ -134,5 +133,6 @@ tsetyr(year::Integer) = tsetyr(default_context(), year)
 # context form of `tparse` uses the interval of abbreviated years of the context.
 etcal(::Union{SpiceContext,KernelSet}, et::Real) = etcal(et)
 tparse(ctx::SpiceContext, s::AbstractString) = tparse(s, timedefaults(ctx))
-tparse(::KernelSet, s::AbstractString) = tparse(s)
+tparse(::KernelSet, s::AbstractString) = tparse(s, TimeDefaults())
+tparse(s::AbstractString) = tparse(default_context(), s)
 tpictr(::Union{SpiceContext,KernelSet}, sample::AbstractString) = tpictr(sample)
