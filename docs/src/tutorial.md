@@ -109,4 +109,6 @@ catch err
 end
 ```
 
+A query that the loaded SPK files cannot answer throws the subtype [`SpkInsufficientDataError`](@ref), which also holds the two bodies, the epoch and the body without data, so that a program can load another kernel or skip the epoch without reading the text.
+
 The task pages in the menu continue from here, and [Differences from CSPICE](@ref) lists what a CSPICE user must know before a port.

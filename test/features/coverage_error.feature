@@ -77,6 +77,12 @@ Feature: Errors for queries that cannot be answered
       | "de440s.bsp"             | body 599, which is in no file    | spkinsuffdata |
       | no SPK file              | body 301                         | noloadedfiles |
 
+  Scenario: Missing SPK data carry the query
+    When a state query fails for missing SPK data
+    Then the error is a "SpkInsufficientDataError", a subtype of "SpiceError"
+    And it holds the target, the observer, the epoch and the body whose data are missing
+    And its field "loaded" tells an epoch outside the data from a body that is in no file
+
   Scenario: The kinds are registered
     When the user reads "Allspice.ERROR_KINDS"
     Then it holds every kind that the package can throw, in sorted order

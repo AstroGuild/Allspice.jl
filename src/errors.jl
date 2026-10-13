@@ -94,13 +94,15 @@ const ERROR_KINDS = (
 end
 
 """
-    SpiceError(kind::Symbol, msg::String)
+    SpiceError <: Exception
+    SpiceError(kind::Symbol, msg) -> SpiceKindError
 
-The exception that the package throws for a call that fails.
+The abstract type of the exceptions that the package throws for a call that fails.
 
-`kind` is a short symbol that names the failure, such as `:spkinsuffdata`,
-`:kernelvarnotfound` or `:badarg`; test it to handle one failure. `msg` is the text for
-a person.
+Every subtype has the fields `kind` and `msg`. `kind` is a short symbol that names the
+failure, such as `:spkinsuffdata`, `:kernelvarnotfound` or `:badarg`; test it to handle
+one failure. `msg` is the text for a person. The constructor returns a
+[`SpiceKindError`](@ref), which has these two fields only.
 
 A kind is the short error message that CSPICE signals in the same call, in lower case
 (`:kernelvarnotfound` for `SPICE(KERNELVARNOTFOUND)`). Two calls can therefore report
@@ -126,10 +128,80 @@ julia> try
        end
 :kernelvarnotfound
 ```
+
+See also [`SpkInsufficientDataError`](@ref).
 """
-struct SpiceError <: Exception
+abstract type SpiceError <: Exception end
+
+"""
+    SpiceKindError <: SpiceError
+
+A [`SpiceError`](@ref) that carries no data but its `kind` and its `msg`.
+
+Most failures throw this type. Catch `SpiceError` and test `kind`; the name of this type
+is needed only to tell it from a subtype with more fields.
+"""
+struct SpiceKindError <: SpiceError
     kind::Symbol
     msg::String
-    SpiceError(kind::Symbol, msg::AbstractString) = new(_check_kind(kind), msg)
+    SpiceKindError(kind::Symbol, msg::AbstractString) = new(_check_kind(kind), msg)
 end
+SpiceError(kind::Symbol, msg::AbstractString) = SpiceKindError(kind, msg)
+
+"""
+    SpkInsufficientDataError <: SpiceError
+
+The [`SpiceError`](@ref) of a state query that the loaded SPK data cannot answer.
+
+[`spkezr`](@ref) and every call that needs the position of a body throw it.
+
+| Field | Meaning |
+|---|---|
+| `kind` | `:spkinsuffdata`, or `:noloadedfiles` if no SPK file is loaded |
+| `msg` | text for a person; it lists the coverage of `body` |
+| `target`, `observer` | NAIF ID codes of the two bodies of the query |
+| `et` | epoch of the missing data, seconds past J2000 TDB |
+| `body` | ID code of the body whose data are missing, or `nothing` if it is not known |
+| `loaded` | `true` if the loaded files hold `body` at other epochs than `et` |
+
+`loaded` tells an epoch outside the data (`true`) from a body that is in no loaded file
+(`false`). With an aberration correction, `et` is the epoch of the lookup that failed,
+which differs from the epoch of the call by the light time. `body` is `nothing` with no
+SPK file loaded. The ephemeris tables
+throw a [`SpiceKindError`](@ref) with the kind `:spkinsuffdata` for an epoch outside
+the table.
+
+# Examples
+```jldoctest
+julia> err = try
+           spkezr(SpiceContext(), 301, 0.0, "J2000", "NONE", 399)
+       catch e
+           e
+       end;
+
+julia> err isa SpkInsufficientDataError
+true
+
+julia> (err.kind, err.target, err.observer, err.et, err.body)
+(:noloadedfiles, 301, 399, 0.0, nothing)
+```
+"""
+struct SpkInsufficientDataError <: SpiceError
+    kind::Symbol
+    msg::String
+    target::Int
+    observer::Int
+    et::Float64
+    body::Union{Nothing,Int}
+    loaded::Bool
+    function SpkInsufficientDataError(kind::Symbol, msg::AbstractString, target::Integer,
+            observer::Integer, et::Real, body::Union{Nothing,Integer}, loaded::Bool)
+        @assert kind === :spkinsuffdata || kind === :noloadedfiles
+        @assert !loaded || body !== nothing
+        return new(_check_kind(kind), msg, target, observer, et, body, loaded)
+    end
+end
+
 Base.showerror(io::IO, e::SpiceError) = print(io, "SpiceError(", e.kind, "): ", e.msg)
+Base.showerror(io::IO, e::SpkInsufficientDataError) =
+    print(io, "SpkInsufficientDataError(", e.kind, "): ", e.msg)

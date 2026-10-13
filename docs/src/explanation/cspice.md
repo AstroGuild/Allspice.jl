@@ -10,7 +10,7 @@ The package keeps the names, the argument order, the units and the numerical res
 | A call fills or changes an argument | A call that changes its argument has a name that ends in `!`, as Julia code does: `wninsd!` |
 | Results come back through output arguments | A call returns its results, several of them as a tuple: `state, lt = spkezr(...)` |
 | Vectors and matrices are C arrays | Results are static arrays (`SVector`, `SMatrix`) of StaticArrays.jl; inputs can be any `AbstractVector` or `AbstractMatrix` |
-| An error sets a flag that the program must test | An error throws [`SpiceError`](@ref), whose field `kind` is a symbol and whose field `msg` is the text |
+| An error sets a flag that the program must test | An error throws a [`SpiceError`](@ref), whose field `kind` is the short message of CSPICE as a symbol and whose field `msg` is the text; missing SPK data throw a subtype with the bodies and the epoch |
 | A "found" flag tells that a lookup failed | A lookup returns `nothing` ([`bodn2c`](@ref) for an unknown name); a call that must return a value throws ([`gdpool`](@ref) for a variable that is not loaded) |
 | Indices count from 0 | Indices count from 1: the first interval of a window, the first plate of a DSK, the first row of an EK |
 | A file handle is an integer, and several calls work on a hidden "current" file | A handle is an object ([`DAFHandle`](@ref), [`DASHandle`](@ref)) that the caller passes to each call |

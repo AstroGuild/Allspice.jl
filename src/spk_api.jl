@@ -72,33 +72,42 @@ function coverage_text(ks::KernelSet, body::Integer)
     return "available coverage: " * join(parts, ", ") * more
 end
 
-"Throw the error for two chains that do not meet; `tend` and `oend` are the last bodies."
+"""
+    throw_no_connection(ks, targ, obs, t, tend, oend) -> Union{}
+
+Throw the [`SpkInsufficientDataError`](@ref) for two chains that do not meet at `t`;
+`tend` and `oend` are the last bodies of the target chain and of the observer chain.
+CSPICE signals NOLOADEDFILES with no SPK file and SPKINSUFFDATA for every other case.
+"""
 @noinline function throw_no_connection(ks::KernelSet, targ, obs, t::Float64, tend, oend)
-    # CSPICE: NOLOADEDFILES with no SPK file, SPKINSUFFDATA for every other case.
-    isempty(ks.spk) && throw(SpiceError(:noloadedfiles, "no SPK file is loaded (needed " *
-        "for target $targ relative to observer $obs at ET $t s); load one with furnsh"))
+    isempty(ks.spk) && throw(SpkInsufficientDataError(:noloadedfiles, "no SPK file is " *
+        "loaded (needed for target $targ relative to observer $obs at ET $t s); load " *
+        "one with furnsh", targ, obs, t, nothing, false))
     for body in (oend, tend)
         if body != 0 && haskey(ks.spk, Int32(body))
-            throw(SpiceError(:spkinsuffdata, "no SPK segment covers body $body at ET $t s " *
-                "(needed for target $targ relative to observer $obs); " *
-                coverage_text(ks, body)))
+            throw(SpkInsufficientDataError(:spkinsuffdata, "no SPK segment covers body " *
+                "$body at ET $t s (needed for target $targ relative to observer $obs); " *
+                coverage_text(ks, body), targ, obs, t, body, true))
         end
     end
-    throw(SpiceError(:spkinsuffdata, "no chain of SPK segments connects target $targ and " *
-        "observer $obs at ET $t s: the target chain ends at body $tend and the " *
-        "observer chain ends at body $oend"))
+    # No end of a chain is in the files at another epoch: the end that is not the solar
+    # system barycenter is the body without data.
+    missing_body = tend != 0 ? tend : oend != 0 ? oend : nothing
+    throw(SpkInsufficientDataError(:spkinsuffdata, "no chain of SPK segments connects " *
+        "target $targ and observer $obs at ET $t s: the target chain ends at body $tend " *
+        "and the observer chain ends at body $oend", targ, obs, t, missing_body, false))
 end
 
-@noinline throw_chain_depth(targ, obs, t::Float64) = throw(SpiceError(:spkinsuffdata,
-    "the SPK chain between target $targ and observer $obs at ET $t s is longer than " *
-    "$MAXCHAIN bodies"))
+@noinline throw_chain_depth(targ, obs, t::Float64) = throw(SpkInsufficientDataError(
+    :spkinsuffdata, "the SPK chain between target $targ and observer $obs at ET $t s " *
+    "is longer than $MAXCHAIN bodies", targ, obs, t, nothing, false))
 
 """
     spk_jet(ks, targ::Int32, et, ref::Int32, obs::Int32, ::Val{N}) -> NTuple{N+1,Vec3}
 
 Return the geometric position of `targ` relative to `obs` in frame `ref` at `et` and
 its time derivatives to order N (no aberration correction). The function does not
-allocate. Throws `SpiceError(:spkinsuffdata)` or `SpiceError(:noloadedfiles)`.
+allocate. Throws [`SpkInsufficientDataError`](@ref).
 """
 function spk_jet(ks::KernelSet, targ::Int32, et::T, ref::Int32, obs::Int32,
         ::Val{N}) where {T<:Real,N}
@@ -178,9 +187,9 @@ distance divided by the speed of light, in seconds. `et` is in seconds past J200
 TDB. `targ` and `obs` are NAIF ID codes; `ref` is a frame name or a frame ID.
 
 Throws `SpiceError(:unknownframe)` if `ref` is not a known frame name,
-`SpiceError(:badarg)` if `et` is not finite, `SpiceError(:noloadedfiles)` if no SPK file
-is loaded, and `SpiceError(:spkinsuffdata)` if the loaded SPK files do not connect
-`targ` and `obs` at `et`.
+`SpiceError(:badarg)` if `et` is not finite, and [`SpkInsufficientDataError`](@ref) if
+no SPK file is loaded (`:noloadedfiles`) or the loaded SPK files do not connect `targ`
+and `obs` at `et` (`:spkinsuffdata`).
 
 See also [`spkezr`](@ref), [`spkssb`](@ref).
 """
@@ -222,7 +231,8 @@ Throws `SpiceError`:
 - `:invalidoption` if `abcorr` is not valid, `:badarg` if `et` is not finite;
 - `:noloadedfiles` if no SPK file is loaded;
 - `:spkinsuffdata` if the loaded SPK files hold no chain between `targ` and `obs` at
-  the epoch needed: a body is in no file, or the epoch is outside its segments;
+  the epoch needed: a body is in no file, or the epoch is outside its segments. These
+  two are a [`SpkInsufficientDataError`](@ref), which holds the body and the epoch;
 - the kinds of [`pxform`](@ref) if `ref` is not inertial and its orientation data are
   not loaded.
 

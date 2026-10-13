@@ -221,6 +221,25 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test err isa Allspice.SpiceError
         @test occursin("spkinsuffdata", sprint(showerror, err))
         @test !isempty(err.msg)
+        # Missing SPK data carry the query and the body without data. `loaded` tells an
+        # epoch outside the data (the kind `:nocoverage` of earlier versions) from a body
+        # that is in no file (`:nopath`).
+        caught(f) = try f(); nothing catch e; e end
+        data(e) = (e.kind, e.target, e.observer, e.et, e.body, e.loaded)
+        err = caught(() -> spkezr(ctx, 301, 1e11, "J2000", "NONE", 399))
+        @test err isa SpkInsufficientDataError
+        @test data(err) == (:spkinsuffdata, 301, 399, 1e11, 399, true)
+        err = caught(() -> spkpos(ctx, "JUPITER", 0.0, "J2000", "NONE", "EARTH"))
+        @test err isa SpkInsufficientDataError
+        @test data(err) == (:spkinsuffdata, 599, 399, 0.0, 599, false)
+        err = caught(() -> spkgeo(SpiceContext(), 301, 0.0, "J2000", 399))
+        @test err isa SpkInsufficientDataError
+        @test data(err) == (:noloadedfiles, 301, 399, 0.0, nothing, false)
+        # Every other failure has the kind and the message only.
+        err = caught(() -> spkezr(ctx, 301, 0.0, "NO_SUCH_FRAME", "NONE", 399))
+        @test err isa SpiceKindError && err isa SpiceError
+        @test SpiceError(:badarg, "text") isa SpiceKindError
+        @test sprint(showerror, SpiceError(:badarg, "text")) == "SpiceError(badarg): text"
     end
 
     @apart @testset "the kind of an error is the short message of CSPICE" begin
@@ -306,7 +325,8 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
 
     @apart @testset "the registry of kinds holds the kinds that the source throws" begin
         # The kinds are read from the syntax trees of `src/`: each lower-case symbol in
-        # the first argument of `SpiceError(...)` (a literal or a conditional of literals),
+        # the first argument of `SpiceError(...)` or of the constructor of a subtype (a
+        # literal or a conditional of literals),
         # in an argument of a call that a function hands on to `SpiceError` (directly or
         # through another such function), and on the right of `kind = ...`.
         # Not seen: a kind that reaches `SpiceError` from a table or a field. The
@@ -325,7 +345,8 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         argname(a) = a isa Symbol ? a : a isa Expr && a.head in (:(::), :kw) && !isempty(a.args) ?
                                         argname(a.args[1]) : nothing
         # the positions of the arguments of a call of `x.args[1]` that hold a kind
-        kindargs(x, helpers) = name(x.args[1]) === :SpiceError ? (1,) : get(helpers, name(x.args[1]), ())
+        errtypes = (:SpiceError, :SpiceKindError, :SpkInsufficientDataError)
+        kindargs(x, helpers) = name(x.args[1]) in errtypes ? (1,) : get(helpers, name(x.args[1]), ())
         hands_on(x, arg, helpers) = x isa Expr && ((x.head === :call && any(p -> p <= length(positional(x)) &&
             mentions(positional(x)[p], arg), kindargs(x, helpers))) || any(a -> hands_on(a, arg, helpers), x.args))
         function helpers!(helpers, x)             # true if a helper or a position was added
@@ -336,7 +357,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
                 while sig isa Expr && sig.head in (:where, :(::))
                     sig = sig.args[1]
                 end
-                if sig isa Expr && sig.head === :call && name(sig.args[1]) !== :SpiceError
+                if sig isa Expr && sig.head === :call && !(name(sig.args[1]) in errtypes)
                     for (pos, a) in enumerate(positional(sig))
                         an = argname(a)
                         (an === nothing || pos in get(helpers, name(sig.args[1]), ())) && continue
@@ -360,7 +381,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
                     pos <= length(args) || continue
                     symbols!(out, args[pos])
                     k = args[pos]
-                    name(x.args[1]) !== :SpiceError || k isa QuoteNode || argname(k) isa Symbol ||
+                    !(name(x.args[1]) in errtypes) || k isa QuoteNode || argname(k) isa Symbol ||
                         (k isa Expr && k.head === :if) || push!(other, k)
                 end
             elseif x.head === :(=) && x.args[1] === :kind

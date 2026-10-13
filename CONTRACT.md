@@ -20,7 +20,11 @@ Conventions that hold everywhere:
 - Every public call that needs kernel data has three forms: `f(ks::KernelSet, args...)`,
   `f(ctx::SpiceContext, args...)`, and `f(args...)` on the default context.
 - Hot paths allocate nothing and return `StaticArrays` values.
-- Errors are `throw(SpiceError(kind, msg))`. The `kind` is the short message of CSPICE
+- Errors are `throw(SpiceError(kind, msg))`; `SpiceError` is abstract and this
+  constructor returns a `SpiceKindError`. A failure that a caller handles in normal flow
+  and that has data of its own gets a subtype with the fields `kind` and `msg` first
+  (`SpkInsufficientDataError`, thrown by the helpers of `spk_api.jl`). The `kind` is the
+  short message of CSPICE
   in lower case, for example `:invaliddegree` for SPICE(INVALIDDEGREE). A new kind goes
   into `ERROR_KINDS` (`errors.jl`): the constructor refuses a kind that is not there, and
   a test compares the registry with the kinds in the source.
@@ -48,7 +52,7 @@ order because `Loaded`, `KernelSet` and `SpiceContext` have fields of their type
 | `Loaded` | `types.jl` | one load-list entry: `path`, `source`, `content` (`DAF`, `TextKernel`, `DSKFile` or `EKFile`) |
 | `FrameDef`, `TKFrame`, `BodyRot`, `LeapSeconds`, `SclkType1` | `types.jl` | parsed pool data |
 | `KernelSet`, `TimeDefaults`, `SpiceContext` | `types.jl` | the snapshot, the defaults of `timdef`, the context |
-| `SpiceError`, `ERROR_KINDS` | `errors.jl` | the error type and the registry of its kinds |
+| `SpiceError`, `SpiceKindError`, `SpkInsufficientDataError`, `ERROR_KINDS` | `errors.jl` | the abstract error type, its two concrete types and the registry of the kinds |
 | `DynVector`, `DynFrame`, `DynLevel{K}`, `SwitchFrame`, `PoolWatch` | `dyntypes.jl` | parsed dynamic and switch frames, the recursion link, the watcher state |
 | `DLADescr`, `DSKDescr`, `DSK02Header`, `DSKSegment`, `DSKFile`, `DSKTolerances` | `dsk_types.jl` | shape-kernel descriptors, one loaded file, the six tolerances |
 | `EKColumnAttr`, `EKSegmentSummary`, `_EKColumn`, `_EKSegment`, `EKFile`, `EKTable` | `ek/types.jl` | table-kernel segments, one loaded file, one catalogue entry |
@@ -366,7 +370,7 @@ the default context, plus an inner form on a `KernelSet`.
   unknown name, and `namfrm` returns 0 for an unknown frame.
 - Internal: `spk_jet(ks, targ::Int32, et::T, ref::Int32, obs::Int32, ::Val{N}) ->
   NTuple{N+1,Vec3}` is the geometric position and its derivatives; it does not allocate
-  and throws `SpiceError(:spkinsuffdata)` or `SpiceError(:noloadedfiles)`. It is the place where a
+  and throws `SpkInsufficientDataError` (`:spkinsuffdata` or `:noloadedfiles`). It is the place where a
   type 10 segment is evaluated, with `_t10_jet` and the leap seconds of `ks`.
   `frame_jet(ks, from, to, et, ::Val{N})` is the rotation jet for any epoch type.
 - `check_epoch(et)` throws `SpiceError(:badarg)` for an epoch that is not finite;

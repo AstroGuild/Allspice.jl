@@ -6,6 +6,8 @@
 SpiceContext
 default_context
 SpiceError
+SpiceKindError
+SpkInsufficientDataError
 Allspice.ERROR_KINDS
 ```
 

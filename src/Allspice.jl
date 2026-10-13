@@ -4,7 +4,8 @@ using StaticArrays
 using Mmap
 using LinearAlgebra
 
-export SpiceContext, SpiceError, default_context
+export SpiceContext, default_context
+export SpiceError, SpiceKindError, SpkInsufficientDataError
 export furnsh, unload, kclear, ktotal
 export spkezr, spkpos, spkgeo, spkder
 export Aberration, spkssb, spkltc, spkaps, spkacs, spkapo, ltime, stelab, stlabx
@@ -71,7 +72,7 @@ export EKResult, eklef, ekuef, ekntab, ektnam, ekccnt, ekcii, ekpsel, ekfind, ek
 include("dyntypes.jl")      # DynFrame, SwitchFrame, PoolWatch (fields of the types below)
 include("dsk_types.jl")     # DLADescr, DSKDescr, DSKSegment, DSKFile, DSKTolerances
 include("ek/types.jl")      # EKColumnAttr, EKSegmentSummary, EKFile, EKTable
-include("errors.jl")         # SpiceError, ERROR_KINDS
+include("errors.jl")         # SpiceError and its subtypes, ERROR_KINDS
 include("types.jl")
 include("taylor.jl")        # Taylor{N,T} truncated series, `primal`
 include("daf.jl")           # open_daf, segment descriptors
