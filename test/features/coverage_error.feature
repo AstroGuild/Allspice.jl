@@ -65,3 +65,8 @@ Feature: Errors for queries that cannot be answered
       | bodvrd | a body name that is not known          |
       | bodvrd | an item that is not in the kernel pool |
       | bodvrd | an item that holds strings             |
+
+  Scenario: The kinds are registered
+    When the user reads "Allspice.ERROR_KINDS"
+    Then it holds every kind that the package can throw, in sorted order
+    And a "SpiceError" with a kind that is not in it cannot be constructed

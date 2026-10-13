@@ -354,39 +354,3 @@ mutable struct SpiceContext
         new(ks, lock, TimeDefaults(), PoolWatch(), DSKTolerances(), 1.0e-6)
 end
 
-"""
-    SpiceError(kind::Symbol, msg::String)
-
-The exception that the package throws for a call that fails.
-
-`kind` is a short symbol that names the failure, such as `:nocoverage`,
-`:kernelvarnotfound` or `:badarg`; test it to handle one failure. `msg` is the text for
-a person.
-
-A kind is the short error message that CSPICE signals in the same call, in lower case
-(`:kernelvarnotfound` for `SPICE(KERNELVARNOTFOUND)`). Two calls can therefore report
-the same failure with different kinds, as in CSPICE: a file that does not exist is
-`:nosuchfile` in `furnsh` and `:filenotfound` in `spkobj`. Test the kinds that the
-docstring of the call lists. A few kinds are names of this package, where CSPICE has no
-message or a less exact one: `:badarg` for an argument of the wrong size or type,
-`:nocoverage` and `:nopath` for missing SPK data, `:nolsk` for missing leap seconds.
-
-A call of CSPICE that has a `found` flag returns `nothing` here when nothing is found,
-unless its docstring names another result (an error, `0`, an empty string or vector, or
-the flag itself).
-
-# Examples
-```jldoctest
-julia> try
-           gdpool(SpiceContext(), "NO_SUCH_VARIABLE")
-       catch err
-           err isa SpiceError ? err.kind : rethrow()
-       end
-:kernelvarnotfound
-```
-"""
-struct SpiceError <: Exception
-    kind::Symbol
-    msg::String
-end
-Base.showerror(io::IO, e::SpiceError) = print(io, "SpiceError(", e.kind, "): ", e.msg)

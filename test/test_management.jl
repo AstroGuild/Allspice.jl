@@ -277,6 +277,85 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         SPICE.dvpool("BODY399_MGMT_TEXT")
     end
 
+    @apart @testset "the registry of kinds holds the kinds that the source throws" begin
+        # The kinds are read from the syntax trees of `src/`: each lower-case symbol in
+        # the first argument of `SpiceError(...)` (a literal or a conditional of literals),
+        # in an argument of a call that a function hands on to `SpiceError` (directly or
+        # through another such function), and on the right of `kind = ...`.
+        # Not seen: a kind that reaches `SpiceError` from a table or a field. The
+        # constructor refuses a kind that is not registered, so the suite fails where
+        # such a kind is thrown.
+        name(f) = f isa Symbol ? f : f isa Expr && f.head === :. && f.args[end] isa QuoteNode ?
+                                     f.args[end].value : nothing
+        islower(s) = all(c -> islowercase(c) || isdigit(c), string(s))
+        function symbols!(out, x)
+            x isa QuoteNode && x.value isa Symbol && islower(x.value) && push!(out, x.value)
+            x isa Expr && foreach(a -> symbols!(out, a), x.head === :. ? x.args[1:1] : x.args)
+            return out
+        end
+        mentions(x, s) = x === s || (x isa Expr && any(a -> mentions(a, s), x.args))
+        positional(x) = filter(a -> !(a isa Expr && a.head === :parameters), x.args[2:end])
+        argname(a) = a isa Symbol ? a : a isa Expr && a.head in (:(::), :kw) && !isempty(a.args) ?
+                                        argname(a.args[1]) : nothing
+        # the positions of the arguments of a call of `x.args[1]` that hold a kind
+        kindargs(x, helpers) = name(x.args[1]) === :SpiceError ? (1,) : get(helpers, name(x.args[1]), ())
+        hands_on(x, arg, helpers) = x isa Expr && ((x.head === :call && any(p -> p <= length(positional(x)) &&
+            mentions(positional(x)[p], arg), kindargs(x, helpers))) || any(a -> hands_on(a, arg, helpers), x.args))
+        function helpers!(helpers, x)             # true if a helper or a position was added
+            x isa Expr || return false
+            added = false
+            if x.head in (:function, :(=)) && x.args[1] isa Expr && length(x.args) == 2
+                sig = x.args[1]
+                while sig isa Expr && sig.head in (:where, :(::))
+                    sig = sig.args[1]
+                end
+                if sig isa Expr && sig.head === :call && name(sig.args[1]) !== :SpiceError
+                    for (pos, a) in enumerate(positional(sig))
+                        an = argname(a)
+                        (an === nothing || pos in get(helpers, name(sig.args[1]), ())) && continue
+                        if hands_on(x.args[2], an, helpers)
+                            helpers[name(sig.args[1])] = (get(helpers, name(sig.args[1]), ())..., pos)
+                            added = true
+                        end
+                    end
+                end
+            end
+            for a in x.args
+                added |= helpers!(helpers, a)
+            end
+            return added
+        end
+        function kinds!(out, other, x, helpers)
+            x isa Expr || return out
+            if x.head === :call
+                args = positional(x)
+                for pos in kindargs(x, helpers)
+                    pos <= length(args) || continue
+                    symbols!(out, args[pos])
+                    k = args[pos]
+                    name(x.args[1]) !== :SpiceError || k isa QuoteNode || argname(k) isa Symbol ||
+                        (k isa Expr && k.head === :if) || push!(other, k)
+                end
+            elseif x.head === :(=) && x.args[1] === :kind
+                symbols!(out, x.args[2])
+            end
+            foreach(a -> kinds!(out, other, a, helpers), x.args)
+            return out
+        end
+        trees = [Meta.parseall(read(joinpath(root, f), String)) for (root, _, files) in
+                 walkdir(joinpath(pkgdir(Allspice), "src")) for f in files if endswith(f, ".jl")]
+        helpers = Dict{Any,Tuple}()
+        while any(t -> helpers!(helpers, t), trees)   # until no function hands a kind on to a new one
+        end
+        thrown, other = Set{Symbol}(), Any[]
+        foreach(t -> kinds!(thrown, other, t, helpers), trees)
+        @test isempty(other)                     # a first argument of a form that is not read
+        @test issorted(Allspice.ERROR_KINDS) && allunique(Allspice.ERROR_KINDS)
+        @test sort!(collect(setdiff(thrown, Allspice.ERROR_KINDS))) == Symbol[]     # thrown, not registered
+        @test sort!(collect(setdiff(Allspice.ERROR_KINDS, thrown))) == Symbol[]     # registered, never thrown
+        @test_throws ArgumentError SpiceError(:nosuchkind, "a kind that is not registered")
+    end
+
     @apart @testset "contexts are independent" begin
         kclear()                                         # default context: nothing loaded
         c440 = neo_context([Kernels.DE440S])

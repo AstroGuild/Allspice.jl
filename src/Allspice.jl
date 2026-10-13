@@ -71,6 +71,7 @@ export EKResult, eklef, ekuef, ekntab, ektnam, ekccnt, ekcii, ekpsel, ekfind, ek
 include("dyntypes.jl")      # DynFrame, SwitchFrame, PoolWatch (fields of the types below)
 include("dsk_types.jl")     # DLADescr, DSKDescr, DSKSegment, DSKFile, DSKTolerances
 include("ek/types.jl")      # EKColumnAttr, EKSegmentSummary, EKFile, EKTable
+include("errors.jl")         # SpiceError, ERROR_KINDS
 include("types.jl")
 include("taylor.jl")        # Taylor{N,T} truncated series, `primal`
 include("daf.jl")           # open_daf, segment descriptors

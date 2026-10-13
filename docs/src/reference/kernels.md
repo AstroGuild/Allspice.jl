@@ -4,8 +4,9 @@
 
 ```@docs
 SpiceContext
-SpiceError
 default_context
+SpiceError
+Allspice.ERROR_KINDS
 ```
 
 ## Loading and inspecting kernels

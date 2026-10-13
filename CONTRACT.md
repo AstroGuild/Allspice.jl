@@ -20,8 +20,10 @@ Conventions that hold everywhere:
 - Every public call that needs kernel data has three forms: `f(ks::KernelSet, args...)`,
   `f(ctx::SpiceContext, args...)`, and `f(args...)` on the default context.
 - Hot paths allocate nothing and return `StaticArrays` values.
-- Errors are `throw(SpiceError(kind, msg))`. The newer files use the short message of
-  CSPICE in lower case as `kind`, for example `:invaliddegree` for SPICE(INVALIDDEGREE).
+- Errors are `throw(SpiceError(kind, msg))`. The `kind` is the short message of CSPICE
+  in lower case, for example `:invaliddegree` for SPICE(INVALIDDEGREE). A new kind goes
+  into `ERROR_KINDS` (`errors.jl`): the constructor refuses a kind that is not there, and
+  a test compares the registry with the kinds in the source.
 - CSPICE keeps state in saved variables and in process-wide tables; this package keeps
   none. State that CSPICE hides is an object that the caller owns (`DAFHandle`,
   `DASHandle`, `EKResult`, `EKFastLoad`) or an atomic field of the `SpiceContext`.
@@ -45,7 +47,8 @@ order because `Loaded`, `KernelSet` and `SpiceContext` have fields of their type
 | `PoolValue`, `Assignment`, `TextKernel` | `types.jl` | pool value (`Vector{Float64}` or `Vector{String}`) and a parsed text kernel |
 | `Loaded` | `types.jl` | one load-list entry: `path`, `source`, `content` (`DAF`, `TextKernel`, `DSKFile` or `EKFile`) |
 | `FrameDef`, `TKFrame`, `BodyRot`, `LeapSeconds`, `SclkType1` | `types.jl` | parsed pool data |
-| `KernelSet`, `TimeDefaults`, `SpiceContext`, `SpiceError` | `types.jl` | the snapshot, the defaults of `timdef`, the context, the error type |
+| `KernelSet`, `TimeDefaults`, `SpiceContext` | `types.jl` | the snapshot, the defaults of `timdef`, the context |
+| `SpiceError`, `ERROR_KINDS` | `errors.jl` | the error type and the registry of its kinds |
 | `DynVector`, `DynFrame`, `DynLevel{K}`, `SwitchFrame`, `PoolWatch` | `dyntypes.jl` | parsed dynamic and switch frames, the recursion link, the watcher state |
 | `DLADescr`, `DSKDescr`, `DSK02Header`, `DSKSegment`, `DSKFile`, `DSKTolerances` | `dsk_types.jl` | shape-kernel descriptors, one loaded file, the six tolerances |
 | `EKColumnAttr`, `EKSegmentSummary`, `_EKColumn`, `_EKSegment`, `EKFile`, `EKTable` | `ek/types.jl` | table-kernel segments, one loaded file, one catalogue entry |
