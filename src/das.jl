@@ -680,17 +680,27 @@ function dasadd(h::DASHandle, data::AbstractVector{<:Real})
     return nothing
 end
 
+"Throws `SpiceError(:valueoutofrange)` unless every element of `data` fits in an `Int32`, the integer of a DAS file."
+function _das_check_int32(who::AbstractString, data)
+    for v in data
+        typemin(Int32) <= v <= typemax(Int32) || throw(SpiceError(:valueoutofrange,
+            "$who: the value $v does not fit in the 32-bit integer of a DAS file"))
+    end
+    return nothing
+end
+
 """
     dasadi(handle, data) -> Nothing
 
 Append the integers `data` to the integer address space, as `dasadi` of SPICELIB. The file
 on disk changes when [`dascls`](@ref) runs.
 
-Throws `InexactError` if a value does not fit in 32 bits; the values before it are then
-appended already.
+Throws `SpiceError(:valueoutofrange)` if a value does not fit in 32 bits; nothing is
+appended then.
 """
 function dasadi(h::DASHandle, data::AbstractVector{<:Integer})
     _das_check_write(h, "dasadi")
+    _das_check_int32("dasadi", data)
     append!(h.ints, data)
     return nothing
 end
@@ -715,13 +725,13 @@ Replace the doubles at the DAS addresses `first:last` with the first `last - fir
 elements of `data`, as `dasudd` of SPICELIB. Nothing happens if `first > last`.
 
 Throws `SpiceError(:dasnosuchaddress)` if the range is not inside the address space, and
-`ArgumentError` if `data` is too short.
+`SpiceError(:badarg)` if `data` is too short.
 """
 function dasudd(h::DASHandle, first::Integer, last::Integer, data::AbstractVector{<:Real})
     _das_check_write(h, "dasudd")
     first > last && return nothing
     _das_check_range(h, "dasudd", first, last, length(h.dps))
-    length(data) >= last - first + 1 || throw(ArgumentError("dasudd: data is too short"))
+    length(data) >= last - first + 1 || throw(SpiceError(:badarg, "dasudd: data is too short"))
     copyto!(h.dps, first, data, firstindex(data), last - first + 1)
     return nothing
 end
@@ -733,14 +743,15 @@ Replace the integers at the DAS addresses `first:last` with the first `last - fi
 elements of `data`, as `dasudi` of SPICELIB. Nothing happens if `first > last`.
 
 Throws `SpiceError(:dasnosuchaddress)` if the range is not inside the address space,
-`ArgumentError` if `data` is too short, and `InexactError` if a value does not fit in 32
-bits.
+`SpiceError(:badarg)` if `data` is too short, and `SpiceError(:valueoutofrange)` if a
+value does not fit in 32 bits. A call that throws changes nothing.
 """
 function dasudi(h::DASHandle, first::Integer, last::Integer, data::AbstractVector{<:Integer})
     _das_check_write(h, "dasudi")
     first > last && return nothing
     _das_check_range(h, "dasudi", first, last, length(h.ints))
-    length(data) >= last - first + 1 || throw(ArgumentError("dasudi: data is too short"))
+    length(data) >= last - first + 1 || throw(SpiceError(:badarg, "dasudi: data is too short"))
+    _das_check_int32("dasudi", view(data, firstindex(data):firstindex(data)+(last-first)))
     copyto!(h.ints, first, data, firstindex(data), last - first + 1)
     return nothing
 end

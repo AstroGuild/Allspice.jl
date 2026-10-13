@@ -475,8 +475,8 @@ Throws `SpiceError`, with the kinds of CSPICE:
   index is out of range;
 - `:badvertexindex` if a vertex number is not in `1:nv`.
 
-Throws `ArgumentError` if `corpar` has more than 10 elements or `spaixd` or `spaixi` is
-too short.
+Throws `SpiceError(:badarg)` if `corpar` has more than 10 elements or `spaixd` or
+`spaixi` is too short.
 
 # Examples
 Write a tetrahedron, then read it back from the file and as a loaded kernel:
@@ -537,7 +537,7 @@ function dskw02(ctx::SpiceContext, h::DASHandle, center::Integer, surfid::Intege
         "the segment stop time $last must be greater than the start time $first")
     mn1, mx1, mn2, mx2, mn3, mx3 = Float64(mncor1), Float64(mxcor1), Float64(mncor2),
         Float64(mxcor2), Float64(mncor3), Float64(mxcor3)
-    length(corpar) <= 10 || throw(ArgumentError("dskw02: CORPAR has more than 10 elements"))
+    length(corpar) <= 10 || throw(SpiceError(:badarg, "dskw02: CORPAR has more than 10 elements"))
     par = zeros(Float64, 10)
     copyto!(par, corpar)
     twopi_ = _DSK_TWOPI
@@ -601,7 +601,7 @@ function dskw02(ctx::SpiceContext, h::DASHandle, center::Integer, surfid::Intege
         (1 <= pf[k] <= nv) || _dsk_throw(:badvertexindex, "vertex index $(k - 3 * ((k - 1) ÷ 3)) " *
             "of plate $((k - 1) ÷ 3 + 1) was $(pf[k]); vertex indices must be in the range 1:$nv")
     end
-    (length(spaixd) >= 10 && length(spaixi) >= _DSK_IXIFIX) || throw(ArgumentError(
+    (length(spaixd) >= 10 && length(spaixi) >= _DSK_IXIFIX) || throw(SpiceError(:badarg, 
         "dskw02: SPAIXD needs 10 elements and SPAIXI at least $_DSK_IXIFIX"))
     ix0 = firstindex(spaixi) - 1
     vgrext = (Int(spaixi[ix0+1]), Int(spaixi[ix0+2]), Int(spaixi[ix0+3]))
@@ -625,7 +625,7 @@ function dskw02(ctx::SpiceContext, h::DASHandle, center::Integer, surfid::Intege
     (ncgr < 1 || ncgr > _DSK_MAXCGR) && _dsk_throw(:valueoutofrange,
         "the coarse voxel count = $ncgr; the count must be in the range 1:$_DSK_MAXCGR")
     (voxnpt >= 0 && voxnpl >= 0 && vtxnpl >= 0 &&
-     length(spaixi) >= _DSK_IXIFIX + voxnpt + voxnpl + nv + vtxnpl) || throw(ArgumentError(
+     length(spaixi) >= _DSK_IXIFIX + voxnpt + voxnpl + nv + vtxnpl) || throw(SpiceError(:badarg, 
         "dskw02: SPAIXI is shorter than the sizes that it holds"))
     vf = _dsk_flat(Float64, vrtces)
     pvoxpt = ix0 + _DSK_IXIFIX

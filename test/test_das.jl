@@ -405,7 +405,13 @@ group("11. DAS files and DLA segment lists") do
         @test neo_kind(() -> dasac(w, String[])) === :invalidargument
         @test neo_kind(() -> dasac(w, ["tab\there"])) === :illegalcharacter
         @test neo_kind(() -> dasudd(w, 1, 2, [1.0, 2.0])) === :dasnosuchaddress
-        @test_throws InexactError dasadi(w, [2^40])
+        # (fault fixed: `dasadi` appended the values before the one that does not fit in 32
+        # bits and then threw `InexactError`; a call that throws now changes nothing)
+        dasadi(w, [7, 8])
+        @test neo_kind(() -> dasadi(w, [1, 2^40])) === :valueoutofrange
+        @test neo_kind(() -> dasudi(w, 1, 2, [3, 2^40])) === :valueoutofrange
+        @test neo_kind(() -> dasudi(w, 1, 2, [3])) === :badarg
+        @test (daslla(w)[3], dasrdi(w, 1, 2)) == (2, [7, 8])
         @test occursin("write", sprint(show, w))
         dascls(w)
     end

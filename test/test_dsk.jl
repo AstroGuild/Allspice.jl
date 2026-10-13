@@ -550,8 +550,8 @@ function dsk_part_6(env)
     @test neo_kind(() -> pltvol(ev[1:3], ep[1:4])) === :toofewvertices
     @test neo_kind(() -> pltvol(ev, ep[1:3])) === :toofewplates
     @test neo_kind(() -> pltvol(ev, [P3(1, 2, 3), P3(1, 2, 3), P3(1, 2, 3), P3(1, 2, length(ev) + 1)])) === :indexoutofrange
-    @test_throws ArgumentError pltnrm([1.0, 2.0], ev[1], ev[2])
-    @test_throws ArgumentError pltexp([ev[1], ev[2]], 0.1)
+    @test neo_kind(() -> pltnrm([1.0, 2.0], ev[1], ev[2])) === :badarg
+    @test neo_kind(() -> pltexp([ev[1], ev[2]], 0.1)) === :badarg
     return nothing
 end
 
@@ -781,8 +781,8 @@ function dsk_part_11(env)
     end
     @test neo_kind(() -> dskxv(ctx, true, "MARS", (), 0.0, "IAU_MARS", [v], [-v])) === :badpriorityspec
     @test neo_kind(() -> dskxv(ctx, false, "MARS", (), 0.0, "IAU_MARS", V3[], V3[])) === :invalidcount
-    @test_throws ArgumentError dskxv(ctx, false, "MARS", (), 0.0, "IAU_MARS", [v, v], [-v])
-    @test_throws ArgumentError dskxsi(ctx, false, "MARS", (), 0.0, "IAU_MARS", [1.0, 2.0], -v)
+    @test neo_kind(() -> dskxv(ctx, false, "MARS", (), 0.0, "IAU_MARS", [v, v], [-v])) === :badarg
+    @test neo_kind(() -> dskxsi(ctx, false, "MARS", (), 0.0, "IAU_MARS", [1.0, 2.0], -v)) === :badarg
 
     path = files[:a][1]
     h = dasopr(path)

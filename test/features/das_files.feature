@@ -83,3 +83,10 @@ Feature: Read and write DAS files through a handle that the caller owns
       | dasonw  | a file that exists             | fileopenfailed   |
       | dasonw  | a blank file type              | blankfiletype    |
       | dasac   | a nonprinting character        | illegalcharacter |
+      | dasadi  | a value that 32 bits cannot hold | valueoutofrange |
+      | dasudi  | fewer values than addresses    | badarg           |
+
+  Scenario: An integer writer that throws changes nothing
+    Given a file open for writing with integers in it
+    When dasadi or dasudi gets a list in which a later value does not fit in 32 bits
+    Then the error "valueoutofrange" occurs and the integers of the file are as before

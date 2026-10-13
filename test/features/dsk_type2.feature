@@ -102,3 +102,7 @@ Feature: DSK type 2 shape models (triangular plates) with the results of CSPICE
       | dskw02  | a vertex number outside of 1:NV     |
       | dski02  | an item that does not exist         |
       | dskobj  | a file that is not a DSK            |
+
+  Scenario: An input of the wrong shape
+    When dskxv gets fewer directions than vertices, or pltexp gets two vertices
+    Then a SpiceError of the kind "badarg" is thrown

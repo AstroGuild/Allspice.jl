@@ -219,7 +219,8 @@ Write an SPK segment of type 10 (two-line element sets), as `spkw10_c`.
 `consts` holds the eight geophysical constants of [`evsgp4`](@ref). `elems`
 holds `n` element sets of ten numbers each, in the form that [`getelm`](@ref) returns, and
 `epochs` holds their `n` epochs (seconds past J2000 TDB). Each epoch must be equal to the
-tenth number of its set; the call does not check this. See [`spkw02`](@ref) for the other
+tenth number of its set; as in CSPICE, the call does not check this. A count of epochs
+that differs from the count of sets throws `:badarg`. See [`spkw02`](@ref) for the other
 arguments and for the errors of every writer.
 
 The call adds to each element set the nutation angles of the IAU 1980 series at its epoch

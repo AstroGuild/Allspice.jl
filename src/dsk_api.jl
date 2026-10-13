@@ -81,13 +81,13 @@ dskstl(keywrd::Integer, dpval::Real) = dskstl(default_context(), keywrd, dpval)
 
 @inline _dsk_vec3(v::Vec3{Float64}) = v
 function _dsk_vec3(v)
-    length(v) == 3 || throw(ArgumentError("a vector of 3 elements is required, got $(length(v))"))
+    length(v) == 3 || throw(SpiceError(:badarg, "a vector of 3 elements is required, got $(length(v))"))
     return Vec3{Float64}(v[begin], v[begin+1], v[begin+2])
 end
 
 "Number of 3-vectors in `a`: the columns of a 3 x n matrix or the elements of a vector of 3-vectors."
 function _dsk_count3(a::AbstractMatrix)
-    size(a, 1) == 3 || throw(ArgumentError("a 3 x n matrix is required, got $(size(a))"))
+    size(a, 1) == 3 || throw(SpiceError(:badarg, "a 3 x n matrix is required, got $(size(a))"))
     return size(a, 2)
 end
 _dsk_count3(a::AbstractVector) = length(a)
@@ -107,7 +107,7 @@ function _dsk_flat(::Type{T}, a) where {T}
             out[3i] = a[3, i]
         else
             e = a[begin+i-1]
-            length(e) == 3 || throw(ArgumentError("element $i does not have 3 components"))
+            length(e) == 3 || throw(SpiceError(:badarg, "element $i does not have 3 components"))
             out[3i-2] = e[begin]
             out[3i-1] = e[begin+1]
             out[3i] = e[begin+2]
@@ -463,6 +463,12 @@ frame, and so is `xpt`. `nothing` replaces the `found` flag of CSPICE. The form 
 context uses the tolerances of the context ([`dskstl`](@ref)). The forms with a handle or
 with a `KernelSet` use the column "Value at start" of [`dskgtl`](@ref).
 
+A ray through an edge or a vertex meets several plates at one point. The plate number is
+then that of `dskx02_c`: the nearest hit in the first voxel along the ray that has one,
+and for equal distances the plate that comes first in the plate list of the voxel.
+Rounding decides between the plates, so [`dskxsi`](@ref) can return another of them for
+the same ray.
+
 Throws `SpiceError(:rayiszerovector)` if `raydir` is zero, `:typenotsupported` if the
 segment does not have the data type 2, and `:arraytoosmall` if a ray that meets no plate
 crosses more than 50000 voxels.
@@ -612,6 +618,11 @@ plate number, from 1. They replace the handle, the DLA descriptor, the DSK descr
 the first element of `ic` of CSPICE; `dc` of CSPICE has no content for the data type 2.
 `nothing` replaces the `found` flag.
 
+As in CSPICE, a ray that starts outside of the bounding sphere of the surface is searched
+from the point where it enters that sphere. For a ray through an edge or a vertex of the
+plates, `plid` can therefore differ from the plate that [`dskx02`](@ref) returns for the
+same ray; `xpt` agrees to rounding.
+
 The form with a context uses the tolerances of the context ([`dskstl`](@ref)). The form
 with a `KernelSet` uses the column "Value at start" of [`dskgtl`](@ref). The call reads one snapshot of the
 loaded kernels and writes nothing, so many threads can call it while another thread loads
@@ -662,8 +673,8 @@ Compute the intercepts of a set of rays as [`dskxv`](@ref) does, and store them 
 With an integer `target`, an integer `fixref` and vectors of `SVector{3,Float64}` the call
 does not allocate.
 
-Throws `ArgumentError` unless `dirarr`, `xptarr` and `fndarr` have one element for each
-ray of `vtxarr`, and the `SpiceError` kinds of [`dskxv`](@ref).
+Throws `SpiceError(:badarg)` unless `dirarr`, `xptarr` and `fndarr` have one element for
+each ray of `vtxarr`, and the kinds of [`dskxv`](@ref).
 """
 function dskxv!(xptarr::AbstractVector{Vec3{Float64}}, fndarr::AbstractVector{Bool},
         ks::KernelSet, pri::Bool, target::NameOrID, srflst, et::Real, fixref::NameOrID, vtxarr,
@@ -688,7 +699,7 @@ function _dsk_xv!(xptarr::AbstractVector{Vec3{Float64}}, fndarr::AbstractVector{
     nrays = _dsk_count3(vtxarr)
     nrays < 1 && throw(SpiceError(:invalidcount, "dskxv: the number of rays must be positive"))
     (_dsk_count3(dirarr) == nrays && length(xptarr) == nrays && length(fndarr) == nrays) ||
-        throw(ArgumentError("dskxv: the ray arrays and the result arrays must have one element for each ray"))
+        throw(SpiceError(:badarg, "dskxv: the ray arrays and the result arrays must have one element for each ray"))
     trgcde = _dsk_target(ks, target)
     fixfid = _dsk_fixfid(ks, fixref, trgcde, target)
     t = Float64(et)
@@ -739,10 +750,10 @@ fraction `delta`, as `pltexp_c`.
 distance of each vertex from the centroid is multiplied by `1 + delta`, so the result is
 in the same plane and has the same orientation.
 
-Throws `ArgumentError` unless `iverts` holds three vertices.
+Throws `SpiceError(:badarg)` unless `iverts` holds three vertices.
 """
 function pltexp(iverts, delta::Real)
-    _dsk_count3(iverts) == 3 || throw(ArgumentError("pltexp: three vertices are required"))
+    _dsk_count3(iverts) == 3 || throw(SpiceError(:badarg, "pltexp: three vertices are required"))
     a, b, c = _dsk_pltexp(_dsk_get3(iverts, 1), _dsk_get3(iverts, 2), _dsk_get3(iverts, 3),
         Float64(delta))
     return SVector{3,Vec3{Float64}}(a, b, c)
@@ -773,7 +784,7 @@ pltnp(point, v1, v2, v3) = _dsk_pltnp(_dsk_vec3(point), _dsk_vec3(v1), _dsk_vec3
 function _dsk_check_plates(who::AbstractString, plates, np::Int, nv::Int)
     for i in 1:np                        # invariant: the plates 1 .. i-1 are valid
         p = plates isa AbstractMatrix ? (plates[1, i], plates[2, i], plates[3, i]) : plates[begin+i-1]
-        length(p) == 3 || throw(ArgumentError("$who: plate $i does not have 3 vertex numbers"))
+        length(p) == 3 || throw(SpiceError(:badarg, "$who: plate $i does not have 3 vertex numbers"))
         for j in 1:3
             (1 <= p[j] <= nv) || throw(SpiceError(:indexoutofrange, "$who: vertex number " *
                 "$(p[j]) of plate $i is not in the range 1:$nv"))

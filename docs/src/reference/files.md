@@ -7,8 +7,7 @@ uses [`default_context`](@ref). `[ctx | ks,]` means that the call also accepts a
 `KernelSet`, the immutable snapshot of the kernels of a context that
 `Allspice.kernelset(ctx)` returns.
 
-An input of the wrong shape throws `SpiceError(:badarg)` in the SPK and CK writers, and
-`ArgumentError` in the DAS and DSK calls that say so.
+An input of the wrong shape throws `SpiceError(:badarg)`.
 
 ## DAF files
 
