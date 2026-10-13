@@ -1522,6 +1522,16 @@ group("9. DAF access, SPK and CK writers") do
         @test throws_kind(() -> dafgda(h, 0, 5), :dafnegaddr)
         @test throws_kind(() -> dafgda(h, 9, 8), :dafbeggtend)
         @test throws_kind(() -> dafgda(h, 1, 10^9), :filereadfailed)
+        # A file that ends inside a record: the words that it holds are returned (CSPICE
+        # gives zeros for the whole record), and a range past the end is an error.
+        last = ic[5] + 10 + (iszero((ic[5] + 10) % 128) ? 1 : 0)
+        cutfile = tempname()
+        write(cutfile, read(h.path)[1:8*last])
+        hx = dafopr(cutfile)
+        @test reinterpret(UInt64, dafgda(hx, ic[5], last)) == reinterpret(UInt64, dafgda(h, ic[5], last))
+        @test throws_kind(() -> dafgda(hx, last, last + 1), :filereadfailed)
+        dafcls(hx)
+        rm(cutfile; force=true)
         @test_throws SPICE.SpiceError SPICE.dafgda(hc, 0, 5)
         @test_throws SPICE.SpiceError ccall((:dafgda_c, LIBCSPICE), Cvoid, (Cint, Cint, Cint, Ptr{Cdouble}), hc, 9, 8, zeros(4)) === SPICE.handleerror()
         fward = dafrfr(h)[4]
