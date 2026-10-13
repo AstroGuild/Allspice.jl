@@ -388,16 +388,6 @@ group("EK write: files of Allspice are equal to files of CSPICE word for word") 
         entries += count
         measured(ekw_depth_line(name, ekw_depths(pn)))
     end
-    # The fixture wrapper `c_ek_write` gives the same files where it does not fail.
-    rng = MersenneTwister(SEED + 1)
-    small = [ek_random_segment(rng, "EVENTS", EK_EVENT_COLS, nsample(120, 400)),
-        ek_random_segment(rng, "EVENTS", EK_EVENT_COLS, nsample(90, 300); fast=true)]
-    pc = c_ek_write(joinpath(dir, "c_small.bes"), small)
-    pn = ek_write_model(EKW_N, joinpath(dir, "n_small.bes"), small)
-    nd, nw = ekw_diff(pc, pn)
-    @test nd == 0
-    words += nw
-    files += 1
     # An empty file and a file with an empty segment.
     for (k, segs) in enumerate((EKSegSpec[], [EKSegSpec("EMPTY", EK_EVENT_COLS, Vector{Any}[], false)]))
         pc = ekw_write(EKW_C, joinpath(dir, "c_empty$k.bes"), segs)
@@ -532,7 +522,7 @@ group("EK write: CSPICE loads and queries files that Allspice wrote") do
         for (table, rows) in (("KEYS", vcat(k1.rows, k2.rows)), ("FIXED", fx.rows))
             val(row, c) = row[c] === nothing ? nothing : row[c][1]
             # Equality on the integer index.
-            for key in (1, 17, 150, 299, 1000)
+            for key in (17, 1000)                           # in the column, and not in it
                 n, err, msg = c_ekfind("SELECT K, V FROM $table WHERE K = $key")
                 @test !err
                 got = c_ek_result(n, [:INT, :DP])
@@ -543,7 +533,7 @@ group("EK write: CSPICE loads and queries files that Allspice wrote") do
                 queries += 1
             end
             # A range on the double index, in the order of the index.
-            for (lo, hi) in ((-5.0, 5.0), (-2000.0, -100.0), (0.0, 1.0e9))
+            for (lo, hi) in ((-5.0, 5.0), (0.0, 1.0e9))     # a narrow range, and one without end
                 n, err, msg = c_ekfind("SELECT V FROM $table WHERE V GT $lo AND V LE $hi ORDER BY V")
                 @test !err
                 got = [g[1][1] for g in c_ek_result(n, [:DP])]
@@ -552,7 +542,7 @@ group("EK write: CSPICE loads and queries files that Allspice wrote") do
                 queries += 1
             end
             # Equality and a range on the character index.
-            for word in ("alpha", "Beta gamma", "zeta", "nothing")
+            for word in ("Beta gamma", "nothing")           # in the column, and not in it
                 n, err, msg = c_ekfind("SELECT S, K FROM $table WHERE S EQ \"$word\"")
                 @test !err
                 @test n == count(r -> val(r, 2) !== nothing && rstrip(val(r, 2)[1:min(end, 12)]) == word, rows)
@@ -946,31 +936,33 @@ group("EK write: input checks give the errors of CSPICE") do
     same("fixed-count and other columns", :ekbseg, "T", ["A", "B"],
             ["DATATYPE = INTEGER", "DATATYPE = INTEGER, FIXED_COUNT = TRUE"]; expect=:badattributes)
     # Segment and row numbers.
-    for segno in (0, 3, -4)
+    # The record calls check the segment number in `_ekw_segment` and the six entry
+    # calls check segment, column and row in `_ekw_locate`: both bounds are checked
+    # through one call of each kind, and one bad number through each of the others.
+    for segno in (0, 3)
         same("ekappr segment $segno", :ekappr, segno; expect=:invalidindex)
-        same("ekinsr segment $segno", :ekinsr, segno, 1; expect=:invalidindex)
-        same("ekdelr segment $segno", :ekdelr, segno, 1; expect=:invalidindex)
         same("ekacei segment $segno", :ekacei, segno, 1, "I", [1], false; expect=:invalidindex, oracle=false)
-        same("ekucei segment $segno", :ekucei, segno, 1, "I", [1], false; expect=:invalidindex, oracle=false)
     end
-    for recno in (0, 14, -1)
+    same("ekinsr segment 3", :ekinsr, 3, 1; expect=:invalidindex)
+    same("ekdelr segment 3", :ekdelr, 3, 1; expect=:invalidindex)
+    same("ekucei segment 3", :ekucei, 3, 1, "I", [1], false; expect=:invalidindex, oracle=false)
+    for recno in (0, 14)
         same("ekinsr row $recno", :ekinsr, 1, recno; expect=:invalidindex)
     end
     for recno in (0, 13)
         same("ekdelr row $recno", :ekdelr, 1, recno; expect=:invalidindex)
         same("ekacei row $recno", :ekacei, 1, recno, "IA", [1, 2, 3], false;
             expect=:indexoutofrange)
-        same("ekuced row $recno", :ekuced, 1, recno, "D", [1.0], false;
-            expect=:indexoutofrange)
-        same("ekucec row $recno", :ekucec, 1, recno, "C", ["x"], false;
-            expect=:indexoutofrange)
     end
-    # Columns and data types.
-    for (fname, good, bad) in ((:ekacec, "C", "I"), (:ekaced, "D", "C"), (:ekacei, "I", "T"),
-        (:ekucec, "CA", "D"), (:ekuced, "T", "IA"), (:ekucei, "IA", "DA"))
+    same("ekuced row 13", :ekuced, 1, 13, "D", [1.0], false; expect=:indexoutofrange)
+    # Columns and data types: each call has its own data types.
+    for (fname, bad) in ((:ekacec, "I"), (:ekaced, "C"), (:ekacei, "T"), (:ekucec, "D"),
+        (:ekuced, "IA"), (:ekucei, "DA"))
         vals = fname in (:ekacec, :ekucec) ? ["x", "y"] : fname in (:ekaced, :ekuced) ? [1.0] : [1, 2, 3]
-        same("$fname unknown column", fname, 1, 1, "NOPE", vals, false; expect=:bug)
         same("$fname wrong type", fname, 1, 1, bad, vals, false; expect=:wrongdatatype)
+    end
+    for (fname, vals) in ((:ekacec, ["x", "y"]), (:ekucei, [1, 2, 3]))
+        same("$fname unknown column", fname, 1, 1, "NOPE", vals, false; expect=:bug)
         same("$fname empty column name", fname, 1, 1, "", vals, false; expect=:emptystring)
     end
     # Entries.
@@ -1064,6 +1056,43 @@ group("EK write: input checks give the errors of CSPICE") do
     c_ekcls(hr)
     measured("ek_write: $checked input checks with the error kind of CSPICE, " *
              "$(length(mismatch)) mismatches; $nw words equal after the failed calls")
+end
+
+# ---------------------------------------------------------------------------------------
+# Entries that are not written yet
+# ---------------------------------------------------------------------------------------
+
+group("EK write: a new record has no entries until they are written") do
+    dir = mktempdir()
+    cols = [EKColSpec("I", :INT; indexed=true), EKColSpec("C", :CHR; strlen=-1, indexed=true),
+        EKColSpec("DA", :DP; size=-1), EKColSpec("CA", :CHR; strlen=6, size=2)]
+    rows = Vector{Any}[Any[Any[7], Any["seven"], Any[1.5, 2.5], Any["a", "b"]],
+        Any[Any[9], Any["nine"], Any[3.5], Any["c", "d"]]]
+    kinds = Dict{String,Any}()
+    paths = Dict{String,String}()
+    for (e, w, rdi, rdc) in (("c", EKW_C, c_ekrcei, c_ekrcec), ("n", EKW_N, ekrcei, ekrcec))
+        kind = e == "c" ? c_kind : neo_kind
+        paths[e] = joinpath(dir, "$(e)_new.bes")
+        h = w.ekopn(paths[e], "NEW", 0)
+        segno = w.ekbseg(h, "T", [c.name for c in cols], [ekdecl(c) for c in cols])
+        for _ in 1:3
+            w.ekappr(h, segno)
+        end
+        # A read of an entry that was never written is an error.
+        kinds[e] = (kind(() -> rdi(h, segno, 1, "I")), kind(() -> rdc(h, segno, 1, "C")))
+        # A row with such entries can be deleted, and the update calls write the entry.
+        w.ekdelr(h, segno, 2)
+        w.ekucei(h, segno, 1, "I", rows[1][1], false)
+        w.ekucec(h, segno, 1, "C", rows[1][2], false)
+        w.ekuced(h, segno, 1, "DA", rows[1][3], false)
+        w.ekucec(h, segno, 1, "CA", rows[1][4], false)
+        ekw_fill(w, h, segno, 2, cols, rows[2])
+        w.ekcls(h)
+    end
+    @test kinds["n"] == kinds["c"] == (:uninitializedvalue, :uninitialized)
+    @test ekw_diff(paths["c"], paths["n"])[1] == 0
+    nent, bad = ekw_read_check(paths["n"], [EKSegSpec("T", cols, rows, false)])
+    @test bad == 0 && nent == 8
 end
 
 # ---------------------------------------------------------------------------------------

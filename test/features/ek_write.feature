@@ -72,6 +72,13 @@ Feature: Write an EK file through a handle that the caller owns
     And the handle can still be used
     And the two files are still equal word for word
 
+  Scenario: A new record has no entries until they are written
+    Given a record that ekappr added and whose entries are not written
+    When ekrcei or ekrcec reads an entry of the record
+    Then a SpiceError is thrown whose kind is the short message of CSPICE (uninitializedvalue for a scalar number, uninitialized for a string)
+    When ekdelr deletes such a record, or ekucec, ekuced and ekucei write its entries
+    Then the file of Allspice is equal to the file of CSPICE word for word
+
   Scenario: Change a fast-loaded segment
     Given a segment that the fast writers made, with equal strings in an indexed column and array entries over several pages
     When Allspice deletes rows, inserts rows and replaces entries

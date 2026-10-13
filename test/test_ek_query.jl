@@ -18,6 +18,13 @@
 #
 # The corpus has hand-written queries (every operator and clause, invalid queries) and
 # generated queries on one, two and three tables.
+#
+# The group `ek_parse` compares the encoded form and the message of every spelling and
+# of every syntax error with CSPICE. This group therefore has one spelling of each
+# comparison operator (the generator takes the spellings at random), and of the queries
+# that are not valid it has those whose error needs the table catalogue that Allspice
+# reads from the files (names, data types, sizes, times), with a few syntax errors as
+# representatives of the path through `ekfind`.
 
 # The code of the EK groups is long and most of it runs once, so Julia compiles the
 # module of the tests without optimization while this file runs (5 s less for the five
@@ -400,21 +407,13 @@ const EK_HAND_QUERIES = [
     "SELECT VEC, IVEC, TAGS, WORDS, TVEC, DVEC, IPAIR FROM EVENTS WHERE ID < 40",
     "SELECT GID, GNAME, WEIGHT, T0, NOTE, K FROM GROUPS",
     "SELECT EID, GID, TAG, SCORE, WHEN FROM LINKS",
-    # Every comparison operator, both spellings, on every data type
+    # Every comparison operator on every data type
     "SELECT ID FROM EVENTS WHERE ID = 17",
-    "SELECT ID FROM EVENTS WHERE ID EQ 17",
     "SELECT ID FROM EVENTS WHERE ID != 17",
-    "SELECT ID FROM EVENTS WHERE ID <> 17",
-    "SELECT ID FROM EVENTS WHERE ID ^= 17",
-    "SELECT ID FROM EVENTS WHERE ID NE 17",
     "SELECT ID FROM EVENTS WHERE ID < 17",
-    "SELECT ID FROM EVENTS WHERE ID LT 17",
     "SELECT ID FROM EVENTS WHERE ID <= 17",
-    "SELECT ID FROM EVENTS WHERE ID LE 17",
     "SELECT ID FROM EVENTS WHERE ID > 170",
-    "SELECT ID FROM EVENTS WHERE ID GT 170",
     "SELECT ID FROM EVENTS WHERE ID >= 170",
-    "SELECT ID FROM EVENTS WHERE ID GE 170",
     "SELECT ID, GRP FROM EVENTS WHERE GRP = 100",
     "SELECT ID, GRP FROM EVENTS WHERE GRP < -900",
     "SELECT ID, VAL FROM EVENTS WHERE VAL = 3",
@@ -593,51 +592,35 @@ const EK_HAND_QUERIES = [
     "SELECT A.EID, B.EID, C.EID FROM LINKS A, LINKS B, LINKS C WHERE A.EID < B.EID AND B.EID < C.EID AND A.EID < 60",
     "SELECT A.EID, B.EID, C.EID FROM LINKS A, LINKS B, LINKS C WHERE A.GID = B.GID AND B.GID = C.GID",
     "SELECT E.ID, L.EID, G.GID FROM EVENTS E, LINKS L, GROUPS G WHERE E.ID = L.EID AND L.GID = G.GID OR E.ID < 2 AND L.EID < 30 AND G.GID < 4",
-    # Invalid queries: the error flag and the message must agree
+    # Invalid queries: the error flag and the message must agree. Syntax errors (the
+    # scanner and the parser find them before the catalogue is read):
     "   ",
-    "SELECT",
     "SELECT ID",
-    "SELECT ID FROM",
+    "SELECT * FROM EVENTS",
+    "SELECT ID FROM EVENTS WHERE ID <",
+    "SELECT ID FROM EVENTS WHERE NAME = 'unfinished",
+    "SELECT ID FROM EVENTS WHERE ID < 1E400",
+    # Errors of names, data types and times, which need the catalogue:
     "SELECT ID FROM NOTABLE",
     "SELECT FOO FROM EVENTS",
-    "SELECT ID FROM EVENTS WHERE",
-    "SELECT ID FROM EVENTS WHERE ID",
-    "SELECT ID FROM EVENTS WHERE ID <",
     "SELECT ID FROM EVENTS WHERE ID < 'abc'",
     "SELECT ID FROM EVENTS WHERE NAME < 3",
     "SELECT ID FROM EVENTS WHERE NAME LIKE 3",
     "SELECT ID FROM EVENTS WHERE ID LIKE 'a*'",
     "SELECT ID FROM EVENTS WHERE EPOCH < 3.0",
     "SELECT ID FROM EVENTS WHERE EPOCH < 'not a time'",
-    "SELECT ID FROM EVENTS ORDER BY",
-    "SELECT ID FROM EVENTS ORDER ID",
-    "SELECT ID FROM EVENTS WHERE (ID < 3",
-    "SELECT ID FROM EVENTS WHERE ID < 3)",
-    "SELECT ID FROM EVENTS WHERE ID < 3 AND",
-    "SELECT ID FROM EVENTS WHERE ID BETWEEN 3",
-    "SELECT ID FROM EVENTS WHERE ID BETWEEN 3 AND",
-    "SELECT ID FROM EVENTS WHERE NAME = 'unfinished",
-    "SELECT ID FROM EVENTS WHERE NAME = ''",
     "SELECT ID FROM EVENTS, GROUPS WHERE GID = EID",
     "SELECT GID FROM GROUPS, LINKS",
     "SELECT E.ID FROM EVENTS E, GROUPS E",
     "SELECT X.ID FROM EVENTS E",
-    "SELECT ID, FROM EVENTS",
-    "SELECT * FROM EVENTS",
-    "SELECT COUNT(*) FROM EVENTS",
-    "SELECT ID FROM EVENTS GROUP BY ID",
-    "SELECT ID FROM EVENTS WHERE ID < 3 ORDER BY NAME DESC ASC",
-    "SELECT ID FROM EVENTS WHERE ID = = 3",
-    "SELECT ID FROM EVENTS WHERE NAME = LABEL = DESCR",
-    "SELECT ID FROM EVENTS WHERE ID < 1E400",
-    "SELECT ID FROM EVENTS WHERE ID # 3",
     "SELECT ID FROM EVENTS WHERE NAME IS 3",
     "SELECT ID FROM EVENTS WHERE E.ID < 3",
     "SELECT ID FROM EVENTS WHERE EVENTS.NOPE < 3",
-    "FROM EVENTS SELECT ID",
     "SELECT ID FROM EVENTS WHERE EPOCH = NAME",
     "SELECT ID FROM EVENTS WHERE ID = EPOCH",
     "SELECT E.ID FROM EVENTS E, GROUPS G WHERE E.NAME = G.GID",
+    # Valid: the clauses in another order.
+    "FROM EVENTS SELECT ID",
 ]
 
 # ---------------------------------------------------------------------------------------
@@ -753,9 +736,11 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
     end
 
     ek_part("ekpsel: the SELECT clause") do
-        for q in ["SELECT ID, NAME, VAL, EPOCH, VEC FROM EVENTS",
-            "select  e.id ,g.gname, G.T0   from events e, groups g where e.grp = g.gid order by e.id",
-            "SELECT EVENTS.LABEL, IVEC FROM EVENTS WHERE ID < 3", "SELECT FOO FROM EVENTS", "SELECT ID FROM"]
+        # `ek_parse` compares the analysis of every query of its corpus with `ekpsel_c`;
+        # here: the public call on the catalogue of Allspice, one valid query with every
+        # data type, an array column, an alias and a table name, and one error.
+        for q in ["select  e.id ,g.gname, G.T0, EVENTS.VAL, ivec  from events e, groups g where e.grp = g.gid order by e.id",
+            "SELECT FOO FROM EVENTS"]
             a = ekpsel(ctx, q)
             b = c_ekpsel(q)
             @test a == b
