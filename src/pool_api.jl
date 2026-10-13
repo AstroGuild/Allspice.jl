@@ -1,9 +1,9 @@
 # Kernel-pool, name, frame-name and time interface on a context.
 
-"Return the value of pool variable `name`; throws `SpiceError(:notfound)` if it is absent."
+"Return the value of pool variable `name`; throws `SpiceError(:kernelvarnotfound)` if it is absent."
 function pool_value(ks::KernelSet, name::AbstractString)
     v = get(ks.pool, String(strip(name)), nothing)
-    v === nothing && throw(SpiceError(:notfound, "kernel-pool variable $name is not loaded"))
+    v === nothing && throw(SpiceError(:kernelvarnotfound, "kernel-pool variable $name is not loaded"))
     return v
 end
 
@@ -17,8 +17,8 @@ the call has no `start` and `room` arguments and no `found` flag: an absent vari
 is an error. Use [`expool`](@ref) or [`dtpool`](@ref) to test first. Blanks around
 `name` are ignored; letter case is not.
 
-Throws `SpiceError(:notfound)` if the variable is not in the pool and
-`SpiceError(:badtype)` if it holds character values.
+Throws `SpiceError(:kernelvarnotfound)` if the variable is not in the pool and
+`SpiceError(:typemismatch)` if it holds character values.
 
 # Examples
 ```jldoctest
@@ -37,7 +37,7 @@ See also [`gipool`](@ref), [`gcpool`](@ref), [`bodvrd`](@ref), [`pdpool`](@ref).
 """
 function gdpool(ks::KernelSet, name::AbstractString)
     v = pool_value(ks, name)
-    v isa Vector{Float64} || throw(SpiceError(:badtype, "kernel-pool variable $name is not numeric"))
+    v isa Vector{Float64} || throw(SpiceError(:typemismatch, "kernel-pool variable $name is not numeric"))
     return copy(v)
 end
 
@@ -49,8 +49,8 @@ integers, as `gipool_c`.
 
 The result holds every value; there is no `found` flag (see [`gdpool`](@ref)).
 
-Throws `SpiceError(:notfound)` if the variable is not in the pool and
-`SpiceError(:badtype)` if it holds character values.
+Throws `SpiceError(:kernelvarnotfound)` if the variable is not in the pool and
+`SpiceError(:typemismatch)` if it holds character values.
 """
 gipool(ks::KernelSet, name::AbstractString) = Int[round(Int, x) for x in gdpool(ks, name)]
 
@@ -62,13 +62,24 @@ Return the character values of the kernel-pool variable `name`, as `gcpool_c`.
 The result is a new vector with every value; there is no `found` flag (see
 [`gdpool`](@ref)).
 
-Throws `SpiceError(:notfound)` if the variable is not in the pool and
-`SpiceError(:badtype)` if it holds numeric values.
+Throws `SpiceError(:kernelvarnotfound)` if the variable is not in the pool and
+`SpiceError(:typemismatch)` if it holds numeric values.
 """
 function gcpool(ks::KernelSet, name::AbstractString)
     v = pool_value(ks, name)
-    v isa Vector{String} || throw(SpiceError(:badtype, "kernel-pool variable $name is not character"))
+    v isa Vector{String} || throw(SpiceError(:typemismatch, "kernel-pool variable $name is not character"))
     return copy(v)
+end
+
+# `bodvrd_c` signals SPICE(NOTRANSLATION) for a name without a code, where the state
+# calls signal SPICE(IDCODENOTFOUND).
+function _bodvrd_code(ks::KernelSet, body)
+    try
+        return body_code(ks, body)
+    catch e
+        (e isa SpiceError && e.kind === :idcodenotfound) || rethrow()
+        throw(SpiceError(:notranslation, "bodvrd: the body name '$body' has no NAIF ID code"))
+    end
 end
 
 """
@@ -82,8 +93,8 @@ code. `item` is case sensitive, as in CSPICE;
 blanks around it are ignored. The values have the units of the kernel: km for
 `"RADII"`, km^3/s^2 for `"GM"` in the NAIF kernels. There is no `maxn` argument.
 
-Throws `SpiceError(:unknownbody)` if the body name is not known,
-`SpiceError(:notfound)` if the variable is not in the pool and `SpiceError(:badtype)`
+Throws `SpiceError(:notranslation)` if the body name is not known,
+`SpiceError(:kernelvarnotfound)` if the variable is not in the pool and `SpiceError(:typemismatch)`
 if it holds character values.
 
 # Examples
@@ -95,7 +106,7 @@ a, b, c = bodvrd("EARTH", "RADII")    # km
 See also [`bodvcd`](@ref), [`gdpool`](@ref).
 """
 bodvrd(ks::KernelSet, body::NameOrID, item::AbstractString) =
-    gdpool(ks, string("BODY", body_code(ks, body), "_", strip(item)))
+    gdpool(ks, string("BODY", _bodvrd_code(ks, body), "_", strip(item)))
 
 """
     bods2c([ctx,] name) -> Union{Int,Nothing}
@@ -120,7 +131,7 @@ function bods2c(ks::KernelSet, name::AbstractString)
     try
         return Int(body_code(ks, name))
     catch e
-        e isa SpiceError && e.kind === :unknownbody && return nothing
+        e isa SpiceError && e.kind === :idcodenotfound && return nothing
         rethrow()
     end
 end

@@ -54,7 +54,7 @@ Feature: Aberration corrections
 
   Scenario Outline: Invalid correction
     When the user asks for a state with correction "<abcorr>"
-    Then a "SpiceError" with kind "badarg" is thrown
+    Then a "SpiceError" with kind "invalidoption" is thrown
 
     Examples:
       | abcorr |

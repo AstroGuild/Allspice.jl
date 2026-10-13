@@ -116,8 +116,11 @@ end
     return (p[1], v...)
 end
 
+# `spkpvn` of CSPICE signals SPICE(SPKTYPENOTSUPP); a binary PCK of another type has no
+# message of its own there.
 @noinline _unsupported(what, dtype) =
-    throw(SpiceError(:unsupported, "$what data type $dtype is not supported"))
+    throw(SpiceError(what == "SPK" ? :spktypenotsupp : :notsupported,
+        "$what data type $dtype is not supported"))
 
 """
     spk_eval(data::Vector{Float64}, seg::Segment, et::T, ::Val{N}) -> NTuple{N+1,Vec3{T}}
@@ -131,7 +134,7 @@ extrapolated). Type 2: all orders are derivatives of the position series. Type 3
 order 0 comes from the position series and order `k >= 1` is derivative `k-1` of the
 velocity series. Types 1, 5, 8, 9, 12 to 15 and 17 to 21 (`spk_more.jl`): order
 `k >= 2` is derivative `k-1` of the velocity function that CSPICE defines. Type 10
-and unknown types throw `SpiceError(:unsupported, ...)`. No allocation.
+and unknown types throw `SpiceError(:spktypenotsupp, ...)`. No allocation.
 """
 @inline function spk_eval(data::Vector{Float64}, seg::Segment, et::T, v::Val{N}) where {T<:Real,N}
     if seg.dtype == 2
@@ -171,7 +174,7 @@ same file; `seg.t0 <= primal(et) <= seg.t1` (not checked). The three components 
 the stored 3-1-3 angles `(PHI, DELTA, W)` with `PHI = RA + pi/2` and
 `DELTA = pi/2 - DEC`, so the matrix from the inertial frame `seg.frame` to the body
 frame is `R3(W) * R1(DELTA) * R3(PHI)`. Other types throw
-`SpiceError(:unsupported, ...)`. No allocation.
+`SpiceError(:notsupported, ...)`. No allocation.
 """
 @inline function pck_eval(data::Vector{Float64}, seg::Segment, et::T, v::Val{N}) where {T<:Real,N}
     seg.dtype == 2 || _unsupported("binary PCK", seg.dtype)

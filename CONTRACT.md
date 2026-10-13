@@ -82,7 +82,7 @@ order because `Loaded`, `KernelSet` and `SpiceContext` have fields of their type
   descriptors in file order: `Segment` for `:SPK` and `:PCK` (including the four
   directory values for SPK types 2, 3, 20 and PCK type 2), `CKSegment` for `:CK`.
   Postcondition: every segment has finite epochs and
-  `1 <= baddr <= eaddr <= length(data)`. Throws `SpiceError(:nofile)` or `(:baddaf)`.
+  `1 <= baddr <= eaddr <= length(data)`. Throws `SpiceError(:filenotfound)` or `(:baddaf)`.
 - `_daf_sizeok(size, psize, dsize, offset) -> (ok, n)` mirrors `zzsizeok_`, and
   `_daf_i32(raw, off, little)` reads one 32-bit integer; `daf_access.jl` uses both.
 
@@ -96,7 +96,7 @@ order because `Loaded`, `KernelSet` and `SpiceContext` have fields of their type
   an independent velocity series (3) order k >= 1 is derivative k-1 of the velocity
   series. Types 2 and 3 are in this file; types 1, 5, 8, 9, 12 to 15 and 17 to 21 are in
   `spk_more.jl` and `spk_types/`. Type 10 and unknown types throw
-  `SpiceError(:unsupported, ...)`: type 10 needs the leap seconds, which `spk_eval` does
+  `SpiceError(:notsupported, ...)`: type 10 needs the leap seconds, which `spk_eval` does
   not have, so only a query through a `KernelSet` evaluates it (see `spk_api.jl`).
   Precondition, not checked: `seg.t0 <= primal(et) <= seg.t1`.
 - `spk_eval_position(data, seg, et::T, ::Val{N})`: as above but always derivatives of
@@ -141,7 +141,7 @@ evaluator pair `spkrNN`/`spkeNN` of CSPICE, so a plain epoch gives the CSPICE st
 
 - `kernel_arch(path) -> Symbol`: `:SPK`, `:PCK` or `:CK` for a binary DAF, `:DSK` or
   `:EK` for a DAS file with that ID word, and `:TEXT` for every other file. Throws
-  `SpiceError(:nofile)` or, for another binary kernel type, `SpiceError(:unsupported)`.
+  `SpiceError(:filenotfound)` or, for another binary kernel type, `SpiceError(:notsupported)`.
 - `parse_text_kernel(path) -> TextKernel`: full text-kernel grammar (`\begindata`,
   `\begintext`, `=`, `+=`, numeric and string vectors, `D` exponents, `@` dates as TDB
   seconds past J2000, quoted strings with doubled quotes). String elements are kept
@@ -165,7 +165,7 @@ evaluator pair `spkrNN`/`spkeNN` of CSPICE, so a plain epoch gives the CSPICE st
   throws `SpiceError(:badpool)` if the pair is not complete or not consistent.
 - `body_code(ks::KernelSet, name::AbstractString) -> Int32` (pool first, then the
   built-in table of `zzidmap.c`, then a string that is an integer); throws
-  `SpiceError(:unknownbody, ...)`. `body_code(ks, id::Integer) = Int32(id)`.
+  `SpiceError(:idcodenotfound, ...)`. `body_code(ks, id::Integer) = Int32(id)`.
 - `body_name(ks, code) -> Union{String,Nothing}`.
 
 ## `frames.jl`
@@ -231,7 +231,7 @@ default context. The conversions need a leap-second kernel (`SpiceError(:nolsk)`
   `et::Taylor` the result carries all derivative orders. Class 1, class 2 (binary PCK
   segment first if one covers the epoch, text-PCK constants otherwise, as `tisbod`
   does), class 3 (`ck.jl`), class 4, class 5 (`dynframes.jl`) and class 6
-  (`switchframes.jl`) frames; a higher class throws `SpiceError(:unsupported, ...)`.
+  (`switchframes.jl`) frames; a higher class throws `SpiceError(:notsupported, ...)`.
   The two frame chains are followed to their first common frame, as `refchg_` does,
   for at most `MAX_FRAME_CHAIN` (10) links each (`SpiceError(:framechain)` beyond).
 - `rotation_jet(ks, from, to, et::Real, ::Val{N}) -> NTuple{N+1,Mat3}`: the same as
@@ -252,7 +252,7 @@ built, so the conversions are pure functions of the snapshot.
 
 - `build_sclk(pool) -> Dict{Int32,SclkType1}`: a clock with incomplete data is left
   out, so that a load never fails. `_sclk(ks, sc) -> SclkType1` then throws
-  `SpiceError(:kernelvarnotfound)`, or `SpiceError(:unsupported)` for another clock type.
+  `SpiceError(:kernelvarnotfound)`, or `SpiceError(:notsupported)` for another clock type.
 - `_sce2c(ks, clock, et::T) -> T` (`scec01`, continuous ticks) is piecewise linear and
   generic over the number type; it throws `SpiceError(:valueoutofrange)` outside the
   clock range. `_sce2t(ks, clock, et::Float64)` (`scet01`) rounds to whole ticks.
@@ -340,9 +340,9 @@ The write interface of the kernel pool (`pdpool`, `pcpool`, `pipool`, `dvpool`,
   `empty_kernelset()`.
 - `SpiceContext()`, `default_context()`, `kernelset(ctx) -> KernelSet` (one atomic read).
 - `furnsh([ctx], path)`, `unload([ctx], path)`, `kclear([ctx])`, `ktotal([ctx])`. If a
-  load fails, the context is unchanged. `furnsh` throws `SpiceError(:badarg)` for a
-  blank path, `SpiceError(:nofile)` for a missing file and `SpiceError(:unsupported)`
-  for a meta-kernel that lists a meta-kernel.
+  load fails, the context is unchanged. `furnsh` throws `SpiceError(:blankfilename)` for
+  a blank path, `SpiceError(:nosuchfile)` for a missing file and
+  `SpiceError(:recursiveloading)` for a meta-kernel that lists a meta-kernel.
 
 ## `spk_api.jl`, `frame_api.jl`, `pool_api.jl`
 

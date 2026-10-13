@@ -697,7 +697,7 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
         @test ktotal(c, "EK") == 0 && ekntab(c) == 0
         ekuef(c, h)                                         # not loaded: no change
         @test ktotal(c, "ALL") == 0
-        @test neo_kind(() -> eklef(c, joinpath(dirname(paths[1]), "none.bes"))) == :nofile
+        @test neo_kind(() -> eklef(c, joinpath(dirname(paths[1]), "none.bes"))) == :filenotfound
         @test neo_kind(() -> eklef(c, Kernels.LSK)) == :wrongarchitecture
         @test ktotal(c, "ALL") == 0
     end

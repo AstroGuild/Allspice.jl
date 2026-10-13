@@ -115,7 +115,7 @@ Throws `SpiceError` with the kind
   relation other than `"ABSMIN"` and `"ABSMAX"`;
 - `:idcodenotfound` if a body name is not known, `:bodiesnotdistinct` if the two bodies
   are the same;
-- `:badarg` if `abcorr` is not a correction.
+- `:invalidoption` if `abcorr` is not a correction.
 
 The errors of [`spkezr`](@ref), such as missing ephemeris data, come from the epochs
 that the search samples.

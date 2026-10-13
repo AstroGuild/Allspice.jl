@@ -357,8 +357,7 @@ sensitive. The result is a new vector with every value, in the units of the kern
 there is no `maxn` argument.
 
 Throws `SpiceError(:kernelvarnotfound)` if the variable is not in the pool and
-`SpiceError(:typemismatch)` if it holds character values. `bodvrd` reports the same
-two failures with the kinds `:notfound` and `:badtype`.
+`SpiceError(:typemismatch)` if it holds character values.
 
 # Examples
 ```jldoctest

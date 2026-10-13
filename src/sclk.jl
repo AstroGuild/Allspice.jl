@@ -101,7 +101,7 @@ end
 "Throw the error that tells why the clock `sc` has no data in `ks.sclk`."
 @noinline function _sclk_missing(ks::KernelSet, sc::Integer)
     t = sctype(ks, sc)
-    t == 1 || throw(SpiceError(:unsupported, "clock type $t of the clock $sc is not supported"))
+    t == 1 || throw(SpiceError(:notsupported, "clock type $t of the clock $sc is not supported"))
     throw(SpiceError(:kernelvarnotfound, "the SCLK01_* or SCLK_PARTITION_* kernel " *
         "variables of the spacecraft clock $sc are absent or malformed"))
 end
@@ -110,7 +110,7 @@ end
     _sclk(ks, sc) -> SclkType1
 
 Data of the type 1 clock `sc`. Throws `SpiceError` with kind `:kernelvarnotfound` (no or
-incomplete data) or `:unsupported` (a clock type other than 1).
+incomplete data) or `:notsupported` (a clock type other than 1).
 """
 @inline function _sclk(ks::KernelSet, sc::Integer)
     clock = get(ks.sclk, Int32(sc), nothing)
@@ -252,7 +252,7 @@ result has the number type of `sclkdp` (`Float64` for an integer), so a dual num
 keeps its derivative. The call does not allocate.
 
 Throws `SpiceError(:kernelvarnotfound)` if no SCLK kernel for `sc` is loaded or its
-data are incomplete, and `SpiceError(:unsupported)` if the clock is not of type 1.
+data are incomplete, and `SpiceError(:notsupported)` if the clock is not of type 1.
 Throws `SpiceError(:valueoutofrange)` if `sclkdp` is outside the range of the
 kernel and `SpiceError(:nolsk)` if a leap-second kernel is needed and not loaded.
 

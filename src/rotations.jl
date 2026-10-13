@@ -468,7 +468,7 @@ function _frame_step(ks::KernelSet, id::Int32, et::T) where {T<:Real}
         # A dynamic frame is linked to its base frame (`dynframes.jl`).
         return _dyn_frame_step(_CKExact(), ks, fd, et)
     end
-    throw(SpiceError(:unsupported,
+    throw(SpiceError(:notsupported,
         "frame $id has class $class; only classes 1 to 6 are supported"))
 end
 
@@ -490,7 +490,7 @@ function _frame_parent(ks::KernelSet, id::Int32)
     end
     (class == 3 || class == 6) && return _J2000_FRAME
     class == 5 && return _dyn_base(ks, id)
-    throw(SpiceError(:unsupported,
+    throw(SpiceError(:notsupported,
         "frame $id has class $class; only classes 1 to 6 are supported"))
 end
 

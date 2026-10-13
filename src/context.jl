@@ -116,7 +116,7 @@ bound `yearbound` of `tsetyr` for its `@` dates); throws `SpiceError` if the fil
 not exist.
 """
 function read_kernel(path::AbstractString, yearbound::Int=1969)
-    isfile(path) || throw(SpiceError(:nofile, "kernel file not found: $path"))
+    isfile(path) || throw(SpiceError(:nosuchfile, "kernel file not found: $path"))
     arch = kernel_arch(path)
     arch === :DSK && return open_dsk(path)
     arch === :EK && return open_ek(path)
@@ -137,7 +137,7 @@ function load_entries(path::AbstractString, yearbound::Int=1969)
         for file in metakernel_files(content)
             sub = read_kernel(file, yearbound)
             if sub isa TextKernel && !isempty(metakernel_files(sub))
-                throw(SpiceError(:unsupported,
+                throw(SpiceError(:recursiveloading,
                     "meta-kernel $p lists the meta-kernel $file; CSPICE does not allow this"))
             end
             push!(entries, Loaded(String(file), p, sub))
@@ -163,9 +163,9 @@ Without `ctx` the kernel goes into [`default_context`](@ref).
   assignments of a text kernel are applied on top of them.
 - An SPK, PCK or CK file in the non-native byte order is read; it is converted in memory.
 
-Throws `SpiceError(:badarg)` if `path` is blank, `SpiceError(:nofile)` if the file (or
-a file that a meta-kernel lists) does not exist, and `SpiceError(:unsupported)` if a
-meta-kernel lists a meta-kernel. A binary file that is damaged throws
+Throws `SpiceError(:blankfilename)` if `path` is blank, `SpiceError(:nosuchfile)` if the
+file (or a file that a meta-kernel lists) does not exist, and
+`SpiceError(:recursiveloading)` if a meta-kernel lists a meta-kernel. A binary file that is damaged throws
 `SpiceError(:baddaf)`, and a meta-kernel that is not consistent throws
 `SpiceError(:badkernel)`.
 
@@ -183,7 +183,7 @@ furnsh(ctx, "mission.tm")
 See also [`unload`](@ref), [`kclear`](@ref), [`ktotal`](@ref), [`kdata`](@ref).
 """
 function furnsh(ctx::SpiceContext, path::AbstractString)
-    isempty(strip(path)) && throw(SpiceError(:badarg, "furnsh: the kernel path is blank"))
+    isempty(strip(path)) && throw(SpiceError(:blankfilename, "furnsh: the kernel path is blank"))
     lock(ctx.lock) do
         entries = load_entries(path, (@atomic ctx.timedefs).yearbound)
         list = copy(kernelset(ctx).loaded)

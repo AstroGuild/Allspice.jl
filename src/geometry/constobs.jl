@@ -327,8 +327,6 @@ Throws `SpiceError`:
 - `:badarg` if `obssta` does not have 6 elements;
 - the kinds of [`spkezr`](@ref) for SPK or frame data that are not loaded.
 
-The kinds for `abcorr` and for a body name differ from those of [`spkezr`](@ref).
-
 See also [`spkcpo`](@ref), [`spkcvt`](@ref), [`azlcpo`](@ref).
 """
 function spkcvo(ks::KernelSet, target::NameOrID, et::Real, outref::NameOrID,

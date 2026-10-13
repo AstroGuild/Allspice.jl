@@ -3,7 +3,7 @@
 # second; this group keeps the error of a conversion without a leap-second kernel.
 #
 # Conventions for an absent item, as the prototype source documents them: `gdpool`,
-# `gcpool`, `gipool` and `bodvrd` throw `SpiceError(:notfound)` (SPICE.jl returns
+# `gcpool`, `gipool` and `bodvrd` throw `SpiceError(:kernelvarnotfound)` (SPICE.jl returns
 # `nothing`, or throws for `bodvrd`); `bodn2c`, `bods2c` and `bodc2n` return `nothing`;
 # `namfrm` returns 0 and `frmnam` returns "", as CSPICE does.
 
@@ -85,11 +85,11 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
         @test gdpool(ctx, "BODY399_RADII")[1] == 6378.1366
         # Absent variable and wrong type.
         @test SPICE.gdpool("NO_SUCH_VARIABLE") === nothing
-        @test throws_kind(() -> gdpool(ctx, "NO_SUCH_VARIABLE"), :notfound)
-        @test throws_kind(() -> gcpool(ctx, "NO_SUCH_VARIABLE"), :notfound)
-        @test throws_kind(() -> gipool(ctx, "NO_SUCH_VARIABLE"), :notfound)
-        @test throws_kind(() -> gcpool(ctx, "BODY399_RADII"), :badtype)
-        @test throws_kind(() -> gdpool(ctx, "TKFRAME_31009_SPEC"), :badtype)
+        @test throws_kind(() -> gdpool(ctx, "NO_SUCH_VARIABLE"), :kernelvarnotfound)
+        @test throws_kind(() -> gcpool(ctx, "NO_SUCH_VARIABLE"), :kernelvarnotfound)
+        @test throws_kind(() -> gipool(ctx, "NO_SUCH_VARIABLE"), :kernelvarnotfound)
+        @test throws_kind(() -> gcpool(ctx, "BODY399_RADII"), :typemismatch)
+        @test throws_kind(() -> gdpool(ctx, "TKFRAME_31009_SPEC"), :typemismatch)
     end
 
     @apart @testset "bodvrd" begin
@@ -111,8 +111,8 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
         # A blank name is an error in CSPICE; Allspice reports "not found".
         @test bodn2c(ctx, "") === nothing
         @test namfrm(ctx, "") == 0
-        @test throws_kind(() -> bodvrd(ctx, "EARTH", "NO_SUCH_ITEM"), :notfound)
-        @test throws_kind(() -> bodvrd(ctx, "NO_SUCH_BODY", "RADII"), :unknownbody)
+        @test throws_kind(() -> bodvrd(ctx, "EARTH", "NO_SUCH_ITEM"), :kernelvarnotfound)
+        @test throws_kind(() -> bodvrd(ctx, "NO_SUCH_BODY", "RADII"), :notranslation)
     end
 
     @apart @testset "bodn2c, bods2c, bodc2n" begin

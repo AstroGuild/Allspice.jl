@@ -125,14 +125,14 @@ and `1 <= baddr <= eaddr <= length(data)`. A CK file has its descriptors in
 encoded SCLK start and stop as `t0`, `t1`) and an empty `segments`. For SPK types 2, 3, 20 and PCK type 2 the
 fields `init`, `intlen`, `rsize`, `nrec` hold the last four doubles of the segment and
 `rsize`, `nrec` agree with the segment length. Throws `SpiceError` with kind
-`:nofile` or `:baddaf` if the file does not meet these conditions.
+`:filenotfound` or `:baddaf` if the file does not meet these conditions.
 
 The ID words `DAF/SPK`, `DAF/PCK` and `DAF/CK` are accepted, and also the old
 `NAIF/DAF` (as in `de405.bsp`), for which the kind follows from NI (5 is PCK; 6 is SPK
 or CK, and `_daf_ckspk` decides from the first segment).
 """
 function open_daf(path::AbstractString)
-    isfile(path) || throw(SpiceError(:nofile, "no such file: $path"))
+    isfile(path) || throw(SpiceError(:filenotfound, "no such file: $path"))
     nbytes = filesize(path)
     nbytes >= 2 * _DAF_RECLEN || throw(SpiceError(:baddaf,
         "file of $nbytes bytes is too short to be a DAF: $path"))

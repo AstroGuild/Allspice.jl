@@ -17,7 +17,7 @@ start epoch is not after the epoch.
 
 Only the layout that `spk14b` of CSPICE writes is accepted (fixed packet size,
 explicit reference values with the index type "last less than or equal"); another
-one throws `SpiceError(:unsupported)`.
+one throws `SpiceError(:notsupported)`.
 """
 function _spk14(data::Vector{Float64}, seg::Segment, et::T) where {T<:Real}
     b, e = seg.baddr, seg.eaddr
@@ -38,7 +38,7 @@ function _spk14(data::Vector{Float64}, seg::Segment, et::T) where {T<:Real}
         pktsz = _seg_count(seg, data[mb+15], 8, len, "packet size")
         pktoff = nmeta >= 16 ? _seg_count(seg, data[mb+16], 0, len, "packet offset") : 0
     end
-    (rdrtyp == 3 && pdrtyp == 0) || throw(SpiceError(:unsupported,
+    (rdrtyp == 3 && pdrtyp == 0) || throw(SpiceError(:notsupported,
         "SPK type 14 segment with reference directory type $rdrtyp and packet " *
         "directory type $pdrtyp is not supported"))
     stride = pktsz + pktoff

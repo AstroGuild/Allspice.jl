@@ -21,7 +21,7 @@ Feature: Errors for queries that cannot be answered
 
   Scenario: Unknown body name
     When the user asks for the state of "NO_SUCH_BODY" relative to "EARTH"
-    Then a "SpiceError" with kind "unknownbody" is thrown
+    Then a "SpiceError" with kind "idcodenotfound" is thrown, as in CSPICE
 
   Scenario: Unknown frame name
     When the user asks for a state in the frame "NO_SUCH_FRAME"
@@ -29,11 +29,11 @@ Feature: Errors for queries that cannot be answered
 
   Scenario: Aberration correction that is not valid
     When the user asks for a state with correction "RL+S"
-    Then a "SpiceError" with kind "badarg" is thrown
+    Then a "SpiceError" with kind "invalidoption" is thrown, as in CSPICE
 
   Scenario: Kernel file that does not exist
     When the user loads a path that is not a file
-    Then a "SpiceError" with kind "nofile" is thrown
+    Then a "SpiceError" with kind "nosuchfile" is thrown, as in CSPICE
     And the context is unchanged
 
   Scenario: Unknown frame ID
@@ -42,5 +42,26 @@ Feature: Errors for queries that cannot be answered
 
   Scenario: Meta-kernel that lists a meta-kernel
     When the user loads a meta-kernel whose "KERNELS_TO_LOAD" names another meta-kernel
-    Then a "SpiceError" with kind "unsupported" is thrown, as CSPICE signals an error
+    Then a "SpiceError" with kind "recursiveloading" is thrown, as in CSPICE
     And the number of loaded kernels is unchanged
+
+  Scenario Outline: The kind of an error is the short message of CSPICE
+    When the user makes the call "<call>" with "<fault>"
+    Then the kind of the "SpiceError" is the short message that CSPICE signals, in lower case
+
+    Examples:
+      | call   | fault                                  |
+      | furnsh | a path that is not a file              |
+      | furnsh | a blank path                           |
+      | ldpool | a path that is not a file              |
+      | eklef  | a path that is not a file              |
+      | ckobj  | a path that is not a file              |
+      | ckobj  | a text kernel                          |
+      | ckcov  | a time system that is not known        |
+      | spkezr | a body name that is not known          |
+      | spkezr | a correction that is not valid         |
+      | spkpos | a correction that is not valid         |
+      | spkapo | a correction that is not valid         |
+      | bodvrd | a body name that is not known          |
+      | bodvrd | an item that is not in the kernel pool |
+      | bodvrd | an item that holds strings             |

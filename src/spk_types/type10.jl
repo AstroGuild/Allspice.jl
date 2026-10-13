@@ -518,11 +518,11 @@ end
 """
     _t10_needs_lsk(seg) -> Union{}
 
-The type 10 branch of `spk_eval`: throws `SpiceError(:unsupported)`, because
+The type 10 branch of `spk_eval`: throws `SpiceError(:notsupported)`, because
 `spk_eval` has no kernel set and a type 10 segment needs the leap seconds. A query
 through a kernel set (`spkezr`, `spkgeo`, `spkder`, ...) evaluates the segment with
 `_t10_jet`.
 """
-@noinline _t10_needs_lsk(seg::Segment) = throw(SpiceError(:unsupported,
+@noinline _t10_needs_lsk(seg::Segment) = throw(SpiceError(:notsupported,
     "SPK data type 10 needs the leap seconds of the kernel set: spk_eval cannot " *
     "evaluate the segment at $(seg.baddr):$(seg.eaddr); use spkezr, spkgeo or spkder"))

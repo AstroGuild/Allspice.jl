@@ -93,7 +93,7 @@ include("spk_types/conic.jl")       # types 5, 15, 17
     _spk_state(data, seg, et::T) -> (pos::Vec3{T}, vel::Vec3{T})
 
 Position (km) and velocity (km/s) of a segment of one of the types of this file at
-`et`, by the algorithm of CSPICE; other types throw `SpiceError(:unsupported)`.
+`et`, by the algorithm of CSPICE; other types throw `SpiceError(:spktypenotsupp)`.
 
 Contract: as `spk_eval`. Every discrete decision uses `primal(et)`, so with a
 series-valued `et` both results are the series of the CSPICE position and velocity

@@ -209,7 +209,7 @@ The result is the path itself, not an integer handle as in CSPICE. It is not a
 file do not take it. The call has the effect of [`furnsh`](@ref) on a file that is an
 EK.
 
-Throws `SpiceError(:nofile)` if the file does not exist and
+Throws `SpiceError(:filenotfound)` if the file does not exist and
 `SpiceError(:wrongarchitecture)` if it is not an EK; the context is then unchanged.
 Throws `SpiceError(:ekcolnummismatch)`, `SpiceError(:ekmissingcolumn)` or
 `SpiceError(:badattributes)` if a segment of the file does not have the columns of a
@@ -219,7 +219,7 @@ See also [`ekfind`](@ref), [`ekntab`](@ref).
 """
 function eklef(ctx::SpiceContext, path::AbstractString)::String
     p = String(path)
-    isfile(p) || throw(SpiceError(:nofile, "eklef: kernel file not found: $p"))
+    isfile(p) || throw(SpiceError(:filenotfound, "eklef: kernel file not found: $p"))
     kernel_arch(p) === :EK || throw(SpiceError(:wrongarchitecture,
         "eklef: the file $p is not an EK file"))
     furnsh(ctx, p)

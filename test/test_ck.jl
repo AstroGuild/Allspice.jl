@@ -171,7 +171,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         @test [s.t1 - s.t0 for s in ks.ck[Int32(-77003)]] ==
               sort([s.t1 - s.t0 for s in ks.ck[Int32(-77003)]])
         @test throws_kind(() -> ckobj(Kernels.DE440S), :invalidfiletype)
-        @test throws_kind(() -> ckobj("/no/such/file.bc"), :nofile)
+        @test throws_kind(() -> ckobj("/no/such/file.bc"), :filenotfound)
     end
 
     @apart @testset "ckmeta" begin
@@ -523,7 +523,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         @test isempty(ckcov(ctx, p, -77011, true, "INTERVAL", 0.0, "SCLK"))
         @test isempty(ckcov(ctx, p, -4242, false, "INTERVAL", 0.0, "SCLK"))
         @test throws_kind(() -> ckcov(ctx, p, -77003, false, "RECORD", 0.0, "SCLK"), :invalidoption)
-        @test throws_kind(() -> ckcov(ctx, p, -77003, false, "SEGMENT", 0.0, "UTC"), :unsupported)
+        @test throws_kind(() -> ckcov(ctx, p, -77003, false, "SEGMENT", 0.0, "UTC"), :notsupported)
         @test throws_kind(() -> ckcov(ctx, p, -77003, false, "SEGMENT", -1.0, "SCLK"), :valueoutofrange)
         @test throws_kind(() -> ckcov(ctx, Kernels.DE440S, 399, false, "SEGMENT", 0.0, "SCLK"),
             :invalidfiletype)

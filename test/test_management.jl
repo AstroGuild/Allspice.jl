@@ -79,7 +79,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test ktotal(ctx) == 0
         @test_throws Allspice.SpiceError query(ctx, epochs[1])
         @test_throws Allspice.SpiceError pxform(ctx, "J2000", "MOON_PA", epochs[1])
-        @test throws_kind(() -> gdpool(ctx, "BODY399_RADII"), :notfound)
+        @test throws_kind(() -> gdpool(ctx, "BODY399_RADII"), :kernelvarnotfound)
         # Built-in names and frames need no kernel.
         @test bodn2c(ctx, "EARTH") == 399
         @test namfrm(ctx, "ECLIPJ2000") == 17
@@ -148,8 +148,8 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
             @test ktotal(ctx) == length(files) + 2
             # The meta-kernel variables do not stay in the pool.
             @test SPICE.gcpool("KERNELS_TO_LOAD") === nothing
-            @test throws_kind(() -> gcpool(ctx, "KERNELS_TO_LOAD"), :notfound)
-            @test throws_kind(() -> gcpool(ctx, "PATH_VALUES"), :notfound)
+            @test throws_kind(() -> gcpool(ctx, "KERNELS_TO_LOAD"), :kernelvarnotfound)
+            @test throws_kind(() -> gcpool(ctx, "PATH_VALUES"), :kernelvarnotfound)
             for et in epochs[1:5]
                 @test spkezr(ctx, "MOON", et, "MOON_PA_DE440", "NONE", "EARTH") ==
                       spkezr(direct, "MOON", et, "MOON_PA_DE440", "NONE", "EARTH")
@@ -163,17 +163,17 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
             unload(ctx, mk)
             SPICE.unload(mk)
             @test ktotal(ctx) == SPICE.ktotal("ALL") == 1
-            @test throws_kind(() -> gdpool(ctx, "BODY399_RADII"), :notfound)
+            @test throws_kind(() -> gdpool(ctx, "BODY399_RADII"), :kernelvarnotfound)
             @test spkezr(ctx, 301, epochs[1], "J2000", "NONE", 399)[1] isa SVector{6,Float64}
             @test_throws Allspice.SpiceError pxform(ctx, "J2000", "MOON_PA_DE440", epochs[1])
             # A missing file gives an error and leaves the context unchanged.
-            @test throws_kind(() -> furnsh(ctx, joinpath(tmp, "absent.bsp")), :nofile)
+            @test throws_kind(() -> furnsh(ctx, joinpath(tmp, "absent.bsp")), :nosuchfile)
             @test ktotal(ctx) == 1
             # A meta-kernel that lists a meta-kernel is an error, as in CSPICE.
             outer = joinpath(tmp, "outer.tm")
             write(outer, "KPL/MK\n\\begindata\nKERNELS_TO_LOAD = ( '$mk' )\n\\begintext\n")
             @test_throws SPICE.SpiceError SPICE.furnsh(outer)
-            @test throws_kind(() -> furnsh(ctx, outer), :unsupported)
+            @test throws_kind(() -> furnsh(ctx, outer), :recursiveloading)
             @test ktotal(ctx) == 1
         end
     end
@@ -197,9 +197,9 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         end
         @test_throws SPICE.SpiceError SPICE.spkezr("301", hi + 1e6, "J2000", "NONE", "399")
         # Unknown body, by name; a body with no ephemeris data, by ID.
-        @test throws_kind(() -> spkezr(ctx, "NO_SUCH_BODY", 0.0, "J2000", "NONE", "EARTH"), :unknownbody)
-        @test throws_kind(() -> spkezr(ctx, "EARTH", 0.0, "J2000", "NONE", "NO_SUCH_BODY"), :unknownbody)
-        @test throws_kind(() -> spkder(ctx, "NO_SUCH_BODY", 0.0, "J2000", "EARTH", Val(1)), :unknownbody)
+        @test throws_kind(() -> spkezr(ctx, "NO_SUCH_BODY", 0.0, "J2000", "NONE", "EARTH"), :idcodenotfound)
+        @test throws_kind(() -> spkezr(ctx, "EARTH", 0.0, "J2000", "NONE", "NO_SUCH_BODY"), :idcodenotfound)
+        @test throws_kind(() -> spkder(ctx, "NO_SUCH_BODY", 0.0, "J2000", "EARTH", Val(1)), :idcodenotfound)
         @test_throws Allspice.SpiceError spkezr(ctx, 599, 0.0, "J2000", "NONE", 399)
         @test_throws Allspice.SpiceError spkezr(ctx, "PHOBOS", 0.0, "J2000", "NONE", "EARTH")
         # Unknown frame.
@@ -209,7 +209,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test throws_kind(() -> pxder(ctx, "J2000", "NO_SUCH_FRAME", 0.0, Val(1)), :unknownframe)
         @test throws_kind(() -> pxform(ctx, 1, 987654, 0.0), :unknownframe)       # by frame ID
         # A correction string that is not valid (group 9 has the full list).
-        @test throws_kind(() -> spkezr(ctx, 301, 0.0, "J2000", "RL+S", 399), :badarg)
+        @test throws_kind(() -> spkezr(ctx, 301, 0.0, "J2000", "RL+S", 399), :invalidoption)
         @test spkezr(ctx, 301, 0.0, "J2000", " none ", 399) == spkezr(ctx, 301, 0.0, "J2000", "NONE", 399)
         # A frame whose data are not loaded (binary PCK of DE421 is not on disk).
         if isfile(Kernels.MOON_TF_OLD)
@@ -221,6 +221,60 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test err isa Allspice.SpiceError
         @test occursin("nocoverage", sprint(showerror, err))
         @test !isempty(err.msg)
+    end
+
+    @apart @testset "the kind of an error is the short message of CSPICE" begin
+        # Regression: these calls had kinds of their own (`:nofile`, `:badarg`,
+        # `:unknownbody`, `:notfound`, `:badtype`, `:baddaf`, `:unsupported`), so that the
+        # same failure had two kinds in sibling calls. One case for each kind that changed.
+        function ckind(f)                       # short message of the direct CSPICE call `f`
+            f()
+            ccall((:failed_c, SPICE.libcspice), Cint, ()) == 0 && return :none
+            buf = zeros(UInt8, 64)
+            ccall((:getmsg_c, SPICE.libcspice), Cvoid, (Cstring, Cint, Ptr{UInt8}), "SHORT", 64, buf)
+            ccall((:reset_c, SPICE.libcspice), Cvoid, ())
+            return Symbol(lowercase(replace(unsafe_string(pointer(buf)), "SPICE(" => "", ")" => "")))
+        end
+        nkind(f) = try f(); :none catch e; e isa Allspice.SpiceError ? e.kind : rethrow() end
+        oracle_load(Kernels.full_set())
+        ctx = neo_context(Kernels.full_set())
+        SPICE.pcpool("BODY399_MGMT_TEXT", ["a"]); pcpool(ctx, "BODY399_MGMT_TEXT", ["a"])
+        none = joinpath(mktempdir(), "none.bc")
+        st, lt, n = zeros(6), Ref(0.0), Ref{Cint}(0)
+        ids = SPICE.SpiceIntCell(10); cover = SPICE.SpiceDoubleCell(10)
+        ezr(targ, corr) = ccall((:spkezr_c, SPICE.libcspice), Cvoid, (Cstring, Cdouble, Cstring, Cstring,
+            Cstring, Ptr{Cdouble}, Ptr{Cdouble}), targ, 0.0, "J2000", corr, "EARTH", st, lt)
+        pos(targ, corr) = ccall((:spkpos_c, SPICE.libcspice), Cvoid, (Cstring, Cdouble, Cstring, Cstring,
+            Cstring, Ptr{Cdouble}, Ptr{Cdouble}), targ, 0.0, "J2000", corr, "EARTH", st, lt)
+        value(body, item) = ccall((:bodvrd_c, SPICE.libcspice), Cvoid, (Cstring, Cstring, Cint, Ptr{Cint},
+            Ptr{Cdouble}), body, item, 6, n, st)
+        cases = (
+            (:nosuchfile, () -> furnsh(ctx, none), () -> ccall((:furnsh_c, SPICE.libcspice), Cvoid, (Cstring,), none)),
+            (:blankfilename, () -> furnsh(ctx, " "), () -> ccall((:furnsh_c, SPICE.libcspice), Cvoid, (Cstring,), " ")),
+            (:fileopenfailed, () -> ldpool(ctx, none), () -> ccall((:ldpool_c, SPICE.libcspice), Cvoid, (Cstring,), none)),
+            (:filenotfound, () -> eklef(ctx, none),
+                () -> ccall((:eklef_c, SPICE.libcspice), Cvoid, (Cstring, Ptr{Cint}), none, n)),
+            (:filenotfound, () -> ckobj(none),
+                () -> ccall((:ckobj_c, SPICE.libcspice), Cvoid, (Cstring, Ref{SPICE.Cell{SPICE.SpiceInt}}), none, ids.cell)),
+            (:invalidarchtype, () -> ckobj(Kernels.LSK), () -> ccall((:ckobj_c, SPICE.libcspice), Cvoid,
+                (Cstring, Ref{SPICE.Cell{SPICE.SpiceInt}}), Kernels.LSK, ids.cell)),
+            (:idcodenotfound, () -> spkezr(ctx, "NO_SUCH_BODY", 0.0, "J2000", "NONE", "EARTH"),
+                () -> ezr("NO_SUCH_BODY", "NONE")),
+            (:invalidoption, () -> spkezr(ctx, "MOON", 0.0, "J2000", "RL+S", "EARTH"),
+                () -> ezr("MOON", "RL+S")),
+            (:spkinvalidoption, () -> spkpos(ctx, "MOON", 0.0, "J2000", "RL+S", "EARTH"),
+                () -> pos("MOON", "RL+S")),
+            (:spkinvalidoption, () -> spkapo(ctx, 301, 0.0, "J2000", zeros(6), "RL+S"),
+                () -> ccall((:spkapo_c, SPICE.libcspice), Cvoid, (Cint, Cdouble, Cstring, Ptr{Cdouble}, Cstring,
+                    Ptr{Cdouble}, Ptr{Cdouble}), 301, 0.0, "J2000", zeros(6), "RL+S", st, lt)),
+            (:notranslation, () -> bodvrd(ctx, "NO_SUCH_BODY", "RADII"), () -> value("NO_SUCH_BODY", "RADII")),
+            (:kernelvarnotfound, () -> bodvrd(ctx, "EARTH", "NO_SUCH_ITEM"), () -> value("EARTH", "NO_SUCH_ITEM")),
+            (:typemismatch, () -> bodvrd(ctx, "EARTH", "MGMT_TEXT"), () -> value("EARTH", "MGMT_TEXT")),
+        )
+        for (kind, neo, c) in cases
+            @test nkind(neo) === ckind(c) === kind
+        end
+        SPICE.dvpool("BODY399_MGMT_TEXT")
     end
 
     @apart @testset "contexts are independent" begin
@@ -239,8 +293,8 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test [spkezr(301, et, "J2000", "NONE", 10) for et in epochs] == b
         # Changing one explicit context changes neither the other nor the default.
         furnsh(c440, Kernels.PCK11)
-        @test throws_kind(() -> gdpool(c405, "BODY399_RADII"), :notfound)
-        @test throws_kind(() -> gdpool("BODY399_RADII"), :notfound)
+        @test throws_kind(() -> gdpool(c405, "BODY399_RADII"), :kernelvarnotfound)
+        @test throws_kind(() -> gdpool("BODY399_RADII"), :kernelvarnotfound)
         kclear(c440)
         @test ktotal(c440) == 0 && ktotal(c405) == 1 && ktotal() == 1
         @test [query(c405, et) for et in epochs] == b

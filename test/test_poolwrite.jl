@@ -446,7 +446,7 @@ group("18. kernel-pool edits and watchers against CSPICE", Kernels.LSK, Kernels.
         @test !expool(ctx, "PW_EMPTY")
         pcpool(ctx, "PW_CUT", ["a"^100])
         @test gcpool(ctx, "PW_CUT") == ["a"^80]
-        @test throws_kind(() -> ldpool(ctx, "/no/such/file.tpc"), :nofile)
+        @test throws_kind(() -> ldpool(ctx, "/no/such/file.tpc"), :fileopenfailed)
         @test throws_kind(() -> gnpool(ctx, "*", 1, -1), :badarraysize)
     end
 

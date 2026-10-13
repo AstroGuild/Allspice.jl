@@ -48,7 +48,7 @@ Feature: States from every SPK data type except two-line elements
   Scenario: Two-line elements
     Given a segment of type 10
     When the user asks for its state
-    Then Allspice throws an error of kind "unsupported"
+    Then Allspice throws an error of kind "notsupported"
 
   Scenario: Damaged segment
     Given a segment whose count at the end does not agree with its length

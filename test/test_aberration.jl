@@ -136,17 +136,17 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
         # Values that CSPICE recognizes and rejects, and values that it does not know.
         for bad in ("RL", "RL+S", "XRL", "XRL+S", "S", "XS", "", "   ", "LT+", "LTS", "L",
                 "NONE+S", "XNONE", "LT+S+S", "CN+SS", "λT", "LT\t")
-            @test throws_kind(() -> Aberration(bad), :badarg)
+            @test throws_kind(() -> Aberration(bad), :invalidoption)
             @test_throws Exception SPICE.spkezr("301", 0.0, "J2000", bad, "399")
         end
         # The calls parse the string with `Aberration`: one bad value through each of them.
-        @test throws_kind(() -> spkezr(ctx, 301, 0.0, "J2000", "RL+S", 399), :badarg)
-        @test throws_kind(() -> spkpos(ctx, 301, 0.0, "J2000", "RL+S", 399), :badarg)
-        @test throws_kind(() -> spkder(ctx, 301, 0.0, "J2000", "RL+S", 399, Val(1)), :badarg)
+        @test throws_kind(() -> spkezr(ctx, 301, 0.0, "J2000", "RL+S", 399), :invalidoption)
+        @test throws_kind(() -> spkpos(ctx, 301, 0.0, "J2000", "RL+S", 399), :spkinvalidoption)
+        @test throws_kind(() -> spkder(ctx, 301, 0.0, "J2000", "RL+S", 399, Val(1)), :invalidoption)
         # CSPICE keeps the first five non-blank characters only, so it reads "XLT+SX"
         # as "XLT+S". Allspice does not truncate: the value is an error.
         @test SPICE.spkezr("301", 0.0, "J2000", "XLT+SX", "399")[2] > 0
-        @test throws_kind(() -> Aberration("XLT+SX"), :badarg)
+        @test throws_kind(() -> Aberration("XLT+SX"), :invalidoption)
     end
 
     pairs = [(301, 399), (399, 301), (10, 399), (399, 10), (5, 301), (4, 0), (3, 199),
@@ -296,7 +296,7 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
         @test throws_kind(() -> spkapo(ctx, 301, 0.0, "IAU_EARTH", st, "LT"), :badarg)
         @test throws_kind(() -> spkltc(ctx, 301, 0.0, "J2000", "LT", zeros(5)), :badarg)
         @test throws_kind(() -> spkaps(ctx, 301, 0.0, "J2000", "LT", st, zeros(2)), :badarg)
-        @test throws_kind(() -> spkltc(ctx, 301, 0.0, "J2000", "S", st), :badarg)
+        @test throws_kind(() -> spkltc(ctx, 301, 0.0, "J2000", "S", st), :invalidoption)
         @test throws_kind(() -> ltime(ctx, 0.0, 399, "<>", 301), :badarg)
         @test throws_kind(() -> stelab(SVector(1.0, 0.0, 0.0), SVector(3e5, 0.0, 0.0)), :badarg)
         @test throws_kind(() -> stelab([1.0, 0.0], [0.0, 0.0, 0.0]), :badarg)

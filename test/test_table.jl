@@ -91,7 +91,7 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
         @test throws_kind(() -> ephemeris_table(ctx, 301, t0, t1, "J2000", "NONE", 399; ncoef=1), :badarg)
         @test throws_kind(() -> ephemeris_table(ctx, 301, t0, t1, "J2000", "NONE", 399; tol=0.0), :badarg)
         @test throws_kind(() -> ephemeris_table(ctx, 301, t0, t1, "J2000", "NONE", 399; maxintervals=0), :badarg)
-        @test throws_kind(() -> ephemeris_table(ctx, 301, t0, t1, "J2000", "BAD", 399), :badarg)
+        @test throws_kind(() -> ephemeris_table(ctx, 301, t0, t1, "J2000", "BAD", 399), :invalidoption)
         @test_throws SpiceError ephemeris_table(ctx, 301, t0, 1e11, "J2000", "NONE", 399)
         @test_throws SpiceError ephemeris_table(ctx, 499, t0, t1, "J2000", "NONE", 399)
         @test throws_kind(() -> Allspice.EphemerisTable(zeros(5), 0.0, 1.0, 1, 2, 1, 2, 1, 0.0), :badarg)

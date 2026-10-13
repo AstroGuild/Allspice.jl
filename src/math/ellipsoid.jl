@@ -1423,7 +1423,7 @@ function _m_bodyid(ks::KernelSet, name::NameOrID, kind::Symbol)
     try
         return body_code(ks, name)
     catch e
-        e isa SpiceError && e.kind === :unknownbody &&
+        e isa SpiceError && e.kind === :idcodenotfound &&
             throw(SpiceError(kind, "the body $name has no ID code"))
         rethrow()
     end

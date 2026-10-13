@@ -41,7 +41,7 @@ each imply `lt`. A value `c` has the properties `c.uselt` (the flag `lt`),
 `c.converged`, `c.stellar`, `c.transmit` and `c.geometric` (true for `"NONE"` only).
 `string(c)` gives the CSPICE spelling.
 
-Throws `SpiceError(:badarg)` if the string is not one of the nine above. This includes
+Throws `SpiceError(:invalidoption)` if the string is not one of the nine above. This includes
 the values that CSPICE recognizes and rejects: `RL`, `RL+S`, `XRL`, `XRL+S`, `S`, `XS`.
 
 # Examples
@@ -102,9 +102,25 @@ function _abcode(s::AbstractString)
     return code
 end
 
-@noinline _throw_abcorr(s, why) = throw(SpiceError(:badarg,
+@noinline _throw_abcorr(s, why) = throw(SpiceError(:invalidoption,
     "aberration correction \"$s\" $why; the valid values are NONE, LT, LT+S, CN, CN+S, " *
     "XLT, XLT+S, XCN, XCN+S"))
+
+"""
+    _spk_abcorr(abcorr) -> Aberration
+
+The correction for `spkpos` and `spkapo`: CSPICE signals SPICE(SPKINVALIDOPTION) there
+for a string that is not valid, where `spkezr` signals SPICE(INVALIDOPTION).
+"""
+@inline _spk_abcorr(c::Aberration) = c
+@inline function _spk_abcorr(s::AbstractString)
+    try
+        return Aberration(s)
+    catch e
+        (e isa SpiceError && e.kind === :invalidoption) || rethrow()
+        throw(SpiceError(:spkinvalidoption, e.msg))
+    end
+end
 
 "Parse a correction string that is not one of the nine common spellings."
 @noinline function _parse_abcorr(s::AbstractString)
@@ -594,7 +610,8 @@ because CSPICE approximates the rate of the light time.
 [Exact derivatives and the rates of CSPICE](@ref) gives the function that is
 differentiated.
 
-Throws `SpiceError(:badarg)` if `N` is not an integer `>= 0` or `abcorr` is not valid,
+Throws `SpiceError(:badarg)` if `N` is not an integer `>= 0`, `SpiceError(:invalidoption)`
+if `abcorr` is not valid,
 and the errors of [`spkezr`](@ref).
 
 # Examples
@@ -666,9 +683,9 @@ derivative of `lt` (no unit). The `LT` forms make one iteration. The `CN` forms 
 at most five and stop when the light time changes by less than `1e-17 * max(1, |epoch|)`.
 
 Throws `SpiceError(:badarg)` if `ref` is not inertial, `stobs` does not have 6
-elements, `abcorr` is not valid, `et` is not finite, or the range rate of the target
-is above `(1 - 1e-10)` times the speed of light. Throws the SPK errors of
-[`spkgeo`](@ref).
+elements, `et` is not finite, or the range rate of the target
+is above `(1 - 1e-10)` times the speed of light. Throws `SpiceError(:invalidoption)` if
+`abcorr` is not valid, and the SPK errors of [`spkgeo`](@ref).
 
 See also [`spkaps`](@ref), [`spkacs`](@ref).
 """
@@ -758,8 +775,9 @@ and `lt` is in seconds. The `LT` forms make one light-time iteration and the `CN
 forms exactly three, as in CSPICE. Note the argument order: `sobs` is before `abcorr`.
 
 Throws `SpiceError(:badarg)` if `ref` is not inertial, `sobs` does not have 6
-elements, `abcorr` is not valid, `et` is not finite, or (for `+S`) the speed of the
-observer is not below the speed of light. Throws the SPK errors of [`spkgeo`](@ref).
+elements, `et` is not finite, or (for `+S`) the speed of the
+observer is not below the speed of light. Throws `SpiceError(:spkinvalidoption)` if
+`abcorr` is not valid, and the SPK errors of [`spkgeo`](@ref).
 
 See also [`spkpos`](@ref), [`spkltc`](@ref).
 """
@@ -767,7 +785,7 @@ function spkapo(ks::KernelSet, targ::Integer, et::Real, ref::NameOrID, sobs::Abs
         abcorr::AbcorrArg)
     robs, vobs = _split_state(sobs)
     return _apo(ks, Int32(targ), check_epoch(et), _need_inertial(ks, frame_id(ks, ref)),
-        Aberration(abcorr), robs, vobs)
+        _spk_abcorr(abcorr), robs, vobs)
 end
 spkapo(ctx::SpiceContext, targ::Integer, et::Real, ref::NameOrID, sobs::AbstractVector,
     abcorr::AbcorrArg) = spkapo(kernelset(ctx), targ, et, ref, sobs, abcorr)

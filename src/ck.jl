@@ -353,7 +353,7 @@ request), which is the type that the CK type 4 writer uses.
     b >= seg.baddr || _ck_bad(:baddaf, "generic segment shorter than its meta data")
     item(k) = round(Int, @inbounds data[b+k])
     begm1 = seg.baddr - 1
-    item(5) == 3 || _ck_bad(:unsupported,
+    item(5) == 3 || _ck_bad(:notsupported,
         "CK type 4 segment with a reference directory type other than 3")
     return item(6) + begm1, item(7), item(8) + begm1, item(10), item(11) + begm1,
         item(12), item(15), (ametas >= 16 ? item(16) : 0)
@@ -614,7 +614,7 @@ end
 
 "Throw `SpiceError` unless `subtyp` is in 0:3 and `wndsiz` is a valid window size for it."
 @inline function _ck_check05(subtyp::Int, wndsiz::Int)
-    0 <= subtyp <= 3 || _ck_bad(:unsupported, "unexpected subtype of a CK type 5 or 6 segment")
+    0 <= subtyp <= 3 || _ck_bad(:notsupported, "unexpected subtype of a CK type 5 or 6 segment")
     (2 <= wndsiz <= _CK5_MAXWND[subtyp+1] && iseven(wndsiz)) || _ck_bad(:invalidvalue,
         "window size of a CK type 5 or 6 segment is odd or outside the allowed range")
     return nothing
@@ -774,7 +774,7 @@ false and the type computes it separately), and `clkout` is the clock time of th
 result. `found` is false if the segment has no pointing within `tol` of `sclk`.
 `cmat` and `av` are functions of `sclk` in its number type where the data type
 interpolates, and constants where it takes a stored instance. Does not allocate.
-Throws `SpiceError(:unsupported)` for a data type outside 1:6.
+Throws `SpiceError(:ckunknowndatatype)` for a data type outside 1:6.
 """
 @inline function _ck_eval(data::Vector{Float64}, seg::CKSegment, sclk::T, tol::Float64,
         needav::Bool) where {T<:Real}
@@ -785,7 +785,7 @@ Throws `SpiceError(:unsupported)` for a data type outside 1:6.
     dtype == 2 && return _ck_eval02(data, seg, sclk, tol, needav)
     dtype == 1 && return _ck_eval01(data, seg, sclk, tol, needav)
     dtype == 4 && return _ck_eval04(data, seg, sclk, tol, needav)
-    _ck_bad(:unsupported, "CK data type $dtype is not supported")
+    _ck_bad(:ckunknowndatatype, "CK data type $dtype is not supported")
 end
 
 """

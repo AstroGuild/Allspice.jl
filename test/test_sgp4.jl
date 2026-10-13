@@ -768,7 +768,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         et = s.epochs[1] + 100.0
         @test seg.dtype == 10
         # `spk_eval` has no kernel set, so it has no leap seconds.
-        @test throws_kind(() -> Allspice.spk_eval(data, seg, et, Val(1)), :unsupported)
+        @test throws_kind(() -> Allspice.spk_eval(data, seg, et, Val(1)), :notsupported)
         # A context without a leap-second kernel.
         nolsk = neo_context([pc])
         @test throws_kind(() -> spkgeo(nolsk, -100005, et, 1, 399), :nolsk)

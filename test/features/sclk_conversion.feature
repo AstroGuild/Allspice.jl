@@ -50,4 +50,4 @@ Feature: Spacecraft clock conversion (SCLK type 1)
   Scenario: A clock of another type
     Given a clock whose "SCLK_DATA_TYPE" is not 1
     When a clock conversion is requested
-    Then a SpiceError of the kind unsupported is thrown
+    Then a SpiceError of the kind notsupported is thrown

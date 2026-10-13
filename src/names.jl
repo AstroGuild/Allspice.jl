@@ -795,12 +795,12 @@ end
 
 Contract: NAIF ID code of the body `name` (case and extra blanks do not matter):
 names defined in the kernel pool first, then the built-in table, then a string that
-is an integer. Throws `SpiceError(:unknownbody)` otherwise. An integer argument is
+is an integer. Throws `SpiceError(:idcodenotfound)` otherwise. An integer argument is
 returned as `Int32`. Reads `ks.name2code` only.
 """
 function body_code(ks::KernelSet, name::AbstractString)::Int32
     c = _body_code_lookup(ks.name2code, name)
-    c === nothing && throw(SpiceError(:unknownbody,
+    c === nothing && throw(SpiceError(:idcodenotfound,
         "the body name '$name' has no NAIF ID code"))
     return c
 end

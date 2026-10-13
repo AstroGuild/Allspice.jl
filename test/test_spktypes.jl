@@ -714,8 +714,8 @@ group("9. SPK data types against CSPICE") do
         # Type 10 (two-line elements) is not available.
         seg10 = Allspice.Segment(Int32(-1), Int32(399), Int32(1), Int32(10), 0.0, 1.0, Int32(0),
             1, 20, 0.0, 0.0, Int32(0), Int32(0))
-        @test throws_kind(() -> Allspice.spk_eval(zeros(20), seg10, 0.5, Val(1)), :unsupported)
-        @test throws_kind(() -> Allspice.spk_eval_position(zeros(20), seg10, 0.5, Val(2)), :unsupported)
+        @test throws_kind(() -> Allspice.spk_eval(zeros(20), seg10, 0.5, Val(1)), :notsupported)
+        @test throws_kind(() -> Allspice.spk_eval_position(zeros(20), seg10, 0.5, Val(2)), :notsupported)
         # A count at the end of a segment that does not agree with its length. (For
         # type 3 the count is checked when the file is opened, as for type 2.)
         for c in cases
@@ -750,7 +750,7 @@ group("9. SPK data types against CSPICE") do
         @test refuses("type 19, 130 intervals", :baddaf, (d, s) -> d[e(s)-2-131:e(s)-2] .= 1.0)
         @test refuses("type 1, order 15", :baddaf, (d, s) -> d[b(s):b(s)+71*130-1] .= 0.0)
         @test refuses("type 21, order 25", :baddaf, (d, s) -> d[e(s)-1] = 26.0)
-        @test refuses("type 14, degree 9", :unsupported, (d, s) -> d[e(s)-12] = 2.0)       # RDRTYP
+        @test refuses("type 14, degree 9", :notsupported, (d, s) -> d[e(s)-12] = 2.0)       # RDRTYP
         @test refuses("type 14, degree 9", :baddaf, (d, s) -> d[e(s)-2] = 7.0)             # PKTSZ
         @test refuses("type 20, degree 8", :baddaf, (d, s) -> d[e(s)-5] = 0.0)             # TSCALE
         @test refuses("type 15, flag 0, ecc 0.2", :baddaf, (d, s) -> d[b(s)+7] = -1.0)     # P

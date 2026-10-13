@@ -168,8 +168,9 @@ end
 
 # --- contents of a CK file ----------------------------------------------------------------
 
-"Open `path` as a CK file; throws `SpiceError(:invalidfiletype)` for another DAF kernel."
-function _ck_open(path::AbstractString)
+"Open `path` as a CK file, with the checks of `_require_binary_kernel`; throws `SpiceError(:invalidfiletype)` for another DAF kernel."
+function _ck_open(path::AbstractString, who::AbstractString="ckobj")
+    _require_binary_kernel(who, path, "CK")
     daf = open_daf(path)
     daf.kind === :CK || throw(SpiceError(:invalidfiletype,
         "the file $path is a binary $(daf.kind) kernel; a CK file is needed"))
@@ -184,9 +185,11 @@ Return the CK IDs of the instruments and structures that have a segment in the C
 
 The file is read from disk and need not be loaded.
 
-Throws `SpiceError(:nofile)` if the file does not exist, `SpiceError(:baddaf)` if it
-cannot be read as a DAF, and `SpiceError(:invalidfiletype)` if it is an SPK or a
-binary PCK.
+Throws `SpiceError`:
+- `:filenotfound` if the file does not exist;
+- `:invalidformat` if it is a transfer file, `:invalidarchtype` if it is not a DAF;
+- `:invalidfiletype` if it is an SPK or a binary PCK;
+- `:baddaf` if the DAF is damaged.
 
 See also [`ckcov`](@ref).
 """
@@ -222,7 +225,7 @@ function _ck_intervals!(out::Vector{NTuple{2,Float64}}, data::Vector{Float64}, s
             rsize = seg.avflag ? 7 : 4
         else
             subtyp = round(Int, data[en-3])
-            0 <= subtyp <= 3 || throw(SpiceError(:unsupported,
+            0 <= subtyp <= 3 || throw(SpiceError(:notsupported,
                 "unexpected subtype $subtyp of a CK type 5 segment"))
             invls, nrec = round(Int, data[en-1]), round(Int, data[en])
             rsize = _CK5_PACKSZ[subtyp+1]
@@ -286,7 +289,7 @@ function _ck_intervals!(out::Vector{NTuple{2,Float64}}, data::Vector{Float64}, s
             first <= finish && push!(out, (first, finish))
         end
     else
-        throw(SpiceError(:unsupported, "CK data type $dtype is not supported"))
+        throw(SpiceError(:ckunknowndatatype, "CK data type $dtype is not supported"))
     end
     return out
 end
@@ -330,7 +333,7 @@ vector of tuples and not a `Window`, and there is no form that adds to a window.
 The CK file is read from disk and need not be loaded.
 
 Throws `SpiceError(:valueoutofrange)` if `tol < 0`, `SpiceError(:invalidoption)` if
-`level` is not one of the two, `SpiceError(:unsupported)` if `timsys` is not one of
+`level` is not one of the two, `SpiceError(:notsupported)` if `timsys` is not one of
 the two, the file errors of [`ckobj`](@ref), and for `"TDB"` the errors of
 [`sct2e`](@ref).
 
@@ -351,9 +354,9 @@ function ckcov(ks::KernelSet, ck::AbstractString, idcode::Integer, needav::Bool,
     lev in ("SEGMENT", "INTERVAL") || throw(SpiceError(:invalidoption,
         "allowed values of the level are SEGMENT and INTERVAL; the value was '$level'"))
     sys = uppercase(strip(timsys))
-    sys in ("SCLK", "TDB") || throw(SpiceError(:unsupported,
+    sys in ("SCLK", "TDB") || throw(SpiceError(:notsupported,
         "the time system was '$timsys'; allowed values are SCLK and TDB"))
-    daf = _ck_open(ck)
+    daf = _ck_open(ck, "ckcov")
     raw = NTuple{2,Float64}[]
     for seg in daf.cksegments
         (seg.inst == idcode && (seg.avflag || !needav)) || continue

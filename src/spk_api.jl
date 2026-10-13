@@ -214,8 +214,9 @@ The SPK segments connect a body to its center, and that center to the next one. 
 call needs such a chain from `targ` and from `obs` to a common body.
 
 Throws `SpiceError`:
-- `:unknownbody` or `:unknownframe` if a name is not known;
-- `:badarg` if `abcorr` is not valid or `et` is not finite;
+- `:idcodenotfound` if a body name is not known, `:unknownframe` if a frame name is
+  not known;
+- `:invalidoption` if `abcorr` is not valid, `:badarg` if `et` is not finite;
 - `:nopath` if the loaded SPK files hold no chain between `targ` and `obs`, also when
   no SPK file is loaded;
 - `:nocoverage` if they hold a body of the chain, but not at the epoch needed;
@@ -248,7 +249,8 @@ Return the position of `targ` relative to `obs` in frame `ref` at `et`, and the
 one-way light time, as `spkpos_c`.
 
 `pos` is an `SVector{3}` in km and `lt` is in seconds. The arguments and the errors
-are those of [`spkezr`](@ref).
+are those of [`spkezr`](@ref), except that an `abcorr` that is not valid throws
+`SpiceError(:spkinvalidoption)`, as in CSPICE.
 
 As in CSPICE, the `CN` corrections make exactly three light-time iterations here, and
 [`spkezr`](@ref) iterates to convergence. The position can therefore differ from the
@@ -263,8 +265,8 @@ pos, lt = spkpos("SUN", et, "J2000", "LT+S", "EARTH")    # km, s
 See also [`spkezr`](@ref), [`spkder`](@ref).
 """
 spkpos(ks::KernelSet, targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString,
-    obs::NameOrID) = spkpos(ks, targ, et, ref, Aberration(abcorr), obs)
+    obs::NameOrID) = spkpos(ks, targ, et, ref, _spk_abcorr(abcorr), obs)
 spkpos(ctx::SpiceContext, targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString,
-    obs::NameOrID) = spkpos(kernelset(ctx), targ, et, ref, Aberration(abcorr), obs)
+    obs::NameOrID) = spkpos(kernelset(ctx), targ, et, ref, _spk_abcorr(abcorr), obs)
 spkpos(targ::NameOrID, et::Real, ref::NameOrID, abcorr::AbstractString, obs::NameOrID) =
     spkpos(default_context(), targ, et, ref, abcorr, obs)

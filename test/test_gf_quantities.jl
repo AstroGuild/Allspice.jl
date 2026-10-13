@@ -360,11 +360,10 @@ end
             () -> GFO.gfdist("NOSUCHBODY", "NONE", "EARTH", "=>", 1.0, 0.0, 0.0, c))
         both(:notrecognized, () -> gfdist(ctx, "NOSUCHBODY", "NONE", "EARTH", "=>", 1.0, 0.0, GF_DAY, cn),
             () -> GFO.gfdist("NOSUCHBODY", "NONE", "EARTH", "=>", 1.0, 0.0, GF_DAY, c))
-        # An invalid correction and a body without ephemeris data have the kinds that
-        # `spkezr` of this package gives them (`:badarg`, `:nopath`); CSPICE signals
-        # an error too.
-        @test throws_kind(() -> gfdist(ctx, "MOON", "LT+X", "EARTH", "=", 1.0, 0.0, GF_DAY, cn), :badarg)
-        @test GFO.kind(() -> GFO.gfdist("MOON", "LT+X", "EARTH", "=", 1.0, 0.0, GF_DAY, c)) !== :none
+        both(:invalidoption, () -> gfdist(ctx, "MOON", "LT+X", "EARTH", "=", 1.0, 0.0, GF_DAY, cn),
+            () -> GFO.gfdist("MOON", "LT+X", "EARTH", "=", 1.0, 0.0, GF_DAY, c))
+        # A body without ephemeris data has the kind that `spkezr` of this package gives
+        # it (`:nopath`); CSPICE signals an error too.
         @test gf_kind(() -> gfdist(ctx, "PHOBOS", "NONE", "EARTH", "=", 1.0, 0.0, GF_DAY, cn)) in
               (:nocoverage, :nopath)
         @test GFO.kind(() -> GFO.gfdist("PHOBOS", "NONE", "EARTH", "=", 1.0, 0.0, GF_DAY, c)) !== :none

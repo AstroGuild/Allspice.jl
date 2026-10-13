@@ -443,7 +443,7 @@ Throws `SpiceError`:
   target;
 - `:badmethodsyntax` if `method` is not valid, `:badpriorityspec` if a DSK method does not
   have `UNPRIORITIZED`, `:invalidmethod` if `method` has a sub-observer point type;
-- `:notfound` if the radii are not loaded, `:badaxislength` if they are not three
+- `:kernelvarnotfound` if the radii are not loaded, `:badaxislength` if they are not three
   positive values (ellipsoid);
 - `:dskdatanotfound` if no DSK segment of the target with a listed surface is loaded,
   `:pointnotfound` if a ray meets no surface, `:shapenotsupported` if an intercept is on
@@ -509,7 +509,7 @@ method the normal is that of the plate on which the point lies.
 
 Throws `SpiceError`:
 - the kinds of [`latsrf`](@ref) for `method`, `target` and `fixref`;
-- `:notfound` if the radii are not loaded, `:badaxislength` if they are not three
+- `:kernelvarnotfound` if the radii are not loaded, `:badaxislength` if they are not three
   positive values, `:pointnotonsurface` if a
   point is not on the ellipsoid within the point-membership margin (item `PTMEMM` of
   [`dskgtl`](@ref)) (ellipsoid);

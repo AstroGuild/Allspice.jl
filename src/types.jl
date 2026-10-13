@@ -359,14 +359,17 @@ end
 
 The exception that the package throws for a call that fails.
 
-`kind` is a short symbol that names the failure, such as `:nocoverage`, `:notfound` or
-`:badarg`; test it to handle one failure. `msg` is the text for a person.
+`kind` is a short symbol that names the failure, such as `:nocoverage`,
+`:kernelvarnotfound` or `:badarg`; test it to handle one failure. `msg` is the text for
+a person.
 
-Many kinds are the short error message of CSPICE in lower case (`:kernelvarnotfound`
-for `SPICE(KERNELVARNOTFOUND)`); the others are names of this package. Two calls can
-report the same failure with different kinds: `gdpool` throws `:notfound` for an absent
-variable and `bodvcd` throws `:kernelvarnotfound`. Test the kinds that the docstring of
-the call lists.
+A kind is the short error message that CSPICE signals in the same call, in lower case
+(`:kernelvarnotfound` for `SPICE(KERNELVARNOTFOUND)`). Two calls can therefore report
+the same failure with different kinds, as in CSPICE: a file that does not exist is
+`:nosuchfile` in `furnsh` and `:filenotfound` in `spkobj`. Test the kinds that the
+docstring of the call lists. A few kinds are names of this package, where CSPICE has no
+message or a less exact one: `:badarg` for an argument of the wrong size or type,
+`:nocoverage` and `:nopath` for missing SPK data, `:nolsk` for missing leap seconds.
 
 A call of CSPICE that has a `found` flag returns `nothing` here when nothing is found,
 unless its docstring names another result (an error, `0`, an empty string or vector, or
@@ -379,7 +382,7 @@ julia> try
        catch err
            err isa SpiceError ? err.kind : rethrow()
        end
-:notfound
+:kernelvarnotfound
 ```
 """
 struct SpiceError <: Exception

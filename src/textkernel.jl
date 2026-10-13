@@ -18,11 +18,11 @@ DAF of that type (ID word `DAF/SPK`, `DAF/PCK`, `DAF/CK`, or the old `NAIF/DAF` 
 summary format ND = 2 and NI = 6 or 5; with NI = 6 the first segment decides between
 SPK and CK, as `open_daf` does), `:DSK` for a DAS file with the ID word `DAS/DSK`, `:EK` for one with `DAS/EK`, and
 `:TEXT` for everything that is not a DAF or DAS file.
-Throws `SpiceError(:nofile)` for a missing file and `SpiceError(:unsupported)` for
+Throws `SpiceError(:filenotfound)` for a missing file and `SpiceError(:notsupported)` for
 another binary kernel type.
 """
 function kernel_arch(path::AbstractString)::Symbol
-    isfile(path) || throw(SpiceError(:nofile, "kernel file '$path' does not exist"))
+    isfile(path) || throw(SpiceError(:filenotfound, "kernel file '$path' does not exist"))
     head = open(io -> read(io, 16), path)
     n = length(head)
     idword = String(head[1:min(n, 8)])
@@ -31,7 +31,7 @@ function kernel_arch(path::AbstractString)::Symbol
         typ == "SPK" && return :SPK
         typ == "PCK" && return :PCK
         typ == "CK" && return :CK
-        throw(SpiceError(:unsupported, "DAF kernel type '$typ' of '$path' is not supported"))
+        throw(SpiceError(:notsupported, "DAF kernel type '$typ' of '$path' is not supported"))
     elseif idword == "NAIF/DAF"
         n >= 16 || throw(SpiceError(:badfile, "DAF file '$path' is truncated"))
         nd = reinterpret(Int32, head[9:12])[1]
@@ -40,12 +40,12 @@ function kernel_arch(path::AbstractString)::Symbol
             d == 2 && i == 6 && return open_daf(path).kind
             d == 2 && i == 5 && return :PCK
         end
-        throw(SpiceError(:unsupported,
+        throw(SpiceError(:notsupported,
             "old-style DAF '$path' has a summary format that is neither SPK nor PCK"))
     elseif startswith(idword, "DAS/")
         strip(idword[5:end]) == "DSK" && return :DSK
         strip(idword[5:end]) == "EK" && return :EK
-        throw(SpiceError(:unsupported, "DAS kernel '$path' is not supported"))
+        throw(SpiceError(:notsupported, "DAS kernel '$path' is not supported"))
     end
     return :TEXT
 end
@@ -454,7 +454,7 @@ Only text between `\\begindata` and `\\begintext` is data. Values are numbers (w
 still in place (see `pool_string_joined`). Variable names are case-sensitive.
 """
 function parse_text_kernel(path::AbstractString, yearbound::Int=1969)::TextKernel
-    isfile(path) || throw(SpiceError(:nofile, "kernel file '$path' does not exist"))
+    isfile(path) || throw(SpiceError(:filenotfound, "kernel file '$path' does not exist"))
     text = read(path, String)
     return parse_text_lines(path, eachsplit(text, r"\r\n|\n|\r"), yearbound)
 end
