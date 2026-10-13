@@ -442,6 +442,22 @@ function dasonw(path::AbstractString, ftype::AbstractString, ifname::AbstractStr
 end
 
 """
+    dasops() -> DASHandle
+
+Open a scratch DAS file for write, as `dasops` of SPICELIB: a DAS file that exists
+only while its handle is open. CSPICE makes a temporary file that the close deletes;
+here the data of a write handle are in memory, so no file exists at any time and
+[`dascls`](@ref) writes nothing. Postcondition: the handle has no data, an empty path
+and the type `SCR`.
+"""
+function dasops()
+    h = DASHandle("", true, true, rpad("DAS/SCR", 8), "", 0, 0, 0, 0, UInt8[], UInt8[], UInt8[],
+        Float64[], Int32[], 0, (0, 0, 0), (0, 0, 0))
+    _das_layout!(h)
+    return h
+end
+
+"""
     dascls(handle) -> Nothing
 
 Close the DAS file of `handle`, as `dascls_c`. For a write handle the complete file is
@@ -450,7 +466,7 @@ returns. Closing a handle that is already closed does nothing.
 """
 function dascls(h::DASHandle)
     h.isopen || return nothing
-    if h.writable
+    if h.writable && !isempty(h.path)       # a scratch file (`dasops`) has no path
         _das_layout!(h)
         _das_write_image(h)
     end

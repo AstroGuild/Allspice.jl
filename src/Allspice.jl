@@ -27,7 +27,7 @@ export ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
 export spkobj, spkobj!, spkcov, spkcov!, kinfo, kdata, tkvrsn
 export Window, card, wncard, wninsd!, wnvald!, wnunid, wnintd, wndifd, wncomd
 export wnelmd, wnincd, wnfetd, wnsumd
-export DASHandle, dasopr, dasopw, dasonw, dascls, dasllc, dashfn, dasrfr, daslla, dashfs
+export DASHandle, dasopr, dasopw, dasonw, dasops, dascls, dasllc, dashfn, dasrfr, daslla, dashfs
 export dasrdd, dasrdi, dasrdc, dasadd, dasadi, dasadc, dasudd, dasudi, dasac, dasec, dasdc
 export DLADescr, dlaopn, dlabns, dlaens, dlabfs, dlafns, dlabbs, dlafps
 export DSKDescr, DSKSegment, dskobj, dsksrf, dskgd, dskb02, dskz02, dskn02, dskp02, dskv02
@@ -63,7 +63,7 @@ export gfsubc, gfsntc, gfilum, gfoclt, gftfov, gfrfov, gfocce, gffove
 export EphemerisTable, ephemeris_table, table_position, table_state, table_jet, table_span
 export EKColumnAttr, EKSegmentSummary, EKTable
 export ekopr, ekcls, eknseg, ekssum, ekrcec, ekrced, ekrcei
-export EKFastLoad, ekopn, ekopw, ekbseg, ekappr, ekinsr, ekdelr, ekacec, ekaced, ekacei, ekucec, ekuced, ekucei
+export EKFastLoad, ekopn, ekopw, ekops, ekbseg, ekappr, ekinsr, ekdelr, ekacec, ekaced, ekacei, ekucec, ekuced, ekucei
 export ekifld, ekaclc, ekacld, ekacli, ekffld
 export EKResult, ekntab, ektnam, ekccnt, ekcii, ekpsel, ekfind, eknelt, ekgc, ekgd, ekgi, ekcolumn
 

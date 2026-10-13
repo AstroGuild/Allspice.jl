@@ -1109,4 +1109,27 @@ group("EK write: column declarations are read as CSPICE reads them") do
     measured("ek_write: $(length(decls) + length(fixed)) unusual declarations, $nw words equal")
 end
 
+group("EK write: a scratch EK (ekops) holds what the file of ekopn holds") do
+    dir = mktempdir()
+    before = readdir(dir)
+    words = 0
+    for (name, segs) in ek_standard_model(SEED; scale=EKW_SCALE)
+        h = ekops()
+        foreach(seg -> ekw_write_segment(EKW_N, h, seg), segs)
+        @test eknseg(h) == length(segs)
+        f = ekopr(ekw_write(EKW_N, joinpath(dir, "f_" * name), segs))
+        @test h.ints == f.ints && h.dps == f.dps && h.chars == f.chars
+        words += length(h.ints) + length(h.dps)
+        # The read calls and the record writers take the scratch handle.
+        @test ekssum(h, 1).tabnam == ekssum(f, 1).tabnam
+        ekcls(f)
+        ekcls(h)
+        @test throws_kind(() -> eknseg(h), :dasnosuchhandle)
+        ekcls(h)                                    # a closed handle: nothing to do
+    end
+    @test Allspice.dashfn(ekops()) == ""
+    @test all(startswith("f_"), setdiff(readdir(dir), before))      # no file of the scratch EK
+    measured("ek_write: scratch EK, $words words equal to the files")
+end
+
 Base.Experimental.@optlevel -1

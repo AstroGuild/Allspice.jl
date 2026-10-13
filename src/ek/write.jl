@@ -42,6 +42,24 @@ function ekopn(path::AbstractString, ifname::AbstractString, ncomch::Integer=0)
 end
 
 """
+    ekops() -> DASHandle
+
+Open a scratch EK for write, as `ekops_c`: an EK with no segment that exists only
+while its handle is open. All record and fast writers and the read calls that take a
+handle accept it, and [`ekcls`](@ref) discards it; no file is made (see
+[`dasops`](@ref)). A scratch EK has no name, so `furnsh` cannot load it for queries, as
+in CSPICE.
+"""
+function ekops()
+    h = dasops()
+    _ekw_pgin(h)
+    p, base = _ekw_pgan(h, 3)
+    tree = _ekw_trit(h)
+    h.ints[base+1] = tree
+    return h
+end
+
+"""
     ekopw(path) -> DASHandle
 
 Open the existing EK file `path` for write, as `ekopw_c`. The file is read into
