@@ -116,9 +116,10 @@ end
 
 Create the DAF file `path` and open it for writing, as `dafonw` of SPICELIB.
 
-`ftype` is the file type (for example `"SPK"`; four characters are stored), `nd` and `ni`
-are the summary format, `ifname` is the internal file name (60 characters are stored) and
-`resv` is the number of reserved (comment) records.
+- `ftype`: the file type, for example `"SPK"`. Four characters are stored.
+- `nd`, `ni`: the numbers of doubles and of integers in an array summary.
+- `ifname`: the internal file name. 60 characters are stored.
+- `resv`: the number of reserved records, which hold the comments.
 
 The file is on disk when the call returns: the file record, `resv` comment records with an
 empty comment area, one empty summary record and one name record, byte for byte as CSPICE
@@ -265,9 +266,6 @@ end
 
 Append the doubles `data` to the array that [`dafbna`](@ref) began on `handle`, as
 `dafada_c`. The data are written to the file at once.
-
-`dafada_c` has no handle argument and works on the hidden current DAF; here the array
-belongs to the handle.
 
 Throws `SpiceError(:dafnewconflict)` if no array is begun on the handle, and
 `:dafwritefail` if the array would pass the largest address of a DAF or the system reports

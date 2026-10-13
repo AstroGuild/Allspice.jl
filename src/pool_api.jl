@@ -77,7 +77,8 @@ end
 Return the values of the kernel-pool variable `BODY<id>_<item>` for `body`, as
 `bodvrd_c`.
 
-`body` is a body name or a NAIF ID code. `item` is case sensitive, as in CSPICE;
+`body` is a body name, a string that holds an integer (`"399"`) or an integer NAIF ID
+code. `item` is case sensitive, as in CSPICE;
 blanks around it are ignored. The values have the units of the kernel: km for
 `"RADII"`, km^3/s^2 for `"GM"` in the NAIF kernels. There is no `maxn` argument.
 

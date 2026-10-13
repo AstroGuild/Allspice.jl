@@ -205,16 +205,22 @@ light time, as `spkezr_c`.
   between the observer and the frame center, as in CSPICE.
 - `abcorr`: `"NONE"` (geometric), `"LT"`, `"LT+S"`, `"CN"`, `"CN+S"` for reception, or
   the same with the prefix `X` for transmission. Letter case and blanks are ignored.
-  An [`Aberration`](@ref) value is also accepted; it has the meaning of each string.
+  An [`Aberration`](@ref) value is also accepted.
 
 The call does not allocate when the bodies and the frame are integer IDs and `abcorr`
 is an `Aberration`. With ForwardDiff loaded, `et` can be a dual number.
 
-Throws `SpiceError(:unknownbody)` or `SpiceError(:unknownframe)` if a name is not
-known, `SpiceError(:badarg)` if `abcorr` is not valid or `et` is not finite,
-`SpiceError(:nocoverage)` if the loaded SPK files hold a body of the chain but not at
-the epoch needed, and `SpiceError(:nopath)` if no chain of segments connects `targ`
-and `obs`.
+The SPK segments connect a body to its center, and that center to the next one. The
+call needs such a chain from `targ` and from `obs` to a common body.
+
+Throws `SpiceError`:
+- `:unknownbody` or `:unknownframe` if a name is not known;
+- `:badarg` if `abcorr` is not valid or `et` is not finite;
+- `:nopath` if the loaded SPK files hold no chain between `targ` and `obs`, also when
+  no SPK file is loaded;
+- `:nocoverage` if they hold a body of the chain, but not at the epoch needed;
+- the kinds of [`pxform`](@ref) if `ref` is not inertial and its orientation data are
+  not loaded.
 
 # Examples
 ```julia

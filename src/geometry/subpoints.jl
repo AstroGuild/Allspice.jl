@@ -207,8 +207,9 @@ Return the sub-observer point on `target` as seen by `obsrvr` at `et` (seconds p
 J2000 TDB), as `subpnt_c` of CSPICE.
 
 - `spoint`: the point, in km, in the body-fixed frame `fixref` of the target.
-- `trgepc`: the epoch at the point. It is `et` corrected for the light time between
-  the observer and the point, and `et` itself without a correction.
+- `trgepc`: the epoch at the point (seconds past J2000 TDB). With a light time
+  correction it is `et` minus (reception) or plus (transmission) the light time between
+  the observer and the point. Without one it is `et`.
 - `srfvec`: the vector from the observer to the point, in km, in `fixref` at `trgepc`.
 
 `method` selects the definition of the point and the shape of the target:
@@ -234,13 +235,12 @@ Throws `SpiceError` with the kind
 - `:idcodenotfound` if a body name is not known;
 - `:bodiesnotdistinct` if `target` and `obsrvr` are the same body;
 - `:noframe` if `fixref` is not known, `:invalidframe` if it is not centered on `target`;
-- `:badmethodsyntax` or `:badpriorityspec` if `method` is malformed, `:invalidsubtype`
-  if it has no valid point definition;
+- `:badmethodsyntax` if `method` is malformed, `:badpriorityspec` if a DSK method does
+  not have `UNPRIORITIZED`, `:invalidsubtype` if it has no valid point definition;
 - `:noseparation` if the observer is at the target center;
 - `:subpointnotfound` if the ray misses the DSK surface, `:degeneratecase` if it
   misses the ellipsoid;
-- `:kernelvarnotfound`, `:invalidcount` or `:badaxislength` if the radii of `target`
-  are missing or not valid.
+- the kinds of [`srfrec`](@ref) if the radii of `target` are missing or not valid.
 
 Also throws the errors of [`spkpos`](@ref).
 
@@ -264,8 +264,9 @@ Return the sub-solar point on `target` as seen by `obsrvr` at `et` (seconds past
 TDB), as `subslr_c` of CSPICE.
 
 - `spoint`: the point, in km, in the body-fixed frame `fixref` of the target.
-- `trgepc`: the epoch at the point: `et` minus the light time between the observer and
-  the point, and `et` itself without a correction.
+- `trgepc`: the epoch at the point (seconds past J2000 TDB). With a light time
+  correction it is `et` minus the light time between the observer and the point.
+  Without one it is `et`.
 - `srfvec`: the vector from the observer to the point, in km, in `fixref` at `trgepc`.
 
 The methods are those of [`subpnt`](@ref), with the Sun in place of the observer in the

@@ -85,7 +85,8 @@ spacecraft, unless both frames are inertial.
 
 Throws `SpiceError(:valueoutofrange)` if `tol < 0`. Throws
 `SpiceError(:unknownframe)` if `ref` is not a known frame name; `ref` is read only
-when a pointing is found.
+when a pointing is found. The change of frame throws the kinds of [`sct2e`](@ref) if
+the SCLK kernel is not loaded, and the kinds of [`pxform`](@ref).
 
 # Examples
 ```julia

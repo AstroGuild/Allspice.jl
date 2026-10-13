@@ -12,10 +12,13 @@ TDB. The frame classes of CSPICE are supported: inertial, PCK, CK, fixed offset,
 dynamic and switch frames. Two inertial frames need no kernel. With ForwardDiff
 loaded, `et` can be a dual number.
 
-Throws `SpiceError(:unknownframe)` if a frame name is not known,
-`SpiceError(:badarg)` if `et` is not finite, and `SpiceError(:framedatanotfound)` or
-`SpiceError(:noframeconnect)` if the loaded kernels do not hold the orientation data
-that connect the two frames at `et`.
+Throws `SpiceError`:
+- `:unknownframe` if a frame name is not known;
+- `:badarg` if `et` is not finite;
+- `:framedatanotfound` if the definition or the constants of a frame are not loaded
+  (the `BODY<id>_PM` variables of a PCK frame, the matrix of a fixed-offset frame);
+- `:noframeconnect` if a CK frame has no pointing or no clock kernel at `et`, or a
+  switch frame has no base there.
 
 # Examples
 ```jldoctest
@@ -50,37 +53,21 @@ pxform(from::NameOrID, to::NameOrID, et::Real) = pxform(default_context(), from,
 Return the rotation matrix from frame `from` to frame `to` at `et` and its time
 derivatives to order `N`. This call has no CSPICE counterpart.
 
-Element `k + 1` of the result is the derivative of order `k`, in 1/s^k. Order 0 is
-the matrix of [`pxform`](@ref), and every higher order is the exact derivative of that
-matrix as a function of `et`. Order 1 can therefore differ from the derivative block
-of [`sxform`](@ref), which follows the choices of CSPICE:
+Element `k + 1` of the result is the derivative of order `k`, in 1/s^k. The
+arguments `from`, `to` and `et` are those of [`pxform`](@ref). Order 0 is the matrix of
+`pxform`, and every higher order is the exact derivative of that matrix as a function
+of `et`.
 
-- CK frames (class 3): the interpolation of the CK segment is differentiated,
-  composed with the piecewise linear clock conversion of [`sce2c`](@ref). The
-  interpolation is constant for type 1 and at single pointing instances, a rotation
-  at the constant stored rate for type 2, a rotation about a fixed axis that is
-  linear in the clock for type 3, and normalized Chebyshev, Hermite or Lagrange
-  polynomials of the quaternion components for types 4, 5 and 6. The stored angular
-  velocity is not used.
-- Dynamic frames (class 5), of-date: the precession, nutation and obliquity series as
-  functions of `et`, with all terms, also the slow drift of the nutation coefficients
-  that the rates of CSPICE omit.
-- Dynamic frames, two-vector: the positions of [`spkpos`](@ref), the unit velocities
-  of [`spkezr`](@ref), the near points and the rotated constant vectors, each with
-  its aberration correction as a function of `et`, as in [`spkder`](@ref).
-- Dynamic frames, Euler: the polynomials of the angles. Product frames: the product
-  of the factors.
-- A frozen frame (`FREEZE_EPOCH`) is constant, so its derivatives relative to its
-  base are zero.
-- `ROTATION_STATE = 'INERTIAL'` does not change the rotation, so it does not change
-  `pxder`: the derivatives are those of the rotating frame, while `sxform` gives a
-  zero derivative block for such a frame.
-- Switch frames (class 6): the base that is selected at `et` is differentiated. At an
-  epoch at which the selection changes, the result is the one of the base that
-  `pxform` selects there.
+Order 1 is the derivative block of [`sxform`](@ref) for inertial, PCK and fixed-offset
+frames. It can differ for these frames, where `sxform` follows the rates of CSPICE:
 
-A velocity that a frame definition gives in a frame that is not inertial takes the
-frame derivative of `sxform`, as `spkezr` does.
+- CK frames (class 3);
+- dynamic frames (class 5), also a frozen frame and one with
+  `ROTATION_STATE = 'INERTIAL'`;
+- switch frames (class 6) whose base is one of the above.
+
+[Exact derivatives and the rates of CSPICE](@ref) says what is differentiated for each
+class.
 
 Throws `SpiceError(:badarg)` if `N` is not an integer `>= 0`, and the errors of
 [`pxform`](@ref).
@@ -114,17 +101,10 @@ The matrix is `[R 0; dR R]`: `R` is the rotation of [`pxform`](@ref) and `dR` is
 time derivative in 1/s. `from` and `to` are frame names or frame IDs; `et` is in
 seconds past J2000 TDB.
 
-`dR` follows the choices of CSPICE, so it can differ from order 1 of
-[`pxder`](@ref), which is the exact derivative of `R`:
-
-- CK frames (class 3): `dR` is built from the angular velocity of the CK segment, and
-  only segments with angular velocity are used.
-- Dynamic frames (class 5) and switch frames (class 6): velocities of
-  [`spkezr`](@ref) for the position vectors, a central difference of the unit
-  velocity over `±max(1, et * 2^-27)` seconds for the velocity vectors, the nutation
-  rates of CSPICE, a zero derivative for constant vectors and for their stellar
-  aberration, and a zero block for a frozen frame and for
-  `ROTATION_STATE = 'INERTIAL'`.
+`dR` is the rate that CSPICE gives. For a CK frame it comes from the angular velocity
+of the CK segment, and only segments with angular velocity are used. For the frame
+classes that [`pxder`](@ref) lists, `dR` is not the exact derivative of `R`; use
+order 1 of `pxder` for that.
 
 Throws the errors of [`pxform`](@ref).
 

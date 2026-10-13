@@ -358,8 +358,11 @@ dskv02(ks::KernelSet, seg::DSKSegment, start::Integer, room::Integer) =
     dskn02(handle, dladsc, plid) -> SVector{3,Float64}
     dskn02([ctx | ks,] segment::DSKSegment, plid)
 
-Return the outward unit normal of plate `plid` of a type 2 segment, as `dskn02_c`: the
-unit vector of `(v2 - v1) x (v3 - v1)` for the vertices `v1`, `v2`, `v3` of the plate.
+Return the outward unit normal of plate `plid` of a type 2 segment, as `dskn02_c`.
+
+It is the unit vector of `(v2 - v1) x (v3 - v1)` for the vertices `v1`, `v2`, `v3` of the
+plate. It points outward because a DSK plate has its vertices in counterclockwise order
+as seen from outside.
 
 Throws `SpiceError(:indexoutofrange)` if `plid` is not in `1:np`, and `:typenotsupported`
 if the segment does not have the data type 2.
@@ -382,13 +385,13 @@ Return at most `room` integers of the item `item` of a type 2 segment, from elem
 
 | `item` | Content                      | `item` | Content                  |
 |:-------|:-----------------------------|:-------|:-------------------------|
-| 1      | `NV`, vertex count           | 8      | `VTXNPL`                 |
+| 1      | `NV`, vertex count           | 8      | `VTXNPL`, size of item 13 |
 | 2      | `NP`, plate count            | 9      | plates                   |
 | 3      | `NVXTOT`, voxel count        | 10     | voxel-plate pointers     |
 | 4      | `VGREXT`, voxel grid extents | 11     | voxel-plate list         |
 | 5      | `CGSCAL`, coarse voxel scale | 12     | vertex-plate pointers    |
-| 6      | `VOXNPT`                     | 13     | vertex-plate list        |
-| 7      | `VOXNPL`                     | 14     | coarse voxel grid        |
+| 6      | `VOXNPT`, size of item 10    | 13     | vertex-plate list        |
+| 7      | `VOXNPL`, size of item 11    | 14     | coarse voxel grid        |
 
 Throws `SpiceError(:valueoutofrange)` if `room <= 0`, `:notsupported` if `item` is not in
 the table, and `:indexoutofrange` if `start` is not an element of the item.
@@ -409,8 +412,13 @@ dski02(ks::KernelSet, seg::DSKSegment, item::Integer, start::Integer, room::Inte
 Return at most `room` doubles of the item `item` of a type 2 segment, from element `start`
 on (1 is the first), as `dskd02_c`.
 
-The items are: 15 the DSK descriptor (24 doubles), 16 the vertex bounds (6), 17 the voxel
-grid origin (3), 18 the voxel size (1), 19 the vertices (3 for each vertex).
+| `item` | Content              | Doubles           |
+|:-------|:---------------------|:------------------|
+| 15     | DSK descriptor       | 24                |
+| 16     | vertex bounds, km    | 6                 |
+| 17     | voxel grid origin, km | 3                |
+| 18     | voxel size, km       | 1                 |
+| 19     | vertices, km         | 3 for each vertex |
 
 Throws `SpiceError(:valueoutofrange)` if `room <= 0`, `:notsupported` if `item` is not in
 `15:19`, and `:indexoutofrange` if `start` is not an element of the item.
@@ -452,8 +460,8 @@ the ray meets no plate.
 
 `vertex` (km) and `raydir` are in the frame of the segment, relative to the centre of that
 frame, and so is `xpt`. `nothing` replaces the `found` flag of CSPICE. The form with a
-context uses the tolerances of the context ([`dskstl`](@ref)); the forms with a handle or
-with a `KernelSet` use the values of CSPICE at start.
+context uses the tolerances of the context ([`dskstl`](@ref)). The forms with a handle or
+with a `KernelSet` use the column "Value at start" of [`dskgtl`](@ref).
 
 Throws `SpiceError(:rayiszerovector)` if `raydir` is zero, `:typenotsupported` if the
 segment does not have the data type 2, and `:arraytoosmall` if a ray that meets no plate
@@ -604,8 +612,8 @@ plate number, from 1. They replace the handle, the DLA descriptor, the DSK descr
 the first element of `ic` of CSPICE; `dc` of CSPICE has no content for the data type 2.
 `nothing` replaces the `found` flag.
 
-The form with a context uses the tolerances of the context ([`dskstl`](@ref)); the form
-with a `KernelSet` uses the values of CSPICE at start. The call reads one snapshot of the
+The form with a context uses the tolerances of the context ([`dskstl`](@ref)). The form
+with a `KernelSet` uses the column "Value at start" of [`dskgtl`](@ref). The call reads one snapshot of the
 loaded kernels and writes nothing, so many threads can call it while another thread loads
 kernels. With an integer `target`, an integer `fixref` and `SVector` arguments it does not
 allocate.
@@ -743,10 +751,12 @@ end
 """
     pltnrm(v1, v2, v3) -> SVector{3,Float64}
 
-Return the outward normal `(v2 - v1) x (v3 - v2)` of the plate with the vertices `v1`,
-`v2`, `v3`, as `pltnrm_c`.
+Return the normal `(v2 - v1) x (v3 - v2)` of the plate with the vertices `v1`, `v2`,
+`v3`, as `pltnrm_c`.
 
-The result does not have unit length. It is zero for a degenerate plate.
+The normal follows the right-hand rule: it points to the side from which the vertices
+are in counterclockwise order. The result does not have unit length. It is zero for a
+degenerate plate. Its direction is that of [`dskn02`](@ref), whose formula is equal.
 """
 pltnrm(v1, v2, v3) = _dsk_pltnrm(_dsk_vec3(v1), _dsk_vec3(v2), _dsk_vec3(v3))
 

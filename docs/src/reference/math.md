@@ -1,5 +1,17 @@
 # Mathematics
 
+The calls of this page take numbers and arrays only, and need no kernel, except
+[`recpgr`](@ref) and its relatives and [`xfmsta`](@ref). These rules hold for all of
+them:
+
+- Integer components are converted to `Float64`.
+- A sum of products is evaluated term by term in index order, as in CSPICE, so that a
+  `Float64` input gives the CSPICE result. The `*` of StaticArrays can round in another
+  way.
+- An input of the wrong size throws `SpiceError(:badarg)`.
+- A call that cites a routine "of SPICELIB" ports a Fortran routine for which CSPICE has
+  no `_c` wrapper.
+
 ## Vectors
 
 ```@docs
@@ -46,6 +58,10 @@ ident
 ```
 
 ## Vectors and matrices of any dimension
+
+The `g` calls take no dimension argument: the arguments give the dimension. Static
+arguments give a static result; other arguments give a `Vector` or a `Matrix`. Two
+vectors must have equal length.
 
 ```@docs
 vaddg
@@ -133,6 +149,9 @@ convrt
 
 ## Jacobians of coordinate conversions
 
+Element `[i, j]` of each Jacobian is the derivative of output coordinate `i` with respect
+to input coordinate `j`. Angles are in radians.
+
 ```@docs
 drdlat
 dlatdr
@@ -148,6 +167,11 @@ dpgrdr
 
 ## Ellipsoids, planes and ellipses
 
+An ellipsoid has its center at the origin and the semi-axes `a`, `b`, `c` along x, y, z.
+The error kind for a semi-axis that is not positive follows CSPICE call by call
+(`:badaxislength`, `:invalidaxislength`, `:invalidradii` or `:degeneratecase`), so read
+it in the entry of the call.
+
 ```@docs
 SpicePlane
 SpiceEllipse
@@ -160,7 +184,6 @@ npedln
 npelpt
 nplnpt
 edlimb
-edterm
 inedpl
 inelpl
 inrypl
@@ -188,4 +211,14 @@ oscelt
 oscltx
 prop2b
 stmp03
+```
+
+## Constants
+
+```@docs
+clight
+halfpi
+twopi
+rpd
+dpr
 ```

@@ -10,7 +10,8 @@
 """
     stmp03(x) -> (c0, c1, c2, c3)
 
-Return the Stumpff functions `c0`, `c1`, `c2`, `c3` of `x`, as `stmp03_` of SPICELIB.
+Return the Stumpff functions `c0`, `c1`, `c2`, `c3` of `x`, as `stmp03` of
+SPICELIB (CSPICE has no `_c` wrapper).
 
 `c0 = 1 - x * c2` and `c1 = 1 - x * c3` hold to rounding. For `x > 0`, `c0` is
 `cos(sqrt(x))` and `c1` is `sin(sqrt(x)) / sqrt(x)`.
@@ -40,15 +41,16 @@ Return the state of a body at the time `dt` after the state `pvinit`, for two-bo
 motion about a mass with the gravitational parameter `gm`, as `prop2b_c` of CSPICE.
 
 The units must be consistent, for example km, km/s, seconds and km³/s². `gm` and
-`pvinit` are converted to `Float64`. `dt` can be a `ForwardDiff` or `Taylor` number;
-the result then holds the derivatives with respect to `dt`.
+`pvinit` are converted to `Float64`. `dt` can be a `ForwardDiff.Dual` or
+`Allspice.Taylor` number; the result then holds the derivatives with respect to `dt`.
 
 Throws:
 - `SpiceError(:nonpositivemass)` if `gm <= 0`.
 - `SpiceError(:zeroposition)` or `SpiceError(:zerovelocity)` if that part of `pvinit`
   is zero.
 - `SpiceError(:nonconicmotion)` if the position and the velocity are parallel.
-- `SpiceError(:dtoutofrange)` if `dt` is too large for the arithmetic.
+- `SpiceError(:dtoutofrange)` if `dt` is so large that the solution would overflow.
+  The bound depends on the orbit, as in CSPICE.
 - `SpiceError(:badarg)` if `pvinit` does not have 6 elements.
 
 # Examples
@@ -103,13 +105,14 @@ Return the state at the epoch `et` of a body on the conic orbit with the element
 | 8     | `mu`    | gravitational parameter of the central mass |
 
 The units must be consistent, for example km, seconds and km³/s². The elements are
-converted to `Float64`. `et` can be a `ForwardDiff` or `Taylor` number.
+converted to `Float64`. `et` can be a `ForwardDiff.Dual` or `Allspice.Taylor` number.
 
 Throws:
 - `SpiceError(:badeccentricity)` if `ecc < 0`.
 - `SpiceError(:badperiapsevalue)` if `rp <= 0`.
 - `SpiceError(:badgm)` if `mu <= 0`.
-- `SpiceError(:dtoutofrange)` if `et - t0` is too large for the arithmetic.
+- `SpiceError(:dtoutofrange)` if `et - t0` is so large that the solution would
+  overflow. The bound depends on the orbit, as in CSPICE.
 - `SpiceError(:badarg)` if `elts` does not have 8 elements.
 
 # Examples

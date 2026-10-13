@@ -220,8 +220,8 @@ Set the kernel-pool variable `name` to the numbers `values`, as `pdpool_c`.
 A variable of that name is replaced, whatever its type. An empty `values` changes
 nothing, as in CSPICE. Blanks around `name` are ignored.
 
-The edit is atomic for queries on other threads, and every table that is built from
-the pool (body names, frames, clocks) follows it. The edit stays through a later
+Every table that is built from the pool (body names, frames, clocks) follows the
+edit. The edit stays through a later
 [`furnsh`](@ref) and through the [`unload`](@ref) of a binary kernel. It is lost at
 [`kclear`](@ref) and at the `unload` of a text kernel or a meta-kernel, as in CSPICE.
 
@@ -565,7 +565,6 @@ After this call, and after every later change of one of the variables,
 [`cvpool`](@ref) returns `true` once for `agent`. The names are added to the ones
 that the agent watches already. A watch belongs to one context: CSPICE keeps one
 table for the process, and here two contexts do not see the watches of each other.
-The call takes the lock of the context, so it is safe on any thread.
 
 # Examples
 ```jldoctest
@@ -607,8 +606,7 @@ The call clears the pending update. A change is an assignment by [`furnsh`](@ref
 [`ldpool`](@ref), [`lmpool`](@ref), [`pdpool`](@ref), [`pcpool`](@ref) or
 [`pipool`](@ref), or a deletion by [`dvpool`](@ref). [`clpool`](@ref),
 [`kclear`](@ref) and the [`unload`](@ref) of a text kernel count as a change of every
-watched variable, as in CSPICE. An agent without a watch gives `false`. The call
-takes the lock of the context, so it is safe on any thread.
+watched variable, as in CSPICE. An agent without a watch gives `false`.
 """
 function cvpool(ctx::SpiceContext, agent::AbstractString)
     a = String(strip(agent))
@@ -625,9 +623,8 @@ end
 Return the number of changes of the kernel pool of `ctx` since the context was made.
 This call has no CSPICE counterpart.
 
-The call is one atomic read and takes no lock. Keep the value and compare it later to
-find out whether the pool changed: this is the lock-free form of a watch on the whole
-pool. A change of the load list that assigns no variable (a binary kernel) does not
+Keep the value and compare it later to find out whether the pool changed. The call
+takes no lock, where [`cvpool`](@ref) takes the lock of the context. A change of the load list that assigns no variable (a binary kernel) does not
 count.
 
 # Examples

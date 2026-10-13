@@ -409,25 +409,24 @@ only codes are 0, ±2 (the point is in front) and ±3 (the point is behind).
 on its target. The frame of a point target is not used; pass `" "`.
 
 `abcorr` is a correction string of [`spkezr`](@ref) or an [`Aberration`](@ref).
-Stellar aberration is not applied: `"LT+S"` acts as `"LT"`, as in CSPICE. `et` must be
-a plain real number, because the result is discrete. The call does not allocate when
+Stellar aberration is not applied: `"LT+S"` acts as `"LT"`, as in CSPICE. `et` cannot
+be a `ForwardDiff.Dual`, because the result is discrete. The call does not allocate when
 the bodies and the frames are integer IDs and the shapes are ellipsoids or points.
 With a DSK shape, a `ctx` gives the tolerances set by [`dskstl`](@ref).
 
 Throws `SpiceError` with the kind
 - `:idcodenotfound` if a body name is not known;
 - `:bodiesnotdistinct` if two of the three bodies are the same;
-- `:invalidshape` if a shape is not one of the three values, `:badmethodsyntax` or
-  `:badpriorityspec` if a DSK shape string is malformed;
+- `:invalidshape` if a shape is not one of the three values, `:badmethodsyntax` if a
+  DSK shape string is malformed, `:badpriorityspec` if it does not have `UNPRIORITIZED`;
 - `:invalidshapecombo` if both targets are points, or if a DSK target is paired with
   an extended target;
 - `:invalidoption` if `abcorr` is not a valid correction;
 - `:invalidframe` if the frame of an extended target is blank, not known or not
   centered on the target;
 - `:notdisjoint` if the observer is inside a target, or if the targets overlap;
-- `:kernelvarnotfound`, `:invalidcount` or `:badaxislength` if the radii of an
-  ellipsoid target are missing or not valid, `:dskdatanotfound` if a DSK target has
-  no data loaded.
+- the kinds of [`srfrec`](@ref) if the radii of an ellipsoid target are missing or not
+  valid, `:dskdatanotfound` if a DSK target has no data loaded.
 
 Also throws the errors of [`spkpos`](@ref).
 

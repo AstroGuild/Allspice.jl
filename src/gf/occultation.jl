@@ -151,8 +151,8 @@ The result is a new `Window` that is a subset of the confinement window `cnfine`
   gap between two of them. Each change of state is then bisected until the bracket is
   not longer than `tol`.
 
-The keywords are those of [`gfdist`](@ref). A `SpiceContext` also gives the DSK
-tolerances; a `KernelSet` uses the default DSK tolerances.
+The keywords are those of [`gfdist`](@ref). With a DSK shape, a `ctx` gives the
+tolerances set by [`dskstl`](@ref).
 
 Throws `SpiceError(:invalidstep)` if `step <= 0`, `SpiceError(:invalidtolerance)` if
 `tol <= 0`, and
@@ -169,12 +169,13 @@ Throws `SpiceError(:invalidstep)` if `step <= 0`, `SpiceError(:invalidtolerance)
 - `SpiceError(:notdisjoint)` if, at an epoch of the search, the observer is inside a
   target or the targets overlap.
 
-An error also comes from the radii lookup, from a DSK method string that is not valid,
-and from `spkpos` and [`sincpt`](@ref) at the epochs that the search samples.
+Also throws the kinds of [`srfrec`](@ref) if the radii of an ellipsoid are missing or
+not valid, and the kinds of [`occult`](@ref) for a DSK shape string. The errors of
+[`spkpos`](@ref) and [`sincpt`](@ref) come from the epochs that the search samples.
 
 # Examples
 The example needs a leapseconds kernel, an SPK, and a PCK with the radii and the
-orientation of the Sun and the Moon.
+orientation of the Sun and the Moon, loaded with [`furnsh`](@ref).
 ```julia
 cnfine = Window([str2et("2025 JAN 01"), str2et("2026 JAN 01")])
 
@@ -212,20 +213,13 @@ gfoclt(occtyp::AbstractString, front::NameOrID, fshape::AbstractString, fframe::
     gfocce([ctx,] occtyp, front, fshape, fframe, back, bshape, bframe, abcorr, obsrvr,
            tol, udstep, udrefn, cnfine; bail=nothing, report=nothing, threads=false) -> Window
 
-Return the occultation window of [`gfoclt`](@ref), found with the step and the
-refinement of the caller, as `gfocce_c`.
+Return the occultation window of [`gfoclt`](@ref), found with a step and a refinement
+function that the caller supplies, as `gfocce_c`.
 
-- `tol`: convergence tolerance in seconds, positive. It is an argument, as in CSPICE;
-  the default of [`gfstol`](@ref) is not used.
-- `udstep`: the step in seconds, a positive number or a function `et -> step`.
-- `udrefn`: the refinement function `(t1, t2, s1, s2) -> t`. It returns an epoch in the
-  bracket [`t1`, `t2`], whose ends have the states `s1` and `s2`. [`gfrefn`](@ref) is
-  the bisection of CSPICE.
-
-The other arguments, the keywords `bail`, `report` and `threads`, the result and the
-errors are those of [`gfoclt`](@ref). `gfocce(..., tol, step, gfrefn, cnfine)` gives the
-window of `gfoclt(..., step, cnfine; tol)`. A step function that returns a value that is
-not positive throws `SpiceError(:invalidstep)` during the search.
+`tol`, `udstep` and `udrefn` are those of [`gfevnt`](@ref). The other arguments, the
+keywords `bail`, `report` and `threads`, the result and the errors are those of
+[`gfoclt`](@ref). `gfocce(..., tol, step, gfrefn, cnfine)` gives the window of
+`gfoclt(..., step, cnfine; tol)`.
 
 See also [`gfoclt`](@ref), [`gfevnt`](@ref), [`gffove`](@ref).
 """

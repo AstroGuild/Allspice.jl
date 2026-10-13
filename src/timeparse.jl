@@ -1092,8 +1092,8 @@ and a system together. A year can be abbreviated as `'97` or given with two digi
   [`tsetyr`](@ref) set for the context.
 - A UTC leap second `23:59:60` is accepted on a day that has one.
 
-Throws `SpiceError(:badtime)`, with the reason in the message, if CSPICE rejects the
-string, and `SpiceError(:nolsk)` if no leap-second kernel is loaded.
+Throws `SpiceError(:badtime)`, with the reason in the message, if `s` is not a time
+string of these forms, and `SpiceError(:nolsk)` if no leap-second kernel is loaded.
 
 # Examples
 ```julia
@@ -1243,8 +1243,8 @@ CSPICE routine:
   Gregorian. The year bound of [`tsetyr`](@ref) is used.
 - The components are not checked against their ranges, so `1996-02-30` is March 1.
 
-Throws `SpiceError(:badtime)` if CSPICE rejects the string and `SpiceError(:nolsk)`
-if no leap-second kernel is loaded.
+Throws `SpiceError(:badtime)` if `s` is not a time string of these forms and
+`SpiceError(:nolsk)` if no leap-second kernel is loaded.
 """
 function utc2et(ks::KernelSet, s::AbstractString, defs::TimeDefaults=TimeDefaults())::Float64
     l = _lsk(ks)
@@ -1280,14 +1280,14 @@ Return the seconds past J2000 of the time string `s` on a formal calendar, as
 On the formal calendar every day has 86400 seconds: there are no leap seconds, and
 the call needs no kernel. The result is not an epoch of a time scale; it is the count
 that [`etcal`](@ref) writes back. `s` has a form that [`str2et`](@ref) accepts,
-without a time zone, a time system, or `A.M.` and `P.M.`. With `ctx`, a year of two
-digits follows [`tsetyr`](@ref) of that context; without it the 100 years start at
-1969.
+without a time zone, a time system, or `A.M.` and `P.M.`.
 
-Different from CSPICE, a string that cannot be parsed is an error and not an `errmsg`
-result.
+With `ctx`, a year of two digits follows [`tsetyr`](@ref) of that context. Without
+`ctx` the call does not read the default context: the year 69 is 1969 and the year 68
+is 2068.
 
-Throws `SpiceError(:badtime)` with the message that `tparse_c` returns in `errmsg`.
+Throws `SpiceError(:badtime)` if the string cannot be parsed; the message is the one
+that `tparse_c` returns in `errmsg`.
 
 # Examples
 ```jldoctest
@@ -1343,11 +1343,11 @@ end
 Return the picture with which [`timout`](@ref) writes epochs in the form of the time
 string `sample`, as `tpictr_c`.
 
-`sample` has a form that [`str2et`](@ref) accepts. The call needs no kernel. Different
-from CSPICE, a string that gives no picture is an error and not an `errmsg` result.
+`sample` has a form that [`str2et`](@ref) accepts. The call needs no kernel; `ctx` is
+accepted and not used.
 
-Throws `SpiceError(:badtime)`, with the reason in the message, if CSPICE gives no
-picture for `sample`.
+Throws `SpiceError(:badtime)` if `sample` is not a time string; the message is the one
+that `tpictr_c` returns in `errmsg`.
 
 # Examples
 ```jldoctest

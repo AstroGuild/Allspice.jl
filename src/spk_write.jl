@@ -282,8 +282,9 @@ end
 """
     spkcls(handle) -> Nothing
 
-Close the SPK file of `handle`, as `spkcls_c`. The file is then complete on disk and can
-be loaded with `furnsh`. The call does nothing if the handle is closed already.
+Close the SPK file of `handle`, as `spkcls_c`. The call does nothing if the handle is
+closed already. Each writer puts its segment on disk at its own call, so the close writes
+no data. Load the file with `furnsh` after the close.
 
 Throws `SpiceError(:nosegmentsfound)` if the file is open for writing and holds no
 segment. The handle then stays open; close it with [`dafcls`](@ref).
@@ -341,7 +342,8 @@ Write an SPK segment of type 2 (Chebyshev polynomials for the position, on inter
 equal length) to the file of `handle`, as `spkw02_c`.
 
 # Arguments
-The first seven arguments and `ctx` have the same meaning in every `spkwNN` writer.
+`handle`, `body`, `center`, `frame`, `first`, `last`, `segid` and `ctx` have the same
+meaning in every `spkwNN` writer.
 - `handle`: a [`DAFHandle`](@ref) from [`spkopn`](@ref) or [`spkopa`](@ref).
 - `body`, `center`: NAIF IDs of the body and of its centre of motion.
 - `frame`: the reference frame, a name or a frame ID. A name is resolved in `ctx` (a
@@ -355,11 +357,12 @@ The first seven arguments and `ctx` have the same meaning in every `spkwNN` writ
   follow from its shape.
 
 A table such as `cdata` is a vector of vectors (the form of SPICE.jl) or a matrix with one
-record in each column; a table whose records have a fixed length can also be a flat
-vector. A count that CSPICE takes as an argument follows from the input.
+record in each column. A table of states or of packets, whose record length the data type
+fixes, can also be a flat vector; `cdata` cannot. The record count that CSPICE takes as an
+argument is not an argument here: it follows from the input.
 
-The segment is in the file when the call returns, with the data area that `spkw02_c`
-writes. A call that throws writes nothing.
+The segment is on disk when the call returns. It holds the same data as the segment that
+`spkw02_c` writes. A call that throws writes nothing.
 
 Throws `SpiceError`. Every `spkwNN` writer throws:
 - `:dafnosuchhandle` if the handle is closed, `:dafinvalidaccess` if it is open for
@@ -367,6 +370,13 @@ Throws `SpiceError`. Every `spkwNN` writer throws:
 - `:emptystring` if `frame` or `segid` is empty;
 - `:badarg` if the shape of an input does not fit;
 - `:invalidrefframe` if the frame is not known.
+
+The other checks follow CSPICE writer by writer, so they differ between writers:
+- Only a writer that lists `:barycenterephem` and `:bodyandcentersame`, or the kinds of
+  [`spkpds`](@ref), rejects `body == 0` and `body == center`.
+- `first == last` is accepted where the list says "if `first > last`".
+- A `segid` that is too long is `:idstringtoolong` in `spkw02`, `spkw03` and `spkw20`,
+  and `:segidtoolong` in the others.
 
 `spkw02` also throws:
 - `:numcoeffsnotpos` if `cdata` has no record;
@@ -410,10 +420,12 @@ spkw03(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Rea
 Write an SPK segment of type 20 (Chebyshev polynomials for the velocity, with the position
 at the midpoint of each interval), as `spkw20_c`.
 
-`cdata` holds one record for each interval, each with `3 * (polydg + 2)` values.
-`intlen` is the length of every interval in days. `dscale` and `tscale` are the distance
-scale (km) and the time scale (s) of the data. `initjd + initfr` is the TDB Julian date
-of the start of the first interval. See [`spkw02`](@ref) for the other arguments and for
+`cdata` holds one record for each interval, each with `3 * (polydg + 2)` values: the
+`polydg + 1` coefficients of the x velocity, then the x position at the midpoint of the
+interval, then the same for y and for z. `intlen` is the length of every interval in
+days, not in seconds as in [`spkw02`](@ref). `dscale` and `tscale` are the distance scale
+(km) and the time scale (s) of the data. `initjd + initfr` is the TDB Julian date of the
+start of the first interval. See [`spkw02`](@ref) for the other arguments and for
 the errors of every writer.
 
 Throws `SpiceError`:
@@ -717,13 +729,22 @@ _spk18_subtype(s::Symbol) = s === :S18TP0 ? 0 : s === :S18TP1 ? 1 : -1
     spkw18(handle, subtyp, body, center, frame, first, last, segid, degree, packts, epochs;
            ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 18 (ESOC/DDID interpolation), as `spkw18_c`.
+Write an SPK segment of type 18, as `spkw18_c`. The type holds the interpolation methods
+of the orbit files of ESOC, the operations centre of ESA (format DDID).
 
-`subtyp` is `0` or `:S18TP0` (Hermite interpolation, packets of 12 values) or `1` or
-`:S18TP1` (Lagrange interpolation, packets of 6 values). `packts` holds the `n` packets
-and `epochs` their `n` epochs (seconds past J2000 TDB). `degree` is the degree of the
-interpolating polynomial. See [`spkw02`](@ref) for the other arguments and for the errors
-of every writer.
+`subtyp` selects the interpolation and the content of a packet (km, km/s, km/s²):
+
+| `subtyp`        | Interpolation | Packet                                            |
+|:----------------|:--------------|:--------------------------------------------------|
+| `0` or `:S18TP0` | Hermite       | x, y, z, dx/dt, dy/dt, dz/dt, vx, vy, vz, dvx/dt, dvy/dt, dvz/dt |
+| `1` or `:S18TP1` | Lagrange      | x, y, z, vx, vy, vz                               |
+
+In subtype 0 the velocity `vx, vy, vz` need not be equal to the derivative of the
+position. `packts` holds the `n` packets and `epochs` their `n` epochs (seconds past
+J2000 TDB). `degree` is the degree of the interpolating polynomial. The window size is
+the number of packets that one interpolation uses: `degree + 1` for Lagrange and
+`(degree + 1) ÷ 2` for Hermite. See [`spkw02`](@ref) for the other arguments and for the
+errors of every writer.
 
 Throws `SpiceError`:
 - `:invalidvalue` if `subtyp` is not known;
@@ -798,12 +819,19 @@ end
 
 Write an SPK segment of type 15 (precessing conic propagation), as `spkw15_c`.
 
-`epoch` is the epoch of periapsis (seconds past J2000 TDB), `tp` the trajectory pole,
-`pa` the periapsis vector, `p` the semi-latus rectum (km), `ecc` the eccentricity, `j2flg`
-the J2 processing flag of CSPICE, `pv` the pole of the central body, and `gm` (km³/s²),
-`j2` and `radius` (equatorial, km) the constants of the central body. The three vectors
-are stored as unit vectors. See [`spkw02`](@ref) for the other arguments and for the
-errors of every writer.
+- `epoch`: the epoch of periapsis, seconds past J2000 TDB.
+- `tp`: the trajectory pole, a vector along the orbital angular momentum.
+- `pa`: a vector from the central body to the periapsis.
+- `p`: the semi-latus rectum, km.
+- `ecc`: the eccentricity.
+- `j2flg`: which J2 corrections the propagation applies. 1: regression of the nodes
+  only. 2: precession of the line of apsides only. 3: none. Any other value: both.
+- `pv`: a vector along the north pole of the central body.
+- `gm`, `j2`, `radius`: the gravitational parameter (km³/s²), the J2 coefficient and the
+  equatorial radius (km) of the central body.
+
+`tp`, `pa` and `pv` are in `frame`; only their directions are stored. See
+[`spkw02`](@ref) for the other arguments and for the errors of every writer.
 
 Throws `SpiceError`:
 - `:badlatusrectum` unless `p > 0`, `:badeccentricity` if `ecc < 0`;
@@ -848,10 +876,25 @@ end
 
 Write an SPK segment of type 17 (equinoctial elements), as `spkw17_c`.
 
-`eqel` holds the nine equinoctial elements at `epoch` (seconds past J2000 TDB), in the
-order and the units of CSPICE. `rapol` and `decpol` are the right ascension and the
-declination (radians) of the pole of the reference plane. See [`spkw02`](@ref) for the
-other arguments and for the errors of every writer.
+`eqel` holds the nine equinoctial elements at `epoch` (seconds past J2000 TDB). `rapol`
+and `decpol` are the right ascension and the declination (radians) in `frame` of the pole
+of the central body, which is the pole of the reference plane of the elements. See
+[`spkw02`](@ref) for the other arguments and for the errors of every writer.
+
+| Index | Element                                                       |
+|:------|:--------------------------------------------------------------|
+| 1     | semi-major axis, km                                           |
+| 2     | `e * sin(argp + node)`                                        |
+| 3     | `e * cos(argp + node)`                                        |
+| 4     | mean longitude `m0 + argp + node` at `epoch`, rad             |
+| 5     | `tan(inc / 2) * sin(node)`                                    |
+| 6     | `tan(inc / 2) * cos(node)`                                    |
+| 7     | rate of the longitude of periapsis, rad/s                     |
+| 8     | rate of the mean longitude, rad/s                             |
+| 9     | rate of the longitude of the ascending node, rad/s            |
+
+Here `e` is the eccentricity, `inc` the inclination, `argp` the argument of periapsis,
+`node` the longitude of the ascending node and `m0` the mean anomaly.
 
 Throws `SpiceError`:
 - `:badsemiaxis` unless the semi-major axis `eqel[1]` is positive;
@@ -1001,26 +1044,37 @@ const _SPK19_PKTSZS = (12, 6, 6)
 Write an SPK segment of type 19 (mini-segments of the ESOC/DDID types), as `spkw19` of
 SPICELIB. CSPICE has no C wrapper for it.
 
-The number of mini-segments is `length(npkts)`. For mini-segment `i`, `npkts[i]` is the
-number of packets, `subtps[i]` the subtype (0 Hermite with packets of 12 values, 1
-Lagrange with 6, 2 Hermite with 6) and `degres[i]` the degree. `packts` is the flat vector
-of all packets and `epochs` that of all epochs (seconds past J2000 TDB), in order.
-`ivlbds` holds the `length(npkts) + 1` bounds of the intervals of the mini-segments. If
-`sellst` is `true`, the later interval is used for an epoch that is on a bound of two
-intervals; else the earlier one is used. See [`spkw02`](@ref) for the other arguments and
-for the errors of every writer.
+A mini-segment is a set of packets with its own subtype and degree, valid on its own
+interval. The number of mini-segments is `length(npkts)`.
+
+- `npkts[i]`, `subtps[i]`, `degres[i]`: the number of packets, the subtype and the degree
+  of mini-segment `i`.
+- `packts`: the flat vector of all packets, in order.
+- `epochs`: the flat vector of the epochs of all packets, seconds past J2000 TDB.
+- `ivlbds`: the `length(npkts) + 1` bounds of the intervals of the mini-segments,
+  seconds past J2000 TDB.
+- `sellst`: if `true`, an epoch on a bound of two intervals uses the later interval;
+  else it uses the earlier one.
+
+Subtypes 0 and 1 have the packets of [`spkw18`](@ref). Subtype 2 is Hermite
+interpolation of packets x, y, z, vx, vy, vz (km, km/s). The window size is defined in
+[`spkw18`](@ref). See [`spkw02`](@ref) for the other arguments and for the errors of
+every writer.
 
 Throws `SpiceError`:
 - `:baddescrtimes` if `first > last`;
 - `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
 - `:invalidcount` if there is no mini-segment;
 - `:boundsoutoforder` unless `ivlbds` is strictly increasing;
-- `:coveragegap` unless [`first`, `last`] is inside [`ivlbds[1]`, `ivlbds[end]`];
-- for a mini-segment: `:toofewpackets` if it has fewer than two packets,
-  `:invalidsubtype` if its subtype is not in `0:2`, `:invaliddegree` if its degree is not
-  in `1:27`, `:badwindowsize` if its window size is odd, `:timesoutoforder` unless its
-  epochs are strictly increasing, and `:boundsdisagree` unless its epochs cover its
-  interval.
+- `:coveragegap` unless [`first`, `last`] is inside [`ivlbds[1]`, `ivlbds[end]`].
+
+For a mini-segment it throws:
+- `:toofewpackets` if it has fewer than two packets;
+- `:invalidsubtype` if its subtype is not in `0:2`;
+- `:invaliddegree` if its degree is not in `1:27`;
+- `:badwindowsize` if its window size is odd;
+- `:timesoutoforder` unless its epochs are strictly increasing;
+- `:boundsdisagree` unless its epochs cover its interval.
 """
 function spkw19(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, npkts::AbstractVector{<:Integer},
@@ -1118,8 +1172,7 @@ An SPK segment of type 14 that is open for the addition of records. [`spk14b`](@
 returns it, and it is the first argument of [`spk14a`](@ref) and [`spk14e`](@ref).
 
 CSPICE keeps this state in a table of the files that have a segment in work; here the
-caller owns it. The file gets the segment when `spk14e` runs, so a segment that is never
-ended leaves the file unchanged.
+caller owns it. [`spk14e`](@ref) writes the segment.
 """
 mutable struct SPK14Writer
     const handle::DAFHandle
@@ -1208,8 +1261,8 @@ the number of records is `length(epochs)`.
 A record has `2 + 6 * (chbdeg + 1)` numbers: the midpoint (seconds past J2000 TDB) and
 the radius (s) of its interval, then the coefficients of x, y, z (km) and of dx, dy, dz
 (km/s). `coeffs` holds the records one after the other: a vector, or a matrix with one
-record in each column. `epochs[i]` is the start of the interval of record `i`. The file
-does not change before [`spk14e`](@ref).
+record in each column. `epochs[i]` is the start of the interval of record `i`, in seconds
+past J2000 TDB.
 
 Throws `SpiceError`:
 - `:segmentnotopen` if `spk14e` ended the writer;
@@ -1253,8 +1306,9 @@ spk14a(w::SPK14Writer, coeffs, epochs) = spk14a(w, length(epochs), coeffs, epoch
 
 End the type 14 segment `writer` and write it to its file, as `spk14e_c`.
 
-The file then has one more segment, with the data area that the generic segment writer of
-CSPICE writes. The writer cannot be used again.
+The file does not change before this call, so a segment that is never ended leaves the
+file unchanged. The segment holds the same data as the one that CSPICE writes. The
+writer cannot be used again.
 
 Throws `SpiceError(:segmentnotopen)` if the writer was ended before.
 """

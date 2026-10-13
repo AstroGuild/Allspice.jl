@@ -298,8 +298,8 @@ end
         -> (state, lt)
 
 Return the state of `target` relative to an observer that moves at a constant velocity
-relative to the body `obsctr`, as an `SVector{6}` (km, km/s) in the frame `outref`, and
-the one-way light time `lt` (s), as `spkcvo_c` of CSPICE.
+relative to the body `obsctr`, as `spkcvo_c` of CSPICE. `state` is an `SVector{6}` (km,
+km/s) in the frame `outref`; `lt` is the one-way light time in seconds.
 
 `obssta` is the state of the observer relative to the center of `obsctr` (km, km/s, 6
 elements) in the frame `obsref` at the epoch `obsepc`. The position at another epoch is
@@ -319,11 +319,15 @@ light time:
 Bodies and frames are names or integer IDs. `et` can be a `ForwardDiff.Dual`. The call
 does not allocate when the bodies and the frames are integer IDs.
 
-Throws `SpiceError(:invalidoption)` if `abcorr` is not a valid correction,
-`SpiceError(:idcodenotfound)` if a body name is not known, `SpiceError(:unknownframe)`
-if `outref` or `obsref` is not known, `SpiceError(:notsupported)` if `refloc` is not one
-of the three values, and `SpiceError(:badarg)` if `obssta` does not have 6 elements.
-Also throws the errors of [`spkezr`](@ref).
+Throws `SpiceError`:
+- `:invalidoption` if `abcorr` is not a valid correction;
+- `:idcodenotfound` if a body name is not known;
+- `:unknownframe` if `outref` or `obsref` is not known;
+- `:notsupported` if `refloc` is not one of the three values;
+- `:badarg` if `obssta` does not have 6 elements;
+- the kinds of [`spkezr`](@ref) for SPK or frame data that are not loaded.
+
+The kinds for `abcorr` and for a body name differ from those of [`spkezr`](@ref).
 
 See also [`spkcpo`](@ref), [`spkcvt`](@ref), [`azlcpo`](@ref).
 """
@@ -345,8 +349,8 @@ end
     spkcpo([ctx,] target, et, outref, refloc, abcorr, obspos, obsctr, obsref) -> (state, lt)
 
 Return the state of `target` relative to an observer at a constant position on the
-body `obsctr`, as an `SVector{6}` (km, km/s) in the frame `outref`, and the one-way
-light time `lt` (s), as `spkcpo_c` of CSPICE.
+body `obsctr`, as `spkcpo_c` of CSPICE. `state` is an `SVector{6}` (km, km/s) in the
+frame `outref`; `lt` is the one-way light time in seconds.
 
 `obspos` is the observer position relative to the center of `obsctr` (km, 3 elements)
 in the frame `obsref`, for example a ground station in the body-fixed frame of its
@@ -372,20 +376,17 @@ end
     spkcvt([ctx,] trgsta, trgepc, trgctr, trgref, et, outref, refloc, abcorr, obsrvr)
         -> (state, lt)
 
-Return the state of a target that moves at a constant velocity relative to the body
-`trgctr`, relative to the observer `obsrvr`, as an `SVector{6}` (km, km/s) in the frame
-`outref`, and the one-way light time `lt` (s), as `spkcvt_c` of CSPICE.
+Return the state, relative to the observer `obsrvr`, of a target that moves at a
+constant velocity relative to the body `trgctr`, as `spkcvt_c` of CSPICE. `state` is an
+`SVector{6}` (km, km/s) in the frame `outref`; `lt` is the one-way light time in seconds.
 
 `trgsta` is the state of the target relative to the center of `trgctr` (km, km/s, 6
 elements) in the frame `trgref` at the epoch `trgepc`. The position at another epoch is
 extrapolated with the constant velocity. `refloc`, `abcorr` and the notes on `et` and
 allocation are those of [`spkcvo`](@ref).
 
-Throws `SpiceError(:invalidoption)` if `abcorr` is not a valid correction,
-`SpiceError(:idcodenotfound)` if a body name is not known, `SpiceError(:unknownframe)`
-if `outref` or `trgref` is not known, `SpiceError(:notsupported)` if `refloc` is not one
-of the three values, and `SpiceError(:badarg)` if `trgsta` does not have 6 elements.
-Also throws the errors of [`spkezr`](@ref).
+Throws the errors of [`spkcvo`](@ref), with `trgsta` and `trgref` in the place of
+`obssta` and `obsref`.
 
 See also [`spkcpt`](@ref), [`spkcvo`](@ref).
 """
@@ -406,9 +407,9 @@ end
 """
     spkcpt([ctx,] trgpos, trgctr, trgref, et, outref, refloc, abcorr, obsrvr) -> (state, lt)
 
-Return the state of a target at a constant position on the body `trgctr`, relative to
-the observer `obsrvr`, as an `SVector{6}` (km, km/s) in the frame `outref`, and the
-one-way light time `lt` (s), as `spkcpt_c` of CSPICE.
+Return the state, relative to the observer `obsrvr`, of a target at a constant position
+on the body `trgctr`, as `spkcpt_c` of CSPICE. `state` is an `SVector{6}` (km, km/s) in
+the frame `outref`; `lt` is the one-way light time in seconds.
 
 `trgpos` is the target position relative to the center of `trgctr` (km, 3 elements) in
 the frame `trgref`, for example a surface point in the body-fixed frame. This is

@@ -3,14 +3,14 @@
 
 """
     azlrec(range, az, el, azccw, elplsz) -> SVector{3}
-    azlrec(range, az, el; azccw=true, elplsz=true)
+    azlrec(range, az, el; azccw=true, elplsz=true) -> SVector{3}
 
 Return the rectangular coordinates of the point at distance `range`, azimuth `az` and
 elevation `el` (radians), as `azlrec_c` of CSPICE.
 
-`azccw` tells whether the azimuth grows counterclockwise about +Z, seen from +Z.
-`elplsz` tells whether the elevation grows toward +Z. The ranges of the inputs are not
-checked. The result has the unit of `range`.
+The azimuth is zero along +X. `azccw` tells whether it grows counterclockwise about +Z,
+seen from +Z. `elplsz` tells whether the elevation grows toward +Z. The ranges of the
+inputs are not checked. The result has the unit of `range`.
 
 See also [`recazl`](@ref), [`drdazl`](@ref).
 """
@@ -24,7 +24,7 @@ azlrec(range::Real, az::Real, el::Real; azccw::Bool=true, elplsz::Bool=true) =
 
 """
     recazl(rectan, azccw, elplsz) -> (range, az, el)
-    recazl(rectan; azccw=true, elplsz=true)
+    recazl(rectan; azccw=true, elplsz=true) -> (range, az, el)
 
 Return the distance, the azimuth in [0, 2π) and the elevation in [-π/2, π/2] (radians)
 of the point `rectan`, as `recazl_c` of CSPICE.
@@ -48,7 +48,7 @@ recazl(rectan::AbstractVector; azccw::Bool=true, elplsz::Bool=true) =
 
 """
     dazldr(x, y, z, azccw, elplsz) -> SMatrix{3,3}
-    dazldr(x, y, z; azccw=true, elplsz=true)
+    dazldr(x, y, z; azccw=true, elplsz=true) -> SMatrix{3,3}
 
 Return the Jacobian of the conversion from rectangular coordinates to (range, azimuth,
 elevation) at the point `(x, y, z)`, as `dazldr_c` of CSPICE.
@@ -74,7 +74,7 @@ dazldr(x::Real, y::Real, z::Real; azccw::Bool=true, elplsz::Bool=true) =
 
 """
     drdazl(range, az, el, azccw, elplsz) -> SMatrix{3,3}
-    drdazl(range, az, el; azccw=true, elplsz=true)
+    drdazl(range, az, el; azccw=true, elplsz=true) -> SMatrix{3,3}
 
 Return the Jacobian of the conversion from (range, azimuth, elevation) to rectangular
 coordinates, as `drdazl_c` of CSPICE.
@@ -121,12 +121,17 @@ axis of `obsref`. `azccw` and `elplsz` are the flags of [`azlrec`](@ref).
 an [`Aberration`](@ref). `et` can be a `ForwardDiff.Dual`. The call does not allocate
 when the bodies and the frame are integer IDs.
 
-Throws `SpiceError(:idcodenotfound)` for an unknown body, `SpiceError(:unknownframe)`
-if `obsref` is not known, `SpiceError(:invalidframe)` if `obsref` is not centered on
-`obsctr`, `SpiceError(:invalidmethod)`, `SpiceError(:invalidoption)` for an unknown
-correction, and `SpiceError(:pointonzaxis)` if the target is on the local vertical.
-Also throws the errors of [`spkcpo`](@ref) and, for missing or invalid radii of
-`obsctr`, `:kernelvarnotfound`, `:invalidcount` or `:badaxislength`.
+Throws `SpiceError` with the kind
+- `:invalidmethod` if `method` is not `"ELLIPSOID"`;
+- `:invalidoption` if `abcorr` is not a valid correction;
+- `:idcodenotfound` if a body name is not known;
+- `:unknownframe` if `obsref` is not known, `:invalidframe` if it is not centered on
+  `obsctr`;
+- `:badarg` if `obspos` does not have 3 elements;
+- `:pointonzaxis` if the target is on the local vertical;
+- the kinds of [`srfrec`](@ref) if the radii of `obsctr` are missing or not valid.
+
+Also throws the errors of [`spkcpo`](@ref).
 
 # Examples
 ```julia

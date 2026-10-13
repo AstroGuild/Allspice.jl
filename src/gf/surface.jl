@@ -384,10 +384,9 @@ of the sub-observer point on `target`, as seen from `obsrvr`, satisfies the rela
 `relate` with `refval`, as `gfsubc_c`.
 
 The point is the one of [`subpnt`](@ref), in the body-fixed frame `fixref`, which must
-be centered on `target`. `method` is `"Near point: ellipsoid"` (the point of the
-reference ellipsoid nearest to the observer) or `"Intercept: ellipsoid"` (the point
-where the line from the observer to the center of the target meets the ellipsoid); case
-and blanks are ignored. As in CSPICE, no other method and no DSK shape is accepted.
+be centered on `target`. `method` is `"Near point: ellipsoid"` or
+`"Intercept: ellipsoid"`; case and blanks are ignored. As in CSPICE, no other spelling
+is accepted: `"NEAR POINT/ELLIPSOID"` and a DSK method throw.
 
 The coordinate systems, the coordinates, their units and ranges, and the convergence of
 a longitude search are those of [`gfposc`](@ref). The other arguments, the keywords and
@@ -404,7 +403,10 @@ Throws `SpiceError(:invalidstep)`, `SpiceError(:invalidtolerance)`,
   one of the two. The method is checked at the first epoch that is searched, so an
   empty `cnfine` gives no error for it, as in CSPICE;
 - `SpiceError(:noframe)` if `fixref` is not known, `SpiceError(:invalidframe)` if it is
-  not centered on `target`, and `SpiceError(:badframe)` if its center has no radii;
+  not centered on `target`, and `SpiceError(:badframe)` if its center has no radii
+  loaded;
+- the kinds `:invalidcount` and `:badaxislength` of [`srfrec`](@ref) if the radii are
+  not valid;
 - `SpiceError(:degeneratecase)` if the velocity of the point is not defined at an epoch
   of the search.
 
@@ -413,7 +415,7 @@ search samples.
 
 # Examples
 The example needs a leapseconds kernel, an SPK, and a PCK with the radii and the
-orientation of Mars.
+orientation of Mars, loaded with [`furnsh`](@ref).
 ```julia
 cnfine = Window([str2et("2025 JAN 01"), str2et("2025 JAN 03")])
 

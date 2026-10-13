@@ -876,7 +876,7 @@ and many tasks can read one result at the same time. It is never modified.
 # Examples
 ```julia
 result, failed, errmsg = ekfind("SELECT NAME, RADIUS FROM MOONS ORDER BY NAME")
-failed && error(errmsg)
+failed && throw(ArgumentError(errmsg))
 for row in 1:length(result)
     name, _, _ = ekgc(result, 1, row)
     radius, isnull, _ = ekgd(result, 2, row)

@@ -23,16 +23,15 @@ const _EK_TYPE_SYMBOLS = (:CHR, :DP, :INT, :TIME)
 Attributes of one EK column, as the attribute descriptor of `ekcii_c` and `ekssum_c`.
 [`ekcii`](@ref) and [`ekssum`](@ref) return it.
 
-- `cclass`: the column class, 1 to 9 (the storage layout; classes 7 to 9 are the
-  columns of a segment that the fast writers made);
+- `cclass`: the column class of CSPICE, 1 to 9. It is the code of the storage layout
+  in the file; a caller needs it only to compare with CSPICE. Classes 7 to 9 are the
+  columns with `FIXED_COUNT = TRUE` (see [`ekbseg`](@ref));
 - `dtype`: `:CHR`, `:DP`, `:INT` or `:TIME`;
 - `strlen`: the string length of a character column, -1 for strings of variable
-  length, and 0 for a column of another type;
+  length, and 0 for a column of another type (CSPICE gives 1 there);
 - `size`: the number of values of an entry, -1 for entries of variable size;
 - `indexd`: true if the column has an index;
 - `nullok`: true if the column can hold null entries.
-
-CSPICE gives `strlen == 1` for a column that does not have character type.
 """
 struct EKColumnAttr
     cclass::Int
@@ -46,7 +45,7 @@ end
 """
     EKSegmentSummary
 
-Summary of one EK segment, as `ekssum_c` returns it. [`ekssum`](@ref) returns it.
+Summary of one EK segment, the result of [`ekssum`](@ref).
 
 - `tabnam`: the name of the table of the segment;
 - `nrows`, `ncols`: the numbers of rows and columns;
@@ -123,20 +122,13 @@ end
 """
     EKTable
 
-One loaded EK table: the entry of the table catalogue that [`ekntab`](@ref),
-[`ektnam`](@ref), [`ekccnt`](@ref) and [`ekcii`](@ref) read. A table is never modified
-after it was built.
-
-- `name`: the table name, in upper case;
-- `cnames`, `attrs`: the name (upper case) and the [`EKColumnAttr`](@ref) of each
-  column, in the order of the first loaded segment of the table;
-- `segs`: the segments of the table in load order, as (file number, segment number)
-  pairs; the file number counts the loaded EK files;
-- `cols`: internal; `cols[k][i]` is the descriptor of column `i` of the table in
-  segment `segs[k]`.
+One loaded EK table: all loaded segments that have the same table name. This is the
+type of the entries of the table catalogue of a context. No call returns it and a
+caller does not build it: read the catalogue with [`ekntab`](@ref), [`ektnam`](@ref),
+[`ekccnt`](@ref) and [`ekcii`](@ref).
 
 All segments of a table have columns with the same names and attributes; a file whose
-segment does not fit is rejected at load time, as in CSPICE.
+segment does not fit is rejected at load time, as in CSPICE (see [`eklef`](@ref)).
 """
 struct EKTable
     name::String

@@ -37,9 +37,9 @@ Reception gives the target as the observer sees it at `et`: the target at
 target at `et + lt`. Letter case and blanks in the string are ignored.
 
 The keyword form builds the value from flags; `converged`, `stellar` and `transmit`
-each imply `lt`. The properties `uselt`, `converged`, `stellar`, `transmit` and
-`geometric` (true for `"NONE"` only) read the value, and `string` gives the CSPICE
-spelling.
+each imply `lt`. A value `c` has the properties `c.uselt` (the flag `lt`),
+`c.converged`, `c.stellar`, `c.transmit` and `c.geometric` (true for `"NONE"` only).
+`string(c)` gives the CSPICE spelling.
 
 Throws `SpiceError(:badarg)` if the string is not one of the nine above. This includes
 the values that CSPICE recognizes and rejects: `RL`, `RL+S`, `XRL`, `XRL+S`, `S`, `XS`.
@@ -580,36 +580,19 @@ Element `k + 1` of the result is the derivative of order `k`, in km/s^k. `et` is
 seconds past J2000 TDB. `targ`, `obs` and `ref` are names or integer IDs. The form
 without `abcorr` is geometric, as is `abcorr = "NONE"`; `abcorr` is a string or an
 [`Aberration`](@ref), as for [`spkezr`](@ref). With ForwardDiff loaded, `et` can be a
-dual number. The call does not allocate for integer IDs.
+dual number. The call does not allocate when the bodies and the frame are integer IDs
+and `abcorr` is absent or an `Aberration`.
 
 Order 0 is the position of [`spkezr`](@ref) and of [`spkpos`](@ref), to rounding.
-Every higher order is the exact derivative of the position function `P` below, so the
-result agrees with a finite difference and with automatic differentiation of
+Every higher order is the exact derivative of that position as a function of `et`. The
+result therefore agrees with a finite difference and with automatic differentiation of
 `spkpos`.
 
-Let `s` be -1 for reception and +1 for transmission and, in the barycentric inertial
-frame,
-
-    p(t) = r_targ(t + s ℓ(t)) - r_obs(t)
-    P(t) = R(t + s |pc(t)| / c) * A(p(t), s * v_obs(t))
-
-- `ℓ` is the light time. For the `LT` forms `ℓ(t) = |r_targ(t) - r_obs(t)| / c`, the
-  geometric light time, because the single iteration of CSPICE evaluates the target at
-  that light time. For the `CN` forms `ℓ` solves the light-time equation
-  `ℓ(t) = |p(t)| / c`: its value at `et` is the one of the CSPICE iteration, and its
-  derivatives satisfy the equation order by order.
-- `A` is the stellar aberration: the identity without `+S`, otherwise
-  `A(p, v) = p + |p| sinφ v̂⊥ + |p| (cosφ - 1) p̂`, with `v⊥` the part of `v`
-  perpendicular to `p` and `sinφ = |v⊥| / c`.
-- `R` is the rotation from J2000 to `ref`, constant for an inertial frame. `pc` is `p`
-  with the center of `ref` in the place of the target; the epoch of `R` is `t` if the
-  center is the observer.
-
-Order 1 is not always the velocity of `spkezr`, for two reasons. CSPICE takes the rate
-of the light time from the converged light-time equation also for the `LT` forms: a
-relative difference near `|v_targ| / c` times the range rate over `c`, about 1e-8 for
-the Moon seen from the Earth. CSPICE also takes the observer acceleration of the `+S`
-forms from a difference of velocities over ±1 s, a difference at rounding level.
+Order 1 is the velocity of `spkezr` for a geometric state. With an `LT` correction it
+differs from that velocity, by about 1e-8 relative for the Moon seen from the Earth,
+because CSPICE approximates the rate of the light time.
+[Exact derivatives and the rates of CSPICE](@ref) gives the function that is
+differentiated.
 
 Throws `SpiceError(:badarg)` if `N` is not an integer `>= 0` or `abcorr` is not valid,
 and the errors of [`spkezr`](@ref).
@@ -670,6 +653,8 @@ end
 Return the state of body `targ` relative to an observer with a given barycentric
 state, corrected for light time, with the light time and its rate, as `spkltc_c`.
 
+- `et`: epoch of the observer in seconds past J2000 TDB; the same in
+  [`spkaps`](@ref), [`spkacs`](@ref) and [`spkapo`](@ref).
 - `stobs`: state of the observer relative to the solar system barycenter at `et`, in
   `ref`; 6 elements, km and km/s.
 - `ref`: an inertial frame, by name or ID.
@@ -682,7 +667,8 @@ at most five and stop when the light time changes by less than `1e-17 * max(1, |
 
 Throws `SpiceError(:badarg)` if `ref` is not inertial, `stobs` does not have 6
 elements, `abcorr` is not valid, `et` is not finite, or the range rate of the target
-is near the speed of light. Throws the SPK errors of [`spkgeo`](@ref).
+is above `(1 - 1e-10)` times the speed of light. Throws the SPK errors of
+[`spkgeo`](@ref).
 
 See also [`spkaps`](@ref), [`spkacs`](@ref).
 """
@@ -705,7 +691,8 @@ Return the state of body `targ` relative to an observer with a given barycentric
 and acceleration, corrected for light time and stellar aberration, as `spkaps_c`.
 
 `stobs` (6 elements, km and km/s) and `accobs` (3 elements, km/s^2) are relative to
-the solar system barycenter at `et`, in the inertial frame `ref`. `abcorr` is as for
+the solar system barycenter at `et`, in the inertial frame `ref`. The other arguments
+are those of [`spkltc`](@ref). `abcorr` is as for
 [`spkezr`](@ref). The acceleration is used for the `+S` forms only: it enters the
 velocity part of the stellar aberration.
 
@@ -739,7 +726,8 @@ Return the state of body `targ` relative to body `obs` in the inertial frame `re
 `state` is an `SVector{6}` in km and km/s, `lt` is in seconds and `dlt` is the time
 derivative of `lt`. `targ` and `obs` are NAIF ID codes. For the `+S` forms the
 acceleration of the observer is the central difference of its velocity over ±1 s, as
-in CSPICE. For an inertial `ref` the state and `lt` are those of [`spkezr`](@ref).
+in CSPICE. `et` is in seconds past J2000 TDB. The state and `lt` are those of
+[`spkezr`](@ref).
 
 Throws the errors of [`spkltc`](@ref).
 """
@@ -764,7 +752,8 @@ Return the position of body `targ` relative to an observer with a given barycent
 state, with the correction `abcorr`, and the light time, as `spkapo_c`.
 
 `sobs` is the state of the observer relative to the solar system barycenter at `et`
-in the inertial frame `ref` (6 elements, km and km/s). `pos` is an `SVector{3}` in km
+(seconds past J2000 TDB) in the inertial frame `ref` (6 elements, km and km/s). `pos`
+is an `SVector{3}` in km
 and `lt` is in seconds. The `LT` forms make one light-time iteration and the `CN`
 forms exactly three, as in CSPICE. Note the argument order: `sobs` is before `abcorr`.
 
@@ -849,7 +838,7 @@ stelab(pobj::AbstractVector, vobs::AbstractVector) = _stelab(_vec3(pobj), _vec3(
     stlabx(pobj, vobs) -> SVector{3}
 
 Return the position `pobj` corrected for stellar aberration at transmission, as
-`stlabx_` of CSPICE: [`stelab`](@ref) with the velocity negated.
+`stlabx_c`: [`stelab`](@ref) with the velocity negated.
 
 Units and errors are those of [`stelab`](@ref).
 """

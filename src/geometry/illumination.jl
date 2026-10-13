@@ -103,8 +103,9 @@ Return the illumination angles at the surface point `spoint` of `target`, for th
 illumination source `ilusrc` and the observer `obsrvr` at `et` (seconds past J2000
 TDB), as `illumg_c` of CSPICE.
 
-- `trgepc`: the epoch at the point. It is `et` corrected for the light time between
-  the observer and the point, and `et` itself without a correction.
+- `trgepc`: the epoch at the point (seconds past J2000 TDB). With a light time
+  correction it is `et` minus (reception) or plus (transmission) the light time between
+  the observer and the point. Without one it is `et`.
 - `srfvec`: the vector from the observer to the point, in km, in the body-fixed frame
   `fixref` at `trgepc`.
 - `phase`: the angle at the point between the directions to the source and to the
@@ -127,13 +128,14 @@ tolerances set by [`dskstl`](@ref).
 Throws `SpiceError` with the kind
 - `:invalidoption` if `abcorr` is not a valid correction;
 - `:idcodenotfound` if a body name is not known;
-- `:badmethodsyntax` or `:badpriorityspec` if `method` is malformed, `:invalidmethod`
-  if it holds a sub-point type;
-- `:bodiesnotdistinct` if `target` and `obsrvr` are the same body;
+- `:badmethodsyntax` if `method` is malformed, `:badpriorityspec` if a DSK method does
+  not have `UNPRIORITIZED`, `:invalidmethod` if it holds a sub-point type;
+- `:bodiesnotdistinct` if `target` and `obsrvr` are the same body (`ilusrc` is not
+  compared with the other two);
 - `:noframe` if `fixref` is not known, `:invalidframe` if it is not centered on `target`;
 - `:badarg` if `spoint` does not have 3 elements;
-- `:kernelvarnotfound`, `:invalidcount` or `:badaxislength` if the radii of `target`
-  are missing or not valid (ellipsoid).
+- the kinds of [`srfrec`](@ref) if the radii of `target` are missing or not valid
+  (ellipsoid).
 
 Also throws the errors of [`spkcpt`](@ref) and, with a DSK method, of [`srfnrm`](@ref).
 
@@ -152,9 +154,12 @@ With `"ELLIPSOID"`, `visibl` is `emissn <= π/2` and `lit` is `incdnc <= π/2`. 
 DSK method, a flag is also false if the surface blocks the ray from the point toward
 the observer or toward the source.
 
-As in CSPICE, a DSK method uses all loaded surfaces of the target, whatever the
-`SURFACES` list of `method` says, and takes the surface normal at the epoch `trgepc`.
-The arguments, the remaining notes and the errors are those of [`illumg`](@ref).
+With a DSK method, the angles and the flags use all loaded surfaces of the target: the
+`SURFACES` list of `method` is ignored. The surface normal is taken at `trgepc`, where
+[`illumg`](@ref) takes it at `et`. Both are as in CSPICE.
+
+The arguments, the notes on `et`, allocation and `ctx`, and the errors are those of
+[`illumg`](@ref).
 
 See also [`ilumin`](@ref), [`illumg`](@ref).
 """
@@ -183,8 +188,9 @@ Return the illumination angles at the surface point `spoint` of `target`, with t
 as the source, as `ilumin_c` of CSPICE.
 
 `phase`, `incdnc` and `emissn` are the phase angle, the solar incidence angle and the
-emission angle (rad). `trgepc` is the epoch at the point and `srfvec` the vector from
-the observer to the point (km, body-fixed frame `fixref`). This is [`illumg`](@ref)
+emission angle (rad). `trgepc` is the epoch at the point (seconds past J2000 TDB) and
+`srfvec` the vector from the observer to the point (km, body-fixed frame `fixref`).
+This is [`illumg`](@ref)
 with `ilusrc = 10`; see there for the arguments, the notes and the errors.
 
 # Examples
@@ -212,9 +218,9 @@ ilumin(method::AbstractString, target::NameOrID, et::Real, fixref::NameOrID, abc
 """
     phaseq([ctx,] et, target, illmn, obsrvr, abcorr) -> phase
 
-Return the phase angle at `target`, in radians in [0, π]: the angle between the
-directions from the target to the illumination source `illmn` and to the observer
-`obsrvr` at `et` (seconds past J2000 TDB), as `phaseq_c` of CSPICE.
+Return the phase angle at `target` at `et` (seconds past J2000 TDB), in radians in
+[0, π], as `phaseq_c` of CSPICE. It is the angle between the directions from the target
+to the illumination source `illmn` and to the observer `obsrvr`.
 
 With a correction, the target is taken as seen by the observer, and the source as seen
 by the target at `et - lt`, where `lt` is the light time between the observer and the

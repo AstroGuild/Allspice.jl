@@ -28,7 +28,8 @@ Return the midpoint of the bracket [`t1`, `t2`], as `gfrefn_c`. This is the defa
 refinement function of the geometry finder.
 
 The result is `t1 * 0.5 + t2 * 0.5`, clamped between `t1` and `t2`; the two ends can be in
-either order. The states `s1` and `s2` at the two ends are not used.
+either order. `s1` and `s2`, the values of the search condition at the two ends, are
+not used.
 
 See also [`gfevnt`](@ref), [`gfocce`](@ref), [`gffove`](@ref).
 """
@@ -475,8 +476,7 @@ end
 Return the numerical derivative of the scalar function `udfunc` at `x`, as `uddf_c`.
 
 The result is the central difference `(udfunc(x + dx) - udfunc(x - dx)) / (2 dx)`.
-`udfunc` is called once at `x - dx` and then once at `x + dx`. Unlike CSPICE, `udfunc`
-takes the abscissa alone.
+Unlike CSPICE, `udfunc` takes the abscissa alone.
 
 Throws `SpiceError(:dividebyzero)` if `dx == 0`.
 

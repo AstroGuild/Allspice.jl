@@ -153,22 +153,23 @@ end
 
 """
     sincpt([ctx,] method, target, et, fixref, abcorr, obsrvr, dref, dvec)
-        -> Union{Nothing, Tuple{SVector{3}, Real, SVector{3}}}
+        -> (spoint, trgepc, srfvec) or nothing
 
 Return the first point where the ray from `obsrvr` along `dvec` meets the surface of
 `target`, as `(spoint, trgepc, srfvec)`, or `nothing` if the ray misses the target. As
 `sincpt_c` of CSPICE, which returns a `found` flag instead of `nothing`.
 
 - `spoint`: the intercept, in km, in the body-fixed frame `fixref` of the target.
-- `trgepc`: the epoch at the intercept. It is `et` corrected for the light time between
-  the observer and the intercept, and `et` itself without a correction.
+- `trgepc`: the epoch at the intercept (seconds past J2000 TDB). With a light time
+  correction it is `et` minus (reception) or plus (transmission) the light time between
+  the observer and the intercept. Without one it is `et`.
 - `srfvec`: the vector from the observer to the intercept, in km, in `fixref` at
   `trgepc`.
 
-`dvec` is the ray direction (3 elements, any length but zero) in the frame `dref`.
-With a light time correction, a `dref` that is not inertial and not centered on the
-observer is evaluated at `et` corrected for the light time to its center. With a `+S`
-correction the direction is corrected for stellar aberration.
+`dvec` is the ray direction (3 elements, not zero) in the frame `dref`. A `dref` that
+is inertial or centered on the observer is evaluated at `et`. With a light time
+correction, any other `dref` is evaluated at `et` corrected for the light time to its
+center. With a `+S` correction the direction is corrected for stellar aberration.
 
 `method` is `"ELLIPSOID"` or `"DSK/UNPRIORITIZED"`; the DSK form can end with
 `"/SURFACES = <list>"`. Case is not significant. `abcorr` is a correction string of
@@ -184,11 +185,12 @@ Throws `SpiceError` with the kind
 - `:noframe` if `fixref` or `dref` is not known, `:invalidframe` if `fixref` is not
   centered on `target`;
 - `:zerovector` if `dvec` is zero, `:badarg` if it does not have 3 elements;
-- `:badmethodsyntax` or `:badpriorityspec` if `method` is malformed, `:invalidmethod`
-  if it holds a sub-point type such as `NEAR POINT`;
+- `:badmethodsyntax` if `method` is malformed, `:badpriorityspec` if a DSK method does
+  not have `UNPRIORITIZED`, `:invalidmethod` if it holds a sub-point type such as
+  `NEAR POINT`;
 - `:noseparation` if the observer is at the target center;
-- `:kernelvarnotfound`, `:invalidcount` or `:badaxislength` if the radii of `target`
-  are missing or not valid, `:dskdatanotfound` if no DSK data are loaded for it.
+- the kinds of [`srfrec`](@ref) if the radii of `target` are missing or not valid,
+  `:dskdatanotfound` if no DSK data are loaded for it.
 
 Also throws the errors of [`spkpos`](@ref).
 
@@ -225,7 +227,8 @@ Return the point of the reference ellipsoid of `body` at the planetocentric long
 CSPICE.
 
 `body` is a name or an integer ID. The radii come from the pool variable
-`BODY<id>_RADII`. The call does not allocate for an integer ID in 1:999.
+`BODY<id>_RADII`. The call does not allocate when `body` is an integer ID from 1 to
+999.
 
 Throws `SpiceError(:idcodenotfound)` if the body name is not known. Throws
 `SpiceError(:kernelvarnotfound)` if the radii are not loaded, `SpiceError(:invalidcount)`

@@ -430,20 +430,21 @@ spheroid of `body`, as `recpgr_c` of CSPICE.
 
 `body` is a name or an ID. `re` is the equatorial radius and `f` the flattening of the
 spheroid. `lat` (radians) and `alt` are the geodetic values of [`recgeo`](@ref). `lon`
-is in radians in [0, 2 pi], and its sense comes from the kernel pool of the context:
+is in radians in [0, 2 pi]; a longitude just below zero can round to 2 pi. Its sense
+comes from the kernel pool of the context, by the first rule that applies:
 
-- The variable `BODY<id>_PGR_POSITIVE_LON` (`EAST` or `WEST`) gives the sense, if it is
-  present.
-- Without it, the longitude is positive west for prograde rotation (the rate
-  `BODY<id>_PM[2]` is positive) and positive east for retrograde rotation.
-- For the Earth, the Moon and the Sun it is positive east.
+1. The variable `BODY<id>_PGR_POSITIVE_LON` (`EAST` or `WEST`) gives the sense, for
+   every body.
+2. For the Earth, the Moon and the Sun the longitude is positive east.
+3. The longitude is positive west for prograde rotation (the rate `BODY<id>_PM[2]` is
+   positive) and positive east for retrograde rotation.
 
 Throws:
 - `SpiceError(:idcodenotfound)` if `body` is a name without an ID.
 - `SpiceError(:valueoutofrange)` if `re <= 0` or `f >= 1`.
 - `SpiceError(:invalidoption)` if the sense variable is not `EAST` or `WEST`.
 - `SpiceError(:missingdata)` if the sense variable and `BODY<id>_PM` are both absent.
-  The Earth needs neither.
+  The Earth needs neither; the Moon and the Sun need one of them.
 
 # Examples
 ```jldoctest
@@ -484,7 +485,7 @@ Return the rectangular coordinates of the point with the planetographic coordina
 radians. The kernel pool of the context gives the sense of the longitude, by the rules in
 [`recpgr`](@ref).
 
-Throws as [`recpgr`](@ref).
+Throws the errors of [`recpgr`](@ref).
 
 See also [`recpgr`](@ref), which has an example, and [`drdpgr`](@ref).
 """
@@ -516,7 +517,8 @@ Return the Jacobian of rectangular coordinates with respect to the latitudinal
 coordinates `(r, lon, lat)`, as `drdlat_c` of CSPICE.
 
 Element `[i, j]` is the derivative of rectangular coordinate `i` with respect to
-latitudinal coordinate `j`. Angles are in radians.
+latitudinal coordinate `j`. Every Jacobian call has this layout: row `i` for the
+output coordinate, column `j` for the input coordinate. Angles are in radians.
 
 See also [`dlatdr`](@ref), [`latrec`](@ref).
 """
@@ -706,7 +708,8 @@ coordinates `(lon, lat, alt)` of `body`, as `drdpgr_c` of CSPICE. Angles are in
 radians. The kernel pool of the context gives the sense of the longitude, by the rules
 in [`recpgr`](@ref).
 
-Throws as [`recpgr`](@ref).
+Throws the errors of [`recpgr`](@ref). `re <= 0` is `:valueoutofrange` here and
+`:badradius` in [`drdgeo`](@ref).
 
 See also [`dpgrdr`](@ref), [`pgrrec`](@ref), [`drdgeo`](@ref).
 """
@@ -727,8 +730,8 @@ respect to rectangular coordinates, at the point `(x, y, z)`, as `dpgrdr_c` of C
 Angles are in radians. The kernel pool of the context gives the sense of the longitude,
 by the rules in [`recpgr`](@ref).
 
-Throws as [`recpgr`](@ref), and `SpiceError(:pointonzaxis)` if the point is on the z
-axis.
+Throws the errors of [`recpgr`](@ref), with `:valueoutofrange` for `re <= 0`, and
+`SpiceError(:pointonzaxis)` if the point is on the z axis.
 
 See also [`drdpgr`](@ref), [`recpgr`](@ref), [`dgeodr`](@ref).
 """
@@ -783,7 +786,8 @@ Return the state `istate` converted from the coordinate system `icosys` to the
 coordinate system `ocosys`, as `xfmsta_c` of CSPICE.
 
 A state is three coordinates followed by their time derivatives. The names of the
-systems ignore case and blanks. Angles are in radians.
+systems ignore case and blanks. Angles are in radians. A length has the unit of the
+input; with `"GEODETIC"` or `"PLANETOGRAPHIC"` it is in km, the unit of the radii.
 
 | System             | Coordinates          |
 |:-------------------|:---------------------|

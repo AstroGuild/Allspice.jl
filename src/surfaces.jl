@@ -115,8 +115,12 @@ Return the name of the surface `code` of the body `bodyid`, as `srfc2s_c`.
 `NAIF_SURFACE_NAME`, `NAIF_SURFACE_CODE` and `NAIF_SURFACE_BODY`. Otherwise `srfstr` is
 the code as a decimal string and `isname` is `false`.
 
-Throws `SpiceError` if the three kernel variables are not consistent: `:badsurfacemap`,
-`:badvariabletype`, `:toomanysurfaces`, `:arraysizemismatch` or `:blanknameassigned`.
+Throws `SpiceError` if the three kernel variables are not consistent:
+- `:badsurfacemap` if only some of the three are present;
+- `:badvariabletype` if the names are not strings or the other two are not numbers;
+- `:toomanysurfaces` if a variable has more than 2000 values;
+- `:arraysizemismatch` if the three do not have the same number of values;
+- `:blanknameassigned` if a name is blank.
 
 See also [`srfcss`](@ref), [`srfscc`](@ref), [`srfs2c`](@ref).
 """
@@ -414,36 +418,36 @@ end
 _dsk_count2(a::AbstractVector) = length(a)
 
 """
-    latsrf([ctx | ks,] method, target, et, fixref, lonlat) -> Vector{SVector{3,Float64}}
+    latsrf([ctx,] method, target, et, fixref, lonlat) -> Vector{SVector{3,Float64}}
 
 Return the surface points of `target` (km, in the body-fixed frame `fixref`) at the
 planetocentric longitudes and latitudes `lonlat`, as `latsrf_c`.
 
 `lonlat` holds the pairs (longitude, latitude) in radians: a 2 x n matrix, or a vector of
-n pairs. `target` and `fixref` are names or IDs; the frame must be centred on the target.
+n pairs. `target` and `fixref` are names or IDs; the frame must be centered on the target.
 `method` selects the surface:
 
 - `"ELLIPSOID"`: the points are on the ellipsoid of the radii `BODY<id>_RADII` of the
   kernel pool. `et` is not used.
-- `"DSK/UNPRIORITIZED[/SURFACES = <list>]"`: each point is the first intercept, on the
-  loaded DSK segments at the epoch `et` (seconds past J2000 TDB), of the ray that starts
-  outside of the body in the given direction and goes to the centre. The list names
-  surfaces by name or by ID; without it every surface of the body is used.
+- `"DSK/UNPRIORITIZED[/SURFACES = <list>]"`: the points are on the loaded DSK segments
+  at the epoch `et` (seconds past J2000 TDB). A ray starts outside of the body in the
+  given direction and goes to the center; the point is its first intercept. The list
+  names surfaces by name or by ID; without it every surface of the body is used.
 
-The form with a context uses the DSK tolerances of the context ([`dskstl`](@ref)); the
-form with a `KernelSet` uses the values of CSPICE at start.
+A DSK method uses the DSK tolerances of the context ([`dskstl`](@ref)).
 
 Throws `SpiceError`:
 - `:emptystring` if `method`, `target` or `fixref` is an empty string;
 - `:idcodenotfound` if the target or a surface of the list is not known;
-- `:noframe` if the frame is not known, `:invalidframe` if it is not centred on the
+- `:noframe` if the frame is not known, `:invalidframe` if it is not centered on the
   target;
 - `:badmethodsyntax` if `method` is not valid, `:badpriorityspec` if a DSK method does not
   have `UNPRIORITIZED`, `:invalidmethod` if `method` has a sub-observer point type;
-- `:badaxislength` if the radii are not three positive values (ellipsoid);
+- `:notfound` if the radii are not loaded, `:badaxislength` if they are not three
+  positive values (ellipsoid);
 - `:dskdatanotfound` if no DSK segment of the target with a listed surface is loaded,
   `:pointnotfound` if a ray meets no surface, `:shapenotsupported` if an intercept is on
-  the far side of the centre (DSK).
+  the far side of the center (DSK).
 
 See also [`srfnrm`](@ref), [`dskxsi`](@ref).
 """
@@ -494,7 +498,7 @@ function _dsk_latsrf(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
 end
 
 """
-    srfnrm([ctx | ks,] method, target, et, fixref, srfpts) -> Vector{SVector{3,Float64}}
+    srfnrm([ctx,] method, target, et, fixref, srfpts) -> Vector{SVector{3,Float64}}
 
 Return the outward unit normals of `target` at the surface points `srfpts`, in the
 body-fixed frame `fixref`, as `srfnrm_c`.
@@ -505,9 +509,10 @@ method the normal is that of the plate on which the point lies.
 
 Throws `SpiceError`:
 - the kinds of [`latsrf`](@ref) for `method`, `target` and `fixref`;
-- `:badaxislength` if the radii are not three positive values, `:pointnotonsurface` if a
-  point is not on the ellipsoid within the margin `PTMEMM` of [`dskgtl`](@ref)
-  (ellipsoid);
+- `:notfound` if the radii are not loaded, `:badaxislength` if they are not three
+  positive values, `:pointnotonsurface` if a
+  point is not on the ellipsoid within the point-membership margin (item `PTMEMM` of
+  [`dskgtl`](@ref)) (ellipsoid);
 - `:nodsksegments` if no DSK segment of the target is loaded, `:pointnotinsegment` if no
   segment holds a point, `:pointoffsurface` if a point is not on a plate (DSK).
 """

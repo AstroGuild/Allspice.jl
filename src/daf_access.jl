@@ -292,13 +292,13 @@ julia> dafbfs(h)
 julia> daffna(h)
 true
 
-julia> dc, ic = dafus(dafgs(h), 2, 6)
+julia> dc, ic = dafus(dafgs(h), 2, 6)   # see dafgs for the meaning of the components
 ([0.0, 100.0], [499, 4, 1, 2, 385, 396])
 
 julia> dafgn(h)
 "mars"
 
-julia> dafgda(h, ic[5], ic[5] + 1)
+julia> dafgda(h, ic[5], ic[5] + 1)      # midpoint and radius of the first record, s
 2-element Vector{Float64}:
  50.0
  50.0
@@ -382,8 +382,7 @@ Return the file architecture and the kernel type of the file `path`, as `getfat_
 
 Results are, for example, `("DAF", "SPK")`, `("DAF", "CK")`, `("DAF", "PCK")`,
 `("DAS", "DSK")` and `("KPL", "LSK")`. The result is `("?", "?")` for a file that is not
-recognized; a text kernel without the `KPL/<type>` first line is one. For an old
-`NAIF/DAF` file the type follows from the summary format and the first array.
+recognized; a text kernel without the `KPL/<type>` first line is one.
 
 Throws `SpiceError(:blankfilename)` if `path` is blank, `:filenotfound` if the file does
 not exist, and `:filereadfailed` if the file has fewer than 12 bytes and no complete line.
@@ -466,12 +465,12 @@ Throws `SpiceError(:dafinvalidparams)` if an integer does not fit in 32 bits.
 
 # Examples
 ```jldoctest
-julia> sum = dafps([0.0, 100.0], [499, 4, 1, 2, 385, 396]);
+julia> packed = dafps([0.0, 100.0], [499, 4, 1, 2, 385, 396]);
 
-julia> length(sum)
+julia> length(packed)
 5
 
-julia> dafus(sum, 2, 6)
+julia> dafus(packed, 2, 6)
 ([0.0, 100.0], [499, 4, 1, 2, 385, 396])
 ```
 """
@@ -541,7 +540,6 @@ end
 Begin a forward search for the arrays of the DAF file, as `dafbfs_c`.
 
 No array is current after the call; the first [`daffna`](@ref) moves to the first array.
-The state of the search is in the handle, so searches on two handles do not interfere.
 
 See also [`dafbbs`](@ref), and [`dafopr`](@ref) for an example.
 """
@@ -590,9 +588,6 @@ end
 
 Move to the next array of the search on `handle`, as `daffna_c`. Return `true` if there
 is one and `false` if the search is past the last array.
-
-`daffna_c` has no handle argument and works on the hidden current DAF; here the search
-belongs to the handle.
 
 Throws `SpiceError(:dafnosearch)` if neither `dafbfs` nor `dafbbs` was called on the
 handle, and `:recordnotfound` or `:baddaf` if the chain of summary records is damaged.
@@ -661,7 +656,14 @@ end
 Return the packed summary of the current array of the search on `handle`, as `dafgs_c`.
 
 The result has `nd + (ni + 1) ÷ 2` doubles; unpack it with [`dafus`](@ref). An SPK file
-and a CK file have `nd = 2` and `ni = 6`.
+and a CK file have `nd = 2` and `ni = 6`:
+
+| File | `dc`                                        | `ic`                                                   |
+|:-----|:--------------------------------------------|:-------------------------------------------------------|
+| SPK  | first and last epoch, seconds past J2000 TDB | target, center, frame ID, data type, first and last address |
+| CK   | first and last time, encoded SCLK ticks      | instrument, frame ID, data type, angular velocity flag, first and last address |
+
+The addresses are those of the data of the array, for [`dafgda`](@ref).
 
 Throws `SpiceError(:dafnosearch)` if no search was begun, and `:nocurrentarray` unless the
 last `daffna` or `daffpa` returned `true`.
@@ -702,9 +704,10 @@ end
 Return the doubles at the DAF addresses `first:last`, as `dafgda_c`. Addresses start at 1,
 as in CSPICE.
 
-Two results differ from CSPICE. A range that is not inside the file throws, where CSPICE
-returns zeros without an error. The words of a last record that the file holds only in
-part are returned as they are, where CSPICE gives zeros for the whole record.
+Two results differ from CSPICE:
+- A range that is not inside the file throws. CSPICE returns zeros without an error.
+- If the file ends inside its last record, the doubles of that record that the file
+  holds are returned. CSPICE returns zeros for the whole record.
 
 Throws `SpiceError(:dafnegaddr)` if `first < 1`, `:dafbeggtend` if `first > last`, and
 `:filereadfailed` if the range is not inside the file.
@@ -729,10 +732,10 @@ end
 """
     dafgsr(handle, recno, first, last) -> Union{Vector{Float64},Nothing}
 
-Return the words `first:last` of summary record `recno`, in native byte order, as
-`dafgsr_c`, or `nothing` if the record is not in the file.
+Return the doubles `first:last` of summary record `recno`, as `dafgsr_c`, or `nothing`
+if the record is not in the file.
 
-A record has 128 words, numbered from 1. `nothing` replaces the `found` flag of CSPICE.
+A record has 128 doubles, numbered from 1. `nothing` replaces the `found` flag of CSPICE.
 
 Throws `SpiceError(:dafinvalidparams)` unless `1 <= first <= last <= 128`.
 """
@@ -780,8 +783,7 @@ end
 Return all lines of the comment area of the DAF file, in order.
 
 One call returns the whole comment area, where `dafec_c` returns one buffer of lines on
-each call. Trailing blanks of a line are not stored in the file. The result is empty if
-the file has no comments.
+each call. The result is empty if the file has no comments.
 
 Throws `SpiceError(:badcommentarea)` if the comment area is damaged.
 

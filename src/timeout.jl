@@ -395,7 +395,7 @@ These marks write nothing and select how the components are computed:
 | Mark                                  | Selects                                               |
 |:--------------------------------------|:------------------------------------------------------|
 | `::UTC`, `::TDB`, `::TDT`, `::TT`     | time system                                           |
-| `::UTC+h:mm`, `::UTC-h:mm`            | time zone                                             |
+| `::UTC+h[:mm]`, `::UTC-h[:mm]`        | time zone, such as `::UTC-8` or `::UTC+5:30`          |
 | `::GCAL`, `::JCAL`, `::MCAL`          | Gregorian, Julian or mixed calendar                   |
 | `::RND`, `::TRNC`                     | round or truncate the last component (default: truncate) |
 
@@ -787,10 +787,11 @@ ignored:
 | `"ISOC"` | `1986-04-12T16:31:09.814`    |
 | `"ISOD"` | `1986-102T16:31:09.814`      |
 
-`prec` is the number of decimal places of the seconds, or of the Julian date. It is
-limited to 0 to 14, and CSPICE writes at most 14 significant digits: 13 places of
-seconds and 7 of a Julian date. The fraction is rounded. The seconds are 60 inside a
-leap second. A year before 1000 has `A.D.` or `B.C.` in the formats `C` and `D`.
+`prec` is the number of decimal places of the seconds, or of the Julian date. A
+value below 0 counts as 0 and a value above 14 counts as 14. As in CSPICE, the string
+has at most 13 decimal places of seconds and 7 of a Julian date. The fraction is
+rounded. The seconds are 60 inside a leap second. A year before 1000 has `A.D.` or
+`B.C.` in the formats `C` and `D`.
 
 Throws `SpiceError(:badformat)` if `format` is not one of the five,
 `SpiceError(:badtime)` if the year is before 1 A.D. in an ISO format, and
@@ -867,7 +868,8 @@ Return the calendar string of `et` (seconds past J2000 TDB) on a formal calendar
 `etcal_c`.
 
 The string has the form `1986 APR 12 16:31:09.814`. It is a TDB date: every day has
-86400 seconds, there are no leap seconds, and the call needs no kernel. Use
+86400 seconds, there are no leap seconds, and the call needs no kernel; `ctx` is
+accepted and not used. Use
 [`et2utc`](@ref) or [`timout`](@ref) for UTC. A year before 1000 has `A.D.` after it,
 and a year before 1 is written with `B.C.`. The seconds are rounded to milliseconds,
 but never up to 60. An epoch whose day number is outside the 32-bit integers gives

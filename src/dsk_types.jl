@@ -97,11 +97,11 @@ The access calls (`dskgd`, `dskb02`, `dskz02`, `dskp02`, `dskv02`, `dskn02`, `ds
 `KernelSet` or the `SpiceContext` that holds the file, and throw
 `SpiceError(:nosuchhandle)` if the file is not loaded there any more.
 
+A caller reads these fields:
 - `dladsc`, `dskdsc`: the [`DLADescr`](@ref) and the [`DSKDescr`](@ref) of the segment.
-- `file`: index of the file in the kernel set, 0 for a segment that is not in a set.
 - `boxctr`, `boxrad`: centre and radius (km) of the bounding sphere of the segment, in the
-  frame of the segment. `boxrad` is NaN for a coordinate system that is not supported.
-- `hdr`: the fixed-size items of a type 2 segment (all zero for another data type).
+  frame of the segment. `boxrad` is NaN unless the coordinate system of the segment is
+  latitudinal, rectangular or planetodetic.
 """
 struct DSKSegment
     file::Int32

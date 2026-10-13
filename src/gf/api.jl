@@ -27,8 +27,7 @@ current default.
 
 The default of a new context is $(_GF_CNVTOL) s. The keyword `tol` of a search overrides
 it for that search. A search reads the default once, at its start, so a change does not
-reach a search that is running. `kclear`, `furnsh` and `unload` do not change it. A
-search on a `KernelSet` does not read it: its default `tol` is $(_GF_CNVTOL) s.
+reach a search that is running. `kclear`, `furnsh` and `unload` do not change it.
 
 Throws `SpiceError(:invalidtolerance)` if `value <= 0`; the default is then unchanged.
 
@@ -69,7 +68,7 @@ between `target` and `obsrvr` satisfies the relation `relate` with the reference
 The result is a new `Window` that is a subset of the confinement window `cnfine`.
 `cnfine` is not modified, and an empty `cnfine` gives an empty window. There is no
 result cell, no workspace and no interval count as in CSPICE: a `Window` has no size
-limit. `ctx` is a `SpiceContext` (the default context if omitted) or a `KernelSet`.
+limit.
 
 # Arguments
 - `target`, `obsrvr`: names or IDs of two different bodies.
@@ -92,29 +91,34 @@ limit. `ctx` is a `SpiceContext` (the default context if omitted) or a `KernelSe
 # Keywords
 Every search of the geometry finder takes these keywords.
 - `tol`: convergence tolerance in seconds, positive. Each end point of the result is
-  bisected until its bracket is not longer than `tol`. The default is `gfstol(ctx)`
-  ($(_GF_CNVTOL) s unless changed), and $(_GF_CNVTOL) s on a `KernelSet`.
+  bisected until its bracket is not longer than `tol`. The default is the value of
+  [`gfstol`](@ref) for the context.
 - `bail`: `nothing`, or a function without arguments that the search calls in its
   loops. When it returns `true` the search stops with an `InterruptException`.
 - `report`: `nothing`, or a progress callback (`gfrepi`, `gfrepu`, `gfrepf` of CSPICE).
   The search calls `report(:init, window, prefix, suffix)` at the start of a pass over
   `window`, `report(:update, ivbeg, ivend, et)` while it searches [`ivbeg`, `ivend`],
-  and `report(:final)` at the end of the pass.
+  and `report(:final)` at the end of the pass. `prefix` and `suffix` are the two strings
+  of the progress message of CSPICE, such as `"Distance pass 1 of 2"` and `"done."`.
 - `threads`: if `true`, each interval that is searched runs in its own task. The result
   does not change. The callbacks, and the functions of [`gfuds`](@ref) and
   [`gfudb`](@ref), are then called from several threads.
 
-A search reads the kernel snapshot once, at its start. `furnsh` on another thread does
-not disturb it, and several searches can run at the same time.
+A search uses the kernels that are loaded when it starts. A `furnsh` or an `unload` on
+another thread does not change a search that runs, and several searches can run at the
+same time.
 
-Throws `SpiceError(:invalidstep)` if `step <= 0`, `SpiceError(:invalidtolerance)` if
-`tol <= 0`, `SpiceError(:notrecognized)` if `relate` is not a relation,
-`SpiceError(:idcodenotfound)` if a body name is not known,
-`SpiceError(:bodiesnotdistinct)` if the two bodies are the same, `SpiceError(:badarg)`
-if `abcorr` is not a correction, `SpiceError(:valueoutofrange)` if `adjust < 0`, and
-`SpiceError(:invalidvalue)` if `adjust` is not zero with a relation other than
-`"ABSMIN"` and `"ABSMAX"`. The errors of `spkezr`, such as missing ephemeris data,
-come from the epochs that the search samples.
+Throws `SpiceError` with the kind
+- `:invalidstep` if `step <= 0`, `:invalidtolerance` if `tol <= 0`;
+- `:notrecognized` if `relate` is not a relation;
+- `:valueoutofrange` if `adjust < 0`, `:invalidvalue` if `adjust` is not zero with a
+  relation other than `"ABSMIN"` and `"ABSMAX"`;
+- `:idcodenotfound` if a body name is not known, `:bodiesnotdistinct` if the two bodies
+  are the same;
+- `:badarg` if `abcorr` is not a correction.
+
+The errors of [`spkezr`](@ref), such as missing ephemeris data, come from the epochs
+that the search samples.
 
 # Examples
 The example needs a leapseconds kernel and an SPK with the Earth and the Moon.
@@ -195,14 +199,14 @@ in radians of `targ1` and `targ2`, as seen from `obsrvr`, satisfies the relation
 Each shape is `"POINT"` or `"SPHERE"`, in any case. For a sphere the separation is
 measured from the limb, so it is negative when the discs overlap. The radius of the
 sphere is the largest of the radii of the body (`BODY<id>_RADII`, km). `frame1` and
-`frame2` are not used by these shapes, as in CSPICE. The three bodies must differ. The
+`frame2` are not read, as in CSPICE; pass `" "`. The three bodies must differ. The
 other arguments, the keywords and the result are those of [`gfdist`](@ref).
 
-Throws the errors of [`gfdist`](@ref), and `SpiceError(:notrecognized)` if a shape is
-not one of the two, `SpiceError(:insidebody)` or `SpiceError(:badgeometry)` if the
-observer is not outside a sphere at an epoch of the search, and the errors of `bodvcd`,
-`SpiceError(:invalidcount)` or `SpiceError(:badaxislength)` if a sphere has no valid
-radii.
+Throws the errors of [`gfdist`](@ref), and `SpiceError` with the kind
+- `:notrecognized` if a shape is not one of the two;
+- the kinds of [`srfrec`](@ref) if the radii of a sphere are missing or not valid;
+- `:insidebody` or `:badgeometry` if the observer is not outside a sphere at an epoch
+  of the search. The first comes from the separation, the second from its rate.
 
 See also [`gfdist`](@ref), [`gfoclt`](@ref).
 """
@@ -324,11 +328,12 @@ cut: the jump gives no root and no extremum. Such a search converges to
 
 The other arguments, the keywords and the result are those of [`gfdist`](@ref).
 
-Throws the errors of [`gfdist`](@ref), and `SpiceError(:notsupported)` if the system or
-the coordinate is not in the table or the equatorial radii differ,
-`SpiceError(:unknownframe)` if `frame` is not known, and, for the geodetic and
-planetographic systems, `SpiceError(:noframe)` or `SpiceError(:badframe)` if the center
-of `frame` has no radii.
+Throws the errors of [`gfdist`](@ref), and `SpiceError` with the kind
+- `:notsupported` if the system or the coordinate is not in the table, or if the
+  equatorial radii differ;
+- `:unknownframe` if `frame` is not known (`:noframe` with the geodetic and
+  planetographic systems);
+- `:badframe` if, for these two systems, the center of `frame` has no radii loaded.
 
 # Examples
 The example needs a leapseconds kernel and an SPK with the Earth and the Sun.
@@ -379,14 +384,14 @@ relation `relate` with `refval`, as `gfuds_c`.
 
 `udfuns(et)` returns a real number. `udqdec(et)` returns `true` if `udfuns` decreases at
 `et`, and must return a `Bool`. For a function without an analytical derivative, use
-`et -> uddc(udfuns, et, dx)`. Each function takes the epoch alone and must return the
-same value each time for the same epoch; CSPICE passes `udfuns` to `udqdec`, and a
-closure does that here. `step` must be shorter than the shortest interval, inside
+`et -> uddc(udfuns, et, dx)`. Each function takes the epoch alone. It must return the
+same value each time for the same epoch. CSPICE also passes `udfuns` to `udqdec`; here
+a closure does that. `step` must be shorter than the shortest interval, inside
 `cnfine`, on which `udfuns` is monotone. The other arguments, the keywords and the
 result are those of [`gfdist`](@ref).
 
-No kernel is read. `ctx` only gives the default of `tol`: `gfstol(ctx)` for a
-`SpiceContext` (the default context if omitted), $(_GF_CNVTOL) s for a `KernelSet`.
+No kernel is read. `ctx` only gives the default of `tol`, which is the value of
+[`gfstol`](@ref) for the context.
 
 Throws `SpiceError(:invalidstep)` if `step <= 0`, `SpiceError(:invalidtolerance)` if
 `tol <= 0`, `SpiceError(:notrecognized)` if `relate` is not a relation,
@@ -495,21 +500,26 @@ const _GF_QPARS = (
 
 Return the window of `cnfine` on which the quantity `gquant` satisfies the relation `op`
 with the reference value `refval`, as `gfevnt_c`. This is the general entry of the
-geometry finder, with the step and the refinement of the caller.
+geometry finder, with a step and a refinement function that the caller supplies.
 
 # Arguments
-- `udstep`: the step in seconds, a positive number or a function `et -> step`.
+- `udstep`: the step in seconds, a positive number or a function `et -> step`. A step
+  function that returns a value that is not positive throws `SpiceError(:invalidstep)`
+  during the search.
 - `udrefn`: the refinement function `(t1, t2, s1, s2) -> t`. It returns an epoch in the
-  bracket [`t1`, `t2`], whose ends have the states `s1` and `s2`. [`gfrefn`](@ref) is
-  the bisection of CSPICE.
+  bracket [`t1`, `t2`]. `s1` and `s2` are the values (`Bool`) of the condition of the
+  search at `t1` and `t2`. [`gfrefn`](@ref) is the bisection of CSPICE.
 - `gquant`: `"DISTANCE"`, `"ANGULAR SEPARATION"`, `"COORDINATE"`, `"RANGE RATE"`,
   `"PHASE ANGLE"` or `"ILLUMINATION ANGLE"`, in any case.
 - `qpnams`, `qcpars`: the names of the parameters of the quantity and their string
   values, in the same order. The parameters that each quantity needs are in the table
-  below.
-- `qdpars`: numeric values. Only the first three are read: the vector `DVEC` of a
-  surface intercept, or `SPOINT` of an illumination angle.
-- `qipars`, `qlpars`: not read; they keep the argument order of CSPICE.
+  below. A value is the string that the search of the quantity takes for that argument,
+  for example `ILLUM` is the `illmn` of [`gfpa`](@ref).
+- `qdpars`: the three numbers of the vector `DVEC` of a surface intercept, or of
+  `SPOINT` of an illumination angle. The name `DVEC` or `SPOINT` is in `qpnams` with a
+  blank string value. Another quantity reads no number: pass `Float64[]`.
+- `qipars`, `qlpars`: not read; they keep the argument order of CSPICE. Pass `Int[]`
+  and `Bool[]`.
 - `op`, `refval`, `adjust`, `cnfine`: as `relate`, `refval`, `adjust` and `cnfine` of
   [`gfdist`](@ref).
 - `tol`: convergence tolerance in seconds, positive. It is an argument, as in CSPICE;
@@ -528,13 +538,28 @@ Every parameter in the row of the quantity must be in `qpnams`, also one that th
 quantity does not use (a blank value is then enough). The keywords `bail`, `report` and
 `threads` are those of [`gfdist`](@ref).
 
-Throws `SpiceError(:notrecognized)` if `gquant` or `op` is not known,
-`SpiceError(:invalidcount)` if there are more than 10 parameter names, fewer values in
-`qcpars` than names, or fewer than 3 values in `qdpars` where a vector is needed,
-`SpiceError(:missingvalue)` if a parameter of the quantity is not in `qpnams`,
-`SpiceError(:notsupported)` if the vector definition is not known, and the errors of
-the search for the quantity: [`gfdist`](@ref), [`gfrr`](@ref), [`gfpa`](@ref),
-[`gfsep`](@ref), [`gfposc`](@ref), [`gfsubc`](@ref), [`gfsntc`](@ref), [`gfilum`](@ref).
+Throws `SpiceError` with the kind
+- `:notrecognized` if `gquant` or `op` is not known;
+- `:invalidcount` if there are more than 10 parameter names, fewer values in `qcpars`
+  than names, or fewer than 3 values in `qdpars` where a vector is needed;
+- `:missingvalue` if a parameter of the quantity is not in `qpnams`;
+- `:notsupported` if the vector definition is not known.
+
+Also throws the errors of the search for the quantity: [`gfdist`](@ref),
+[`gfrr`](@ref), [`gfpa`](@ref), [`gfsep`](@ref), [`gfposc`](@ref), [`gfsubc`](@ref),
+[`gfsntc`](@ref), [`gfilum`](@ref).
+
+# Examples
+The example needs a leapseconds kernel and an SPK with the Earth and the Moon, loaded
+with [`furnsh`](@ref).
+```julia
+cnfine = Window([str2et("2025 JAN 01"), str2et("2025 MAR 01")])
+
+# The search of `gfdist("MOON", "LT+S", "EARTH", "<", 370000.0, 0.0, 86400.0, cnfine)`,
+# with a tolerance of 1e-3 s.
+gfevnt(86400.0, gfrefn, "DISTANCE", ["TARGET", "OBSERVER", "ABCORR"],
+    ["MOON", "EARTH", "LT+S"], Float64[], Int[], Bool[], "<", 370000.0, 1e-3, 0.0, cnfine)
+```
 
 See also [`gfocce`](@ref), [`gffove`](@ref).
 """

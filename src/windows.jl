@@ -6,7 +6,7 @@
     Window()
     Window(endpoints)
 
-Window: a set of disjoint closed intervals of the real line. It takes the place of the
+A set of disjoint closed intervals of the real line. It takes the place of the
 double-precision window cell of CSPICE.
 
 `Window()` is empty. `Window(endpoints)` takes the pairs `left₁, right₁, left₂, right₂, …`.
@@ -62,7 +62,8 @@ end
 Return the number of elements of `x`, as `card_c` of CSPICE gives for a cell.
 
 For a [`Window`](@ref) this is the number of endpoints, which is twice the number of
-intervals. For a vector of IDs it is the length.
+intervals. For another vector, such as the IDs that [`spkobj`](@ref) returns, it is the
+length.
 
 See also [`wncard`](@ref).
 """

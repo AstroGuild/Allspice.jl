@@ -75,7 +75,7 @@ Return the outward unit normal of an ellipsoid at the surface point `point`, as
 `surfnm_c` of CSPICE.
 
 The ellipsoid has its center at the origin and the semi-axes `a`, `b`, `c` along x, y,
-z. This holds for all the ellipsoid calls. `point` is not checked to be on the surface.
+z, as in every ellipsoid call. `point` is not checked to be on the surface.
 
 Throws `SpiceError(:badaxislength)` if a semi-axis is not positive, and
 `SpiceError(:badarg)` if `point` does not have 3 elements.
@@ -158,8 +158,8 @@ Return the point of an ellipsoid on the ray from the center through the point `p
 `edpnt_c` of CSPICE. The ellipsoid has the semi-axes `a`, `b`, `c`.
 
 Throws `SpiceError(:invalidradii)` if a semi-axis is not positive, and
-`SpiceError(:zerovector)` if `p` is zero. Throws `SpiceError(:pointtoosmall)` if `p` is
-so near the center that its scaled square is zero.
+`SpiceError(:zerovector)` if `p` is zero. Throws `SpiceError(:pointtoosmall)` if
+`(p[1]/a)^2 + (p[2]/b)^2 + (p[3]/c)^2` underflows to zero.
 
 See also [`nearpt`](@ref), [`surfpt`](@ref).
 """
@@ -190,7 +190,8 @@ Throws:
 - `SpiceError(:axisunderflow)` if the ratio of a semi-axis to the largest one
   underflows.
 - `SpiceError(:zerovector)` if `normal` is zero.
-- `SpiceError(:degeneratecase)` if the scale factor underflows.
+- `SpiceError(:degeneratecase)` if `normal` is so small that the sum of its squared
+  components underflows to zero.
 
 # Examples
 ```jldoctest
@@ -532,15 +533,16 @@ Return the point of an ellipsoid that is nearest to the point `positn`, and the
 altitude of `positn` above the ellipsoid, as `nearpt_c` of CSPICE.
 
 The ellipsoid has the semi-axes `a`, `b`, `c`. `alt` is negative for a point inside.
-The results have the unit of the arguments. The iteration is the one of CSPICE.
+The results have the unit of the arguments.
 
-The arguments can be `ForwardDiff` or `Taylor` numbers. The value is then the one of
-the `Float64` iteration. The derivatives are zero at the center and at an interior
-point whose nearest point is not unique.
+The arguments can be `ForwardDiff.Dual` or `Allspice.Taylor` numbers. The value is
+then equal to the `Float64` result. The derivatives are zero at the center and at an
+interior point whose nearest point is not unique.
 
 Throws `SpiceError(:badaxislength)` if a semi-axis is not positive or if the ratio of
-the longest to the shortest one is too large. Throws `SpiceError(:inputstoolarge)` if
-the product of a semi-axis and a coordinate would overflow.
+the longest to the shortest one is above about 1.3e153. Throws
+`SpiceError(:inputstoolarge)` if the product of a semi-axis and a coordinate would
+overflow.
 
 # Examples
 ```jldoctest
@@ -1289,7 +1291,8 @@ points and the distance 0.
 
 Throws `SpiceError(:zerovector)` if `linedr` is zero,
 `SpiceError(:invalidaxislength)` if a semi-axis is not positive, and
-`SpiceError(:degeneratecase)` if the shape is too extreme for the arithmetic.
+`SpiceError(:degeneratecase)` if the square of the ratio of a semi-axis to the longest
+one underflows to zero.
 
 # Examples
 ```jldoctest
@@ -1435,7 +1438,8 @@ lights, as `edterm_c` of CSPICE.
 
 `trmtyp` is `"UMBRAL"` or `"PENUMBRAL"`. `source` is the light source and `target` the
 lit body. `et` is the epoch at the observer `obsrvr`, in seconds past J2000 TDB.
-`fixref` is a body-fixed frame of the target. `abcorr` is the aberration correction.
+`fixref` is a body-fixed frame of the target. `abcorr` is an aberration correction
+of [`spkezr`](@ref), for example `"NONE"` or `"LT+S"`.
 Bodies and frames are names or IDs.
 
 - `trgepc`: the epoch at the target, `et` corrected for light time if `abcorr` asks

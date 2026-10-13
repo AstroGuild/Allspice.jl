@@ -30,8 +30,7 @@ clears the system.
 
 The defaults apply to [`str2et`](@ref) for a string that names no system or zone, and
 to [`timout`](@ref) for a picture that names no system, zone or calendar. They belong
-to the context; CSPICE keeps one set for the process. A `"SET"` is atomic for readers
-on other threads.
+to the context; CSPICE keeps one set for the process.
 
 Throws `SpiceError(:badtimedefault)` if the action, the item or the value is not one
 of the above; the defaults are then unchanged.
@@ -101,7 +100,8 @@ Set the first year of the 100 years that a year of two digits stands for, as
 
 At start the value is 1969: the year 69 is 1969 and the year 68 is 2068. After
 `tsetyr(ctx, 1980)` the year 80 is 1980 and the year 79 is 2079. The value applies to
-[`str2et`](@ref), [`utc2et`](@ref) and [`tparse`](@ref) on the context, and to the `@`
+[`str2et`](@ref) and [`utc2et`](@ref) on the context, to [`tparse`](@ref) when the
+context is passed to it, and to the `@`
 dates of the text kernels that the context loads afterwards ([`furnsh`](@ref),
 [`ldpool`](@ref), [`lmpool`](@ref)). A `year` that is not positive changes nothing, as
 in CSPICE. The value belongs to the context; CSPICE keeps one for the process.

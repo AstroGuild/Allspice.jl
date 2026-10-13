@@ -53,9 +53,4 @@ tyear
 spd
 b1900
 b1950
-clight
-halfpi
-twopi
-rpd
-dpr
 ```

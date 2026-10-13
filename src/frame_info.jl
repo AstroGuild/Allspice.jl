@@ -83,8 +83,7 @@ Return `(frcode, frname)` of the frame that is associated with the body with ID
 The kernel-pool variable `OBJECT_<cent>_FRAME` (or `OBJECT_<name>_FRAME`) has
 priority. Without it the answer is `IAU_EARTH` for the Earth, and otherwise a built-in
 frame whose center is `cent`. For a center with several built-in frames the answer is
-the one that the binary search of CSPICE finds. `nothing` takes the place of the
-`found` flag.
+the frame that CSPICE gives. `nothing` takes the place of the `found` flag.
 
 # Examples
 ```jldoctest
@@ -183,7 +182,8 @@ end
     tkfram([ctx,] frcode) -> Union{Nothing,Tuple{SMatrix{3,3,Float64,9},Int}}
 
 Return `(rot, relative)` of the fixed-offset (class 4) frame with the class ID
-`frcode`, as `tkfram_` of CSPICE, or `nothing` if no valid definition is loaded.
+`frcode`, as `tkfram_c`, or `nothing` if no valid definition is loaded. `frcode` is the
+value of `FRAME_<id>_CLASS_ID`, not the frame ID.
 
 `rot` rotates a vector from the frame to its relative frame, the frame with ID
 `relative`; this is the meaning of `TKFRAME_<frcode>_MATRIX`. The definition comes
@@ -352,13 +352,13 @@ bodfnd(ks::KernelSet, body::Integer, item::AbstractString) =
 
 Return the values of the kernel-pool variable `BODY<bodyid>_<item>`, as `bodvcd_c`.
 
-`bodyid` is a NAIF ID code; [`bodvrd`](@ref) takes a body name. `item` is case
+`bodyid` is a NAIF ID code; [`bodvrd`](@ref) also takes a body name. `item` is case
 sensitive. The result is a new vector with every value, in the units of the kernel;
 there is no `maxn` argument.
 
 Throws `SpiceError(:kernelvarnotfound)` if the variable is not in the pool and
-`SpiceError(:typemismatch)` if it holds character values. Note that `bodvrd` reports
-the same two failures with the kinds `:notfound` and `:badtype`.
+`SpiceError(:typemismatch)` if it holds character values. `bodvrd` reports the same
+two failures with the kinds `:notfound` and `:badtype`.
 
 # Examples
 ```jldoctest

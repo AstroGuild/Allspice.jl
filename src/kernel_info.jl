@@ -9,10 +9,10 @@ const CSPICE_VERSION = "CSPICE_N0067"
 
 Return the version string of the toolkit, as `tkvrsn_c`.
 
-For `item = "TOOLKIT"` (any letter case, or the symbol `:TOOLKIT` as in SPICE.jl) the
-result is `"Allspice_v<package version>/CSPICE_N0067"`: the version of this package
-and, after the slash, the CSPICE version whose behaviour and file formats the package
-follows. `tkvrsn_c` gives `"CSPICE_N0067"` alone. Any other item gives
+For `item = "TOOLKIT"` the result is `"Allspice_v<package version>/CSPICE_N0067"`.
+The part after the slash is the CSPICE version whose behaviour and file formats the
+package follows; `tkvrsn_c` gives that part alone. Letter case is ignored, and the
+symbol `:TOOLKIT` is accepted as in SPICE.jl. Any other item gives
 `"No version found."`, as in CSPICE.
 
 # Examples
@@ -190,8 +190,10 @@ end
 Insert the ID codes of the bodies that have data in the SPK file `path` into the
 vector `ids`, as `spkobj_c` does with a SPICE cell.
 
-`ids` must be sorted and without duplicates; it stays so. The argument order is the
-one of SPICE.jl. The file is read from disk and need not be loaded.
+`ids` must be sorted and without duplicates; it stays so. The call does not check
+this: with another `ids` the result can hold duplicates ([`pckfrm!`](@ref) sorts its
+input; this call does not). The argument order is the one of SPICE.jl. The file is read
+from disk and need not be loaded.
 
 Throws the errors of [`spkobj`](@ref).
 """

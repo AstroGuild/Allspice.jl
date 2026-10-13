@@ -38,6 +38,9 @@ The handle holds the three address spaces of the file in memory: characters, dou
 memory only, and the file on disk changes when `dascls` runs. The data of a handle that is
 open for reading are never modified.
 
+A DAS file is segregated if all records of one data type are together. A file that is
+being written by CSPICE can have the types mixed.
+
 Two handles are independent. One handle is not safe for concurrent use: tasks that share a
 handle must hold a lock around every call.
 
@@ -381,8 +384,8 @@ end
 
 Open the DAS file `path` for reading and return its handle, as `dasopr_c`.
 
-The file can have either byte order, and it need not be segregated. Close the handle with
-[`dascls`](@ref).
+The file can have either byte order, and it need not be segregated (see
+[`DASHandle`](@ref)). Close the handle with [`dascls`](@ref).
 
 Throws `SpiceError`:
 - `:blankfilename` if `path` is blank, `:filenotfound` if the file does not exist;
@@ -508,9 +511,9 @@ end
 
 Close the DAS file of `handle`, as `dascls_c`.
 
-For a handle that is open for writing, the complete file is written in segregated form
-(all records of one data type together) to a temporary file beside it and moved into
-place in one step. All data are on disk when the call returns. A scratch file
+A handle that is open for writing writes the complete file, in segregated form (see
+[`DASHandle`](@ref)). The file goes to a temporary file beside it and is moved into place
+in one step. All data are on disk when the call returns. A scratch file
 ([`dasops`](@ref)) is not written. The call does nothing if the handle is closed already.
 
 Throws `SpiceError(:daswritefail)` if the file cannot be written; the handle then stays
@@ -583,11 +586,15 @@ end
 
 Return the file summary, as `dashfs` of SPICELIB.
 
-`nresvr`, `nresvc`, `ncomr` and `ncomc` are the counts of the file record, and `free` is
-the first free record number. `lastla`, `lastrc` and `lastwd` are tuples of three values,
-for the character, the double and the integer data: the last address in use, the record
-number of the last directory record that describes the data type, and the word of that
-record that holds its last cluster descriptor.
+- `nresvr`, `nresvc`: the numbers of reserved records and of reserved characters.
+- `ncomr`, `ncomc`: the numbers of comment records and of comment characters.
+- `free`: the first free record number.
+- `lastla`, `lastrc`, `lastwd`: tuples of three values, for the character, the double
+  and the integer data.
+  - `lastla`: the last address in use.
+  - `lastrc`: the number of the last directory record that describes the data type.
+  - `lastwd`: the word of that record that describes the last run of records of the
+    type.
 
 For a handle that is open for writing, `free`, `lastrc` and `lastwd` describe the
 segregated file that [`dascls`](@ref) will write.
@@ -645,8 +652,9 @@ end
 """
     dasrdc(handle, first, last) -> String
 
-Return the characters at the DAS addresses `first:last` as one string, as `dasrdc` of
-SPICELIB with one substring. Addresses start at 1. The result is empty if `first > last`.
+Return the characters at the DAS addresses `first:last` as one string. `dasrdc` of
+SPICELIB fills substrings of an array of strings. Addresses start at 1. The result is
+empty if `first > last`.
 
 Throws `SpiceError(:dasnosuchaddress)` if the range is not inside the address space.
 """
@@ -690,8 +698,9 @@ end
 """
     dasadc(handle, data) -> Nothing
 
-Append the code units of the string `data` to the character address space, as `dasadc` of
-SPICELIB with one substring. The file on disk changes when [`dascls`](@ref) runs.
+Append the code units of the string `data` to the character address space. `dasadc` of
+SPICELIB takes substrings of an array of strings. The file on disk changes when
+[`dascls`](@ref) runs.
 """
 function dasadc(h::DASHandle, data::AbstractString)
     _das_check_write(h, "dasadc")
@@ -803,8 +812,7 @@ Return all lines of the comment area of the DAS file, in order.
 One call returns the whole comment area, where `dasec_c` returns one buffer of lines on
 each call. The result is empty if the file has no comments.
 
-Throws `SpiceError(:baddascommentarea)` if the last line is not terminated inside the
-count of comment characters that the file record states.
+Throws `SpiceError(:baddascommentarea)` if the comment area is damaged.
 """
 function dasec(h::DASHandle)
     _das_check_open(h, "dasec")

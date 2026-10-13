@@ -318,10 +318,10 @@ A context holds:
 - the pool watchers of [`swpool`](@ref);
 - the DSK tolerances of [`dskstl`](@ref) and the search tolerance of [`gfstol`](@ref).
 
-A context can be shared between threads. A query reads one immutable snapshot of the
-kernel set and takes no lock. A call that changes the context builds a new snapshot
-under a lock and swaps it in atomically, so a query that runs during a load sees the
-kernel set before the load or after it, never a part of it.
+A context can be shared between threads. A query takes no lock. A call that changes
+the context (a load, an unload, an edit of the pool or of a setting) is atomic: a query
+that runs at the same time sees the context before the change or after it, never a part
+of it. Two changes on two threads are applied one after the other.
 
 # Examples
 ```jldoctest
@@ -360,9 +360,17 @@ end
 The exception that the package throws for a call that fails.
 
 `kind` is a short symbol that names the failure, such as `:nocoverage`, `:notfound` or
-`:badarg`; test it to handle one failure. `msg` is the text for a person. The kinds
-are not the short error messages of CSPICE (`SPICE(SPKINSUFFDATA)`, ...); each
-docstring lists the kinds that its call throws.
+`:badarg`; test it to handle one failure. `msg` is the text for a person.
+
+Many kinds are the short error message of CSPICE in lower case (`:kernelvarnotfound`
+for `SPICE(KERNELVARNOTFOUND)`); the others are names of this package. Two calls can
+report the same failure with different kinds: `gdpool` throws `:notfound` for an absent
+variable and `bodvcd` throws `:kernelvarnotfound`. Test the kinds that the docstring of
+the call lists.
+
+A call of CSPICE that has a `found` flag returns `nothing` here when nothing is found,
+unless its docstring names another result (an error, `0`, an empty string or vector, or
+the flag itself).
 
 # Examples
 ```jldoctest

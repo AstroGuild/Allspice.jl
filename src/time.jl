@@ -356,11 +356,11 @@ const _OFFSTG = _RDAYG - _RDAYJ
     jul2gr(year, month, day) -> (year, month, day, doy)
 
 Return the Gregorian calendar date, and its day of year, of a date given in the
-Julian calendar, as `jul2gr_` of CSPICE.
+Julian calendar, as `jul2gr` of SPICELIB (CSPICE has it without a `_c` wrapper).
 
-Years are astronomical: 1 B.C. is 0 and 2 B.C. is -1. A `month` outside 1:12 is
-reduced into a year. The Gregorian calendar is extended to all dates. The result is a
-tuple of integers; CSPICE changes its arguments in place.
+Years are astronomical: 1 B.C. is 0 and 2 B.C. is -1. A `month` outside 1:12 carries
+into the year: month 14 of 2000 is February 2001. The Gregorian calendar is extended
+to all dates. The result is a tuple of integers; CSPICE changes its arguments in place.
 
 # Examples
 ```jldoctest
@@ -403,7 +403,7 @@ end
     gr2jul(year, month, day) -> (year, month, day, doy)
 
 Return the Julian calendar date, and its day of year, of a date given in the extended
-Gregorian calendar, as `gr2jul_` of CSPICE.
+Gregorian calendar, as `gr2jul` of SPICELIB (CSPICE has it without a `_c` wrapper).
 
 This is the inverse of [`jul2gr`](@ref), with the same conventions.
 
@@ -509,7 +509,7 @@ end
 end
 
 """
-    unitim([ctx,] epoch, insys, outsys)
+    unitim([ctx,] epoch, insys, outsys) -> Real
 
 Return the epoch `epoch` of the uniform time scale `insys` expressed in the scale
 `outsys`, as `unitim_c`.
@@ -519,7 +519,7 @@ Return the epoch `epoch` of the uniform time scale `insys` expressed in the scal
 | `"TAI"`                  | TAI seconds past J2000 TAI                |
 | `"TDT"`, `"TT"`          | TDT seconds past J2000 TDT                |
 | `"TDB"`, `"ET"`          | TDB seconds past J2000 TDB                |
-| `"GPS"`                  | GPS seconds, on the scale TAI - 19 s      |
+| `"GPS"`                  | GPS seconds past J2000 GPS (TAI - 19 s)   |
 | `"JDTDT"`                | Julian date in TDT, days                  |
 | `"JDTDB"`, `"JED"`       | Julian date in TDB, days                  |
 

@@ -1,5 +1,8 @@
 # Event kernels
 
+Segments, rows, columns and elements count from 1 in every call of this page. The C
+interface of CSPICE counts from 0.
+
 ## Reading a file
 
 ```@docs

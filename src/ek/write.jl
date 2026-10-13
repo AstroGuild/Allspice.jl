@@ -105,8 +105,8 @@ end
 Return a write handle to a scratch EK, as `ekops_c` of CSPICE: an EK with no segment
 that exists only in memory while its handle is open.
 
-All record writers, fast writers and readers that take a handle accept it.
-[`ekcls`](@ref) discards it; no file is made (see [`dasops`](@ref)). A scratch EK has
+All calls that take an EK handle accept it. [`ekcls`](@ref) discards it; no file is
+made (see [`dasops`](@ref)). A scratch EK has
 no name, so `furnsh` cannot load it for queries, as in CSPICE.
 
 See also [`ekopn`](@ref), [`ekifld`](@ref).
@@ -129,9 +129,10 @@ Open the existing EK file `path` and return a handle that is open for write, as
 The file is read into memory; all changes are on disk when [`ekcls`](@ref) returns.
 
 Throws `SpiceError(:emptystring)` if `path` is empty, `SpiceError(:filenotfound)` if
-the file does not exist, `SpiceError(:fileopenfailed)` if it is not writable, and
-`SpiceError(:wrongarchitecture)` or `SpiceError(:invalidformat)` if it is a DAS file
-that does not hold a paged EK. The other errors are those of [`dasopw`](@ref).
+the file does not exist, `SpiceError(:fileopenfailed)` if it is not writable,
+`SpiceError(:wrongarchitecture)` if it is a DAS file that is not an EK, and
+`SpiceError(:invalidformat)` if the EK is damaged. The other errors are those of
+[`dasopw`](@ref).
 
 See also [`ekopn`](@ref), [`ekopr`](@ref).
 """
@@ -427,7 +428,7 @@ end
 Start a new segment without rows for the table `tabnam` in the EK of the write handle
 and return its segment number, as `ekbseg_c` of CSPICE.
 
-Segment numbers start at 1 (the C interface of CSPICE counts from 0). `cnames` holds
+Segment numbers start at 1; the C interface of CSPICE counts from 0. `cnames` holds
 the column names and `decls` one declaration for each column. A table name has at
 most 64 and a column name at most 32 characters: a letter, then letters, digits, `\$`
 and `_`. The file stores the names in upper case. Two columns with the same name are
@@ -442,8 +443,9 @@ A declaration is a list of `KEYWORD = value` items that commas separate, in any 
 - `INDEXED`: `TRUE` or `FALSE`. Default `FALSE`. Scalar columns only.
 - `NULLS_OK`: `TRUE` or `FALSE`. Default `FALSE`.
 - `FIXED_COUNT`: `TRUE` or `FALSE`. Default `FALSE`. Scalar columns only, and for all
-  columns of the segment or for none. Only the fast writers can fill such a segment
-  (see [`ekifld`](@ref)).
+  columns of the segment or for none. Such a segment has a fixed number of rows: only
+  [`ekifld`](@ref) and the column writers can fill it, and no row can be added or
+  deleted later.
 
 Add rows with [`ekappr`](@ref) or [`ekinsr`](@ref).
 
@@ -502,11 +504,9 @@ end
 
 Insert an empty record as row `recno` of segment `segno`, as `ekinsr_c` of CSPICE.
 
-Segment and row numbers start at 1 (the C interface of CSPICE counts from 0). The
-rows from `recno` on move up by one; `recno = nrows + 1` appends. Write every entry of
-the new record with [`ekacec`](@ref), [`ekaced`](@ref) or [`ekacei`](@ref): the
-readers throw for an entry that was never written, and not all of CSPICE can read a
-segment that holds one.
+The rows from `recno` on move up by one; `recno = nrows + 1` appends. Write every
+entry of the new record with [`ekacec`](@ref), [`ekaced`](@ref) or [`ekacei`](@ref).
+The readers and the fetch calls throw for an entry that was never written.
 
 Throws `SpiceError(:dasnosuchhandle)` or `SpiceError(:dasinvalidaccess)` if the
 handle is closed or open for read, `SpiceError(:invalidindex)` if there is no segment
@@ -557,8 +557,7 @@ end
 Append an empty record to segment `segno` and return its row number, as `ekappr_c` of
 CSPICE.
 
-Segment and row numbers start at 1 (the C interface of CSPICE counts from 0). Write
-every entry of the new record, as for [`ekinsr`](@ref).
+Write every entry of the new record, as for [`ekinsr`](@ref).
 
 Throws the errors of [`ekinsr`](@ref).
 
@@ -576,15 +575,10 @@ end
 
 Delete row `recno` of segment `segno`, as `ekdelr_c` of CSPICE.
 
-Segment and row numbers start at 1 (the C interface of CSPICE counts from 0). The
-rows after `recno` move down by one. The entries of the row leave the indexes, and
-pages that become empty go to the free list of the file.
+The rows after `recno` move down by one.
 
-Rows of a segment that the fast writers made (without fixed-count columns) can be
-deleted too. CSPICE damages such a segment: it frees the record page of the row with
-all the records in it, it does not find the row in the index of a character column
-with equal strings, and it takes links from data pages that other array entries use.
-Here the record pages of a fast load are never freed.
+Rows of a segment that [`ekifld`](@ref) made without fixed-count columns can be
+deleted too. CSPICE N0067 damages such a segment; this call does not.
 
 Throws `SpiceError(:dasnosuchhandle)` or `SpiceError(:dasinvalidaccess)` if the
 handle is closed or open for read, `SpiceError(:invalidindex)` if there is no segment
@@ -708,15 +702,16 @@ end
 Write the entry of the character column `column` in row `recno` of segment `segno`,
 as `ekacec_c` of CSPICE.
 
-Segment and row numbers start at 1 (the C interface of CSPICE counts from 0). `cvals`
-is a vector with the strings of the entry. A scalar column takes the first string (a
+`cvals` is a vector with the strings of the entry. A scalar column takes the first string (a
 blank string if `cvals` is empty); an array column takes all of them. Trailing blanks
 do not count, and a string longer than the string length of the column is cut. With
 `isnull = true` the entry is null and `cvals` is not used. The column name can be in
 any case.
 
-The entry must not be written yet. The call does not check that, as in CSPICE; use
-[`ekucec`](@ref) to replace an entry.
+Use the call for an entry that is not written yet, and [`ekucec`](@ref) to replace an
+entry. As in CSPICE, the call does not check that: a second call replaces the entry
+without an error, where [`ekaced`](@ref) and [`ekacei`](@ref) throw for a scalar
+column.
 
 Throws `SpiceError` with the kind:
 - `:dasnosuchhandle` or `:dasinvalidaccess` if the handle is closed or open for read;
@@ -778,11 +773,11 @@ Replace the entry of the character column `column` in row `recno` of segment `se
 as `ekucec_c` of CSPICE.
 
 The new entry can have another size than the old one, and it can be null. The
-arguments are those of [`ekacec`](@ref). Data pages that only the old entry used
-become free.
+arguments are those of [`ekacec`](@ref).
 
 Throws the errors of [`ekacec`](@ref). The old entry is deleted before the new one is
-checked: after `:badattribute` or `:invalidcount` the entry is not written.
+checked: after `:badattribute` or `:invalidcount` the old value is lost and the entry
+is as one that was never written.
 
 See also [`ekuced`](@ref), [`ekucei`](@ref).
 """
@@ -833,11 +828,10 @@ ekucei(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
 The state of one fast load: the second result of [`ekifld`](@ref), which
 [`ekaclc`](@ref), [`ekacld`](@ref), [`ekacli`](@ref) and [`ekffld`](@ref) take.
 
-It takes the place of the `rcptrs` array of CSPICE. As a vector it holds the record
-pointers of the rows of the new segment (empty for a segment with fixed-count
-columns). It also holds the handle, the segment number and the data pointers of the
-columns that were stored. CSPICE keeps these in one global stack, so it can do one
-fast load at a time; here every load has its own state.
+A fast load writes a segment column by column, where [`ekappr`](@ref) and
+[`ekacec`](@ref) write it row by row. The value takes the place of the `rcptrs` array
+of CSPICE: pass it on unchanged. CSPICE can do one fast load at a time; here every
+load has its own state, so several can run at once.
 """
 struct EKFastLoad <: AbstractVector{Int32}
     handle::DASHandle
@@ -860,8 +854,8 @@ exactly once with [`ekaclc`](@ref), [`ekacld`](@ref) or [`ekacli`](@ref), then c
 [`ekffld`](@ref); pass `rcptrs` to each of these calls. Between `ekifld` and `ekffld`
 make no other change to the file and do not read the segment.
 
-If the columns are declared with `FIXED_COUNT = TRUE`, the segment has a fixed layout:
-[`ekappr`](@ref), [`ekinsr`](@ref) and [`ekdelr`](@ref) refuse it.
+If the columns are declared with `FIXED_COUNT = TRUE`, the number of rows is fixed:
+[`ekappr`](@ref), [`ekinsr`](@ref) and [`ekdelr`](@ref) refuse the segment.
 
 Throws `SpiceError(:invalidcount)` if `nrows < 1`, and the errors of
 [`ekbseg`](@ref).

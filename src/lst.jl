@@ -60,18 +60,22 @@ on a 12 hour clock.
 
 The local solar time is the angle between the meridian of `lon` and the meridian of
 the Sun, with 12:00:00 at the sub-solar meridian and 24 "hours" in one rotation; an
-"hour" is not 3600 s. The Sun is taken with the correction `"LT+S"` in the body-fixed
-frame of [`cidfrm`](@ref), and the sign of the second value of `BODY<body>_PM` gives
-the direction of the rotation. For the Sun (`body = 10`) the result is always
-12:00:00. The call needs SPK data for the body and the Sun and PCK data for the body.
+"hour" is not 3600 s. The position of the Sun has the correction `"LT+S"` and is in
+the body-fixed frame of [`cidfrm`](@ref). The sign of the second value of
+`BODY<body>_PM` gives the direction of the rotation. For the Sun (`body = 10`) the
+result is always 12:00:00. The call needs SPK data for the body and the Sun and PCK
+data for the body.
 
-Throws `SpiceError(:unknownsystem)` if `type` is not one of the two,
-`SpiceError(:cantfindframe)` if the body has no body-fixed frame, and
-`SpiceError(:cantgetrotationtype)` if `BODY<body>_PM` is not a numeric variable of two
-or more values. For `"PLANETOGRAPHIC"`, throws `SpiceError(:invalidoption)` if
-`BODY<body>_PGR_POSITIVE_LON` is not `EAST` or `WEST`, and `SpiceError(:missingdata)`
-if that variable and `BODY<body>_PM` are both absent. Throws the errors of
-[`spkezr`](@ref).
+Throws `SpiceError`:
+- `:unknownsystem` if `type` is not one of the two;
+- `:cantfindframe` if the body has no body-fixed frame;
+- `:cantgetrotationtype` if `BODY<body>_PM` is absent or is not a numeric variable of
+  two or more values;
+- `:invalidoption`, for `"PLANETOGRAPHIC"`, if `BODY<body>_PGR_POSITIVE_LON` is not
+  `EAST` or `WEST`;
+- `:missingdata`, for `"PLANETOGRAPHIC"`, if `BODY<body>_PGR_POSITIVE_LON` and
+  `BODY<body>_PM` are both absent;
+- the kinds of [`spkezr`](@ref).
 
 # Examples
 ```julia
@@ -125,16 +129,19 @@ et2lst(et::Real, body::Integer, lon::Real, type::AbstractString) =
 """
     lspcn([ctx,] body, et, abcorr) -> Float64
 
-Return the planetocentric longitude of the Sun (L_s) for `body` at `et`, in radians
+Return the planetocentric longitude of the Sun (`Ls`) for `body` at `et`, in radians
 in `[0, 2pi)`, as `lspcn_c`.
 
-L_s is the season angle of the body: 0 at its spring equinox of the north, `pi/2` at
+`Ls` is the season angle of the body: 0 at its spring equinox of the north, `pi/2` at
 the summer solstice of the north. It is the right ascension of the Sun as seen from
-the body in the frame whose Z axis is the orbital angular momentum of the body about
-the Sun and whose X axis is the cross product of the north pole of the body and that
-Z axis. `body` is a name or a NAIF ID, `et` is in seconds past J2000 TDB, and
-`abcorr` is as for [`spkezr`](@ref). The call needs PCK data for the pole and SPK data
-for the body and the Sun.
+the body, in this frame:
+
+- the Z axis is the orbital angular momentum of the body about the Sun;
+- the X axis is the cross product of the north pole of the body and the Z axis.
+
+`body` is a name or a NAIF ID, `et` is in seconds past J2000 TDB, and `abcorr` is as
+for [`spkezr`](@ref). The call needs PCK data for the pole and SPK data for the body
+and the Sun.
 
 Throws `SpiceError(:dependentvectors)` if the pole is parallel to the orbital angular
 momentum, and the errors of [`spkezr`](@ref) and [`tipbod`](@ref).

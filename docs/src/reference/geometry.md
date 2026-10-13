@@ -26,6 +26,7 @@ phaseq
 occult
 limbpt
 termpt
+edterm
 tangpt
 ```
 

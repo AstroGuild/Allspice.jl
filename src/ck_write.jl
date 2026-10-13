@@ -124,7 +124,7 @@ Write a CK segment of type 1 (discrete pointing) to the file of `handle`, as `ck
 
 # Arguments
 The arguments `handle`, `begtim`, `endtim`, `inst`, `ref`, `segid` and `ctx` have the same
-meaning in every `ckwNN` writer.
+meaning in every `ckwNN` writer. [`ckw06`](@ref) names the coverage `first`, `last`.
 - `handle`: a [`DAFHandle`](@ref) from [`ckopn`](@ref).
 - `begtim`, `endtim`: the coverage of the segment, encoded spacecraft clock ticks.
 - `inst`: the NAIF ID of the instrument or structure.
@@ -138,13 +138,19 @@ meaning in every `ckwNN` writer.
 The number of records is `length(sclkdp)`. A table such as `quats` is a vector of vectors
 (the form of SPICE.jl), a matrix with one record in each column, or a flat vector.
 
-The segment has angular velocity if `avvs` holds one vector for each record. `nothing`,
-or one vector for more than one record (the default), gives a segment without angular
-velocity. With exactly one record the default is one vector for one record, so the segment
-has the angular velocity zero; pass `nothing` to have none.
+The segment has angular velocity if `avvs` holds one vector for each record, and none
+if `avvs` is `nothing`. Without the argument, the result depends on the number of
+records:
 
-The segment is in the file when the call returns, with the data area that `ckw01_c`
-writes. A call that throws writes nothing.
+| Records       | Segment without the `avvs` argument |
+|:--------------|:------------------------------------|
+| more than one | no angular velocity                 |
+| one           | angular velocity zero               |
+
+Pass `nothing` to write one record without angular velocity.
+
+The segment is on disk when the call returns. It holds the same data as the segment that
+`ckw01_c` writes. A call that throws writes nothing.
 
 Throws `SpiceError`. Every `ckwNN` writer throws:
 - `:dafnosuchhandle` if the handle is closed, `:dafinvalidaccess` if it is open for
@@ -206,8 +212,8 @@ Write a CK segment of type 2 (pointing with a constant angular velocity on inter
 
 Record `i` is valid from `start[i]` to `stop[i]` (encoded spacecraft clock ticks).
 `quats[i]` is its quaternion, `avvs[i]` its angular velocity (rad/s) and `rates[i]` its
-number of seconds per tick. The number of records is `length(start)`; SPICE.jl 0.2.5
-passes one record less to `ckw02_c`. See [`ckw01`](@ref) for the other arguments and for
+number of seconds per tick. The number of records is `length(start)`. SPICE.jl 0.2.5
+writes one record less. See [`ckw01`](@ref) for the other arguments and for
 the errors of every writer.
 
 Throws `SpiceError`:
@@ -278,7 +284,7 @@ Write a CK segment of type 3 (pointing with linear interpolation inside interval
 `sclkdp` holds the times of the `nrec` records (encoded spacecraft clock ticks), `quats`
 their quaternions and `starts` the start times of the interpolation intervals. `avvs`
 is as for [`ckw01`](@ref), which also gives the other arguments and the errors of every
-writer. All `nrec` records are written; SPICE.jl 0.2.5 drops the last one.
+writer. All `nrec` records are written. SPICE.jl 0.2.5 writes one record less.
 
 Throws `SpiceError`:
 - `:invalidnumrec` if there is no record, `:invalidnumint` if there is no interval;
@@ -348,15 +354,31 @@ end
     ckw05(handle, subtyp, degree, begtim, endtim, inst, ref, avflag, segid, sclkdp, packts,
           rate, nints, starts; ctx=default_context()) -> Nothing
 
-Write a CK segment of type 5 (ESOC/DDID interpolation of quaternions), as `ckw05_c`.
+Write a CK segment of type 5, as `ckw05_c`. The type holds the interpolation methods of
+the attitude files of ESOC, the operations centre of ESA (format DDID).
 
-`subtyp` gives the interpolation and the packet size: 0 Hermite with packets of 8 values,
-1 Lagrange with 4, 2 Hermite with 14, 3 Lagrange with 7. `degree` is the degree of the
-interpolating polynomial. `avflag` tells whether the segment has angular velocity.
-`sclkdp` holds the times of the packets `packts` (encoded spacecraft clock ticks), `rate`
-is the nominal clock rate in seconds per tick, and the first `nints` elements of `starts`
-are the start times of the interpolation intervals. See [`ckw01`](@ref) for the other
-arguments and for the errors of every writer.
+`subtyp` selects the interpolation and the content of a packet. `q` is a SPICE
+quaternion (scalar first), `dq` its derivative, `av` the angular velocity in `ref`
+(rad/s) and `dav` its derivative (rad/s²):
+
+| `subtyp` | Interpolation | Packet                 | Values |
+|:---------|:--------------|:-----------------------|:-------|
+| 0        | Hermite       | `q`, `dq`              | 8      |
+| 1        | Lagrange      | `q`                    | 4      |
+| 2        | Hermite       | `q`, `dq`, `av`, `dav` | 14     |
+| 3        | Lagrange      | `q`, `av`              | 7      |
+
+The other arguments:
+- `degree`: the degree of the interpolating polynomial. The window size is the number of
+  packets that one interpolation uses: `degree + 1` for Lagrange and `(degree + 1) ÷ 2`
+  for Hermite.
+- `avflag`: `true` if the segment has angular velocity.
+- `sclkdp`: the times of the packets `packts`, encoded spacecraft clock ticks.
+- `rate`: the nominal clock rate, seconds per tick.
+- `nints`, `starts`: the first `nints` elements of `starts` are the start times of the
+  interpolation intervals. No interpolation uses packets of two intervals.
+
+See [`ckw01`](@ref) for the remaining arguments and for the errors of every writer.
 
 Throws `SpiceError`:
 - `:toofewpackets` if there is no packet, `:invalidnumints` unless `nints > 0`;
@@ -436,29 +458,42 @@ const _CK06_PKTSZS = (8, 4, 14, 7)
 Write a CK segment of type 6 (mini-segments of the ESOC/DDID types), as `ckw06` of
 SPICELIB. CSPICE has no C wrapper for it.
 
-`first` and `last` are the coverage of the segment (encoded spacecraft clock ticks), and
-`avflag` tells whether the segment has angular velocity. The number of mini-segments is
-`length(npkts)`. For mini-segment `i`, `npkts[i]` is the number of packets, `subtps[i]`
-the subtype (0, 1, 2, 3 with packets of 8, 4, 14, 7 values), `degres[i]` the degree and
-`rates[i]` the clock rate in seconds per tick. `packts` is the flat vector of all packets
-and `sclkdp` that of all their times, in order. `ivlbds` holds the `length(npkts) + 1`
-bounds of the intervals of the mini-segments. If `sellst` is `true`, the later interval is
-used for a time that is on a bound of two intervals; else the earlier one is used. See
-[`ckw01`](@ref) for the other arguments and for the errors of every writer.
+A mini-segment is a set of packets with its own subtype, degree and clock rate, valid on
+its own interval. The number of mini-segments is `length(npkts)`. The subtypes, their
+packets and the window size are those of [`ckw05`](@ref).
+
+- `first`, `last`: the coverage of the segment, encoded spacecraft clock ticks. They
+  take the place of `begtim` and `endtim`.
+- `avflag`: `true` if the segment has angular velocity.
+- `npkts[i]`, `subtps[i]`, `degres[i]`, `rates[i]`: the number of packets, the subtype,
+  the degree and the clock rate (seconds per tick) of mini-segment `i`.
+- `packts`: the flat vector of all packets, in order.
+- `sclkdp`: the flat vector of the times of all packets, encoded spacecraft clock ticks.
+- `ivlbds`: the `length(npkts) + 1` bounds of the intervals of the mini-segments, ticks.
+- `sellst`: if `true`, a time on a bound of two intervals uses the later interval; else
+  it uses the earlier one.
+
+See [`ckw01`](@ref) for the other arguments and for the errors of every writer.
 
 Throws `SpiceError`:
 - `:baddescrtimes` if `first > last`;
 - `:invalidcount` if there is no mini-segment;
 - `:boundsoutoforder` unless `ivlbds` is strictly increasing;
-- `:coveragegap` unless [`first`, `last`] is inside [`ivlbds[1]`, `ivlbds[end]`];
-- for a mini-segment: `:toofewpackets` if it has fewer than two packets,
-  `:invalidsubtype` if its subtype is not in `0:3`, `:invalidsclkrate` unless its rate is
-  positive, `:invaliddegree` if its degree is not in `1:23`, `:badwindowsize` if its
-  window size is odd, `:timesoutoforder` unless its times are strictly increasing,
-  `:boundsdisagree` if its first time is after the start of its interval or its last time
-  is before that start, `:zeroquaternion` if a quaternion is zero, and for a Hermite
-  subtype `:badquatsign` if a quaternion is farther from its predecessor than its
-  negative is.
+- `:coveragegap` unless [`first`, `last`] is inside [`ivlbds[1]`, `ivlbds[end]`].
+
+For a mini-segment it throws:
+- `:toofewpackets` if it has fewer than two packets;
+- `:invalidsubtype` if its subtype is not in `0:3`;
+- `:invalidsclkrate` unless its rate is positive;
+- `:invaliddegree` if its degree is not in `1:23`;
+- `:badwindowsize` if its window size is odd;
+- `:timesoutoforder` unless its times are strictly increasing;
+- `:boundsdisagree` if its first time is after the start of its interval, or its last
+  time is before that start. As in SPICELIB, the last time is not compared with the end
+  of the interval, so the times can end before it;
+- `:zeroquaternion` if a quaternion is zero;
+- `:badquatsign`, for a Hermite subtype, if a quaternion is farther from its
+  predecessor than its negative is.
 """
 function ckw06(h::DAFHandle, inst::Integer, ref::SegFrame, avflag::Bool, first::Real,
         last::Real, segid::AbstractString, npkts::AbstractVector{<:Integer},

@@ -6,11 +6,12 @@
 
 """
     EphemerisTable{T,A<:AbstractVector{T}}
+    EphemerisTable(coef, t0, dt, nint, ncoef, target, observer, frame, maxerr)
     EphemerisTable{T}(tab) -> EphemerisTable{T,Vector{T}}
 
 Position of one body relative to another on a fixed span of time, as piecewise
 Chebyshev polynomials that need no kernel to evaluate. [`ephemeris_table`](@ref)
-makes one.
+makes one; the constructor with nine arguments takes the fields of the table below.
 
 A query does no segment search and follows no chain of bodies, so it suits the inner
 loop of an optimizer. With Adapt.jl loaded, `adapt` moves the coefficients to another
@@ -37,7 +38,9 @@ Throws `SpiceError(:badarg)` if the constructor gets `dt <= 0`, `nint < 1`,
 
 # Examples
 ```jldoctest
-julia> tab = EphemerisTable([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 0.0, 10.0, 1, 2, 301, 399, 1, 0.0);
+julia> coef = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];    # nint = 1 interval, ncoef = 2
+
+julia> tab = EphemerisTable(coef, 0.0, 10.0, 1, 2, 301, 399, 1, 0.0);
 
 julia> table_span(tab)
 (0.0, 10.0)
@@ -336,11 +339,12 @@ Two methods give the coefficients:
   end after `t1`, and `tol`, `ncoef` and `maxintervals` are not used.
 - **Interpolation.** In all other cases the call interpolates on `t0` to `t1` with
   `ncoef` coefficients for each interval, and it doubles the number of intervals
-  until the measured error is at most `tol` (km). Without `tol` the goal is `1e-12`
-  times the largest distance in the table. The call then stops also when one more
-  doubling does not divide a small error by four: the source limits the accuracy
-  (rounding of a rotation angle of many turns, or the small steps of an
-  aberration-corrected position at the record boundaries of the kernels).
+  until the measured error is at most `tol` (km). With `tol`, the result has
+  `maxerr <= tol` or the call throws. Without `tol` the goal is `1e-12` times the
+  largest distance in the table, and the call also stops when the error is below
+  `1e-6` times that distance and one more doubling does not divide it by four. The
+  source then limits the accuracy: rounding of a rotation angle of many turns, or the
+  small steps of an aberration-corrected position at the record boundaries.
 
 Throws `SpiceError(:badarg)` if the epochs are not finite with `t0 < t1`, if
 `ncoef < 2`, `tol <= 0` or `maxintervals < 1`. Throws `SpiceError(:noconvergence)` if
@@ -411,7 +415,7 @@ derivative. `handle` comes from [`spkopn`](@ref) or [`spkopa`](@ref); `segid` is
 segment identifier; `first` and `last` are the bounds of the segment in seconds past
 J2000 TDB. The segment is for `tab.target` relative to `tab.observer` in the frame
 `tab.frame`. The coefficients are written as `Float64`; a table on a GPU is copied to
-the CPU.
+the CPU. `ctx` is passed to [`spkw02`](@ref).
 
 A segment has no aberration correction. Write only a table that was made with
 `abcorr = "NONE"`; the call cannot check this.
@@ -503,9 +507,9 @@ Return the rotation matrix from the rotation table `tab` at `et` and its time
 derivatives to order `N`.
 
 Element `k + 1` is the derivative of order `k`, in 1/s^k; every order is a derivative
-of the polynomials of the table. Order 1 thus follows order 1 of [`pxder`](@ref). It
-is the derivative block of [`sxform`](@ref) for the frames where the two agree, which
-excludes CK and dynamic frames. `et` is in seconds past J2000 TDB. The rules for the
+of the polynomials of the table. Order 1 thus follows order 1 of [`pxder`](@ref), which
+lists the frame classes for which the derivative block of [`sxform`](@ref) differs.
+`et` is in seconds past J2000 TDB. The rules for the
 epoch, for `@inbounds` and for the number types are those of [`table_jet`](@ref). The
 call reads no kernel and does not allocate.
 
@@ -554,10 +558,11 @@ error.
 
 The call interpolates the nine elements of the matrix with `ncoef` coefficients for
 each interval, and it doubles the number of intervals until the measured error
-(Frobenius norm, no unit) is at most `tol`. Without `tol` the goal is `1.7e-12`. The
-call then stops also when one more doubling does not divide a small error by four:
-the source limits the accuracy (a rotation angle of many turns has an error of
-rounding near 1e-11).
+(Frobenius norm, no unit) is at most `tol`. With `tol`, the result has
+`maxerr <= tol` or the call throws. Without `tol` the goal is `1.7e-12`, and the call
+also stops when the error is below `1.7e-6` and one more doubling does not divide it
+by four. The source then limits the accuracy: the rotation angle of many turns has a
+rounding error above the goal. Read `maxerr` for the error that was reached.
 
 Throws `SpiceError(:badarg)` if the epochs are not finite with `t0 < t1`, if
 `ncoef < 2`, `tol <= 0` or `maxintervals < 1`. Throws `SpiceError(:noconvergence)` if

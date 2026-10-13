@@ -34,8 +34,8 @@ dskopn(fname::AbstractString, ifname::AbstractString, ncomch::Integer) =
 Close the DSK file of `handle`, as `dskcls_c`. A file that is open for writing is written
 to disk by this call.
 
-`optmiz` has no effect. The file is always written segregated (all records of one data
-type together), which is what `optmiz = true` gives in CSPICE.
+`optmiz` has no effect. The file is always written segregated (see
+[`DASHandle`](@ref)), which is what `optmiz = true` gives in CSPICE.
 
 Throws `SpiceError(:daswritefail)` if the file cannot be written.
 """
@@ -265,22 +265,28 @@ elements) and the integer part `spaixi` (`spxisz` elements). [`dskw02`](@ref) ta
   3-vectors. A plate is three vertex numbers, which start at 1.
 - `finscl`: the edge length of a fine voxel, in units of the mean extent of the plates.
 - `corscl`: the number of fine voxels along one edge of a coarse voxel.
-- `worksz`, `voxpsz`, `voxlsz`: the sizes of the workspace, of the voxel-plate pointer
-  array and of the voxel-plate list, with the meaning and the limits of CSPICE.
+- `worksz`: the size of the workspace. It must hold the pairs of a plate and a fine
+  voxel that meet: `np` times the mean number of fine voxels that a plate meets. With
+  `makvtl` it must also hold `nv + 3np`. The least value is `np + 1`.
+- `voxpsz`: the size of the voxel-plate pointer array, at least `corscl^3` times the
+  number of coarse voxels that are not empty.
+- `voxlsz`: the size of the voxel-plate list, at least the first bound of `worksz`. The
+  least value is `np + 1`.
 - `makvtl`: `true` to make the vertex-plate list.
 - `spxisz`: the size of `spaixi`, at least `100007 + voxpsz + voxlsz`, plus `2nv + 3np`
   if `makvtl` is `true`.
 
-The index has the layout of CSPICE. Every element is equal to the one that CSPICE gives
-for an output array that is zero at entry. This includes the elements after the lists,
-which keep values of the workspace.
+The index is equal to the one that CSPICE makes.
 
 Throws `SpiceError`:
 - `:badfinevoxelscale` unless `finscl > 0`, `:badcoarsevoxscale` unless `corscl >= 1`;
 - `:badvertexcount` or `:badplatecount` if the number of vertices or of plates is out of
   range;
-- `:workspacetoosmall`, `:ptrarraytoosmall`, `:platelisttoosmall`, `:intindextoosmall`,
-  `:cellarraytoosmall` or `:barraytoosmall` if a size is too small;
+- `:workspacetoosmall` if `worksz < np + 1`, `:ptrarraytoosmall` if `voxpsz < 1`,
+  `:platelisttoosmall` if `voxlsz < np + 1`, `:intindextoosmall` if `spxisz` is below
+  its bound;
+- `:cellarraytoosmall` if `worksz` cannot hold the pairs, `:barraytoosmall` if a list
+  does not fit in `voxlsz` or in `worksz`;
 - `:valueoutofrange`, `:incompatiblescale` or `:coarsegridoverflow` if the voxel grid that
   follows from the scales is not valid;
 - `:badvertexindex` if a vertex number is not in `1:nv`, which CSPICE does not check

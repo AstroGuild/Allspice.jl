@@ -1,5 +1,15 @@
 # Files and writers
 
+A file handle is a [`DAFHandle`](@ref) or a [`DASHandle`](@ref) object, not an integer.
+The writers keep the positional arguments of CSPICE and take the context as the keyword
+`ctx`; other calls take it as the optional first argument `[ctx,]`. Without it a call
+uses [`default_context`](@ref). `[ctx | ks,]` means that the call also accepts a
+`KernelSet`, the immutable snapshot of the kernels of a context that
+`Allspice.kernelset(ctx)` returns.
+
+An input of the wrong shape throws `SpiceError(:badarg)` in the SPK and CK writers, and
+`ArgumentError` in the DAS and DSK calls that say so.
+
 ## DAF files
 
 ```@docs
@@ -56,9 +66,16 @@ spk14b
 spk14a
 spk14e
 SPK14Writer
+spkw10
+```
+
+## Two-line element sets
+
+[`spkw10`](@ref) writes element sets to an SPK segment.
+
+```@docs
 getelm
 evsgp4
-spkw10
 ```
 
 ## CK writers

@@ -81,11 +81,12 @@ column 1 are not read.
 Throws `SpiceError`:
 - `:badarg` unless `lines` holds two lines;
 - `:nolsk` if no leap-second kernel is loaded;
-- `:badtle`, as CSPICE, if the satellite numbers of the two lines differ, if a line does
-  not have 68 or 69 characters (blanks at the end are not counted), if a term is not a
-  number, if an exponent has more than one digit, or if a value is out of range: NODE0,
-  OMEGA and M0 in [0, 360) degrees, INCL in [0, 180] degrees, N0 in [0, 20] revolutions
-  per day.
+- `:badtle`, as CSPICE, in each of these cases:
+  - the satellite numbers of the two lines differ;
+  - a line does not have 68 or 69 characters (blanks at the end are not counted);
+  - a term is not a number, or an exponent has more than one digit;
+  - a value is out of range. The ranges are [0, 360) degrees for NODE0, OMEGA and M0,
+    [0, 180] degrees for INCL, and [0, 20] revolutions per day for N0.
 
 # Examples
 The file names are those of the generic kernels of NAIF; `geophs` holds the constants of
@@ -171,10 +172,20 @@ end
 Return the state (km, km/s) in the TEME frame, at the epoch `et` (seconds past J2000 TDB),
 of the two-line element set `elems`, as `evsgp4_c`.
 
-`elems` holds the ten elements that [`getelm`](@ref) returns. `geophs` holds the eight
-geophysical constants in the order J2, J3, J4, KE, QO, SO, ER, AE; as in CSPICE, QO, SO
-and AE are not used. The propagator is SGP4, or SDP4 for an orbital period of 225 minutes
-or more.
+`elems` holds the ten elements that [`getelm`](@ref) returns. `geophs` holds eight
+geophysical constants of the Earth:
+
+| Index | Name | Meaning                                                        |
+|:------|:-----|:---------------------------------------------------------------|
+| 1 – 3 | J2, J3, J4 | gravitational harmonics                                  |
+| 4     | KE   | square root of GM, in Earth radii^1.5 per minute               |
+| 5     | QO   | upper altitude bound of the atmospheric model, km              |
+| 6     | SO   | lower altitude bound of the atmospheric model, km              |
+| 7     | ER   | equatorial radius, km                                          |
+| 8     | AE   | distance units per Earth radius                                |
+
+As in CSPICE, QO, SO and AE are not used. The propagator is SGP4, or SDP4 for an orbital
+period of 225 minutes or more.
 
 The context `ctx` (default: the default context) or the kernel set `ks` must hold a
 leap-second kernel. `et` can have any real number type; an `Allspice.Taylor` epoch gives
@@ -205,7 +216,7 @@ evsgp4(et::Real, geophs, elems) = evsgp4(default_context(), et, geophs, elems)
 
 Write an SPK segment of type 10 (two-line element sets), as `spkw10_c`.
 
-`consts` holds the eight geophysical constants (J2, J3, J4, KE, QO, SO, ER, AE). `elems`
+`consts` holds the eight geophysical constants of [`evsgp4`](@ref). `elems`
 holds `n` element sets of ten numbers each, in the form that [`getelm`](@ref) returns, and
 `epochs` holds their `n` epochs (seconds past J2000 TDB). Each epoch must be equal to the
 tenth number of its set; the call does not check this. See [`spkw02`](@ref) for the other
@@ -216,7 +227,8 @@ and their rates, as `spkw10_c` does, so a packet of the segment has 14 doubles.
 
 Throws `SpiceError`:
 - the kinds of [`spkpds`](@ref);
-- `:segidtoolong` or `:nonprintingchars` if `segid` is not valid;
+- `:segidtoolong` or `:nonprintingchars` if `segid` is not valid (the other writers have
+  `:nonprintablechars`; the kinds follow CSPICE);
 - `:numpacketsnotpos` if there is no element set;
 - `:unorderedrefs` unless the epochs are strictly increasing.
 """

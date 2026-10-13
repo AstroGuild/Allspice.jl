@@ -89,7 +89,7 @@ const DEFAULT_CONTEXT = SpiceContext()
 
 Return the process-wide context that every call without a `ctx` argument uses.
 
-The result is always the same object. Pass it where a call needs an explicit context.
+The result is always the same object.
 
 # Examples
 ```jldoctest
@@ -152,11 +152,11 @@ end
 Load the kernel file at `path` into `ctx`, as `furnsh_c`.
 
 The type is read from the file: SPK, binary PCK, CK, DSK, EK, text kernel or
-meta-kernel. A meta-kernel loads the files of its `KERNELS_TO_LOAD` list in order.
+meta-kernel. A meta-kernel loads the files of its `KERNELS_TO_LOAD` list in order,
+with `PATH_SYMBOLS` and `PATH_VALUES` applied as in CSPICE.
 Without `ctx` the kernel goes into [`default_context`](@ref).
 
-- The load is atomic. A query on another thread sees the kernel set before the load or
-  after it, and a load that fails leaves `ctx` unchanged.
+- A load that fails leaves `ctx` unchanged.
 - A later kernel has priority over an earlier one, as in CSPICE.
 - A path that is already loaded gets a second entry, as in CSPICE.
 - Direct edits of the kernel pool ([`pdpool`](@ref), [`lmpool`](@ref), ...) stay; the
@@ -165,8 +165,9 @@ Without `ctx` the kernel goes into [`default_context`](@ref).
 
 Throws `SpiceError(:badarg)` if `path` is blank, `SpiceError(:nofile)` if the file (or
 a file that a meta-kernel lists) does not exist, and `SpiceError(:unsupported)` if a
-meta-kernel lists a meta-kernel. A file that cannot be read as a kernel throws a
-`SpiceError` of the kind that the reader gives (`:baddaf`, `:badkernel`, ...).
+meta-kernel lists a meta-kernel. A binary file that is damaged throws
+`SpiceError(:baddaf)`, and a meta-kernel that is not consistent throws
+`SpiceError(:badkernel)`.
 
 # Examples
 ```julia

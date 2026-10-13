@@ -289,8 +289,6 @@ end
 
 Return the sum `v1 + v2` of two vectors of 3 elements, as `vadd_c` of CSPICE.
 
-Integer components are converted to `Float64`.
-
 Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
 
 # Examples
@@ -340,8 +338,7 @@ vminus(v1::AbstractVector) = -_m_v3(v1)
 """
     vdot(v1, v2)
 
-Return the dot product of two vectors of 3 elements, as `vdot_c` of CSPICE. The terms
-are added in index order.
+Return the dot product of two vectors of 3 elements, as `vdot_c` of CSPICE.
 
 Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
 
@@ -447,9 +444,7 @@ end
 Return the angle between two vectors of 3 elements, in radians in [0, pi], as `vsep_c`
 of CSPICE.
 
-For an acute angle, the result is twice the arcsine of half the distance between the
-unit vectors. An obtuse angle uses the norm of their sum in the same way. This keeps
-the precision near 0 and pi. The result is 0 if a vector is zero.
+The method keeps the precision near 0 and pi. The result is 0 if a vector is zero.
 
 Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
 
@@ -516,8 +511,8 @@ vproj(a::AbstractVector, b::AbstractVector) = _m_proj(_m_v3(a), _m_v3(b), true)
 Return the component of the vector `a` that is perpendicular to the vector `b`, as
 `vperp_c` of CSPICE.
 
-A zero `b` gives `a`. This is the documented behaviour of CSPICE and the one of
-`vperp_` of SPICELIB; the code of `vperp_c` in CSPICE N0067 gives the zero vector there.
+A zero `b` gives `a`, as the header of `vperp_c` says. The code of `vperp_c` in CSPICE
+N0067 gives the zero vector there.
 
 Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
 
@@ -634,7 +629,7 @@ ucrss(v1::AbstractVector, v2::AbstractVector) = _m_ucrss(_m_v3(v1), _m_v3(v2))
     vtmv(v1, matrix, v2)
 
 Return the bilinear form `v1' * matrix * v2` of two vectors of 3 elements and a 3 by 3
-matrix, as `vtmv_c` of CSPICE. The terms are added row by row.
+matrix, as `vtmv_c` of CSPICE.
 
 Throws `SpiceError(:badarg)` if a vector does not have 3 elements or the matrix is not
 3 by 3.
@@ -660,8 +655,9 @@ end
 Return the product `m * vin` of a 3 by 3 matrix and a vector of 3 elements, as `mxv_c`
 of CSPICE.
 
-Each component is the sum of its three products from left to right, as in CSPICE. The
-product `m * vin` of StaticArrays can round in another way.
+Each component is the sum of its three products from left to right, as in CSPICE.
+The product `m * vin` of StaticArrays can round in another way. This rule holds for
+every matrix product of the package.
 
 Throws `SpiceError(:badarg)` if `m` is not 3 by 3 or `vin` does not have 3 elements.
 
@@ -695,8 +691,7 @@ mtxv(m::AbstractMatrix, vin::AbstractVector) = _m_mtxv(_m_m3(m), _m_v3(vin))
 """
     mxm(m1, m2) -> SMatrix{3,3}
 
-Return the product `m1 * m2` of two 3 by 3 matrices, as `mxm_c` of CSPICE. Each element
-is the sum of its three products from left to right.
+Return the product `m1 * m2` of two 3 by 3 matrices, as `mxm_c` of CSPICE.
 
 Throws `SpiceError(:badarg)` if a matrix is not 3 by 3.
 
@@ -893,9 +888,9 @@ rotate(angle::Real, iaxis::Integer) = _m_rotate(_m_f(angle), iaxis)
 """
     rotmat(m1, angle, iaxis) -> SMatrix{3,3}
 
-Return `rotate(angle, iaxis) * m1` for a 3 by 3 matrix `m1`, as `rotmat_c` of CSPICE:
-the transformation `m1` followed by a rotation of the coordinate system by `angle`
-radians about the axis `iaxis`.
+Return `rotate(angle, iaxis) * m1` for a 3 by 3 matrix `m1`, as `rotmat_c` of CSPICE.
+This is the transformation `m1` followed by a rotation of the coordinate system by
+`angle` radians about the axis `iaxis`.
 
 Throws `SpiceError(:badarg)` if `m1` is not 3 by 3.
 
@@ -1126,7 +1121,7 @@ Return the time derivative of the angle between the positions of two states, in
 radians per time unit, as `dvsep_c` of CSPICE. Parallel positions, or a zero position,
 give 0.
 
-Throws `SpiceError(:numericoverflow)` if the result is above the largest number, and
+Throws `SpiceError(:numericoverflow)` if the size of the result is above 1e308, and
 `SpiceError(:badarg)` if a state does not have 6 elements.
 
 See also [`vsep`](@ref).
@@ -1151,10 +1146,10 @@ end
 """
     vaddg(v1, v2)
 
-Return the sum `v1 + v2` of two vectors of any equal length, as `vaddg_c` of CSPICE.
+Return the sum `v1 + v2` of two vectors of equal length, as `vaddg_c` of CSPICE.
 
-The `g` calls take no dimension argument: the arguments give the dimension. Two static
-vectors give a static vector. Integer elements are converted to `Float64`.
+The `g` calls take no dimension argument: the arguments give the dimension. Static
+arguments give a static result. Other arguments give a `Vector` or a `Matrix`.
 
 Throws `SpiceError(:badarg)` if the lengths differ.
 
@@ -1165,7 +1160,7 @@ vaddg(v1::AbstractVector, v2::AbstractVector) = (_m_samelen(v1, v2); _m_f.(v1) .
 """
     vsubg(v1, v2)
 
-Return the difference `v1 - v2` of two vectors of any equal length, as `vsubg_c` of
+Return the difference `v1 - v2` of two vectors of equal length, as `vsubg_c` of
 CSPICE.
 
 Throws `SpiceError(:badarg)` if the lengths differ.
@@ -1196,8 +1191,7 @@ vminug(vin::AbstractVector) = .-_m_f.(vin)
 """
     vequg(vin)
 
-Return a copy of the vector `vin` of any length, with integer elements converted to
-`Float64`, as `vequg_c` of CSPICE.
+Return a copy of the vector `vin` of any length, as `vequg_c` of CSPICE.
 
 See also [`vequ`](@ref).
 """
@@ -1206,8 +1200,7 @@ vequg(vin::AbstractVector) = _m_f.(vin)
 """
     vdotg(v1, v2)
 
-Return the dot product of two vectors of any equal length, as `vdotg_c` of CSPICE. The
-terms are added in index order.
+Return the dot product of two vectors of equal length, as `vdotg_c` of CSPICE.
 
 Throws `SpiceError(:badarg)` if the lengths differ.
 
@@ -1277,7 +1270,7 @@ end
 """
     vdistg(v1, v2)
 
-Return the distance between two points of any equal dimension, as `vdistg_c` of CSPICE.
+Return the distance between two points of equal length, as `vdistg_c` of CSPICE.
 
 Throws `SpiceError(:badarg)` if the lengths differ.
 
@@ -1301,12 +1294,12 @@ end
 """
     vsepg(v1, v2)
 
-Return the angle between two vectors of any equal dimension, in radians in [0, pi].
+Return the angle between two vectors of equal length, in radians in [0, pi].
 The result is 0 if a vector is zero.
 
-The method is the one of [`vsep`](@ref) and of `vsepg_` of SPICELIB. `vsepg_c` of
-CSPICE N0067 has the acute and the obtuse case exchanged, which loses up to half of the
-digits near 0 and pi; the result here differs from it by that error.
+The method is the one of [`vsep`](@ref) and of the Fortran routine `VSEPG` of SPICELIB.
+`vsepg_c` of CSPICE N0067 has the acute and the obtuse case exchanged. It loses up to
+half of the digits near 0 and pi, and the result here differs from it by that error.
 
 Throws `SpiceError(:badarg)` if the lengths differ.
 """
@@ -1332,8 +1325,8 @@ end
 """
     vrelg(v1, v2)
 
-Return the relative difference `|v1 - v2| / max(|v1|, |v2|)` of two vectors of any
-equal dimension, as `vrelg_c` of CSPICE. The result is 0 for equal vectors.
+Return the relative difference `|v1 - v2| / max(|v1|, |v2|)` of two vectors of equal
+length, as `vrelg_c` of CSPICE. The result is 0 for equal vectors.
 
 Throws `SpiceError(:badarg)` if the lengths differ.
 
@@ -1350,8 +1343,8 @@ end
 """
     vprojg(a, b)
 
-Return the projection of the vector `a` on the vector `b`, for any equal dimension, as
-`vprojg_` of SPICELIB. A zero `b` gives the zero vector.
+Return the projection of the vector `a` on the vector `b` of equal length, as
+`vprojg_c` of CSPICE. A zero `b` gives the zero vector.
 
 Throws `SpiceError(:badarg)` if the lengths differ.
 
@@ -1367,7 +1360,7 @@ end
 """
     vlcomg(a, v1, b, v2)
 
-Return the linear combination `a*v1 + b*v2` of two vectors of any equal dimension, as
+Return the linear combination `a*v1 + b*v2` of two vectors of equal length, as
 `vlcomg_c` of CSPICE.
 
 Throws `SpiceError(:badarg)` if the lengths differ.
@@ -1391,7 +1384,7 @@ vzerog(v::AbstractVector) = all(x -> primal(x) == 0.0, v)
     vtmvg(v1, matrix, v2)
 
 Return the bilinear form `v1' * matrix * v2` for any dimensions that fit, as `vtmvg_c`
-of CSPICE. The terms are added row by row.
+of CSPICE.
 
 Throws `SpiceError(:badarg)` if `size(matrix) != (length(v1), length(v2))`.
 
@@ -1414,9 +1407,6 @@ end
 
 Return the product `m1 * v2` of a matrix and a vector of any sizes that fit, as
 `mxvg_c` of CSPICE.
-
-The terms of each element are added in index order. A static matrix and a static
-vector give a static vector; this holds for the other `g` products in the same way.
 
 Throws `SpiceError(:badarg)` if `size(m1, 2) != length(v2)`.
 

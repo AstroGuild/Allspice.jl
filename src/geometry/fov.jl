@@ -145,7 +145,7 @@ kernel. Both forms of the specification are read: `CORNERS` (the default) and `A
 
 Throws `SpiceError` with the kind
 - `:framemissing`, `:shapemissing`, `:boresightmissing` or `:boundarymissing` if the
-  variable is not in the kernel pool;
+  frame, the shape, the boresight or the boundary variable is not in the kernel pool;
 - `:shapenotsupported` if the shape is not one of the four, or is a polygon given by
   angles; `:unsupportedspec` if the specification is not `CORNERS` or `ANGLES`;
 - `:badboresightspec` if the boresight does not hold 3 numbers, `:zeroboresight` if it
@@ -625,9 +625,8 @@ Return `true` if the body `target` is in the field of view of the instrument `in
 [`getfov`](@ref)). `obsrvr` is the body that carries the instrument. The instrument
 frame is evaluated at `et`, so a CK and an SCLK kernel for the spacecraft are needed
 if that frame is a CK frame. `abcorr` is a correction string of [`spkezr`](@ref) or an
-[`Aberration`](@ref). `et` must be a plain real number. The call allocates.
-
-The angular radius of the field of view about its axis must be below 90 degrees.
+[`Aberration`](@ref). `et` cannot be a `ForwardDiff.Dual`, because the result is
+discrete.
 
 Throws `SpiceError` with the kind
 - `:invalidoption` if `tshape` is `"RAY"` (use [`fovray`](@ref)) or if `abcorr` is not a
@@ -638,13 +637,16 @@ Throws `SpiceError` with the kind
 - `:invalidframe` if `tframe` is blank, not known, or not centered on an ellipsoid
   target; `:frameinfonotfound` if the frame has no definition loaded;
 - `:unknownframe` if the instrument frame is not known;
-- `:fovtoowide` if the field of view is 90 degrees or more from its axis;
-- `:degeneratecase`, `:invalidcount`, `:facenotfound`, `:notsupported` or `:invalidfov`
-  if the boundary vectors do not bound a usable pyramid;
+- `:fovtoowide` if the angular radius of the field of view about its axis is not below
+  90 degrees minus 1e-6 rad;
+- for a rectangle or a polygon: `:degeneratecase` if two neighbour boundary vectors are
+  parallel, `:facenotfound` or `:notsupported` if no axis is less than 90 degrees from
+  every boundary vector, `:invalidfov` if a vector is 90 degrees or more from the axis;
+- for a circle or an ellipse: `:degeneratecase` if a semi-axis is zero;
 - `:notdisjoint` if the observer is inside the target ellipsoid.
 
-Also throws the errors of [`getfov`](@ref), of [`spkpos`](@ref) and of the radii
-lookup (`:kernelvarnotfound`, `:invalidcount`, `:badaxislength`).
+Also throws the errors of [`getfov`](@ref) and [`spkpos`](@ref), and the kinds of
+[`srfrec`](@ref) if the radii of an ellipsoid target are missing or not valid.
 
 # Examples
 ```julia
@@ -689,15 +691,17 @@ velocity gives the stellar aberration. `abcorr` is one of:
 | `"S"` | stellar aberration, for light that the observer receives |
 | `"XS"` | stellar aberration, for light that the observer sends |
 
-An [`Aberration`](@ref) without light time is also valid. `et` must be a plain real
-number. The call allocates. The notes of [`fovtrg`](@ref) on the instrument apply.
+An [`Aberration`](@ref) without light time is also valid. `et` cannot be a
+`ForwardDiff.Dual`. The notes of [`fovtrg`](@ref) on the instrument apply.
 
-Throws `SpiceError(:zerovector)` if `raydir` is zero, `SpiceError(:badarg)` if it does
-not have 3 elements, `SpiceError(:idcodenotfound)` if a name is not known,
-`SpiceError(:invalidframe)` if `rframe` is blank or not known,
-`SpiceError(:frameinfonotfound)` if it has no definition loaded, and
-`SpiceError(:invalidoption)` if `abcorr` is another value, such as a correction with
-light time. Also throws the errors of [`fovtrg`](@ref) for the field of view.
+Throws `SpiceError` with the kind
+- `:zerovector` if `raydir` is zero, `:badarg` if it does not have 3 elements;
+- `:idcodenotfound` if the observer or the instrument name is not known;
+- `:invalidframe` if `rframe` is blank or not known, `:frameinfonotfound` if it has no
+  definition loaded;
+- `:invalidoption` if `abcorr` is another value, such as a correction with light time.
+
+Also throws the errors of [`fovtrg`](@ref) for the field of view.
 
 See also [`fovtrg`](@ref), [`gfrfov`](@ref), [`sincpt`](@ref).
 """

@@ -16,14 +16,15 @@
 
 Open the EK file `path` for read access and return its handle, as `ekopr_c`.
 
-The caller owns the handle; close it with [`ekcls`](@ref). The handle serves the calls
-that read one file ([`eknseg`](@ref), [`ekssum`](@ref), [`ekrcec`](@ref),
-[`ekrced`](@ref), [`ekrcei`](@ref)). To run queries, load the file with
+The handle is a [`DASHandle`](@ref). The caller owns it; close it with
+[`ekcls`](@ref). The handle serves the calls that read one file ([`eknseg`](@ref),
+[`ekssum`](@ref), [`ekrcec`](@ref), [`ekrced`](@ref), [`ekrcei`](@ref)); the example of
+[`ekopn`](@ref) ends with such a read. To run queries, load the file with
 [`eklef`](@ref) instead.
 
 Throws `SpiceError(:filenotfound)` if the file does not exist, the other kinds of
-`dasopr` if it is not a DAS file, and `SpiceError(:wrongarchitecture)` or
-`SpiceError(:invalidformat)` if the DAS file is not a paged EK (architecture 8).
+[`dasopr`](@ref) if it is not a DAS file, `SpiceError(:wrongarchitecture)` if the DAS
+file is not an EK, and `SpiceError(:invalidformat)` if the EK is damaged.
 
 See also [`ekopw`](@ref), [`ekopn`](@ref).
 """
@@ -56,9 +57,9 @@ end
 
 Return the number of segments of the EK file of `handle`, as `eknseg_c`.
 
-Throws `SpiceError(:dasnosuchhandle)` if the handle is closed, and
-`SpiceError(:wrongarchitecture)` or `SpiceError(:invalidformat)` if the file is not a
-paged EK.
+Throws `SpiceError(:dasnosuchhandle)` if the handle is closed,
+`SpiceError(:wrongarchitecture)` if the file is not an EK, and
+`SpiceError(:invalidformat)` if the EK is damaged.
 """
 function eknseg(h::DASHandle)
     _ek_check_read(h, "eknseg")
@@ -125,15 +126,16 @@ segment `segno`, without trailing blanks, as `ekrcec_c`.
 
 `segno` and `recno` count from 1; `ekrcec_c` counts from 0. The column name is matched
 without regard to case. The entry of a scalar column gives a vector of one string. A
-null entry gives an empty vector and `isnull == true`; the C call returns the element
-count and the flag in separate outputs.
+null entry gives an empty vector and `isnull == true`.
 
-Throws `SpiceError(:invalidindex)` if `segno` is not a segment of the file,
-`SpiceError(:bug)` if the segment has no column `column` (as CSPICE),
-`SpiceError(:wrongdatatype)` if the column does not have character type,
-`SpiceError(:indexoutofrange)` unless `1 <= recno <= nrows`, and
-`SpiceError(:uninitialized)` if the entry was never written. A closed handle gives the
-errors of [`eknseg`](@ref).
+Throws `SpiceError` with the kind
+- `:invalidindex` if `segno` is not a segment of the file;
+- `:bug` (as CSPICE) if the segment has no column `column`;
+- `:wrongdatatype` if the column does not have character type;
+- `:indexoutofrange` unless `1 <= recno <= nrows`;
+- `:uninitialized` if the entry was never written.
+
+A closed handle gives the errors of [`eknseg`](@ref).
 
 See also [`ekrced`](@ref), [`ekrcei`](@ref), [`ekfind`](@ref).
 """
@@ -199,11 +201,13 @@ ekntab() = ekntab(default_context())
 """
     eklef([ctx,] path) -> String
 
-Load the EK file at `path` for queries, as `eklef_c`, and return the handle for
+Load the EK file at `path` for queries, as `eklef_c`, and return the value to pass to
 [`ekuef`](@ref).
 
-The handle is the path itself, not an integer as in CSPICE, because a context has no
-file handles. The call has the effect of [`furnsh`](@ref) on a file that is an EK.
+The result is the path itself, not an integer handle as in CSPICE. It is not a
+[`DASHandle`](@ref): [`ekcls`](@ref), [`eknseg`](@ref) and the calls that read one
+file do not take it. The call has the effect of [`furnsh`](@ref) on a file that is an
+EK.
 
 Throws `SpiceError(:nofile)` if the file does not exist and
 `SpiceError(:wrongarchitecture)` if it is not an EK; the context is then unchanged.
@@ -283,9 +287,8 @@ Return the name and the attributes of column number `cindex` of the loaded table
 `table`, as `ekcii_c`.
 
 `cindex` counts from 1; `ekcii_c` counts from 0. The columns are in the order of the
-first loaded segment of the table. The string length `attdsc.strlen` of a column that
-does not have character type is 0; CSPICE gives the value that the file holds, which
-is 1.
+first loaded segment of the table. [`EKColumnAttr`](@ref) states one difference from
+CSPICE, in `strlen`.
 
 Throws `SpiceError(:tablenotloaded)` if the table is not loaded and
 `SpiceError(:invalidindex)` unless `1 <= cindex <= ekccnt(table)`.
@@ -330,41 +333,43 @@ ekpsel(ctx::SpiceContext, query::AbstractString) =
 ekpsel(query::AbstractString) = ekpsel(default_context(), query)
 
 """
-    ekfind([ctx,] query) -> (result::EKResult, error::Bool, errmsg::String)
+    ekfind([ctx,] query) -> (result::EKResult, failed::Bool, errmsg::String)
 
 Find the rows of the loaded EK tables that satisfy `query`, as `ekfind_c`, and return
 them in an [`EKResult`](@ref) with the error flag and the error message of the query.
 
 The query has the form `SELECT <column>, ... FROM <table> [<alias>], ... [WHERE
-<constraints>] [ORDER BY <column> [ASC|DESC], ...]`, with the language of CSPICE.
+<constraints>] [ORDER BY <column> [ASC|DESC], ...]`. The language is the one of CSPICE;
+the EK Required Reading of NAIF
+(<https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/ek.html>) describes the
+constraints.
 
 CSPICE keeps the rows of the last query in global state. Here the rows are in
-`result`, which the fetch calls take as first argument: `result.nmrows` (or
-`length(result)`) is the output `nmrows` of `ekfind_c`, [`ekgc`](@ref),
-[`ekgd`](@ref) and [`ekgi`](@ref) read one element, [`eknelt`](@ref) gives the size
-of an entry, and [`ekcolumn`](@ref) reads a whole SELECT column. Rows, SELECT columns
-and elements count from 1; CSPICE counts from 0.
+`result`, an [`EKResult`](@ref), which the fetch calls take as first argument. Rows,
+SELECT columns and elements count from 1; CSPICE counts from 0.
 
-A query that is not valid gives `error == true`, the message of CSPICE in `errmsg`
+A query that is not valid gives `failed == true`, the message of CSPICE in `errmsg`
 and a result without rows; the call does not throw for it. Positions in a message are
 byte positions in `query`, from 1. A time value in a query is converted with the
-leap-second and clock kernels of the context, and a failure of that conversion is
-also reported in `errmsg`.
+leap-second and clock kernels of the context. A failure of that conversion is also
+reported in `errmsg`.
 
-The call reads one snapshot of the loaded kernels and changes nothing, so many tasks
-can run queries at the same time, also while another task loads or unloads kernels.
+The call changes nothing, so many tasks can run queries at the same time, also while
+another task loads or unloads kernels.
 
-The rows differ from those of CSPICE N0067 only where CSPICE has a defect: rows that
-several OR branches of the WHERE clause match (CSPICE can return such a row twice, or
-drop other rows), a double precision value compared with an indexed integer column
-(`ID < 17.4` loses the rows with `ID = 17` in CSPICE), and a number such as `2.756`,
-which the number parser of CSPICE reads one unit in the last place off.
+The rows differ from those of CSPICE N0067 only where CSPICE has a defect:
+- a row that several OR branches of the WHERE clause match: CSPICE can return it
+  twice, or drop other rows;
+- a double precision value compared with an indexed integer column: `ID < 17.4` loses
+  the rows with `ID = 17` in CSPICE;
+- a number such as `2.756`: the number parser of CSPICE gives a value that is wrong by
+  one unit in the last place.
 
-Throws `SpiceError(:celltoosmall)` if the WHERE clause expands to more constraints
-than an encoded query holds (1000 without other clauses),
-`SpiceError(:toomanyconjunctions)` if it expands to more than 1000 OR branches, and
-`SpiceError(:buffertoosmall)` if the converted times do not fit in the buffer of 100
-numbers.
+Throws `SpiceError` for a query that is over a size limit:
+- `:celltoosmall` if the WHERE clause expands to more than 1000 constraints (fewer if
+  the query has other clauses);
+- `:toomanyconjunctions` if it expands to more than 1000 OR branches;
+- `:buffertoosmall` if it holds more than 100 time values.
 
 # Examples
 ```jldoctest
@@ -476,8 +481,9 @@ array entry has fewer than `elment` elements. For a scalar column `elment` is no
 used, and `found` is true.
 
 Throws `SpiceError(:invalidindex)` unless `1 <= row <= result.nmrows`, `selidx` is the
-position of a SELECT column and `elment >= 1`, and `SpiceError(:invalidtype)` if the
-column does not have character type.
+position of a SELECT column and `elment >= 1`, `SpiceError(:invalidtype)` if the
+column does not have character type, and `SpiceError(:uninitialized)` if the entry was
+never written.
 
 See [`ekfind`](@ref) for an example. See also [`ekgd`](@ref), [`ekgi`](@ref),
 [`eknelt`](@ref), [`ekcolumn`](@ref).
@@ -498,8 +504,9 @@ column `selidx` of `result`, as `ekgd_c`. A time is in seconds past J2000 TDB.
 Indices, `null` and `found` are as for [`ekgc`](@ref); `ddata` is 0.0 for a null entry
 and for an element that is not found.
 
-Throws `SpiceError(:invalidindex)` for a bad index, as [`ekgc`](@ref), and
-`SpiceError(:invalidtype)` if the column has character or integer type.
+Throws `SpiceError(:invalidindex)` for a bad index, as [`ekgc`](@ref),
+`SpiceError(:invalidtype)` if the column has character or integer type, and
+`SpiceError(:uninitializedvalue)` if the entry was never written.
 """
 function ekgd(res::EKResult, selidx::Integer, row::Integer, elment::Integer=1)
     f, col, recptr = _ek_result_entry(res, selidx, row)
@@ -516,8 +523,9 @@ Return element `elment` of the integer entry in row `row` and SELECT column `sel
 Indices, `null` and `found` are as for [`ekgc`](@ref); `idata` is 0 for a null entry
 and for an element that is not found.
 
-Throws `SpiceError(:invalidindex)` for a bad index, as [`ekgc`](@ref), and
-`SpiceError(:invalidtype)` if the column does not have integer type.
+Throws `SpiceError(:invalidindex)` for a bad index, as [`ekgc`](@ref),
+`SpiceError(:invalidtype)` if the column does not have integer type, and
+`SpiceError(:uninitializedvalue)` if the entry was never written.
 """
 function ekgi(res::EKResult, selidx::Integer, row::Integer, elment::Integer=1)
     f, col, recptr = _ek_result_entry(res, selidx, row)
@@ -534,12 +542,13 @@ each row, in the order of the result.
 An item is `missing` for a null entry, the value for a scalar column, and the vector
 of the values for an array column. Strings are without trailing blanks; a time is in
 seconds past J2000 TDB. The element type is the narrowest that holds the items, for
-example `Vector{Union{Missing, Float64}}`. CSPICE has no such call: it replaces the
-loop over [`eknelt`](@ref) and [`ekgc`](@ref), [`ekgd`](@ref) or [`ekgi`](@ref).
+example `Vector{Union{Missing, Float64}}`. This call has no CSPICE counterpart. It
+replaces the loop over [`eknelt`](@ref) and [`ekgc`](@ref), [`ekgd`](@ref) or
+[`ekgi`](@ref).
 
-Throws `SpiceError(:invalidindex)` unless `selidx` is the position of a SELECT column,
-and `SpiceError(:uninitialized)` or `SpiceError(:uninitializedvalue)` if an entry was
-never written.
+Throws `SpiceError(:invalidindex)` unless `selidx` is the position of a SELECT column.
+If an entry was never written, throws `SpiceError(:uninitialized)` for a character
+column and `SpiceError(:uninitializedvalue)` for another column.
 
 See [`ekfind`](@ref) for an example.
 """

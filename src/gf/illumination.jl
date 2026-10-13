@@ -165,8 +165,9 @@ Throws `SpiceError(:invalidstep)`, `SpiceError(:invalidtolerance)`,
   if it is not centered on `target`;
 - `SpiceError(:notsupported)` if `angtyp` is not one of the three.
 
-An error also comes from the radii lookup if `target` has no valid radii, and from
-`spkcpt` and `spkcpo` at the epochs that the search samples.
+Also throws the kinds of [`srfrec`](@ref) if the radii of `target` are missing or not
+valid. The errors of [`spkcpt`](@ref) and [`spkcpo`](@ref) come from the epochs that
+the search samples.
 
 See also [`ilumin`](@ref), [`illumg`](@ref), [`gfpa`](@ref).
 """
