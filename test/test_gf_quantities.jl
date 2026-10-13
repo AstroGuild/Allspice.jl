@@ -133,12 +133,11 @@ end
             @test gf_compare("gfpa " * gf_family(rel, adjust), w, ref)
         end
         cn = Window([0.0, 100 * GF_DAY])
-        for abcorr in ("XLT", "XLT+S", "XCN", "XCN+S")
-            @test throws_kind(() -> gfpa(ctx, "MOON", "SUN", abcorr, "EARTH", "=", 1.0, 0.0, GF_DAY, cn),
-                :invalidoption)
-            @test GFO.kind(() -> GFO.gfpa("MOON", "SUN", abcorr, "EARTH", "=", 1.0, 0.0, GF_DAY,
-                collect(cn))) === :invalidoption
-        end
+        # a transmission correction (one branch of the code: the flag of the parsed correction)
+        @test throws_kind(() -> gfpa(ctx, "MOON", "SUN", "XLT+S", "EARTH", "=", 1.0, 0.0, GF_DAY, cn),
+            :invalidoption)
+        @test GFO.kind(() -> GFO.gfpa("MOON", "SUN", "XLT+S", "EARTH", "=", 1.0, 0.0, GF_DAY,
+            collect(cn))) === :invalidoption
     end
 
     @testset "searches with no result" begin
@@ -248,31 +247,45 @@ end
         cn = Window([et("2023 JAN 01"), et("2023 JUN 01")])
         nod, noi, nol = Float64[], Int[], Bool[]
         tpar = (["TARGET", "OBSERVER", "ABCORR"], ["MOON", "EARTH", "LT+S"])
-        for (rel, wadj) in GF_VARIANTS
+        cnames = ["TARGET", "OBSERVER", "ABCORR", "COORDINATE SYSTEM", "COORDINATE", "REFERENCE FRAME",
+            "VECTOR DEFINITION", "METHOD", "DVEC", "DREF"]
+        # `gfevnt` selects the quantity by its name and gives the relation to the same
+        # search for every quantity, so the default run takes each relation once and the
+        # quantities in turn (each quantity once at least); the exhaustive run takes the
+        # product.
+        nev = 0
+        for (iv, (rel, wadj)) in enumerate(GF_VARIANTS), iq in 1:5
+            FULL || iq == mod1(iv, 5) || continue
+            nev += 1
             adjust = wadj ? 2000.0 : 0.0
-            @test gfevnt(ctx, GF_DAY, gfrefn, "DISTANCE", tpar..., nod, noi, nol, rel, 3.9e5,
-                1.0e-6, adjust, cn) ==
-                  gfdist(ctx, "MOON", "LT+S", "EARTH", rel, 3.9e5, adjust, GF_DAY, cn)
-            @test gfevnt(ctx, GF_DAY, gfrefn, " range rate", tpar..., nod, noi, nol, rel, 0.01,
-                1.0e-6, adjust / 1.0e5, cn) ==
-                  gfrr(ctx, "MOON", "LT+S", "EARTH", rel, 0.01, adjust / 1.0e5, GF_DAY, cn)
-            @test gfevnt(ctx, GF_DAY, gfrefn, "PHASE ANGLE", ["ILLUM", "TARGET", "OBSERVER", "ABCORR"],
-                ["SUN", "MOON", "EARTH", "LT+S"], nod, noi, nol, rel, 1.0, 1.0e-6, adjust / 1.0e4, cn) ==
-                  gfpa(ctx, "MOON", "SUN", "LT+S", "EARTH", rel, 1.0, adjust / 1.0e4, GF_DAY, cn)
-            @test gfevnt(ctx, GF_DAY, gfrefn, "ANGULAR SEPARATION",
-                ["TARGET1", "FRAME1", "SHAPE1", "TARGET2", "FRAME2", "SHAPE2", "OBSERVER", "ABCORR"],
-                ["MOON", "IAU_MOON", "SPHERE", "SUN", "IAU_SUN", "SPHERE", "EARTH", "LT+S"],
-                nod, noi, nol, rel, 1.0, 1.0e-6, adjust / 1.0e4, cn) ==
-                  gfsep(ctx, "MOON", "SPHERE", "IAU_MOON", "SUN", "SPHERE", "IAU_SUN", "LT+S", "EARTH",
-                rel, 1.0, adjust / 1.0e4, GF_DAY, cn)
-            @test gfevnt(ctx, GF_DAY, gfrefn, "COORDINATE",
-                ["TARGET", "OBSERVER", "ABCORR", "COORDINATE SYSTEM", "COORDINATE", "REFERENCE FRAME",
-                    "VECTOR DEFINITION", "METHOD", "DVEC", "DREF"],
-                ["MOON", "EARTH", "LT+S", "RA/DEC", "DECLINATION", "J2000", "POSITION", " ", " ", " "],
-                [0.0, 0.0, 0.0], noi, nol, rel, 0.1, 1.0e-6, adjust / 1.0e5, cn) ==
-                  gfposc(ctx, "MOON", "J2000", "LT+S", "EARTH", "RA/DEC", "DECLINATION", rel, 0.1,
-                adjust / 1.0e5, GF_DAY, cn)
+            if iq == 1
+                @test gfevnt(ctx, GF_DAY, gfrefn, "DISTANCE", tpar..., nod, noi, nol, rel, 3.9e5,
+                    1.0e-6, adjust, cn) ==
+                      gfdist(ctx, "MOON", "LT+S", "EARTH", rel, 3.9e5, adjust, GF_DAY, cn)
+            elseif iq == 2
+                @test gfevnt(ctx, GF_DAY, gfrefn, " range rate", tpar..., nod, noi, nol, rel, 0.01,
+                    1.0e-6, adjust / 1.0e5, cn) ==
+                      gfrr(ctx, "MOON", "LT+S", "EARTH", rel, 0.01, adjust / 1.0e5, GF_DAY, cn)
+            elseif iq == 3
+                @test gfevnt(ctx, GF_DAY, gfrefn, "PHASE ANGLE", ["ILLUM", "TARGET", "OBSERVER", "ABCORR"],
+                    ["SUN", "MOON", "EARTH", "LT+S"], nod, noi, nol, rel, 1.0, 1.0e-6, adjust / 1.0e4, cn) ==
+                      gfpa(ctx, "MOON", "SUN", "LT+S", "EARTH", rel, 1.0, adjust / 1.0e4, GF_DAY, cn)
+            elseif iq == 4
+                @test gfevnt(ctx, GF_DAY, gfrefn, "ANGULAR SEPARATION",
+                    ["TARGET1", "FRAME1", "SHAPE1", "TARGET2", "FRAME2", "SHAPE2", "OBSERVER", "ABCORR"],
+                    ["MOON", "IAU_MOON", "SPHERE", "SUN", "IAU_SUN", "SPHERE", "EARTH", "LT+S"],
+                    nod, noi, nol, rel, 1.0, 1.0e-6, adjust / 1.0e4, cn) ==
+                      gfsep(ctx, "MOON", "SPHERE", "IAU_MOON", "SUN", "SPHERE", "IAU_SUN", "LT+S", "EARTH",
+                    rel, 1.0, adjust / 1.0e4, GF_DAY, cn)
+            else
+                @test gfevnt(ctx, GF_DAY, gfrefn, "COORDINATE", cnames,
+                    ["MOON", "EARTH", "LT+S", "RA/DEC", "DECLINATION", "J2000", "POSITION", " ", " ", " "],
+                    [0.0, 0.0, 0.0], noi, nol, rel, 0.1, 1.0e-6, adjust / 1.0e5, cn) ==
+                      gfposc(ctx, "MOON", "J2000", "LT+S", "EARTH", "RA/DEC", "DECLINATION", rel, 0.1,
+                    adjust / 1.0e5, GF_DAY, cn)
+            end
         end
+        @test nev == (FULL ? 5 : 1) * length(GF_VARIANTS)
         base = gfdist(ctx, "MOON", "LT+S", "EARTH", "=", 3.9e5, 0.0, GF_DAY, cn)
         # the tolerance is an argument of `gfevnt`
         @test gfevnt(ctx, GF_DAY, gfrefn, "DISTANCE", tpar..., nod, noi, nol, "=", 3.9e5, 1.0e-3,
@@ -301,8 +314,6 @@ end
             "=", 1.0, 1.0e-6, 0.0, cn), :invalidstep)
         @test throws_kind(() -> gfevnt(ctx, GF_DAY, gfrefn, "DISTANCE", tpar..., nod, noi, nol, "=",
             1.0, 0.0, 0.0, cn), :invalidtolerance)
-        cnames = ["TARGET", "OBSERVER", "ABCORR", "COORDINATE SYSTEM", "COORDINATE", "REFERENCE FRAME",
-            "VECTOR DEFINITION", "METHOD", "DVEC", "DREF"]
         cvals(vd) = ["MOON", "EARTH", "NONE", "LATITUDINAL", "LATITUDE", "IAU_EARTH", vd, " ", " ", " "]
         @test throws_kind(() -> ev("COORDINATE", cnames, cvals("VELOCITY")), :notsupported)
     end

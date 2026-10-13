@@ -227,6 +227,8 @@ end
             @test same_kind(() -> g_fovray(inst, d, rf, cor, obs, et), () -> fovray(ctx, inst, d, rf, cor, obs, et))
         end
         @test neo_kind(() -> fovray(ctx, C, [1.0, 0.0], "J2000", "NONE", "EARTH", et)) == :badarg
+        # A parsed correction with light time is not valid for a ray, as the string is.
+        @test neo_kind(() -> fovray(ctx, C, z, "J2000", Aberration("LT+S"), "EARTH", et)) == :invalidoption
         # An instrument frame that is not known, and degenerate polygons.
         B = "BORESIGHT" => [0.0, 0.0, 1.0]
         fov_define!(ctx, "FOV_FRAME" => "NOFRAME", "FOV_SHAPE" => "CIRCLE", B, "FOV_BOUNDARY" => [0.1, 0.0, 1.0])

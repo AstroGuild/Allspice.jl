@@ -5,6 +5,10 @@
 # logic, the bisection, the confinement end points, the adjust value and the absolute
 # extrema without any noise from the ephemeris.
 #
+# Default run and exhaustive run (`ALLSPICE_TEST_FULL=1`). `gfrefn`, `uddf`, `uddc` and the
+# window helpers have two branches each, so the default run takes 20 and 10 random cases
+# and the exhaustive run 200 and 100. The random searches are the same in the two runs.
+#
 # Behaviour specification: test/features/gf_solver.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
@@ -27,7 +31,7 @@ gfv_d3(t) = 1.0e-3 * ((t - 11.0) * (t - 17.5) + (t - 3.0) * (t - 17.5) + (t - 3.
     funcs = ((f1, d1, "sin"), (f2, d2, "two sines"), (f3, d3, "cubic"))
 
     @testset "gfrefn, uddf, uddc" begin
-        for _ in 1:200
+        for _ in 1:nsample(20, 200)
             a, b = 100 * randn(rng), 100 * randn(rng)
             @test gfrefn(a, b, true, false) === SPICE.gfrefn(a, b, true, false)
             lo, hi = minmax(a, b)
@@ -246,7 +250,7 @@ gfv_d3(t) = 1.0e-3 * ((t - 11.0) * (t - 17.5) + (t - 3.0) * (t - 17.5) + (t - 3.
     end
 
     @testset "window helpers of the solver" begin
-        for _ in 1:100
+        for _ in 1:nsample(10, 100)
             w = gf_random_window(rng, rand(rng, 1:6), 0.0, 10.0)
             amount = rand(rng, (0.0, 0.5, 2.0))
             c = GFO.cell(collect(w))

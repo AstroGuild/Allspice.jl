@@ -462,6 +462,70 @@ group("17. dynamic frames and switch frames against CSPICE", Kernels.LSK, Kernel
         @test df_oracle_kind(:pxform_c, "J2000", "DT_CLASS7", et) !== :none
     end
 
+    @apart @testset "angle units, a switch frame with frame IDs and time strings, type and size of an item" begin
+        # Forms of a definition that the kernel of `DynFix` does not use. Each angle unit
+        # has a factor of its own in the code (the kernel has RADIANS and DEGREES only);
+        # the bases of a switch frame can be frame IDs and its bounds can be time strings.
+        units = (("ARCMINUTES", 600.0), ("ARCSECONDS", 36000.0), ("HOURANGLE", 1.5),
+            ("MINUTEANGLE", 90.0), ("SECONDANGLE", 5400.0))      # 10 degrees and 22.5 degrees
+        io = IOBuffer()
+        print(io, "KPL/FK\n\\begindata\n")
+        for (k, (unit, a)) in enumerate(units)
+            id = 1850140 + k
+            print(io, DynFix.head("DT_UNIT_$k", id, 5), """
+                   FRAME_$(id)_RELATIVE = 'J2000'
+                   FRAME_$(id)_DEF_STYLE = 'PARAMETERIZED'
+                   FRAME_$(id)_FAMILY = 'EULER'
+                   FRAME_$(id)_EPOCH = @2010-JAN-01/12:00:00
+                   FRAME_$(id)_AXES = ( 3, 1, 3 )
+                   FRAME_$(id)_UNITS = '$unit'
+                   FRAME_$(id)_ANGLE_1_COEFFS = ( $a, $(a * 1.0e-7) )
+                   FRAME_$(id)_ANGLE_2_COEFFS = ( $(2a) )
+                   FRAME_$(id)_ANGLE_3_COEFFS = ( $(-3a), $(a * 2.0e-8) )
+            """)
+        end
+        # IAU_EARTH (10013) from 2000 to 2006, ECLIPJ2000 (17) from 2005 to 2010
+        print(io, DynFix.head("DT_SWITCH_IDS", 1850150, 6), """
+               FRAME_1850150_ALIGNED_WITH = ( 10013, 17 )
+               FRAME_1850150_START = ( '2000 JAN 01 00:00:00 TDB', '2005 JAN 01 00:00:00 TDB' )
+               FRAME_1850150_STOP = ( '2006 JAN 01 00:00:00 TDB', '2010 JAN 01 00:00:00 TDB' )
+        """)
+        # an item of the wrong type, and an item with more values than it can have
+        for (name, id, family) in (("DT_BADTYPE", 1850151, "5"), ("DT_BADSIZE", 1850152, "( 'EULER', 'EULER' )"))
+            print(io, DynFix.head(name, id, 5), """
+                   FRAME_$(id)_RELATIVE = 'J2000'
+                   FRAME_$(id)_DEF_STYLE = 'PARAMETERIZED'
+                   FRAME_$(id)_FAMILY = $family
+            """)
+        end
+        print(io, "\\begintext\n")
+        set4 = [set..., joinpath(mktempdir(), "forms.tf")]
+        write(set4[end], String(take!(io)))
+        oracle_load(set4)
+        c = neo_context(set4)
+        for k in eachindex(units), et in (-2.0e8, 3.0e8)
+            a6 = sxform(c, "J2000", "DT_UNIT_$k", et)
+            b6 = SPICE.sxform("J2000", "DT_UNIT_$k", et)
+            @test maximum(abs.(a6[1:3, 1:3] .- b6[1:3, 1:3])) <= DF_DEFAULT_TOL[1]
+            @test df_rel(a6[4:6, 1:3], b6[4:6, 1:3]) <= DF_DEFAULT_TOL[2]
+        end
+        # the units are not equal by accident: 10 degrees and 22.5 degrees
+        @test pxform(c, "J2000", "DT_UNIT_1", 0.0) != pxform(c, "J2000", "DT_UNIT_3", 0.0)
+        y(s) = str2et(c, s)
+        for (t, base) in (("2002 JUN 01 TDB", "IAU_EARTH"), ("2005 JUN 01 TDB", "ECLIPJ2000"),
+            ("2008 JUN 01 TDB", "ECLIPJ2000"))
+            @test pxform(c, "J2000", "DT_SWITCH_IDS", y(t)) == pxform(c, "J2000", base, y(t))
+            @test maximum(abs.(pxform(c, "J2000", "DT_SWITCH_IDS", y(t)) .-
+                               SPICE.pxform("J2000", "DT_SWITCH_IDS", y(t)))) <= DF_DEFAULT_TOL[1]
+        end
+        @test df_neo_kind(() -> pxform(c, "J2000", "DT_SWITCH_IDS", y("2012 JUN 01 TDB"))) ===
+              df_oracle_kind(:pxform_c, "J2000", "DT_SWITCH_IDS", y("2012 JUN 01 TDB")) === :noframeconnect
+        for (name, kind) in (("DT_BADTYPE", :badvariabletype), ("DT_BADSIZE", :badvariablesize))
+            @test df_neo_kind(() -> pxform(c, "J2000", name, 0.0)) ===
+                  df_oracle_kind(:pxform_c, "J2000", name, 0.0) === kind
+        end
+    end
+
     @apart @testset "definitions follow furnsh, unload and pool edits" begin
         c = neo_context([Kernels.LSK, Kernels.PCK11, Kernels.DE440S])
         et = 2.0e8

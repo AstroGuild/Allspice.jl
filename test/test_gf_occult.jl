@@ -17,10 +17,13 @@
 # Default run and exhaustive run (`ALLSPICE_TEST_FULL=1`). A search of CSPICE over the
 # years that hold an eclipse by chance takes 0.04 s for each year, so the default run
 # searches some days about an eclipse of a list of dates (`GFOC_SOLAR`, `GFOC_LUNAR`,
-# `GFOC_VENUS`; the window has one interval or two), each transit with one correction,
-# and one case in three of the synthetic ellipsoids; it does not make the table of
-# search times. The exhaustive run searches random spans of 2 to 12 years, every
-# transit with every correction and every synthetic case.
+# `GFOC_VENUS`; the window has one interval or two), one case in three of the product of
+# bodies, occultation types and corrections of the eclipses (each type for each triple
+# of bodies once at least, each correction four times), each transit with one correction, one case
+# in three of the synthetic ellipsoids, and each DSK method and each correction once and
+# not their product; it does not make the table of search times. The exhaustive run
+# searches random spans of 2 to 12 years, every transit with every correction, every
+# synthetic case and every pair of a DSK method and a correction.
 #
 # Behaviour specification: test/features/gf_occult.feature
 
@@ -91,10 +94,16 @@ const GFOC_VENUS = ("2000 JUN 10", "2008 JUN 08", "2016 JUN 05")
             ("Earth in front of the Moon, from the Sun", "EARTH", "IAU_EARTH", "MOON", "IAU_MOON", "SUN",
                 (hour, 2 * hour)))
         k = 0
+        j = 0
         for (label, f, ff, b, bf, obs, steps) in cases, typ in GFOC_TYPES, corr in GFOC_CORRS
-            k += 1
+            # (the type and the correction are independent in the code: the stride 3 has
+            # no common factor with 4 and 5, so each type of each triple of bodies is
+            # searched once at least and each correction four times; `j` counts the
+            # cases of this run, so the dates and the two forms of the window come in turn)
+            gf_pick(k += 1, 3) || continue
+            j += 1
             t0 = -3.0e8 + 8.0e8 * rand(rng)
-            cn = !FULL ? near_event(obs == "EARTH" ? GFOC_SOLAR : GFOC_LUNAR, k, 2, 2) :
+            cn = !FULL ? near_event(obs == "EARTH" ? GFOC_SOLAR : GFOC_LUNAR, j, 2, 2) :
                  rand(rng) < 0.7 ? Window([t0, t0 + 2 * year]) : gf_random_window(rng, 4, t0, t0 + 3 * year)
             check(label * ", " * typ, (typ, f, E, ff, b, E, bf, corr, obs, pick_step(steps)), cn)
         end
@@ -172,16 +181,17 @@ const GFOC_VENUS = ("2000 JUN 10", "2008 JUN 08", "2016 JUN 05")
                 # B is behind A as seen from GEO_OBS: no event with B in front
                 f == "GEO_B" && @test isempty(w)
             end
-            for corr in GFOC_CORRS
-                check("synthetic, B as a point", ("ANY", "GEO_A", E, "GEO_A_FIXED", "GEO_B", P, " ", corr,
-                        "GEO_OBS", 20.0), cn)
-            end
         end
         both_pdpool(ctx, "BODY-5002_RADII", [80.0, 60.0, 50.0])
+        # (a point has no radii, so this search is made once and not for each set of radii)
+        for corr in GFOC_CORRS
+            check("synthetic, B as a point", ("ANY", "GEO_A", E, "GEO_A_FIXED", "GEO_B", P, " ", corr,
+                    "GEO_OBS", 20.0), cn)
+        end
         for typ in GFOC_TYPES
             @test found["synthetic, A in front, $typ"] > 0
         end
-        @test found["synthetic, B as a point"] == 15
+        @test found["synthetic, B as a point"] == 5
         measured(@sprintf("  gfoclt synthetic: intervals found: %s", join(["$k: $v" for (k, v) in
             sort!(collect(found); by=first) if v > 0], "; ")))
     end
@@ -190,15 +200,17 @@ const GFOC_VENUS = ("2000 JUN 10", "2008 JUN 08", "2016 JUN 05")
         empty!(found)
         T = GEO_OCC_SPAN - 100.0
         cn = Window([-T, T])
-        for corr in GFOC_CORRS, m in ("DSK/UNPRIORITIZED", "DSK/UNPRIORITIZED/SURFACES = 2",
-                "dsk/unprioritized/surfaces = 1", E)
+        for (ic, corr) in enumerate(GFOC_CORRS), (im, m) in enumerate(("DSK/UNPRIORITIZED",
+                "DSK/UNPRIORITIZED/SURFACES = 2", "dsk/unprioritized/surfaces = 1", E))
+            # (the default run: each correction once, the methods in turn)
+            FULL || im == mod1(ic, 4) || continue
             check("DSK Moon in front of a point", ("ANY", "MOON", m, "IAU_MOON", "GEO_STAR", P, " ", corr,
                     "GEO_OBS2", 30.0), cn)
             w = check("point in front of the DSK Moon", ("ANY", "GEO_STAR", "point", " ", "MOON", m,
                     "IAU_MOON", corr, "GEO_OBS2", 30.0), cn)
             @test isempty(w)
         end
-        @test found["DSK Moon in front of a point"] == 20
+        @test found["DSK Moon in front of a point"] == nsample(5, 20)
     end
 
     @testset "gfocce: step function and refinement" begin

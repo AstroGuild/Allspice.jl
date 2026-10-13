@@ -67,10 +67,6 @@ function gf_thread_jobs(rng::AbstractRNG, n::Integer)
     return jobs
 end
 
-"User function of the searches with `gfuds` and `gfudb`, and its derivative."
-gft_f(t) = sin(t) + 0.3 * sin(2.7 * t + 0.4)
-gft_d(t) = cos(t) + 0.81 * cos(2.7 * t + 0.4)
-
 @gf_light group("gf threads: parallel searches, threads keyword, load and unload") do
     rng = MersenneTwister(SEED + 6400)
     ctx = neo_context(Kernels.full_set())
@@ -99,15 +95,7 @@ gft_d(t) = cos(t) + 0.81 * cos(2.7 * t + 0.4)
                 threads=true)
             @test collect(a) == collect(b)
         end
-        f = GFScalar(gft_f)
-        d = gf_decreasing(gft_d)
-        above = GFState(t -> gft_f(t) > 0.2)
-        cn = gf_random_window(rng, 16, 0.0, 200.0)
-        for rel in ("<", "=", ">", "LOCMIN", "LOCMAX", "ABSMIN", "ABSMAX")
-            @test collect(gfuds(f, d, rel, 0.2, 0.0, 0.1, cn)) ==
-                  collect(gfuds(f, d, rel, 0.2, 0.0, 0.1, cn; threads=true))
-        end
-        @test collect(gfudb(above, 0.1, cn)) == collect(gfudb(above, 0.1, cn; threads=true))
+        # (`gfuds` and `gfudb` with the keyword: group gf_solver, "threads keyword: the same window")
     end
 
     if Threads.nthreads() < 2

@@ -55,6 +55,26 @@ Feature: Dynamic frames and switch frames
     When the user asks at an epoch outside every interval
     Then the error "noframeconnect" occurs, as in CSPICE
 
+  Scenario: A switch frame with frame IDs and time strings
+    Given a switch frame whose bases are frame ID codes and whose bounds are time strings
+    When the user asks for "pxform" at an epoch inside one interval, and inside two intervals
+    Then the matrix is that of the base of the last interval that holds the epoch, as in CSPICE
+    When the user asks at an epoch outside every interval
+    Then the error "noframeconnect" occurs, as in CSPICE
+
+  Scenario Outline: Angle units of an Euler frame
+    Given an Euler frame whose angles have the unit "<unit>"
+    When the user asks for "sxform" from "J2000" to that frame
+    Then the rotation and the derivative block agree with CSPICE
+
+    Examples:
+      | unit        |
+      | ARCMINUTES  |
+      | ARCSECONDS  |
+      | HOURANGLE   |
+      | MINUTEANGLE |
+      | SECONDANGLE |
+
   Scenario: A switch frame over CK frames follows the CK coverage
     Given a switch frame whose bases are a PCK frame and two CK frames
     When the user asks for "pxform" at an epoch at which only the first CK frame has pointing
@@ -84,6 +104,8 @@ Feature: Dynamic frames and switch frames
       | DT_BADBODY      | unknown body name                    | notranslation     |
       | DT_BADABCORR    | unknown aberration correction        | spkinvalidoption  |
       | DT_SWITCH_COUNT | interval count differs from bases    | countmismatch     |
+      | DT_BADTYPE      | a number where a string is needed    | badvariabletype   |
+      | DT_BADSIZE      | two values where one is allowed      | badvariablesize   |
 
   Scenario: No allocation
     When the user calls "pxform", "sxform", "pxder" or "spkezr" with integer IDs for a dynamic frame
