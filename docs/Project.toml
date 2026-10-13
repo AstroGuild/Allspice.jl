@@ -1,0 +1,10 @@
+[deps]
+Allspice = "1c6edf61-da3a-4136-b24a-0cb478996395"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
+[sources]
+Allspice = {path = ".."}
+
+[compat]
+Documenter = "1"
