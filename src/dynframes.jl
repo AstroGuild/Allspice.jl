@@ -829,64 +829,17 @@ function _dyn_spkez(ks::KernelSet, targ::Int32, et::T, ref::Int32, corr,
     return Vec3{T}(s[1], s[2], s[3]), Vec3{T}(s[4], s[5], s[6]), lt
 end
 
-@noinline _dyn_throw_nearpt(why) = throw(SpiceError(:degeneratecase,
-    "the near point on the target ellipsoid cannot be computed: $why"))
-
 """
     _dyn_nearpt(p, radii) -> Vec3
 
 Contract: the point of the ellipsoid with the semi-axes `radii` (all positive) that is
-nearest to the point `p`, in the number type of `p`. The point is
-`x_i = a_i^2 p_i / (a_i^2 + lambda)`, with `lambda` the root of
-`sum (a_i p_i / (a_i^2 + lambda))^2 = 1` that is above the poles of the terms: found by
-Newton steps on the plain values (the function is convex and decreasing there, so the
-steps from the left are monotone), then refined in the number type of `p`, which makes
-every derivative order exact. Postcondition: the result is on the ellipsoid to
-rounding. Throws `SpiceError(:degeneratecase)` for the center of the ellipsoid and for
-an interior point for which the iteration does not converge.
+nearest to the point `p`, in the number type of `p`: the near point of `nearpt`
+(`_m_nearpt`), so the plain value is the one of CSPICE and each derivative order comes
+from the stationarity condition. Postcondition: the result is on the ellipsoid to
+rounding.
 """
-function _dyn_nearpt(p::Vec3{S}, radii::Vec3{Float64}) where {S<:Real}
-    a2 = map(abs2, radii)
-    q = Vec3{Float64}(primal(p[1]), primal(p[2]), primal(p[3]))
-    f(l) = (radii[1] * q[1] / (a2[1] + l))^2 + (radii[2] * q[2] / (a2[2] + l))^2 +
-           (radii[3] * q[3] / (a2[3] + l))^2 - 1.0
-    df(l) = -2.0 * ((radii[1] * q[1])^2 / (a2[1] + l)^3 + (radii[2] * q[2])^2 / (a2[2] + l)^3 +
-                    (radii[3] * q[3])^2 / (a2[3] + l)^3)
-    lam = 0.0
-    f0 = f(0.0)
-    if f0 < 0.0
-        # Interior point: start at the value at which the term of the smallest axis
-        # with a non-zero component is one, which is left of the root.
-        k = 0
-        for i in 1:3
-            q[i] != 0.0 && (k == 0 || radii[i] < radii[k]) && (k = i)
-        end
-        k == 0 && _dyn_throw_nearpt("the point is the center of the ellipsoid")
-        lam = radii[k] * abs(q[k]) - a2[k]
-    end
-    scale = max(a2[1], a2[2], a2[3])
-    n = 0
-    while true      # invariant: f(lam) >= 0 up to rounding, lam is left of the root
-        step = -f(lam) / df(lam)
-        lam += step
-        (abs(step) <= 4.0 * eps(Float64) * max(scale, abs(lam)) || !isfinite(step)) && break
-        n += 1
-        n > 200 && _dyn_throw_nearpt("the iteration did not converge")
-    end
-    isfinite(lam) || _dyn_throw_nearpt("the iteration failed")
-    l = zero(S) + lam
-    # invariant: one more derivative order of `l` is exact after each step
-    for _ in 1:(_ad_order(S) + 1)
-        w1 = radii[1] * p[1] / (a2[1] + l)
-        w2 = radii[2] * p[2] / (a2[2] + l)
-        w3 = radii[3] * p[3] / (a2[3] + l)
-        g = w1 * w1 + w2 * w2 + w3 * w3 - 1.0
-        dg = -2.0 * (w1 * w1 / (a2[1] + l) + w2 * w2 / (a2[2] + l) + w3 * w3 / (a2[3] + l))
-        l -= g / dg
-    end
-    return Vec3{S}(a2[1] * p[1] / (a2[1] + l), a2[2] * p[2] / (a2[2] + l),
-        a2[3] * p[3] / (a2[3] + l))
-end
+@inline _dyn_nearpt(p::Vec3{S}, radii::Vec3{Float64}) where {S<:Real} =
+    Vec3{S}(_m_nearpt(p, radii[1], radii[2], radii[3])[1])
 
 "Epoch `et` moved by the light time `lt` in the direction of the correction `corr`, as `zzcorepc_`."
 @inline _dyn_corepc(corr, et, lt) = corr.uselt ? et + _ltsign(corr) * lt : et
