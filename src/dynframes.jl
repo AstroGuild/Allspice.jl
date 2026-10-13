@@ -1187,6 +1187,9 @@ end
     "that is itself needed for the evaluation of a dynamic frame; dynamic frames may " *
     "not be used at recursion level 1"))
 
+"Contract: returns the matrix `x` with each element in the number type `S` (`_dyn_lift`). The type is an argument with a type parameter: a closure that captures a type is not compiled for it in Julia 1.10, and then allocates."
+@inline _dyn_liftmat(::Type{S}, x::Mat3) where {S} = Mat3{S}(ntuple(i -> _dyn_lift(S, x[i]), Val(9)))
+
 """
     _dyn_frame_step(mode, ks, fd, et) -> (base::Int32, rot)
 
@@ -1206,7 +1209,7 @@ for the frames of the other classes.
     S = _ck_numtype(mode, T)
     if def.frozen
         x = _dyn_call(mode, inner, def, def.t0)
-        return def.base, map(e -> _dyn_lift(S, e), x)::Mat3{S}
+        return def.base, _dyn_liftmat(S, x)
     end
     return def.base, _dyn_call(mode, inner, def, et)::Mat3{S}
 end
