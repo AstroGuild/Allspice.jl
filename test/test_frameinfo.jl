@@ -180,6 +180,9 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
         want = sort!(Int[i for i in SPICE.pckfrm!(SPICE.SpiceIntCell(100), Kernels.MOON_BPC)])
         @test pckfrm(Kernels.MOON_BPC) == want
         @test pckfrm!([7, 3], Kernels.MOON_BPC) == sort!(unique!(vcat([7, 3], want)))
+        # Regression: `spkobj!` did not sort its input, so that an input that was not
+        # sorted came back with duplicates; `spkobj_c` inserts into a set.
+        @test spkobj!([399, 3, 399], Kernels.DE440S) == sort!(unique!(vcat([399, 3], spkobj(Kernels.DE440S))))
         @test !isempty(want)
         for id in vcat(want, [399, 0])
             cell = SPICE.pckcov!(SPICE.SpiceDoubleCell(2000), Kernels.MOON_BPC, id)

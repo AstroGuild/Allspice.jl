@@ -190,15 +190,14 @@ end
 Insert the ID codes of the bodies that have data in the SPK file `path` into the
 vector `ids`, as `spkobj_c` does with a SPICE cell.
 
-`ids` must be sorted and without duplicates; it stays so. The call does not check
-this: with another `ids` the result can hold duplicates ([`pckfrm!`](@ref) sorts its
-input; this call does not). The argument order is the one of SPICE.jl. The file is read
-from disk and need not be loaded.
+`ids` is used as a set: on return it is sorted and without duplicates. The argument
+order is the one of SPICE.jl. The file is read from disk and need not be loaded.
 
 Throws the errors of [`spkobj`](@ref).
 """
 function spkobj!(ids::AbstractVector{<:Integer}, path::AbstractString)
     _require_binary_kernel("spkobj", path, "SPK")
+    sort!(unique!(ids))
     _each_summary(path) do dc, ic, h
         k = searchsortedfirst(ids, ic[1])
         (k <= length(ids) && ids[k] == ic[1]) || insert!(ids, k, ic[1])
