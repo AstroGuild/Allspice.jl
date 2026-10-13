@@ -1,6 +1,6 @@
 module AllspiceAdaptExt
 
-using Allspice: EphemerisTable
+using Allspice: EphemerisTable, RotationTable
 import Adapt
 
 # Move the coefficient array of an ephemeris table to another array type and keep the
@@ -9,5 +9,7 @@ import Adapt
 # or is captured by a broadcast. `cu(tab)` also converts the coefficients to `Float32`.
 Adapt.adapt_structure(to, tab::EphemerisTable) = EphemerisTable(Adapt.adapt(to, tab.coef),
     tab.t0, tab.dt, tab.nint, tab.ncoef, tab.target, tab.observer, tab.frame, tab.maxerr)
+Adapt.adapt_structure(to, tab::RotationTable) = RotationTable(Adapt.adapt(to, tab.coef),
+    tab.t0, tab.dt, tab.nint, tab.ncoef, tab.from, tab.to, tab.maxerr)
 
 end # module

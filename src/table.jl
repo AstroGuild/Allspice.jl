@@ -182,13 +182,30 @@ the epochs that `f` received, which keeps a polynomial `f` exact to rounding.
 is largest); `scale` is the largest norm of `f` at the zeros.
 Requires `dt > 0`, `nint >= 1`, `ncoef >= 2`.
 """
-function _tab_fit(f::F, start::Float64, dt::Float64, nint::Int, ncoef::Int) where {F}
+_tab_fit(f::F, start::Float64, dt::Float64, nint::Int, ncoef::Int) where {F} =
+    _tab_fit(f, start, dt, nint, ncoef, Val(1))
+
+"The value at `s` of the `C` vector series of one record of `ncoef` coefficients from index `a`, as one vector."
+@inline function _tab_value(coef, a::Int, n::Int, s, radius, ::Val{C}) where {C}
+    cols = ntuple(c -> _cheb3(coef, a + 3 * n * (c - 1), n, s, radius, Val(0))[1], Val(C))
+    return vcat(cols...)
+end
+
+"""
+    _tab_fit(f, start, dt, nint, ncoef, Val(C)) -> (coef, maxerr, scale)
+
+The fit above for a function `f(et)` of `3C` components (for `C = 3`, the columns of a
+matrix one after the other): a record holds `ncoef` coefficients for each component,
+in the order of the components, and the two norms are norms of all `3C` components.
+"""
+function _tab_fit(f::F, start::Float64, dt::Float64, nint::Int, ncoef::Int, vc::Val{C}) where {F,C}
     @assert dt > 0 && nint >= 1 && ncoef >= 2
     n = ncoef
     x = [cospi((j - 0.5) / n) for j in 1:n]
     xc = [cospi(j / n) for j in 1:n-1]
-    coef = zeros(3 * n * nint)
-    vals = Matrix{Float64}(undef, n, 3)
+    w = 3 * C * n                       # numbers in one record
+    coef = zeros(w * nint)
+    vals = Matrix{Float64}(undef, n, 3 * C)
     basis = Matrix{Float64}(undef, n, n)
     radius = dt / 2
     scale = 0.0
@@ -206,17 +223,41 @@ function _tab_fit(f::F, start::Float64, dt::Float64, nint::Int, ncoef::Int) wher
                 basis[j, k] = 2 * s * basis[j, k-1] - basis[j, k-2]
             end
         end
-        coef[3*n*i+1:3*n*(i+1)] .= vec(basis \ vals)
+        coef[w*i+1:w*(i+1)] .= vec(basis \ vals)
     end
     maxerr = 0.0
     for i in 0:nint-1, sc in xc
         mid = start + (2i + 1) * radius
         et = mid + radius * sc
-        fit = _cheb3(coef, 3 * n * i + 1, n, (et - mid) / radius, radius, Val(0))[1]
+        fit = _tab_value(coef, w * i + 1, n, (et - mid) / radius, radius, vc)
         maxerr = max(maxerr, norm(fit - f(et)))
     end
-    @assert length(coef) == 3 * n * nint
+    @assert length(coef) == w * nint
     return coef, maxerr, scale
+end
+
+"""
+    _tab_refine(f, a, b, tol, ncoef, maxintervals, Val(C), who, unit) -> (coef, dt, nint, maxerr)
+
+Fit `f` on `a` to `b` with `_tab_fit` and double the number of intervals until the
+measured error is at most `tol`. Without `tol` (`nothing`) the goal is `1e-12` times
+the largest norm of `f`, and the loop stops also when the error is small and one more
+doubling did not divide it by four: the source then limits the accuracy. Throws
+`SpiceError(:noconvergence)` if `maxintervals` intervals do not reach the goal.
+"""
+function _tab_refine(f::F, a::Float64, b::Float64, tol::Union{Nothing,Real}, ncoef::Int,
+        maxintervals::Integer, vc::Val{C}, who::AbstractString, unit::AbstractString) where {F,C}
+    nint, previous = 1, Inf
+    while true     # invariant: no number of intervals below `nint` was accepted
+        dt = (b - a) / nint
+        coef, maxerr, scale = _tab_fit(f, a, dt, nint, ncoef, vc)
+        goal = tol === nothing ? 1e-12 * scale : Float64(tol)
+        floor_reached = tol === nothing && maxerr <= 1e-6 * scale && maxerr > previous / 4
+        (maxerr <= goal || floor_reached) && return coef, dt, nint, maxerr
+        2 * nint > maxintervals && throw(SpiceError(:noconvergence,
+            "$who: $nint intervals give an error of $maxerr$unit, above the tolerance of $goal$unit"))
+        nint, previous = 2 * nint, maxerr
+    end
 end
 
 """
@@ -267,22 +308,9 @@ function ephemeris_table(ks::KernelSet, targ::NameOrID, t0::Real, t1::Real, ref:
         coef, maxerr, _ = _tab_fit(source, start, dt, nint, n)
         tab = EphemerisTable(coef, start, dt, nint, n, t, o, f, maxerr)
     else
-        nint, previous = 1, Inf
-        while true     # invariant: no number of intervals below `nint` was accepted
-            dt = (b - a) / nint
-            coef, maxerr, scale = _tab_fit(source, a, dt, nint, Int(ncoef))
-            goal = tol === nothing ? 1e-12 * scale : Float64(tol)
-            # Without `tol`, stop also at the noise of the source: the error is small
-            # and one more doubling did not divide it by four.
-            floor_reached = tol === nothing && maxerr <= 1e-6 * scale && maxerr > previous / 4
-            if maxerr <= goal || floor_reached
-                tab = EphemerisTable(coef, a, dt, nint, ncoef, t, o, f, maxerr)
-                break
-            end
-            2 * nint > maxintervals && throw(SpiceError(:noconvergence,
-                "ephemeris_table: $nint intervals give an error of $maxerr km, above the tolerance of $goal km"))
-            nint, previous = 2 * nint, maxerr
-        end
+        coef, dt, nint, maxerr = _tab_refine(source, a, b, tol, Int(ncoef), maxintervals, Val(1),
+            "ephemeris_table", " km")
+        tab = EphemerisTable(coef, a, dt, nint, ncoef, t, o, f, maxerr)
     end
     lo, hi = table_span(tab)
     @assert lo <= a && b <= hi + 1e-9 * tab.dt "the table does not cover the request"
@@ -294,3 +322,153 @@ ephemeris_table(ctx::SpiceContext, targ::NameOrID, t0::Real, t1::Real, ref::Name
 ephemeris_table(targ::NameOrID, t0::Real, t1::Real, ref::NameOrID,
     abcorr::Union{AbstractString,Aberration}, obs::NameOrID; kw...) =
     ephemeris_table(default_context(), targ, t0, t1, ref, abcorr, obs; kw...)
+
+# ---------------------------------------------------------------------------------
+# Export of a table as an SPK segment
+# ---------------------------------------------------------------------------------
+
+"""
+    table_to_spk(handle, tab, segid; first=table_span(tab)[1], last=table_span(tab)[2],
+                 ctx=default_context()) -> Nothing
+
+Add the ephemeris table `tab` to the SPK file `handle` as one segment of type 2: the
+records of the table are the records of the segment, so `spkpos` on the new file gives
+the position of the table to rounding and the velocity that is its derivative.
+
+Preconditions (each throws `SpiceError`): the checks of [`spkw02`](@ref) (among them
+`tab.ncoef <= 28`, `tab.target != 0`, `tab.target != tab.observer`, a known frame,
+`first` and `last` inside the table), and a table whose position is a geometric one in
+its frame, which the caller knows: a segment has no aberration correction. The
+coefficients are written as `Float64` (a table on a GPU is copied to the CPU).
+Postcondition: the file has one more segment for `tab.target` relative to
+`tab.observer` in the frame `tab.frame`.
+"""
+function table_to_spk(h::DAFHandle, tab::EphemerisTable, segid::AbstractString;
+        first::Real=table_span(tab)[1], last::Real=table_span(tab)[2],
+        ctx::SegContext=default_context())
+    cdata = reshape(Vector{Float64}(Array(tab.coef)), 3 * tab.ncoef, tab.nint)
+    spkw02(h, tab.target, tab.observer, Int(tab.frame), first, last, segid, tab.dt, cdata, tab.t0;
+        ctx=ctx)
+    return nothing
+end
+
+# ---------------------------------------------------------------------------------
+# Rotation tables
+# ---------------------------------------------------------------------------------
+
+"""
+    RotationTable{T,A<:AbstractVector{T}}
+
+Rotation matrix from frame `from` to frame `to` for `t0 <= et <= t0 + nint * dt`
+(seconds of ET), from `rotation_table`: the counterpart of `EphemerisTable` for
+`pxform`.
+
+Interval `i` (from 0) holds `ncoef` Chebyshev coefficients for each of the nine
+elements of the matrix, column after column, from index `9 ncoef i + 1` of `coef`.
+`maxerr` is the largest Frobenius norm of the difference between the table and the
+source that `rotation_table` measured; a matrix of the table is orthogonal to that
+accuracy and is not made orthogonal again.
+
+Invariants: `dt > 0`, `nint >= 1`, `ncoef >= 1`, `length(coef) == 9 ncoef nint`.
+"""
+struct RotationTable{T<:AbstractFloat,A<:AbstractVector{T}}
+    coef::A
+    t0::Float64
+    dt::Float64
+    nint::Int
+    ncoef::Int
+    from::Int32
+    to::Int32
+    maxerr::Float64
+    function RotationTable(coef::A, t0::Real, dt::Real, nint::Integer, ncoef::Integer,
+            from::Integer, to::Integer, maxerr::Real) where {T<:AbstractFloat,A<:AbstractVector{T}}
+        (dt > 0 && nint >= 1 && ncoef >= 1 && length(coef) == 9 * ncoef * nint) ||
+            throw(SpiceError(:badarg, "RotationTable: the sizes do not agree"))
+        return new{T,A}(coef, t0, dt, nint, ncoef, from, to, maxerr)
+    end
+end
+
+"Copy of `tab` with coefficients of type `T` on the CPU; `maxerr` is not measured again."
+RotationTable{T}(tab::RotationTable) where {T<:AbstractFloat} =
+    RotationTable(Vector{T}(tab.coef), tab.t0, tab.dt, tab.nint, tab.ncoef, tab.from, tab.to,
+        tab.maxerr)
+
+@inline table_span(tab::RotationTable) = (tab.t0, tab.t0 + tab.nint * tab.dt)
+
+Base.show(io::IO, tab::RotationTable{T}) where {T} = print(io, "RotationTable{", T, "}(frame ",
+    tab.from, " to frame ", tab.to, ", ET ", tab.t0, " to ", table_span(tab)[2], ", ", tab.nint,
+    " intervals of ", tab.dt, " s, ", tab.ncoef, " coefficients, largest error ", tab.maxerr, ")")
+
+"""
+    table_rotation_jet(tab, et, Val(N)) -> NTuple{N+1,SMatrix{3,3}}
+
+Rotation matrix from `tab` at `et` and its time derivatives to order N (order 1 is the
+derivative block of `sxform`). The contract on the epoch, on `@inbounds` and on the
+number types is the one of [`table_jet`](@ref). No allocation, no kernel access.
+"""
+Base.@propagate_inbounds function table_rotation_jet(tab::RotationTable{T}, et::Real, v::Val{N}) where {T,N}
+    t = primal(et)
+    @boundscheck (tab.t0 <= t <= tab.t0 + tab.nint * tab.dt) || _throw_table_range()
+    i = clamp(unsafe_trunc(Int, (t - tab.t0) / tab.dt), 0, tab.nint - 1)
+    radius = tab.dt / 2
+    s = _tab_arg(T, (et - (tab.t0 + (2i + 1) * radius)) / radius)
+    r = _tab_arg(T, radius)
+    a = 9 * tab.ncoef * i + 1
+    c1 = _cheb3(tab.coef, a, tab.ncoef, s, r, v)
+    c2 = _cheb3(tab.coef, a + 3 * tab.ncoef, tab.ncoef, s, r, v)
+    c3 = _cheb3(tab.coef, a + 6 * tab.ncoef, tab.ncoef, s, r, v)
+    return ntuple(k -> hcat(c1[k], c2[k], c3[k]), Val(N + 1))
+end
+
+"""
+    table_rotation(tab, et) -> SMatrix{3,3}
+
+Rotation matrix from frame `tab.from` to frame `tab.to` at `et`. Contract as for
+`table_rotation_jet`.
+"""
+Base.@propagate_inbounds table_rotation(tab::RotationTable, et::Real) =
+    table_rotation_jet(tab, et, Val(0))[1]
+
+"""
+    rotation_table(from, to, t0, t1; tol=nothing, ncoef=16, maxintervals=65536)
+        -> RotationTable{Float64,Vector{Float64}}
+
+Extract the rotation from frame `from` to frame `to` for `t0 <= et <= t1` into a table
+that `table_rotation` and `table_rotation_jet` evaluate without the kernels. Forms: on
+a `KernelSet`, on a `SpiceContext`, and on the default context. The frames are as for
+`pxform`.
+
+The function interpolates the nine elements of the matrix with `ncoef` coefficients
+for each interval and doubles the number of intervals until the measured error
+(Frobenius norm, no unit) is at most `tol`. Without `tol` the goal is `1.7e-12`, and
+the function stops also when one more doubling does not divide a small error by four:
+the source then limits the accuracy (a rotation angle of many turns has an error of
+rounding near 1e-11).
+
+Requires `t0 < t1`, both finite, with data for all of `t0` to `t1`; `ncoef >= 2`;
+`tol > 0`. Throws `SpiceError(:badarg)` for a bad argument and
+`SpiceError(:noconvergence)` if `maxintervals` intervals do not reach `tol`.
+Ensures `result.maxerr` is the measured error and `table_span(result) == (t0, t1)` to
+rounding.
+"""
+function rotation_table(ks::KernelSet, from::NameOrID, to::NameOrID, t0::Real, t1::Real;
+        tol::Union{Nothing,Real}=nothing, ncoef::Integer=16, maxintervals::Integer=65536)
+    a, b = Float64(t0), Float64(t1)
+    (isfinite(a) && isfinite(b) && a < b) ||
+        throw(SpiceError(:badarg, "rotation_table: the epochs must be finite, with t0 < t1"))
+    ncoef >= 2 || throw(SpiceError(:badarg, "rotation_table: ncoef must be at least 2"))
+    (tol === nothing || tol > 0) || throw(SpiceError(:badarg, "rotation_table: tol must be positive"))
+    maxintervals >= 1 || throw(SpiceError(:badarg, "rotation_table: maxintervals must be at least 1"))
+    f, t = frame_id(ks, from), frame_id(ks, to)
+    source = et -> SVector{9,Float64}(frame_rotation(ks, f, t, et))
+    source(a), source(b)       # data at both ends, or the error of the frame layer
+    coef, dt, nint, maxerr = _tab_refine(source, a, b, tol, Int(ncoef), maxintervals, Val(3),
+        "rotation_table", "")
+    tab = RotationTable(coef, a, dt, nint, ncoef, f, t, maxerr)
+    @assert table_span(tab)[1] == a && abs(table_span(tab)[2] - b) <= 1e-9 * (b - a)
+    return tab
+end
+rotation_table(ctx::SpiceContext, from::NameOrID, to::NameOrID, t0::Real, t1::Real; kw...) =
+    rotation_table(kernelset(ctx), from, to, t0, t1; kw...)
+rotation_table(from::NameOrID, to::NameOrID, t0::Real, t1::Real; kw...) =
+    rotation_table(default_context(), from, to, t0, t1; kw...)

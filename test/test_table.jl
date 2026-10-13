@@ -1,4 +1,5 @@
-# Group: ephemeris tables (`ephemeris_table`, `table_position`, `table_state`, `table_jet`).
+# Group: ephemeris and rotation tables (`ephemeris_table`, `table_position`, `table_state`,
+# `table_jet`, `table_to_spk`, `rotation_table`, `table_rotation`, `table_rotation_jet`).
 #
 # Feature file: features/ephemeris_table.feature
 #
@@ -131,6 +132,93 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
               (tab.t0, tab.dt, tab.nint, tab.ncoef, tab.maxerr)
         small = Allspice.EphemerisTable(SVector{6,Float64}(1, 2, 3, 4, 5, 6), 0.0, 2.0, 1, 2, 1, 2, 1, 0.0)
         @test isbits(small) && table_position(small, 1.5) == SVector(2.0, 5.0, 8.0)
+    end
+
+    @apart @testset "export as an SPK segment" begin
+        dir = mktempdir()
+        tab = ephemeris_table(ctx, 301, t0, t1, "ECLIPJ2000", "NONE", 399)
+        lo, hi = table_span(tab)
+        p = joinpath(dir, "table.bsp")
+        h = spkopn(p, "TABLE", 0)
+        table_to_spk(h, tab, "moon from the table"; ctx=ctx)
+        fit = ephemeris_table(ctx, 399, t0, t1, "MOON_PA", "NONE", 301; tol=1e-6)
+        @test throws_kind(() -> table_to_spk(h, fit, "x"; first=t0 - 10.0, ctx=ctx), :coveragegap)
+        spkcls(h)
+        # A second file: the Earth from the Moon in the same file would close a loop of bodies.
+        p2 = joinpath(dir, "table2.bsp")
+        h2 = spkopn(p2, "TABLE", 0)
+        table_to_spk(h2, Allspice.EphemerisTable{Float32}(fit), "earth, single precision"; ctx=ctx)
+        spkcls(h2)
+        own = neo_context([p])
+        SPICE.kclear(); SPICE.furnsh(Kernels.LSK); SPICE.furnsh(p)
+        ep = ev = ec = 0.0
+        for et in random_epochs(rng, 500, lo, hi)
+            x = table_state(tab, et)
+            y = spkezr(own, 301, et, "ECLIPJ2000", "NONE", 399)[1]
+            c = SPICE.spkezr("301", et, "ECLIPJ2000", "NONE", "399")[1]
+            ep = max(ep, rel(y[1:3], x[1:3])); ev = max(ev, rel(y[4:6], x[4:6])); ec = max(ec, rel(c, y))
+        end
+        measured(@sprintf("  table as SPK type 2: position %.1e, velocity %.1e against the table; %.1e against CSPICE on the file", ep, ev, ec))
+        @test ep <= 5e-15 && ev <= 1e-11 && ec <= 1e-13
+        # The segment keeps the bodies, the frame and the span of the table.
+        seg = only(Allspice.kernelset(own).spk[Int32(301)])
+        @test (seg.center, seg.dtype, seg.t0, seg.t1) == (399, 2, lo, hi)
+        own2 = neo_context([p2])
+        seg2 = only(Allspice.kernelset(own2).spk[Int32(399)])
+        @test (seg2.center, seg2.frame, seg2.dtype) == (301, fit.frame, 2)
+        d = Allspice.kernelset(own2).daf[seg2.file]
+        @test d[seg2.baddr:seg2.baddr+3*fit.ncoef+1][3:end] == Float64.(Float32.(fit.coef[1:3*fit.ncoef]))
+        oracle_load(set)
+    end
+
+    @apart @testset "rotation table" begin
+        oracle_load(set)
+        days = FULL ? 30 : 6
+        r0, r1 = t0, t0 + days * 86400.0
+        frob(a, b) = norm(a - b)
+        for (from, to, limit) in [("J2000", "IAU_EARTH", 1e-9), ("IAU_MOON", "J2000", 1e-10),
+                ("MOON_PA", "IAU_EARTH", 1e-9), ("ECLIPJ2000", "J2000", 1e-14)]
+            tab = rotation_table(ctx, from, to, r0, r1)
+            @test table_span(tab)[1] == r0 && table_span(tab)[2] ≈ r1
+            @test length(tab.coef) == 9 * tab.ncoef * tab.nint && tab.maxerr <= limit
+            e = eo = 0.0
+            for et in random_epochs(rng, 500, r0, r1)
+                m = table_rotation(tab, et)
+                e = max(e, frob(m, SPICE.pxform(from, to, et)))
+                eo = max(eo, frob(m * m', I))
+            end
+            measured(@sprintf("  rotation table %-10s to %-9s nint=%d maxerr %.1e, against CSPICE %.1e, orthogonality %.1e",
+                from, to, tab.nint, tab.maxerr, e, eo))
+            @test e <= 3 * limit && eo <= 6 * limit
+        end
+        tab = rotation_table(ctx, "J2000", "IAU_EARTH", r0, r1; tol=1e-8)
+        @test tab.maxerr <= 1e-8
+        et = r0 + 0.37 * (r1 - r0)
+        jet = table_rotation_jet(tab, et, Val(2))
+        refj = pxder(ctx, "J2000", "IAU_EARTH", et, Val(2))
+        @test jet[1] == table_rotation(tab, et)
+        @test frob(jet[2], refj[2]) <= 1e-9 && frob(jet[3], refj[3]) <= 1e-11
+        d1 = ForwardDiff.derivative(t -> table_rotation(tab, t), et)
+        @test frob(d1, jet[2]) <= 1e-18
+        @test (@inferred table_rotation(tab, et)) isa SMatrix{3,3,Float64,9}
+        rot_alloc(tb, t) = @allocated table_rotation_jet(tb, t, Val(1))
+        rot_alloc(tab, et)
+        @test rot_alloc(tab, et) == 0
+        single = Allspice.RotationTable{Float32}(tab)
+        @test table_rotation(single, et) isa SMatrix{3,3,Float32,9}
+        @test frob(table_rotation(single, et), jet[1]) <= 1e-5
+        moved = Adapt.adapt(ToFloat32(), tab)
+        @test moved.coef == single.coef && (moved.from, moved.to, moved.nint) == (tab.from, tab.to, tab.nint)
+        @test occursin("RotationTable{Float64}", sprint(show, tab))
+        @test rotation_table(ctx, 1, "IAU_EARTH", r0, r1; tol=1e-8).coef == tab.coef
+        @test throws_kind(() -> table_rotation(tab, r1 + 1.0), :nocoverage)
+        @test throws_kind(() -> rotation_table(ctx, "J2000", "IAU_EARTH", r1, r0), :badarg)
+        @test throws_kind(() -> rotation_table(ctx, "J2000", "IAU_EARTH", r0, r1; ncoef=1), :badarg)
+        @test throws_kind(() -> rotation_table(ctx, "J2000", "IAU_EARTH", r0, r1; tol=-1.0), :badarg)
+        @test throws_kind(() -> rotation_table(ctx, "J2000", "IAU_EARTH", r0, r1; maxintervals=0), :badarg)
+        @test throws_kind(() -> rotation_table(ctx, "J2000", "IAU_EARTH", r0, r1; tol=1e-15, maxintervals=8), :noconvergence)
+        @test throws_kind(() -> Allspice.RotationTable(zeros(5), 0.0, 1.0, 1, 2, 1, 2, 0.0), :badarg)
+        @test_throws SpiceError rotation_table(ctx, "J2000", "NO_SUCH_FRAME", r0, r1)
     end
 end
 

@@ -41,3 +41,14 @@ Feature: Ephemeris table for a fixed interval of time
     When the user converts the table with "adapt" or to "Float32" coefficients
     Then the scalar fields are equal and the coefficients have the new array type
     And a table whose array is an isbits value is an isbits value
+
+  Scenario: Export as an SPK segment
+    Given an ephemeris table of a geometric position
+    When the user writes it to an SPK file with "table_to_spk"
+    Then "spkezr" on that file gives the state of the table to rounding, in Allspice and in CSPICE
+
+  Scenario: Rotation table
+    Given two frames and an interval of time with data
+    When the user calls "rotation_table"
+    Then "table_rotation" gives the matrix of "pxform" within the measured error of the table
+    And "table_rotation_jet" gives its time derivatives without the kernels
