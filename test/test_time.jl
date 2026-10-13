@@ -844,6 +844,33 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
                     end
                     @test str2et(yctx, "105 A.D. Jan 1") == SPICE.str2et("105 A.D. Jan 1")    # not abbreviated
                 end
+                # The `@` dates of a text kernel loaded afterwards take the same interval,
+                # and the reader accepts and rejects the strings that `tparse_` does.
+                kdates = ["60-JAN-1", "JAN-1-60", "99-JAN-1", "JAN-1-05", "1-JAN-49",
+                    "15-MAR-87", "31-DEC-50/12:00", "1949-01-02", "01-02-1949", "1-2-49",
+                    "1-2-999", "49-1-2", "1-2-0049", "13-2-1949", "1949-13-2", "1949-2-30",
+                    "1-2-49 12:00", "JD2451545.5", "2000-JAN-1T12:00:00"]
+                kdate(f) = try f() catch; :rejected end
+                for bound in (1969, 1950, 2000), s in kdates
+                    SPICE.tsetyr(bound)
+                    tsetyr(yctx, bound)
+                    line = ["YB_DATE = @$s"]
+                    want = kdate(() -> (oracle_unchecked(SPICE.lmpool, line); SPICE.gdpool("YB_DATE")))
+                    @test kdate(() -> (lmpool(yctx, line); gdpool(yctx, "YB_DATE"))) == want
+                end
+                mktempdir() do dir
+                    tk = joinpath(dir, "yb.tk")
+                    write(tk, "\\begindata\nYB_FILE = ( @60-JAN-1, @7-JUL-68 )\n\\begintext\n")
+                    SPICE.tsetyr(1950); tsetyr(yctx, 1950)
+                    oracle_unchecked(SPICE.furnsh, tk); furnsh(yctx, tk)
+                    want = SPICE.gdpool("YB_FILE")
+                    SPICE.unload(tk)
+                    @test gdpool(yctx, "YB_FILE") == want
+                    @test want[1] == tparse("1960 Jan 1")
+                    unload(yctx, tk)
+                    ldpool(yctx, tk)
+                    @test gdpool(yctx, "YB_FILE") == want
+                end
                 tsetyr(yctx, 1980)
                 @test tparse(yctx, "79 Jan 1") == tparse("2079 Jan 1")
                 @test tparse(yctx, "80 Jan 1") == tparse("1980 Jan 1")

@@ -376,8 +376,9 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
                 # converged forms the two differ in CSPICE as well: spkltc (spkezr)
                 # stops when the light time changes by less than 1e-17 |epoch|, which
                 # is 4e-9 s at 4.5e8 s and can be after one iteration, and spkapo
-                # (spkpos) always makes three. The difference is then the square of
-                # speed over light speed, 4e-12 for the Earth and the Moon.
+                # (spkpos) always makes three. The difference is then of the order of
+                # the square of speed over light speed; a C reproducer measured up to
+                # 2.0e-11 relative between `spkezr_c` and `spkpos_c`.
                 ezr = spkezr(ctx, targ, et, ref, ab, obs)[1][SOneTo(3)]
                 worst[1] = max(worst[1], ab_reldiff(jet[1], ezr))
                 worst[2:4] .= max.(worst[2:4], [ab_reldiff(jet[k], ad[k]) for k in 2:4])

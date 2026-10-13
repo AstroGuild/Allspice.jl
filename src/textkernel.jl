@@ -196,81 +196,21 @@ end
 const _MONTH_ABBR = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT",
     "NOV", "DEC")
 
-"Contract: `y` is a two-digit year; returns the year in 1969..2068, as `texpyr` does."
-_texpyr(y::Int) = y >= 69 ? y + 1900 : y + 2000
-
 """
-    _tparse_seconds(year, month, day, h, m, s) -> Float64
+    _tparse(s, yearbound=1969) -> Float64
 
-Contract: a Gregorian calendar date with `year >= 1`; returns the seconds past J2000
-on a uniform 86400 s day scale with the arithmetic of CSPICE `tparse`.
+Contract: `s` is a kernel date without the leading `@`, `yearbound > 0`; returns the
+seconds past J2000 without leap seconds that `tparse` gives, since the reader of CSPICE
+(`zzrvar_`) calls `tparse_` for such a date. A year of two digits is a year of the 100
+years from `yearbound` (the bound of `tsetyr`). Throws `SpiceError(:badtime)` for a
+string that `tparse` rejects. The range check of `tparch` is off, which is the start
+state of CSPICE (there `str2et_` can leave the check on, and the reader then rejects
+dates such as `@1-JAN-49` that it accepted before).
 """
-function _tparse_seconds(year::Int, month::Int, day::Int, h::Float64, m::Float64, s::Float64)
-    year >= 1 || throw(SpiceError(:badtime, "years before 1 A.D. are not supported"))
-    d = 367 * year - div(7 * (year + div(month + 9, 12)), 4) -
-        div(3 * (div(year + div(month - 9, 7), 100) + 1), 4) + div(275 * month, 9) + day -
-        730516
-    return (Float64(d) - 0.5) * 86400.0 + h * 3600.0 + m * 60.0 + s
-end
-
-"""
-    _tparse(s) -> Float64
-
-Contract: `s` is a kernel date without the leading `@` in one of the forms
-`YYYY-MON-DD`, `DD-MON-YYYY`, `MON-DD-YYYY`, `YYYY-MM-DD`, each with an
-optional time `hh:mm[:ss.fff]` after `-`, `/`, `T` or a blank, or `JD<number>`;
-returns seconds past J2000 without leap seconds, as CSPICE `tparse` does. Throws
-`SpiceError(:badtime)` for any other form.
-"""
-function _tparse(s::AbstractString)::Float64
-    str = uppercase(strip(s))
-    bad() = throw(SpiceError(:badtime, "cannot parse the kernel date '@$s'"))
-    isempty(str) && bad()
-    if startswith(str, "JD")
-        return (_nparsd(strip(str[3:end])) - 2451545.0) * 86400.0
-    end
-    str = replace(str, r"(?<=\d)T(?=\d)" => " ")
-    pieces = split(str, r"[-/,\s]+"; keepempty=false)
-    h = mi = sec = 0.0
-    datep = SubString{String}[]
-    for p in pieces
-        if occursin(':', p)
-            t = split(p, ':')
-            2 <= length(t) <= 3 || bad()
-            h = _nparsd(t[1])
-            mi = _nparsd(t[2])
-            sec = length(t) == 3 ? _nparsd(t[3]) : 0.0
-        else
-            push!(datep, p)
-        end
-    end
-    isnum(p) = all(isdigit, p)
-    monthof(p) = begin
-        length(p) >= 3 || bad()
-        k = findfirst(==(p[1:3]), _MONTH_ABBR)
-        k === nothing && bad()
-        k
-    end
-    local year::Int, month::Int, day::Int
-    length(datep) == 3 || bad()
-    im = findfirst(!isnum, datep)
-    if im === nothing
-        a, b, c = parse(Int, datep[1]), parse(Int, datep[2]), parse(Int, datep[3])
-        # A leading number of 1000 or more is a year; otherwise the order is M-D-Y.
-        year, month, day = a >= 1000 ? (a, b, c) : (c, a, b)
-    else
-        month = monthof(datep[im])
-        rest = [datep[i] for i in 1:3 if i != im]
-        all(isnum, rest) || bad()
-        a, b = parse(Int, rest[1]), parse(Int, rest[2])
-        # `MON D Y` always; around a month name the first number is the year unless
-        # the last one is 1000 or more (`15-MAR-87` is year 2015, day 87).
-        yearlast = im == 1 || b >= 1000
-        year, day = yearlast ? (b, a) : (a, b)
-    end
-    year < 100 && (year = _texpyr(year))
-    (1 <= month <= 12 && day >= 1) || bad()
-    return _tparse_seconds(year, month, day, h, mi, sec)
+function _tparse(s::AbstractString, yearbound::Int=1969)::Float64
+    @assert yearbound > 0
+    d = TimeDefaults()
+    return tparse(s, TimeDefaults(d.calendar, d.system, d.zone, yearbound))
 end
 
 # ---------------------------------------------------------------------------------
@@ -405,15 +345,28 @@ end
 const _BEGINDATA = Vector{UInt8}(codeunits("\\begindata"))
 const _BEGINTEXT = Vector{UInt8}(codeunits("\\begintext"))
 
+"Throws `SpiceError(:badkernel)` with `msg` and the place `lineno` of `path`."
+@noinline _tk_fail(path, lineno::Int, msg) =
+    throw(SpiceError(:badkernel, "$msg (line $lineno of '$path')"))
+
+"Contract: `kind` is 0 (no value), 1 (strings) or 2 (numbers); adds the assignment of `name` with the values of its kind to `out`, and nothing for kind 0."
+function _tk_finish!(out::Vector{Assignment}, kind::Int, name, append::Bool, strs, nums)
+    @assert 0 <= kind <= 2
+    kind == 1 && push!(out, Assignment(name, append, strs))
+    kind == 2 && push!(out, Assignment(name, append, nums))
+    return nothing
+end
+
 """
-    parse_text_lines(path, lines) -> TextKernel
+    parse_text_lines(path, lines, yearbound=1969) -> TextKernel
 
 Contract: `lines` iterates the physical lines of a text kernel; returns the
 assignments in file order with the values CSPICE puts in the kernel pool. `path` is
-used for the result and for error messages only. Throws `SpiceError(:badkernel)` for
+used for the result and for error messages only; `yearbound` is the bound of `tsetyr`
+for a year of two digits in an `@` date. Throws `SpiceError(:badkernel)` for
 a malformed assignment.
 """
-function parse_text_lines(path::AbstractString, lines)::TextKernel
+function parse_text_lines(path::AbstractString, lines, yearbound::Int=1969)::TextKernel
     out = Assignment[]
     indata = false
     invec = false
@@ -423,12 +376,6 @@ function parse_text_lines(path::AbstractString, lines)::TextKernel
     strs = String[]
     kind = 0                       # 0 unknown, 1 string, 2 numeric
     lineno = 0
-    fail(msg) = throw(SpiceError(:badkernel, "$msg (line $lineno of '$path')"))
-    finish() = begin
-        kind == 1 && push!(out, Assignment(name, append, strs))
-        kind == 2 && push!(out, Assignment(name, append, nums))
-        invec = false
-    end
     for raw in lines
         lineno += 1
         line = _clean_line(raw)
@@ -444,13 +391,13 @@ function parse_text_lines(path::AbstractString, lines)::TextKernel
         count = length(begs)
         nxt = 1
         if !invec
-            count >= 3 || fail("a kernel variable assignment must have the form " *
+            count >= 3 || _tk_fail(path, lineno, "a kernel variable assignment must have the form " *
                                 "'<name> [+]= <values>'")
             ends[1] - begs[1] + 1 <= _TK_MAXNAME ||
-                fail("a variable name is longer than $_TK_MAXNAME characters")
+                _tk_fail(path, lineno, "a variable name is longer than $_TK_MAXNAME characters")
             name = String(line[begs[1]:ends[1]])
             types[2] == _TOK_EQUAL || types[2] == _TOK_PLUSEQ ||
-                fail("the assignment operator of '$name' is neither '=' nor '+='")
+                _tk_fail(path, lineno, "the assignment operator of '$name' is neither '=' nor '+='")
             append = types[2] == _TOK_PLUSEQ
             nums = Float64[]
             strs = String[]
@@ -471,34 +418,35 @@ function parse_text_lines(path::AbstractString, lines)::TextKernel
             t, b, e = types[nxt], begs[nxt], ends[nxt]
             if kind == 0
                 kind = t == _TOK_QUOTED ? 1 : t == _TOK_VALUE ? 2 :
-                       fail("the first item after the assignment operator of '$name' " *
+                       _tk_fail(path, lineno, "the first item after the assignment operator of '$name' " *
                             "is not a value")
             end
             if kind == 1
-                t == _TOK_QUOTED || fail("'$name' is a string variable but a value " *
+                t == _TOK_QUOTED || _tk_fail(path, lineno, "'$name' is a string variable but a value " *
                                           "is not a string")
-                b + 1 >= e && fail("there is a quoted string with no characters")
+                b + 1 >= e && _tk_fail(path, lineno, "there is a quoted string with no characters")
                 push!(strs, _string_value(line, b, e))
             else
-                t == _TOK_VALUE || fail("'$name' is a numeric variable but a value " *
+                t == _TOK_VALUE || _tk_fail(path, lineno, "'$name' is a numeric variable but a value " *
                                          "is not a number or a time")
                 if line[b] == UInt8('@')
-                    e == b && fail("'@' is not followed by a time")
-                    push!(nums, _tparse(String(line[b+1:e])))
+                    e == b && _tk_fail(path, lineno, "'@' is not followed by a time")
+                    push!(nums, _tparse(String(line[b+1:e]), yearbound))
                 else
                     push!(nums, _nparsd(view(line, b:e)))
                 end
             end
             nxt += 1
         end
-        nxt > count ? (invec = true) : finish()
+        invec = nxt > count
+        invec || _tk_finish!(out, kind, name, append, strs, nums)
     end
-    invec && finish()
+    invec && _tk_finish!(out, kind, name, append, strs, nums)
     return TextKernel(String(path), out)
 end
 
 """
-    parse_text_kernel(path) -> TextKernel
+    parse_text_kernel(path, yearbound=1969) -> TextKernel
 
 Contract: `path` names a readable text kernel; returns its assignments in file order.
 Only text between `\\begindata` and `\\begintext` is data. Values are numbers (with
@@ -506,10 +454,10 @@ Only text between `\\begindata` and `\\begintext` is data. Values are numbers (w
 `''` as an escaped quote; string elements are kept raw, so a continuation marker is
 still in place (see `pool_string_joined`). Variable names are case-sensitive.
 """
-function parse_text_kernel(path::AbstractString)::TextKernel
+function parse_text_kernel(path::AbstractString, yearbound::Int=1969)::TextKernel
     isfile(path) || throw(SpiceError(:nofile, "kernel file '$path' does not exist"))
     text = read(path, String)
-    return parse_text_lines(path, eachsplit(text, r"\r\n|\n|\r"))
+    return parse_text_lines(path, eachsplit(text, r"\r\n|\n|\r"), yearbound)
 end
 
 # ---------------------------------------------------------------------------------

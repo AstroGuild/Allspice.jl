@@ -155,6 +155,33 @@ ekntab(ctx::SpiceContext) = ekntab(kernelset(ctx))
 ekntab() = ekntab(default_context())
 
 """
+    eklef([ctx,] path) -> String
+
+Load the EK file at `path` for queries, as `eklef_c`, and return the handle for `ekuef`
+(the path itself, since a context has no file handles). The call is `furnsh` for a file
+that is an EK. Throws `SpiceError(:nofile)` if the file does not exist and
+`SpiceError(:wrongarchitecture)` if it is not an EK; the context is then unchanged.
+"""
+function eklef(ctx::SpiceContext, path::AbstractString)::String
+    p = String(path)
+    isfile(p) || throw(SpiceError(:nofile, "eklef: kernel file not found: $p"))
+    kernel_arch(p) === :EK || throw(SpiceError(:wrongarchitecture,
+        "eklef: the file $p is not an EK file"))
+    furnsh(ctx, p)
+    return p
+end
+eklef(path::AbstractString) = eklef(default_context(), path)
+
+"""
+    ekuef([ctx,] handle) -> Nothing
+
+Unload the EK file that `eklef` loaded with the result `handle`, as `ekuef_c`. A handle
+that is not loaded changes nothing, as in CSPICE.
+"""
+ekuef(ctx::SpiceContext, handle::AbstractString) = unload(ctx, handle)
+ekuef(handle::AbstractString) = ekuef(default_context(), handle)
+
+"""
     ektnam([ctx,] n) -> String
 
 Name of loaded table number `n` (from 1; `ektnam_c` counts from 0), in the order in

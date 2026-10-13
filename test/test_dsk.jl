@@ -181,7 +181,8 @@ function compare_xsi(ctx, ks, target, srf, et, fixref, v, d)
     fixfid = Allspice.namfrm(ctx, fixref)
     inframe = seg.dskdsc.frmcde == fixfid
     if same && plid != cp
-        # CSPICE returns the plate of the segment that it searched last. The plate of
+        # CSPICE returns the plate of the last searched segment that has an intercept,
+        # which is not always the segment with the closest one. The plate of
         # Allspice must be the one that `dskx02` of CSPICE finds in the segment that
         # both engines return, for the ray in the frame of that segment.
         # CSPICE searches a segment in the frame of the ray from the vertex moved onto

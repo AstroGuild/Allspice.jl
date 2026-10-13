@@ -393,8 +393,9 @@ Contract: the result is plain bits (`isbits`), with all the values that `_sgp4_e
 needs: `dodeep` tells whether the period is 225 minutes or more (SDP4), and `dosimp`
 whether the drag terms of higher order are left out. Throws
 `SpiceError(:suborbital)` if the perigee radius is below one Earth radius, and
-`SpiceError(:invalidelements)` for an eccentricity above 1 with a negative mean
-motion, where CSPICE leaves the constants undefined. As in CSPICE, QO, SO and AE
+`SpiceError(:invalidelements)` for an eccentricity above 1 (the mean motion is then
+NaN), where CSPICE signals no error at the initialization and keeps the constants of
+the element set before. As in CSPICE, QO, SO and AE
 are not read: the atmosphere bounds 120 km and 78 km are fixed in the code.
 """
 function _sgp4_init(geophs::NTuple{8,Float64}, elems::NTuple{10,Float64}, epoch::Float64,

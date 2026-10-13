@@ -669,13 +669,12 @@ function _ek_join(segs::Vector{_EKQSeg}, rs1::_EKRowSet, rs2::_EKRowSet, cons::V
     out = _EKRowSet(nt3, Vector{Int}[], Vector{Int32}[])
     # The constraint that selects the join method: the first equality, else the first
     # inequality with LT, LE, GE or GT.
-    cnstr = findfirst(i -> active[i] && cons[i].opcode == _EK_EQ, eachindex(cons))
-    case = cnstr === nothing ? 3 : 1
-    if cnstr === nothing
-        cnstr = findfirst(i -> active[i] && cons[i].opcode in (_EK_LT, _EK_LE, _EK_GE, _EK_GT),
-            eachindex(cons))
-        cnstr === nothing || (case = 2)
-    end
+    equal = findfirst(i -> active[i] && cons[i].opcode == _EK_EQ, eachindex(cons))
+    ordered = equal !== nothing ? nothing :
+              findfirst(i -> active[i] && cons[i].opcode in (_EK_LT, _EK_LE, _EK_GE, _EK_GT),
+        eachindex(cons))
+    cnstr = equal !== nothing ? equal : ordered
+    case = equal !== nothing ? 1 : ordered !== nothing ? 2 : 3
     rowvec = Vector{Int32}(undef, nt3)
     for (s1, sv1) in enumerate(rs1.segvecs), (s2, sv2) in enumerate(rs2.segvecs)
         segvec = vcat(sv1, sv2)

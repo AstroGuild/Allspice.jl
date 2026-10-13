@@ -21,7 +21,7 @@ The package is a prototype that covers the part of the toolkit which most trajec
 | Kernel pool | `gdpool`, `gcpool`, `gipool`, `bodvrd`, `bodvcd`, `bodfnd`, body and frame name calls; `pdpool`, `pcpool`, `pipool`, `dvpool`, `lmpool`, `ldpool`, `clpool`, `boddef`; `expool`, `dtpool`, `gnpool`, `szpool`, `stpool`; watchers `swpool`, `cvpool` for each context | |
 | Mathematics | vectors, matrices, rotations and quaternions, coordinate conversions with their Jacobians, ellipsoid, plane and ellipse calls, conic elements and two-body propagation | |
 | Shape kernels | DAS file access, DSK type 2 read and write, plate access calls, ray-surface intercept (`dskxv`, `dskxsi`, `dskx02`), `latsrf`, `srfnrm`, surface name calls (type 2 is the only DSK type of CSPICE N0067) | |
-| Event kernels | EK read access (`ekopr`, `ekssum`, `ekrcec`, `ekrced`, `ekrcei`), table catalogue (`ekntab`, `ektnam`, `ekccnt`, `ekcii`), queries (`ekpsel`, `ekfind`, `eknelt`, `ekgc`, `ekgd`, `ekgi`) with a result object for each query, record and fast writers (`ekopn`, `ekops`, `ekbseg`, `ekappr`, `ekinsr`, `ekdelr`, `ekace*`, `ekuce*`, `ekifld`, `ekacl*`, `ekffld`) | |
+| Event kernels | EK read access (`ekopr`, `ekssum`, `ekrcec`, `ekrced`, `ekrcei`), load and unload of one file (`eklef`, `ekuef`), table catalogue (`ekntab`, `ektnam`, `ekccnt`, `ekcii`), queries (`ekpsel`, `ekfind`, `eknelt`, `ekgc`, `ekgd`, `ekgi`) with a result object for each query, record and fast writers (`ekopn`, `ekops`, `ekbseg`, `ekappr`, `ekinsr`, `ekdelr`, `ekace*`, `ekuce*`, `ekifld`, `ekacl*`, `ekffld`) | |
 | Geometry finder | `gfdist`, `gfsep`, `gfposc`, `gfrr`, `gfpa`, `gfsubc`, `gfsntc`, `gfilum`, `gfoclt`, `gftfov`, `gfrfov`, `gfuds`, `gfudb`, `gfevnt` for the six quantities of CSPICE, `gfocce`, `gffove`, `gfstol`, `gfrefn`, `uddf`, `uddc` | DSK shapes in `gfsubc`, `gfsntc` and `gfilum` (CSPICE has none either) |
 | Geometry | `subpnt`, `subslr`, `sincpt`, `ilumin`, `illumg`, `illumf`, `phaseq`, `occult`, `limbpt`, `termpt`, `tangpt`, `getfov`, `getfvn`, `fovtrg`, `fovray`, `azlcpo`, `azlrec`, `recazl`, `dazldr`, `drdazl`, `srfrec`, on ellipsoids and on DSK data | |
 | Ephemeris and rotation tables | `ephemeris_table`, `table_position`, `table_state`, `table_jet`: the position of one body relative to another on a fixed interval, as one array of coefficients for the CPU or a GPU; `table_to_spk`: the table as an SPK segment of type 2; `rotation_table`, `table_rotation`, `table_rotation_jet`: the same for the rotation between two frames | |
@@ -75,8 +75,15 @@ The errors are Frobenius norms (the root of the sum of the squares of the nine d
 
 ## Relation to NAIF
 
-This package is an independent work. NAIF does not develop it, support it or endorse it, and the CSPICE toolkit of NAIF is the reference against which the package is tested.
+This package is an independent work, which the Navigation and Ancillary Information Facility (NAIF) of the Jet Propulsion Laboratory does not develop, support or endorse. Questions and defect reports about the package go to its author through the issue tracker of the repository, and not to NAIF, because NAIF cannot support software that it did not write.
+
+The package is derived from the CSPICE toolkit, version N0067: each routine follows the algorithm of the CSPICE routine of the same name, and the error messages keep the wording of CSPICE where a program can depend on it. The repository contains no file of the toolkit (no source, header, library or document of NAIF) and no kernel, and the tests take CSPICE and the kernels from the packages and the directories that the test environment names. The CSPICE toolkit itself is available from NAIF at <https://naif.jpl.nasa.gov/naif/toolkit.html>, and its rules of use are at <https://naif.jpl.nasa.gov/naif/rules.html>.
+
+The SPICE system is the work of NAIF, and a publication that uses this package should acknowledge it with the two references that NAIF asks for:
+
+- C. H. Acton, "Ancillary data services of NASA's Navigation and Ancillary Information Facility", *Planetary and Space Science* 44 (1), 65-70, 1996.
+- C. Acton, N. Bachman, B. Semenov and E. Wright, "A look towards the future in the handling of space science mission geometry", *Planetary and Space Science* 150, 9-12, 2018.
 
 ## Licence
 
-The package is under the MIT licence; see `LICENSE`.
+The code of this package is under the MIT licence; see `LICENSE`. That licence covers the work of the author and gives no right over the CSPICE toolkit, which stays under the terms of NAIF.

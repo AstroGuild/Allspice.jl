@@ -70,9 +70,9 @@ function _sw_parse_checked(ks::KernelSet, fd::FrameDef)
             "no specification was found for the base frame $b of the switch frame $id"))
         push!(classes, r[2])
     end
-    starts, stops = Float64[], Float64[]
+    starts = hasstart ? _sw_times(ks, kstart) : Float64[]
+    stops = hasstart ? _sw_times(ks, kstop) : Float64[]
     if hasstart
-        starts, stops = _sw_times(ks, kstart), _sw_times(ks, kstop)
         k = findfirst(i -> starts[i] >= stops[i], 1:n)
         k === nothing || throw(SpiceError(:badtimebounds, "interval time bounds are not " *
             "strictly increasing at interval index $k for the switch frame $id: " *

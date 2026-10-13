@@ -111,32 +111,33 @@ Return the current snapshot of `ctx` with one atomic read; the result never chan
 kernelset(ctx::SpiceContext) = @atomic ctx.ks
 
 """
-    read_kernel(path) -> Union{DAF,TextKernel}
+    read_kernel(path, yearbound=1969) -> Union{DAF,TextKernel}
 
-Open the binary kernel (DAF, or DSK) or parse the text kernel at `path`; throws
-`SpiceError` if the file does not exist.
+Open the binary kernel (DAF, or DSK) or parse the text kernel at `path` (with the year
+bound `yearbound` of `tsetyr` for its `@` dates); throws `SpiceError` if the file does
+not exist.
 """
-function read_kernel(path::AbstractString)
+function read_kernel(path::AbstractString, yearbound::Int=1969)
     isfile(path) || throw(SpiceError(:nofile, "kernel file not found: $path"))
     arch = kernel_arch(path)
     arch === :DSK && return open_dsk(path)
     arch === :EK && return open_ek(path)
-    return (arch === :SPK || arch === :PCK || arch === :CK) ? open_daf(path) : parse_text_kernel(path)
+    return (arch === :SPK || arch === :PCK || arch === :CK) ? open_daf(path) : parse_text_kernel(path, yearbound)
 end
 
 """
-    load_entries(path) -> Vector{Loaded}
+    load_entries(path, yearbound=1969) -> Vector{Loaded}
 
 Read the kernel at `path` and return its load-list entries: one entry for the kernel
 and, for a meta-kernel, one entry for each listed file (in order, `source == path`).
 """
-function load_entries(path::AbstractString)
+function load_entries(path::AbstractString, yearbound::Int=1969)
     p = String(path)
-    content = read_kernel(p)
+    content = read_kernel(p, yearbound)
     entries = Loaded[Loaded(p, "", content)]
     if content isa TextKernel
         for file in metakernel_files(content)
-            sub = read_kernel(file)
+            sub = read_kernel(file, yearbound)
             if sub isa TextKernel && !isempty(metakernel_files(sub))
                 throw(SpiceError(:unsupported,
                     "meta-kernel $p lists the meta-kernel $file; CSPICE does not allow this"))
@@ -158,7 +159,7 @@ kernel pool (`pdpool`, ...) stay; the assignments of a text kernel are applied o
 function furnsh(ctx::SpiceContext, path::AbstractString)
     isempty(strip(path)) && throw(SpiceError(:badarg, "furnsh: the kernel path is blank"))
     lock(ctx.lock) do
-        entries = load_entries(path)
+        entries = load_entries(path, (@atomic ctx.timedefs).yearbound)
         list = copy(kernelset(ctx).loaded)
         append!(list, entries)
         _pool_x_swap_loaded!(ctx, list, entries)

@@ -606,7 +606,9 @@ end
 The doubles at the DAF addresses `first:last`, as `dafgda_c`. Preconditions:
 `first >= 1` (else `SpiceError(:dafnegaddr)`), `first <= last` (else
 `SpiceError(:dafbeggtend)`), and the range is inside the file (else
-`SpiceError(:filereadfailed)`; CSPICE returns undefined values in that case).
+`SpiceError(:filereadfailed)`; CSPICE returns zeros without an error in that case, and
+also for all the words of a last record that the file holds in part, which this port
+returns as they are).
 """
 function dafgda(h::DAFHandle, first::Integer, last::Integer)
     _daf_check_open(h, "dafgda")

@@ -289,7 +289,8 @@ Load the text lines `cvals` into the kernel pool as the data section of a text k
 `lmpool_c`. Throws `SpiceError(:badkernel)` for a malformed assignment.
 """
 function lmpool(ctx::SpiceContext, cvals::AbstractVector{<:AbstractString})
-    tk = parse_text_lines("lmpool", vcat(["\\begindata"], String[String(s) for s in cvals]))
+    tk = parse_text_lines("lmpool", vcat(["\\begindata"], String[String(s) for s in cvals]),
+        timedefaults(ctx).yearbound)
     return _pool_x_edit!(pool -> _pool_x_apply!(pool, tk), ctx)
 end
 
@@ -302,7 +303,7 @@ file does not enter the load list of `furnsh`, so `ktotal` does not count it and
 `SpiceError(:nofile)` if the file does not exist.
 """
 function ldpool(ctx::SpiceContext, fname::AbstractString)
-    tk = parse_text_kernel(String(fname))
+    tk = parse_text_kernel(String(fname), timedefaults(ctx).yearbound)
     return _pool_x_edit!(pool -> _pool_x_apply!(pool, tk), ctx)
 end
 

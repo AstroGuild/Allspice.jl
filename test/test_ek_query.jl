@@ -705,6 +705,20 @@ group("EK queries: catalogue, query corpus against CSPICE and against the model"
         end
     end
 
+    ek_part("eklef and ekuef load and unload one EK") do
+        c = neo_context(String[])
+        h = eklef(c, paths[1])
+        @test h == paths[1] && ktotal(c, "EK") == 1 && ekntab(c) >= 1
+        @test ektnam(c, 1) == ektnam(neo_context([paths[1]]), 1)
+        ekuef(c, h)
+        @test ktotal(c, "EK") == 0 && ekntab(c) == 0
+        ekuef(c, h)                                         # not loaded: no change
+        @test ktotal(c, "ALL") == 0
+        @test neo_kind(() -> eklef(c, joinpath(dirname(paths[1]), "none.bes"))) == :nofile
+        @test neo_kind(() -> eklef(c, Kernels.LSK)) == :wrongarchitecture
+        @test ktotal(c, "ALL") == 0
+    end
+
     ek_part("catalogue: ekntab, ektnam, ekccnt, ekcii") do
         @test ekntab(ctx) == c_ekntab() == 3
         for n in 1:ekntab(ctx)

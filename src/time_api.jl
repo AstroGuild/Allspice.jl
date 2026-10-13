@@ -73,7 +73,8 @@ timout(et::Real, pictur::AbstractString) = timout(default_context(), et, pictur)
     tsetyr([ctx], year) -> Nothing
 
 Set the first year of the 100 years that a year of two digits abbreviates in `str2et`,
-`utc2et` and `tparse` of the context, as `tsetyr_c`: after `tsetyr(ctx, 1980)` the year
+`utc2et` and `tparse` of the context, and in the `@` dates of the text kernels that the
+context loads afterwards (`furnsh`, `ldpool`, `lmpool`), as `tsetyr_c`: after `tsetyr(ctx, 1980)` the year
 80 is 1980 and the year 79 is 2079. A `year` that is not positive changes nothing, as in
 CSPICE. The value belongs to the context (CSPICE keeps one for the process), and a
 reader sees the old or the new value, never a mixture.

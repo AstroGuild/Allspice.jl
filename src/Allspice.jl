@@ -66,7 +66,7 @@ export EKColumnAttr, EKSegmentSummary, EKTable
 export ekopr, ekcls, eknseg, ekssum, ekrcec, ekrced, ekrcei
 export EKFastLoad, ekopn, ekopw, ekops, ekbseg, ekappr, ekinsr, ekdelr, ekacec, ekaced, ekacei, ekucec, ekuced, ekucei
 export ekifld, ekaclc, ekacld, ekacli, ekffld
-export EKResult, ekntab, ektnam, ekccnt, ekcii, ekpsel, ekfind, eknelt, ekgc, ekgd, ekgi, ekcolumn
+export EKResult, eklef, ekuef, ekntab, ektnam, ekccnt, ekcii, ekpsel, ekfind, eknelt, ekgc, ekgd, ekgi, ekcolumn
 
 include("dyntypes.jl")      # DynFrame, SwitchFrame, PoolWatch (fields of the types below)
 include("dsk_types.jl")     # DLADescr, DSKDescr, DSKSegment, DSKFile, DSKTolerances

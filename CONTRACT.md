@@ -207,7 +207,13 @@ default context. The conversions need a leap-second kernel (`SpiceError(:nolsk)`
 - `tsetyr([ctx], year)` sets the field `yearbound` of the `TimeDefaults` of the context:
   the first year of the 100 years that a year of two digits abbreviates (1969 at
   start). `str2et`, `utc2et` and the context form of `tparse` use it; the forms on a
-  `KernelSet` take the defaults as an argument, and `tparse(s)` uses 1969.
+  `KernelSet` take the defaults as an argument, and `tparse(s)` uses 1969. The reader
+  of text kernels converts an `@` date with `tparse` and the bound that the context
+  has at the load (`furnsh`, `ldpool`, `lmpool`), as `zzrvar_` does; the range check
+  of `tparch` is off there, which is the start state of CSPICE.
+- `eklef([ctx], path) -> String` is `furnsh` for a file that is an EK
+  (`:wrongarchitecture` otherwise) and returns the path as the handle of
+  `ekuef([ctx], handle)`, which is `unload`.
 - `jul2gr(y, m, d)`, `gr2jul(y, m, d) -> (year, month, day, doy)`.
 - Constants: `j1900 j1950 j2000 j2100 jyear tyear spd b1900 b1950 clight halfpi twopi
   rpd dpr`, each a function without arguments.

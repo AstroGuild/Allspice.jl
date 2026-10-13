@@ -546,7 +546,6 @@ function _zzunpck(st::_Tokens, yabbrv::Bool)
     nyear = nmon = nday = nhour = nmin = nsec = ndoy = njd = 0
     ntvec = 0
     pic = st.pictur
-    repl(i, text) = (pic = _repsub(pic, st.pbegs[i], st.pends[i], text))
     # Loop invariant: tokens `i+1:size` are counted, their values are stored and their
     # picture marks are written (from the right, so the positions to the left hold).
     for i in st.size:-1:1
@@ -556,43 +555,43 @@ function _zzunpck(st::_Tokens, yabbrv::Bool)
         if item == 'Y'
             nyear += 1; ntvec += 1
             tvec[1] = _tokval(s, j, k, tvec[1])
-            repl(i, yabbrv ? "YR" : "YYYY")
+            pic = _repsub(pic, st.pbegs[i], st.pends[i], yabbrv ? "YR" : "YYYY")
         elseif item == 'm'
             nmon += 1; ntvec += 1
             name = uppercase(rpad(String(s[j:min(k, j + 2)]), 3))
             value = findfirst(==(name), _MONTH_ABBR)
             if value === nothing
                 tvec[2] = _tokval(s, j, k, tvec[2])
-                repl(i, "MM")
+                pic = _repsub(pic, st.pbegs[i], st.pends[i], "MM")
             else
                 tvec[2] = Float64(value)
             end
         elseif item == 'D'
             nday += 1; ntvec += 1
             tvec[3] = _tokval(s, j, k, tvec[3])
-            repl(i, _zzmkpc("DD", tok))
+            pic = _repsub(pic, st.pbegs[i], st.pends[i], _zzmkpc("DD", tok))
         elseif item == 'y'
             ndoy += 1; ntvec += 1
             tvec[2] = _tokval(s, j, k, tvec[2])
-            repl(i, _zzmkpc("DOY", tok))
+            pic = _repsub(pic, st.pbegs[i], st.pends[i], _zzmkpc("DOY", tok))
         elseif item == 'H'
             nhour += 1; ntvec += 1
             hms[1] = _tokval(s, j, k, hms[1])
-            repl(i, _zzmkpc(st.ampm ? "AP" : "HR", tok))
+            pic = _repsub(pic, st.pbegs[i], st.pends[i], _zzmkpc(st.ampm ? "AP" : "HR", tok))
         elseif item == 'M'
             nmin += 1; ntvec += 1
             hms[2] = _tokval(s, j, k, hms[2])
-            repl(i, _zzmkpc("MN", tok))
+            pic = _repsub(pic, st.pbegs[i], st.pends[i], _zzmkpc("MN", tok))
         elseif item == 'S'
             nsec += 1; ntvec += 1
             hms[3] = _tokval(s, j, k, hms[3])
-            repl(i, _zzmkpc("SC", tok))
+            pic = _repsub(pic, st.pbegs[i], st.pends[i], _zzmkpc("SC", tok))
         elseif item == 'J'
             njd += 1; ntvec += 1
             # A token such as `- jd 2451545.0` is not a number. CSPICE leaves the value
             # of an earlier call in the vector; NaN marks the date as having no value.
             tvec[1] = _tokval(s, j, k, NaN)
-            repl(i, _zzmkpc("JULIAND", tok))
+            pic = _repsub(pic, st.pbegs[i], st.pends[i], _zzmkpc("JULIAND", tok))
         elseif item == 'i'
             return false, tvec, 0, "", "", "The meaning of the integer <$(_sub(s, j, k))> " *
                 "could not be determined: '" * _marked(s, j, k) * "'"

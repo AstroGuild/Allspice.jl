@@ -298,7 +298,8 @@ end
 # The functions of f2c index the cell from its control area: C element `k` is the cell
 # element `k - 5`. The two accessors below keep the indices of the C source. An element
 # past the cardinality reads as 0 (CSPICE reads memory that it never set there, which
-# can only happen after the defect that `_ek_qpars!` describes for its state 9).
+# can only happen after its read of one token past a WHERE clause that ends with NOT,
+# zzeknrml.c line 1426; see `tokat` in `_ek_qnrml!`).
 @inline _ek_qget(q::_EKQEnc, k::Int) = k - 5 <= length(q.i) ? Int(@inbounds q.i[k-5]) : 0
 @inline _ek_qput!(q::_EKQEnc, k::Int, v::Integer) = (@inbounds q.i[k-5] = Int32(v); nothing)
 
