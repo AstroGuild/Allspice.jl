@@ -62,6 +62,12 @@ Feature: Frame information, body constants and local solar time
       | 199  | PLANETOCENTRIC |
       | 10   | PLANETOCENTRIC |
 
+  Scenario: A kernel variable sets the sense of a planetographic longitude
+    Given the variable "BODY299_PGR_POSITIVE_LON" with the value "EAST" or "WEST"
+    When the user asks for "et2lst" of Venus with a "PLANETOGRAPHIC" longitude
+    Then the local time is equal to the local time of CSPICE
+    But another value of the variable throws a "SpiceError" of the kind "invalidoption"
+
   Scenario: Longitude of the Sun
     When the user asks for "lspcn" of the Earth, the Moon, Venus and Mercury with five corrections
     Then the angle agrees with CSPICE to 2e-13 rad

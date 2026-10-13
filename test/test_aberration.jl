@@ -137,11 +137,12 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
         for bad in ("RL", "RL+S", "XRL", "XRL+S", "S", "XS", "", "   ", "LT+", "LTS", "L",
                 "NONE+S", "XNONE", "LT+S+S", "CN+SS", "λT", "LT\t")
             @test throws_kind(() -> Aberration(bad), :badarg)
-            @test throws_kind(() -> spkezr(ctx, 301, 0.0, "J2000", bad, 399), :badarg)
-            @test throws_kind(() -> spkpos(ctx, 301, 0.0, "J2000", bad, 399), :badarg)
-            @test throws_kind(() -> spkder(ctx, 301, 0.0, "J2000", bad, 399, Val(1)), :badarg)
             @test_throws Exception SPICE.spkezr("301", 0.0, "J2000", bad, "399")
         end
+        # The calls parse the string with `Aberration`: one bad value through each of them.
+        @test throws_kind(() -> spkezr(ctx, 301, 0.0, "J2000", "RL+S", 399), :badarg)
+        @test throws_kind(() -> spkpos(ctx, 301, 0.0, "J2000", "RL+S", 399), :badarg)
+        @test throws_kind(() -> spkder(ctx, 301, 0.0, "J2000", "RL+S", 399, Val(1)), :badarg)
         # CSPICE keeps the first five non-blank characters only, so it reads "XLT+SX"
         # as "XLT+S". Allspice does not truncate: the value is an error.
         @test SPICE.spkezr("301", 0.0, "J2000", "XLT+SX", "399")[2] > 0
@@ -171,7 +172,8 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
     end
 
     @apart @testset "forms of the call" begin
-        for et in random_epochs(rng, 5, span...), ab in AB_CORRECTIONS, ref in ("J2000", "IAU_EARTH")
+        # The forms do not depend on the epoch: one epoch in the default run.
+        for et in random_epochs(rng, nsample(1, 5), span...), ab in AB_CORRECTIONS, ref in ("J2000", "IAU_EARTH")
             byid = spkezr(ctx, 301, et, ref, ab, 10)
             @test byid[1] isa SVector{6,Float64} && byid[2] isa Float64
             @test spkezr(ctx, "MOON", et, ref, ab, "SUN") == byid
@@ -220,7 +222,9 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
     end
 
     @apart @testset "low-level calls against CSPICE" begin
-        epochs = random_epochs(rng, 15, span...)
+        # Each epoch runs every correction through every low-level call for two frames and
+        # four pairs of bodies (about 1100 assertions): three epochs in the default run.
+        epochs = random_epochs(rng, nsample(3, 15), span...)
         worst = Dict{String,Float64}()
         note(name, x) = (worst[name] = max(get(worst, name, 0.0), x); x)
         tol = 1e-11
@@ -313,7 +317,7 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
             w0 = 0.0
             w1i = 0.0
             w1b = 0.0
-            for (targ, obs, ref, _) in cases, et in depochs
+            for (targ, obs, ref, _) in cases, et in depochs[1:nsample(2, 6)]
                 jet = spkder(ctx, targ, et, ref, ab, obs, Val(1))
                 @test jet isa NTuple{2,SVector{3,Float64}}
                 state, _ = spkezr(ctx, targ, et, ref, ab, obs)

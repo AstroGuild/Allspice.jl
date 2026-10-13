@@ -191,7 +191,9 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
             nfound = 0; nmiss = 0
             agree_found = true
             spacing = tags[2] - tags[1]
-            for tol in (0.0, 0.3 * spacing, 4.0 * spacing), _ in 1:400
+            # Clock values for each tolerance; each one is asked in three frames.
+            nq = nsample(150, 400)
+            for tol in (0.0, 0.3 * spacing, 4.0 * spacing), _ in 1:nq
                 t = ck_random_tick(rng, case, tags)
                 for ref in ("J2000", "ECLIPJ2000", "IAU_EARTH")
                     oracle_ck_reset(case.inst)
@@ -217,7 +219,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
                 end
             end
             @test agree_found
-            @test nfound > 300 && nmiss > 20
+            @test nfound > 3nq ÷ 4 && nmiss > nq ÷ 20
             a = report_quantiles("ckgp/ckgpav $(case.label): C-matrix", dcm)
             @test a.max <= CK_TOL_CMAT
             @test maximum(dclk) == 0.0

@@ -162,6 +162,11 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
         @test throws_kind(() -> sct2e(ctx, -5, 0.0), :kernelvarnotfound)
         @test throws_kind(() -> sctype(ctx, -5), :kernelvarnotfound)
         @test throws_kind(() -> scpart(ctx, -5), :kernelvarnotfound)
+        # A clock of another type than 1 has no conversion, as in CSPICE.
+        other = neo_context([CKFix.sclk_kernel()])
+        lmpool(other, ["SCLK_DATA_TYPE_90 = ( 2 )"])
+        @test sctype(other, -90) == 2
+        @test throws_kind(() -> sct2e(other, -90, 0.0), :unsupported)
         # The TDT clock needs the leap-second kernel; the TDB clock does not.
         bare = neo_context([CKFix.sclk_kernel()])
         @test throws_kind(() -> sct2e(bare, CKFix.SC_TDT, 1000.0), :nolsk)

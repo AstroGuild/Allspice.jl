@@ -708,7 +708,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
     end
 
     @apart @testset "deltet agrees with unitim and ttrans" begin
-        worst = 0.0; wref = 0.0
+        worst = 0.0; wref = 0.0; whole = true
         # ET - UTC from the time vectors against `deltet` in both directions, away from
         # the leap seconds (the formal UTC count repeats one second there). `deltet`
         # evaluates the periodic term at a UTC epoch with the UTC value, so the two
@@ -718,7 +718,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
             worst = max(worst, abs((et - utc) - deltet(ctx, et, "ET")), abs((et - utc) - deltet(ctx, utc, "UTC")))
             tai = unitim(ctx, et, "TDB", "TAI")
             leaps = deltet(ctx, et, "ET") - (et - tai)      # TAI - UTC, a whole number
-            @test abs(leaps - round(leaps)) < 1e-6 && 10.0 <= round(leaps) + 1.0 <= 38.0
+            whole &= abs(leaps - round(leaps)) < 1e-6 && 10.0 <= round(leaps) + 1.0 <= 38.0
         end
         for et in vcat(modern, dense), sys in ("ET", "UTC", "et", "utc")
             wref = max(wref, abs(deltet(ctx, et, sys) - SPICE.deltet(et, uppercase(sys))))
@@ -727,6 +727,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         measured(@sprintf("  %-44s max=%.3e", "deltet against CSPICE, absolute s", wref))
         @test wref == 0.0
         @test worst < 1e-6
+        @test whole
     end
 
     @apart @testset "ttrans against the CSPICE library" begin

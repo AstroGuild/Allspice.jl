@@ -173,7 +173,9 @@ group("18. kernel-pool edits and watchers against CSPICE", Kernels.LSK, Kernels.
         vars = ["PW_V0", "PW_V1", "PW_V2", "PW_S0", "PW_S1", "PW_X1", "PW_X2", "PW_X3"]
         nbad = 0
         counts = Dict{Symbol,Int}()
-        nops = 400
+        # 150 operations reach each of the nine kinds with the seed of the suite (the
+        # rarest, `clpool` and `kclear`, have a probability of 0.03 each: 4 and 2 times).
+        nops = nsample(150, 400)
         for step in 1:nops
             r = rand(rng)
             op = r < 0.2 ? :pdpool : r < 0.35 ? :pcpool : r < 0.45 ? :pipool : r < 0.6 ? :dvpool :

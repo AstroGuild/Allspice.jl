@@ -1,8 +1,9 @@
-# Group 9: the SPK data types other than 2 and 3 against CSPICE.
+# Group 9: the SPK data types other than 2 against CSPICE.
 #
 # Feature file: features/spk_data_types.feature
 #
-# No kernel of these types is on this machine, so the group writes them: one SPK file
+# Type 2 is the type of `de440s.bsp` and `de405.bsp` (groups 1 to 4). No kernel of the
+# other types, type 3 included, is on this machine, so the group writes them: one SPK file
 # with one segment per case, made with the segment writers of CSPICE (`spkwNN_c`, the
 # `spk14b_c`/`spk14a_c`/`spk14e_c` sequence, and the Fortran-interface routines
 # `spkw01_`, `spkw19_`, `spkw21_` for the types that have no C wrapper). Each case has
@@ -274,6 +275,22 @@ function write_type20!(rng, h, body, frame, polydg, n, intlen, dscale, tscale, i
     return first, last
 end
 
+"Type 3: `n` records of `intlen` seconds from `t0`; the velocity series is not the derivative of the position series."
+function write_type3!(rng, h, body, frame, degree, n, t0, intlen)
+    @assert n >= 1 && intlen > 0
+    ncoef = degree + 1
+    recs = Matrix{Float64}(undef, 6 * ncoef, n)
+    for i in 1:n
+        recs[:, i] = vcat((cheb_coefs(rng, ncoef, c <= 3 ? 7000.0 : 7.0) for c in 1:6)...)
+    end
+    last = t0 + n * intlen
+    ccall((:spkw03_c, LIBCSPICE), Cvoid, (CInt, CInt, CInt, Cstring, Cdouble, Cdouble, Cstring,
+            Cdouble, CInt, CInt, Ref{Cdouble}, Cdouble), h, body, EARTH, frame, t0, last, "type 3",
+        intlen, n, degree, recs, t0)
+    cspice_check()
+    return last
+end
+
 function write_type15!(h, body, frame, t0, t1, epoch, tp, pa, p, ecc, j2flg, pv, j2, radius)
     ccall((:spkw15_c, LIBCSPICE), Cvoid, (CInt, CInt, CInt, Cstring, Cdouble, Cdouble, Cstring,
             Cdouble, Ref{Cdouble}, Ref{Cdouble}, Cdouble, Cdouble, Cdouble, Ref{Cdouble},
@@ -422,6 +439,13 @@ function write_type_kernel(path::AbstractString, rng::AbstractRNG)
         add!("type 17, h $hh, k $kk", 17, epoch - 1.0e5, epoch + 2.0e5, [epoch], 1e-2)
     end
 
+    # Type 3: position and velocity series apart. It is the last case, so that the cases
+    # before it keep their random data.
+    t0 = -2000.0
+    body -= 1
+    t1 = write_type3!(rng, h, body, J, 9, 12, t0, 900.0)
+    add!("type 3, degree 9", 3, t0, t1, [t0 + k * 900.0 for k in 0:12], 1e-2)
+
     SPICE.spkcls(h)
     @assert all(c -> c.t0 < c.t1, cases)
     return cases
@@ -503,7 +527,7 @@ group("9. SPK data types against CSPICE") do
     ctx = neo_context([path])
     ks = Allspice.kernelset(ctx)
     println("  ", length(cases), " segments in ", path)
-    @test sort(unique(c.dtype for c in cases)) == [1, 5, 8, 9, 12, 13, 14, 15, 17, 18, 19, 20, 21]
+    @test sort(unique(c.dtype for c in cases)) == [1, 3, 5, 8, 9, 12, 13, 14, 15, 17, 18, 19, 20, 21]
 
     @apart @testset "states against CSPICE" begin
         by_type = Dict{Int,Tuple{Float64,Float64}}()
@@ -549,7 +573,7 @@ group("9. SPK data types against CSPICE") do
             acc(t) = ForwardDiff.derivative(vel, t)
             jerk(t) = ForwardDiff.derivative(acc, t)
             worst = zeros(3)            # order 2, order 3 against AD; order 2 against FD
-            for et in smooth_epochs(rng, c, 8)
+            for et in smooth_epochs(rng, c, nsample(3, 8))
                 jet = spkder(ctx, c.body, et, 1, EARTH, Val(3))
                 state, _ = spkgeo(ctx, c.body, et, 1, EARTH)
                 # Equal to the last bit in a normal run; with coverage instrumentation the
@@ -577,7 +601,7 @@ group("9. SPK data types against CSPICE") do
             data = ks.daf[seg.file]
             pos(t) = Allspice.spk_eval(data, seg, t, Val(0))[1]
             worst = zeros(TYPE_AD_ORDER + 1)
-            for et in smooth_epochs(rng, c, 4)
+            for et in smooth_epochs(rng, c, nsample(2, 4))
                 jet = Allspice.spk_eval_position(data, seg, et, Val(3))
                 ad = type_ad_jet(pos, et, Val(TYPE_AD_ORDER))
                 worst .= max.(worst, [type_reldiff(jet[k], ad[k]) for k in 1:TYPE_AD_ORDER+1])
@@ -692,9 +716,10 @@ group("9. SPK data types against CSPICE") do
             1, 20, 0.0, 0.0, Int32(0), Int32(0))
         @test throws_kind(() -> Allspice.spk_eval(zeros(20), seg10, 0.5, Val(1)), :unsupported)
         @test throws_kind(() -> Allspice.spk_eval_position(zeros(20), seg10, 0.5, Val(2)), :unsupported)
-        # A count at the end of a segment that does not agree with its length.
+        # A count at the end of a segment that does not agree with its length. (For
+        # type 3 the count is checked when the file is opened, as for type 2.)
         for c in cases
-            c.dtype in (15, 17, 20) && continue
+            c.dtype in (3, 15, 17, 20) && continue
             seg = ks.spk[Int32(c.body)][1]
             bad = copy(ks.daf[seg.file])
             bad[seg.eaddr] += 1.0

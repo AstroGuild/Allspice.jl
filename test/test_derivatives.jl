@@ -33,9 +33,15 @@
 # Size of (c). A `Dual` nested k deep through the generic evaluators is a new compilation
 # of the SPK and frame code for each k, and the cost grows fast with k (about 2 s, 3 s,
 # 6 s and 16 s for the position). The default run therefore nests the generic path to
-# `AD_GENERIC_ORDER` = 1 and the public calls to `AD_PUBLIC_ORDER` = 3; the exhaustive run
-# (`ALLSPICE_TEST_FULL=1`) nests both to order 4. Check (b) covers orders 1 to 4 of
-# `spkder` and `pxder` in both runs.
+# `AD_GENERIC_ORDER` = 1 and the public calls to `AD_PUBLIC_ORDER` = 2; the exhaustive run
+# (`ALLSPICE_TEST_FULL=1`) nests both to order 4. Depth 2 is the first depth at which the
+# extension assembles a dual number from dual numbers; a deeper nesting runs the same
+# methods on another type. Check (b) covers orders 1 to 4 of `spkder` and `pxder` in both
+# runs.
+#
+# Size of (a). The per-epoch assertions of (a) use `EPOCHS_EXACT` epochs (2 in the default
+# run, all 12 in the exhaustive run): the relation between the orders does not depend on
+# the epoch, and the checks (b) and (c) use the larger sets.
 
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
@@ -53,7 +59,9 @@ const AD_RTOL = (2e-15, 1e-13, 1e-11, 1e-9, 1e-7)
 const MAXORDER = 4
 "Nesting depth of ForwardDiff through the generic evaluators, and through the public calls."
 const AD_GENERIC_ORDER = nsample(1, MAXORDER)
-const AD_PUBLIC_ORDER = nsample(3, MAXORDER)
+const AD_PUBLIC_ORDER = nsample(2, MAXORDER)
+"Number of epochs of the per-epoch assertions of check (a)."
+const EPOCHS_EXACT = nsample(2, 12)
 
 "Relative difference `|a - b| / |b|`; for `b == 0` the absolute difference."
 function reldiff(a, b)
@@ -127,22 +135,22 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
             jet = spkder(ctx, 301, et, "J2000", 399, Val(N))
             @test jet isa NTuple{N + 1,SVector{3,Float64}}
         end
-        # A lower order is a prefix of a higher order.
-        for (targ, obs, ref, _) in state_cases, et in epochs[1:4]
+        # A lower order is a prefix of a higher order, in each class of frame.
+        for (targ, obs, ref, _) in state_cases, et in epochs[1:nsample(1, 4)]
             full = spkder(ctx, targ, et, ref, obs, Val(MAXORDER))
             for N in 0:MAXORDER-1
                 part = spkder(ctx, targ, et, ref, obs, Val(N))
                 @test all(isapprox(part[k], full[k]; rtol=1e-13) for k in 1:N+1)
             end
-            # Name form equals the integer-ID form.
-            @test spkder(ctx, string(targ), et, ref, string(obs), Val(2)) ==
-                  spkder(ctx, targ, et, SPICE.namfrm(ref), obs, Val(2))
         end
+        # Name form equals the integer-ID form (the name form only resolves the names).
+        @test spkder(ctx, "301", et, "IAU_EARTH", "399", Val(2)) ==
+              spkder(ctx, 301, et, SPICE.namfrm("IAU_EARTH"), 399, Val(2))
     end
 
     @apart @testset "spkder: orders 0 and 1 are the spkezr state" begin
         worst = 0.0
-        for (targ, obs, ref, _) in state_cases, et in epochs
+        for (targ, obs, ref, _) in state_cases, et in epochs[1:EPOCHS_EXACT]
             state, _ = spkezr(ctx, targ, et, ref, "NONE", obs)
             cstate, _ = SPICE.spkezr(string(targ), et, ref, "NONE", string(obs))
             r, v = spkder(ctx, targ, et, ref, obs, Val(1))
@@ -207,10 +215,10 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
 
     @apart @testset "pxder: orders 0 and 1 are pxform and the sxform block" begin
         worst = 0.0
-        for (from, to, _) in rot_cases, et in epochs
-            for N in 0:MAXORDER
-                @test pxder(ctx, from, to, et, Val(N)) isa NTuple{N + 1,SMatrix{3,3,Float64,9}}
-            end
+        for N in 0:MAXORDER
+            @test pxder(ctx, "J2000", "IAU_EARTH", epochs[1], Val(N)) isa NTuple{N + 1,SMatrix{3,3,Float64,9}}
+        end
+        for (from, to, _) in rot_cases, et in epochs[1:EPOCHS_EXACT]
             R, dR = pxder(ctx, from, to, et, Val(1))
             X = sxform(ctx, from, to, et)
             @test isapprox(R, pxform(ctx, from, to, et); atol=4eps())

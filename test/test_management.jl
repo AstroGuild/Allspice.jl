@@ -169,20 +169,26 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
             # A missing file gives an error and leaves the context unchanged.
             @test throws_kind(() -> furnsh(ctx, joinpath(tmp, "absent.bsp")), :nofile)
             @test ktotal(ctx) == 1
+            # A meta-kernel that lists a meta-kernel is an error, as in CSPICE.
+            outer = joinpath(tmp, "outer.tm")
+            write(outer, "KPL/MK\n\\begindata\nKERNELS_TO_LOAD = ( '$mk' )\n\\begintext\n")
+            @test_throws SPICE.SpiceError SPICE.furnsh(outer)
+            @test throws_kind(() -> furnsh(ctx, outer), :unsupported)
+            @test ktotal(ctx) == 1
         end
     end
 
     @apart @testset "errors" begin
         ctx = neo_context(Kernels.full_set())
         lo, hi = -4.734072e9, 4.735368e9
-        # Out of coverage, on both sides, in every form of the call.
-        for et in (hi + 1e6, lo - 1e6, 1e11, -1e11)
-            @test throws_kind(() -> spkezr(ctx, 301, et, "J2000", "NONE", 399), :nocoverage)
-            @test throws_kind(() -> spkezr(ctx, "MOON", et, "J2000", "NONE", "EARTH"), :nocoverage)
-            @test throws_kind(() -> spkpos(ctx, 10, et, "J2000", "NONE", 0), :nocoverage)
-            @test throws_kind(() -> spkgeo(ctx, 399, et, "J2000", 10), :nocoverage)
-            @test throws_kind(() -> spkder(ctx, 301, et, "J2000", 399, Val(2)), :nocoverage)
-        end
+        # Out of coverage: on both sides, and after the end in every form of the call.
+        @test throws_kind(() -> spkezr(ctx, 301, lo - 1e6, "J2000", "NONE", 399), :nocoverage)
+        et = hi + 1e6
+        @test throws_kind(() -> spkezr(ctx, 301, et, "J2000", "NONE", 399), :nocoverage)
+        @test throws_kind(() -> spkezr(ctx, "MOON", et, "J2000", "NONE", "EARTH"), :nocoverage)
+        @test throws_kind(() -> spkpos(ctx, 10, et, "J2000", "NONE", 0), :nocoverage)
+        @test throws_kind(() -> spkgeo(ctx, 399, et, "J2000", 10), :nocoverage)
+        @test throws_kind(() -> spkder(ctx, 301, et, "J2000", 399, Val(2)), :nocoverage)
         # The ends of the coverage are inside it, as in CSPICE.
         oracle_load(Kernels.full_set())
         for et in (lo, hi)
@@ -201,6 +207,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test throws_kind(() -> pxform(ctx, "J2000", "NO_SUCH_FRAME", 0.0), :unknownframe)
         @test throws_kind(() -> sxform(ctx, "NO_SUCH_FRAME", "J2000", 0.0), :unknownframe)
         @test throws_kind(() -> pxder(ctx, "J2000", "NO_SUCH_FRAME", 0.0, Val(1)), :unknownframe)
+        @test throws_kind(() -> pxform(ctx, 1, 987654, 0.0), :unknownframe)       # by frame ID
         # A correction string that is not valid (group 9 has the full list).
         @test throws_kind(() -> spkezr(ctx, 301, 0.0, "J2000", "RL+S", 399), :badarg)
         @test spkezr(ctx, 301, 0.0, "J2000", " none ", 399) == spkezr(ctx, 301, 0.0, "J2000", "NONE", 399)

@@ -44,10 +44,13 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
        OBJECT_EARTH_FRAME     = 13000
        OBJECT_-77_FRAME       = 'TESTSC_T3'
        OBJECT_301_FRAME       = 'MOON_ME'
+       OBJECT_299_FRAME       = 31000
        NAIF_BODY_NAME        += ( 'TEST_PROBE' )
        NAIF_BODY_CODE        += ( -77 )
     \\begintext
     """)
+    # The second pass adds the `OBJECT_*_FRAME` variables. Only `cidfrm` and `cnmfrm` read
+    # them, so the other calls are compared in the first pass only.
     for with_objects in (false, true)
         with_objects && push!(set, extra)
         oracle_load(set)
@@ -57,7 +60,7 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
         frames = vcat(collect(-5:25), collect(10001:10150), collect(13000:13010),
             [1850000 + i for i in 0:25], [31000, 31001, 31002, 31003, 31004, 31005, 31006,
                 31007, 31008, -77001, -77003, -77900, -77099, -99001, 1400499, 99999999])
-        @testset "frinfo$label" begin
+        with_objects || @testset "frinfo" begin
             nfound = 0
             for id in frames
                 want = SPICE.frinfo(id)
@@ -85,7 +88,7 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
             end
             println("  cidfrm: ", length(bodies), " bodies, ", nfound, " found")
             @test nfound > 50
-            names = ["EARTH", "earth", "  Moon ", "MARS", "JUPITER", "SUN", "PHOBOS", "TEST_PROBE",
+            names = ["EARTH", "earth", "  Moon ", "MARS", "JUPITER", "SUN", "PHOBOS", "TEST_PROBE", "VENUS",
                 "SOLAR SYSTEM BARYCENTER", "MARS BARYCENTER", "NOT A BODY", "TITAN", "CERES",
                 "PLUTO", "IO", "Earth  Barycenter", "399", "-77", "499"]
             for n in names
@@ -96,7 +99,7 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
             end
         end
 
-        @testset "ccifrm$label" begin
+        with_objects || @testset "ccifrm" begin
             n = 0
             for id in frames
                 info = SPICE.frinfo(id)
@@ -117,7 +120,7 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
             println("  ccifrm: ", n, " (class, class ID) pairs of loaded frames")
         end
 
-        @testset "tkfram$label" begin
+        with_objects || @testset "tkfram" begin
             worst = 0.0
             nfound = 0
             for id in (-77900, 31000, 31001, 31002, 31003, 31006, 31007, 1850001, 10013, 5, -5)
@@ -131,7 +134,7 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
             end
             @test nfound >= 3
             @test worst <= 4 * eps()
-            measured(@sprintf("  %-58s n=%-7d max=%.3e", "tkfram: element of the matrix$label",
+            measured(@sprintf("  %-58s n=%-7d max=%.3e", "tkfram: element of the matrix",
                 nfound, worst))
         end
     end
@@ -143,6 +146,7 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
 
     @apart @testset "tipbod and tisbod" begin
         dp = Float64[]; ds = Float64[]; dd = Float64[]
+        structure_ok = true
         for body in (399, 301, 499, 599, 10, 199, 299, 699, 799, 899, 401, 502, 606, 31006),
             ref in ("J2000", "ECLIPJ2000", "B1950", "FK4", "GALACTIC", 1, 17)
             body == 31006 && continue
@@ -156,8 +160,7 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
                 push!(ds, maximum(abs.(s[1:3, 1:3] .- t[1:3, 1:3])))
                 scale = maximum(abs.(t[4:6, 1:3]))
                 push!(dd, maximum(abs.(s[4:6, 1:3] .- t[4:6, 1:3])) / scale)
-                @test s[1:3, 4:6] == zeros(3, 3)
-                @test s[4:6, 4:6] == s[1:3, 1:3]
+                structure_ok &= s[1:3, 4:6] == zeros(3, 3) && s[4:6, 4:6] == s[1:3, 1:3]
             end
         end
         sp = report_quantiles("tipbod: element of the matrix", dp)
@@ -166,6 +169,7 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
         @test sp.max <= 1e-13
         @test ss.max <= 1e-13
         @test sd.max <= 1e-12
+        @test structure_ok          # [R 0; dR R]
         @test (@inferred tipbod(ks, 1, 399, 1.0e8)) isa SMatrix{3,3,Float64,9}
         @test (@inferred tisbod(ks, 1, 399, 1.0e8)) isa SMatrix{6,6,Float64,36}
         @test throws_kind(() -> tipbod(ctx, "IAU_EARTH", 399, 0.0), :irfnotrec)
@@ -241,6 +245,20 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
         @test nexact >= n - 3
         @test et2lst(ctx, 0.0, 10, 1.0, "PLANETOCENTRIC") == SPICE.et2lst(0.0, 10, 1.0, "PLANETOCENTRIC")
         @test throws_kind(() -> et2lst(ctx, 0.0, 399, 0.0, "GEODETIC"), :unknownsystem)
+        # `BODY<id>_PGR_POSITIVE_LON` sets the sense of a planetographic longitude.
+        try
+            for sense in ("EAST", "WEST")
+                SPICE.pcpool("BODY299_PGR_POSITIVE_LON", [sense])
+                pcpool(ctx, "BODY299_PGR_POSITIVE_LON", [sense])
+                @test et2lst(ctx, 1.0e8, 299, 0.7, "PLANETOGRAPHIC") ==
+                      SPICE.et2lst(1.0e8, 299, 0.7, "PLANETOGRAPHIC")
+            end
+            pcpool(ctx, "BODY299_PGR_POSITIVE_LON", ["NORTH"])
+            @test throws_kind(() -> et2lst(ctx, 1.0e8, 299, 0.7, "PLANETOGRAPHIC"), :invalidoption)
+        finally
+            SPICE.dvpool("BODY299_PGR_POSITIVE_LON")
+            dvpool(ctx, "BODY299_PGR_POSITIVE_LON")
+        end
         @test throws_kind(() -> et2lst(ctx, 0.0, 1234567, 0.0, "PLANETOCENTRIC"), :cantfindframe)
         r = @inferred et2lst(ctx, 1.0e8, 399, 0.3, "PLANETOCENTRIC")
         @test r isa Tuple{Int,Int,Int,String,String}

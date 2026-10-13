@@ -46,3 +46,8 @@ Feature: Spacecraft clock conversion (SCLK type 1)
     Given a context without an SCLK kernel for the spacecraft
     When a clock conversion is requested
     Then a SpiceError of the kind kernelvarnotfound is thrown
+
+  Scenario: A clock of another type
+    Given a clock whose "SCLK_DATA_TYPE" is not 1
+    When a clock conversion is requested
+    Then a SpiceError of the kind unsupported is thrown

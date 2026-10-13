@@ -1,11 +1,11 @@
 Feature: States from every SPK data type except two-line elements
   A user loads an SPK kernel whose segments are of a data type other than the
-  Chebyshev types 2 and 3. The states agree with CSPICE, and the time derivatives
+  Chebyshev type 2. The states agree with CSPICE, and the time derivatives
   of every order are available as for the Chebyshev types.
 
   Background:
     Given a new context
-    And an SPK kernel with one segment of each of the types 1, 5, 8, 9, 12, 13, 14, 15, 17, 18, 19, 20 and 21, written by CSPICE
+    And an SPK kernel with one segment of each of the types 1, 3, 5, 8, 9, 12, 13, 14, 15, 17, 18, 19, 20 and 21, written by CSPICE
 
   Scenario Outline: Geometric state of a segment of one data type
     When the user asks for the state of the target of the type <type> segment relative to its center at an epoch inside the segment
@@ -15,6 +15,7 @@ Feature: States from every SPK data type except two-line elements
     Examples:
       | type |
       | 1    |
+      | 3    |
       | 5    |
       | 8    |
       | 9    |

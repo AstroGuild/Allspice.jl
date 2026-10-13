@@ -75,7 +75,7 @@ group("roundtrip", Kernels.LSK, Kernels.DE440S) do
     set = (Kernels.LSK, Kernels.DE440S, bsp, tsc, tf, bc)
     oracle_load(set)
     ctx = neo_context(set)
-    ets = vcat(epochs[1], epochs[end], epochs[7], random_epochs(rng, 200, epochs[1], epochs[end]))
+    ets = vcat(epochs[1], epochs[end], epochs[7], random_epochs(rng, nsample(30, 200), epochs[1], epochs[end]))
 
     @apart @testset "type 13 SPK written and read by Allspice" begin
         worst = 0.0
@@ -95,12 +95,13 @@ group("roundtrip", Kernels.LSK, Kernels.DE440S) do
 
     @apart @testset "type 3 CK written and read by Allspice" begin
         worst = 0.0
+        allfound = true
         for et in ets
             R = pxform(ctx, "J2000", "RT_BUS", et)
             worst = max(worst, maximum(abs.(R - SPICE.pxform("J2000", "RT_BUS", et))))
-            cmat, av, clk, found = ckgpav(ctx, -901000, 1000.0 * et, 0.0, "J2000")
-            @test found
+            allfound &= ckgpav(ctx, -901000, 1000.0 * et, 0.0, "J2000")[4]
         end
+        @test allfound
         measured(@sprintf("  %-58s max=%.3e", "round trip type 3 CK, pxform against CSPICE, absolute", worst))
         @test worst <= 1e-14
         s = spkezr(ctx, 301, ets[5], "RT_BUS", "LT+S", -901)[1]

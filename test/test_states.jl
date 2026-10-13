@@ -55,7 +55,9 @@ group("1. states against CSPICE", Kernels.FULL_SET_FILES...) do
     end
 
     @apart @testset "forms of the call" begin
-        epochs = random_epochs(rng, 20, DE440S_COVERAGE...)
+        # The forms differ in the resolution of names only, which does not depend on the
+        # epoch: two epochs in the default run.
+        epochs = random_epochs(rng, nsample(2, 20), DE440S_COVERAGE...)
         named = [("MOON", 301, "EARTH", 399), ("EARTH", 399, "SUN", 10),
             ("SUN", 10, "MOON", 301), ("EARTH BARYCENTER", 3, "SOLAR SYSTEM BARYCENTER", 0),
             ("JUPITER BARYCENTER", 5, "VENUS", 299), ("MERCURY", 199, "EMB", 3)]

@@ -1,4 +1,6 @@
-# Group 5: kernel pool, names and time conversions against CSPICE.
+# Group 5: kernel pool and names against CSPICE. The time conversions (`utc2et`, `et2utc`,
+# `deltet`) are in the group `time`, which compares them with CSPICE around every leap
+# second; this group keeps the error of a conversion without a leap-second kernel.
 #
 # Conventions for an absent item, as the prototype source documents them: `gdpool`,
 # `gcpool`, `gipool` and `bodvrd` throw `SpiceError(:notfound)` (SPICE.jl returns
@@ -26,29 +28,6 @@ function oracle_names(template::AbstractString)
     end
     return unique!(out)
 end
-
-"Number of time conversions of Allspice that threw, and the first messages."
-const NEO_TIME_ERRORS = Ref(0)
-
-"""
-    neo_time(f, what) -> Float64
-
-Value of `f()`, or `NaN` if it throws a `SpiceError`. The error is counted and the first
-three are printed, so that one defect does not hide the other measurements of the group.
-"""
-function neo_time(f, what)
-    try
-        return Float64(f())
-    catch e
-        e isa Allspice.SpiceError || rethrow()
-        NEO_TIME_ERRORS[] += 1
-        NEO_TIME_ERRORS[] <= 3 && println("  Allspice threw for ", repr(what), ": ", sprint(showerror, e))
-        return NaN
-    end
-end
-
-"UTC calendar string `YYYY-MM-DDThh:mm:ss.fff` of the given fields (no validation of the day)."
-iso(y, mo, d, h, mi, s) = @sprintf("%04d-%02d-%02dT%02d:%02d:%06.3f", y, mo, d, h, mi, s)
 
 group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
     Kernels.MOON_TF_OLD) do
@@ -171,91 +150,6 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
                 31009, 0, -5, 123456]
             @test frmnam(ctx, id) == SPICE.frmnam(id)
         end
-    end
-
-    @apart @testset "utc2et, et2utc, deltet" begin
-        # Random calendar dates from 1972 to 2035 with millisecond resolution.
-        worst = 0.0; same_str2et = true
-        for _ in 1:300
-            s = iso(rand(rng, 1972:2035), rand(rng, 1:12), rand(rng, 1:28), rand(rng, 0:23),
-                rand(rng, 0:59), rand(rng, 0:59999) / 1000)
-            ref = SPICE.utc2et(s)
-            got = neo_time(() -> utc2et(ctx, s), s)
-            worst = max(worst, abs(got - ref))
-            isnan(got) || (same_str2et &= str2et(ctx, s) == got)
-        end
-        @test same_str2et
-        measured(@sprintf("  %-58s max=%.3e", "utc2et, random dates, absolute s", worst))
-        # One unit in the last place of 1e9 s is 1.2e-7 s.
-        @test worst <= 5e-7
-
-        # Around every leap second of the kernel, and inside the leap second itself.
-        at = SPICE.gdpool("DELTET/DELTA_AT"; room=200)
-        nleap = 0; wleap = 0.0
-        for i in 4:2:length(at)                 # the first entry is the initial offset
-            # The entry is the first instant with the new offset: 1 Jan or 1 Jul 00:00.
-            day = SPICE.et2utc(at[i] + 100.0, "ISOC", 0)
-            y = parse(Int, day[1:4]); mo = parse(Int, day[6:7])
-            (py, pmo, pd) = mo == 1 ? (y - 1, 12, 31) : (y, 6, 30)
-            for s in (iso(py, pmo, pd, 23, 59, 58.25), iso(py, pmo, pd, 23, 59, 59.75),
-                    iso(py, pmo, pd, 23, 59, 60.0), iso(py, pmo, pd, 23, 59, 60.5),
-                    iso(y, mo, 1, 0, 0, 0.0), iso(y, mo, 1, 0, 0, 1.5))
-                wleap = max(wleap, abs(neo_time(() -> utc2et(ctx, s), s) - SPICE.utc2et(s)))
-            end
-            nleap += 1
-        end
-        println("  leap seconds checked: ", nleap)
-        measured(@sprintf("  %-58s max=%.3e", "utc2et, around leap seconds, absolute s", wleap))
-        @test nleap >= 26
-        @test wleap <= 5e-7
-        # The leap second is one second long: 23:59:60.5 lies between its neighbours.
-        u(s) = neo_time(() -> utc2et(ctx, s), s)
-        @test u("2016-12-31T23:59:60.500") - u("2016-12-31T23:59:59.500") ≈ 1.0 atol = 1e-6
-        @test u("2017-01-01T00:00:00.500") - u("2016-12-31T23:59:60.500") ≈ 1.0 atol = 1e-6
-        println("  utc2et calls of Allspice that threw: ", NEO_TIME_ERRORS[])
-        @test NEO_TIME_ERRORS[] == 0
-
-        # Forms of the input string.
-        for s in ("2000-01-01T12:00:00", "2000-01-01", "2024-02-29T23:59:59.999",
-                "1999-12-31T23:59:59.123456", "2020-06-15T06:07:08 UTC", "2000-01-01 12:00:00 TDB",
-                "2030-03-04 05:06:07.5 TDB")
-            ref = try SPICE.str2et(s) catch; nothing end
-            ref === nothing && continue
-            @test isapprox(neo_time(() -> str2et(ctx, s), s), ref; atol=5e-7)
-        end
-
-        # et2utc: equal strings in the three formats.
-        ets = random_epochs(rng, 200, SPICE.utc2et("1972-01-02T00:00:00"),
-            SPICE.utc2et("2035-01-01T00:00:00"))
-        for i in 4:2:length(at)
-            t = SPICE.utc2et(SPICE.et2utc(at[i] + 100.0, "ISOC", 0)[1:10] * "T00:00:00")
-            append!(ets, (t - 2.5, t - 1.5, t - 0.5, t, t + 0.5))
-        end
-        nbad = 0
-        for et in ets, (fmt, prec) in (("ISOC", 3), ("ISOC", 0), ("ISOC", 6), ("C", 3), ("J", 6))
-            ref = SPICE.et2utc(et, fmt, prec)
-            got = et2utc(ctx, et, fmt, prec)
-            if got != ref
-                nbad += 1
-                nbad <= 5 && println("  et2utc differs: et=", et, " ", fmt, " ", prec, ": ",
-                    repr(got), " against ", repr(ref))
-            end
-        end
-        println("  et2utc strings compared: ", 5 * length(ets), ", different: ", nbad)
-        @test nbad == 0
-        # Round trip.
-        for et in ets[1:50]
-            @test abs(neo_time(() -> utc2et(ctx, et2utc(ctx, et, "ISOC", 6)), "round trip") - et) <= 1e-6
-        end
-
-        # deltet in both directions.
-        wd = 0.0
-        for et in ets
-            wd = max(wd, abs(deltet(ctx, et, "ET") - SPICE.deltet(et, "ET")),
-                abs(deltet(ctx, et, "UTC") - SPICE.deltet(et, "UTC")))
-        end
-        measured(@sprintf("  %-58s max=%.3e", "deltet, absolute s", wd))
-        @test wd <= 1e-9
     end
 
     @apart @testset "no leap-second kernel" begin

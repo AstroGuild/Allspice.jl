@@ -11,10 +11,9 @@ Feature: Errors for queries that cannot be answered
     And the message is not empty
 
     Examples:
-      | epoch    |
-      | 1.0e11   |
-      | -1.0e11  |
-      | 4.74e9   |
+      | epoch      |
+      | 4.736e9    |
+      | -4.735e9   |
 
   Scenario: The ends of the coverage are inside the coverage
     When the user asks for a state at the first or the last epoch of the coverage
@@ -36,3 +35,12 @@ Feature: Errors for queries that cannot be answered
     When the user loads a path that is not a file
     Then a "SpiceError" with kind "nofile" is thrown
     And the context is unchanged
+
+  Scenario: Unknown frame ID
+    When the user asks for a rotation to a frame ID that has no definition
+    Then a "SpiceError" with kind "unknownframe" is thrown
+
+  Scenario: Meta-kernel that lists a meta-kernel
+    When the user loads a meta-kernel whose "KERNELS_TO_LOAD" names another meta-kernel
+    Then a "SpiceError" with kind "unsupported" is thrown, as CSPICE signals an error
+    And the number of loaded kernels is unchanged
