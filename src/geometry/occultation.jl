@@ -385,10 +385,10 @@ function _geo_occ_roles(ks::KernelSet, tols::DSKTolerances, front::_GeoOccBody, 
 end
 
 """
-    occult(targ1, shape1, frame1, targ2, shape2, frame2, abcorr, obsrvr, et) -> Int
+    occult([ctx,] targ1, shape1, frame1, targ2, shape2, frame2, abcorr, obsrvr, et) -> Int
 
-Return the occultation state of two targets as seen by `obsrvr` at ET `et`, as
-`occult_c`:
+Return the occultation state of two targets as seen by `obsrvr` at `et` (seconds past
+J2000 TDB), as `occult_c` of CSPICE:
 
 | Code | Meaning |
 |---|---|
@@ -400,19 +400,48 @@ Return the occultation state of two targets as seen by `obsrvr` at ET `et`, as
 | 2 | annular occultation of the second target by the first |
 | 3 | total occultation of the second target by the first |
 
-`shape1` and `shape2` are `"ELLIPSOID"`, `"POINT"` or `"DSK/UNPRIORITIZED[/SURFACES =
-<list>]"`; a target with DSK data needs a point as the other target. `frame1` and
-`frame2` are the body-fixed frames of the extended targets (a blank string for a
-point). Stellar aberration is not used: `LT+S` acts as `LT`, as in CSPICE. Forms: on a
-`KernelSet`, on a `SpiceContext` (which gives the DSK tolerances), and on the default
-context.
+`shape1` and `shape2` are `"ELLIPSOID"`, `"POINT"` or `"DSK/UNPRIORITIZED"`; the DSK
+form can end with `"/SURFACES = <list>"`. At least one target must be extended, and a
+DSK target needs a point as the other target. With a point and an extended target, the
+only codes are 0, ±2 (the point is in front) and ±3 (the point is behind).
 
-Contract: the three bodies differ; the epoch is a plain number, because the result is
-discrete. No allocation for integer IDs with ellipsoid and point shapes. Throws
-`SpiceError`: `:idcodenotfound`, the kinds of the method string, `:bodiesnotdistinct`,
-`:invalidshape`, `:invalidshapecombo`, `:invalidoption`, `:invalidframe`,
-`:notdisjoint` (the observer is inside a target or the targets overlap), and the errors
-of `spkpos`, of the radii lookup and of [`sincpt`](@ref).
+`frame1` and `frame2` are the body-fixed frames of the extended targets, each centered
+on its target. The frame of a point target is not used; pass `" "`.
+
+`abcorr` is a correction string of [`spkezr`](@ref) or an [`Aberration`](@ref).
+Stellar aberration is not applied: `"LT+S"` acts as `"LT"`, as in CSPICE. `et` must be
+a plain real number, because the result is discrete. The call does not allocate when
+the bodies and the frames are integer IDs and the shapes are ellipsoids or points.
+With a DSK shape, a `ctx` gives the tolerances set by [`dskstl`](@ref).
+
+Throws `SpiceError` with the kind
+- `:idcodenotfound` if a body name is not known;
+- `:bodiesnotdistinct` if two of the three bodies are the same;
+- `:invalidshape` if a shape is not one of the three values, `:badmethodsyntax` or
+  `:badpriorityspec` if a DSK shape string is malformed;
+- `:invalidshapecombo` if both targets are points, or if a DSK target is paired with
+  an extended target;
+- `:invalidoption` if `abcorr` is not a valid correction;
+- `:invalidframe` if the frame of an extended target is blank, not known or not
+  centered on the target;
+- `:notdisjoint` if the observer is inside a target, or if the targets overlap;
+- `:kernelvarnotfound`, `:invalidcount` or `:badaxislength` if the radii of an
+  ellipsoid target are missing or not valid, `:dskdatanotfound` if a DSK target has
+  no data loaded.
+
+Also throws the errors of [`spkpos`](@ref).
+
+# Examples
+```julia
+# Needs an SPK, a PCK with the radii and the rotation of the Moon and the Sun, and a
+# leap seconds kernel.
+et = str2et("2024 APR 08 18:18:00 UTC")
+code = occult("MOON", "ELLIPSOID", "IAU_MOON", "SUN", "ELLIPSOID", "IAU_SUN", "LT", "EARTH", et)
+code > 0        # true if the Moon hides a part of the Sun as seen from the Earth center
+code == 3       # true if the eclipse is total there
+```
+
+See also [`gfoclt`](@ref), [`fovtrg`](@ref).
 """
 occult(ks::KernelSet, targ1::NameOrID, shape1::AbstractString, frame1::NameOrID,
     targ2::NameOrID, shape2::AbstractString, frame2::NameOrID, abcorr::AbcorrArg,

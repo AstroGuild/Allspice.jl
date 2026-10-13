@@ -21,13 +21,6 @@ abstract type GFQuantity end
 "J2000, the frame of every quantity that does not depend on a frame."
 const _GF_J2000 = Int32(1)
 
-"""
-    _gf_body(ks, name, what) -> Int32
-
-ID of the body `name` (a name, a string that holds an integer, or an integer), as
-`bods2c`. Throws `SpiceError(:idcodenotfound)` for an unknown name; `what` names the
-role of the body in the message.
-"""
 function _gf_body(ks::KernelSet, name::AbstractString, what::AbstractString)
     id = bods2c(ks, name)
     id === nothing && throw(SpiceError(:idcodenotfound, "The $what, '$name', is not a " *
@@ -45,7 +38,6 @@ _gf_body(ks::KernelSet, id::Integer, what::AbstractString) = Int32(id)
 @inline _gf_spkezp(ks::KernelSet, targ::Int32, et::Float64, ref::Int32, corr::Aberration,
     obs::Int32) = spkpos(ks, targ, et, ref, corr, obs)
 
-"Position and velocity parts of a state."
 @inline _gf_pv(s::SVector{6,Float64}) =
     (SVector(s[1], s[2], s[3]), SVector(s[4], s[5], s[6]))
 
@@ -97,7 +89,6 @@ _gf_label(::GFDistance) = "Distance pass # of # "
 @inline _gf_value(q::GFDistance, et::Float64) =
     vnorm(_gf_spkezp(q.ks, q.targ, et, _GF_J2000, q.corr, q.obs)[1])
 
-"The distance decreases if and only if the position and the velocity have a negative dot product."
 @inline function _gf_decreasing(q::GFDistance, et::Float64)
     r, v = _gf_pv(_gf_spkez(q.ks, q.targ, et, _GF_J2000, q.corr, q.obs)[1])
     return vdot(r, v) < 0.0
@@ -116,7 +107,6 @@ struct GFSeparation <: GFQuantity
     rad2::Float64
 end
 
-"Radius of the shape `shape` of `body`: 0 for `POINT`, the largest radius for `SPHERE`."
 function _gf_shape_radius(ks::KernelSet, body::Int32, shape::AbstractString)
     s = uppercase(strip(shape, ' '))
     s == "POINT" && return 0.0
@@ -470,12 +460,10 @@ function GFCoordinate(vec::GFVector, ks::KernelSet, crdsys::AbstractString,
     return GFCoordinate(vec, sys, idx, re, f, sense, center)
 end
 
-"Kernel snapshot of a vector source."
 _gf_ks(v::GFPositionVector) = v.ks
 
 _gf_label(::GFCoordinate) = "Coordinate pass # of #"
 
-"The three coordinates of the position `pos` in the system of `q`."
 @inline function _gf_coords(q::GFCoordinate, pos::SVector{3,Float64})
     sys = q.sys
     sys == _GF_RECTANGULAR && return (pos[1], pos[2], pos[3])
@@ -511,7 +499,6 @@ end
         rad[3], east[3], north[3])
 end
 
-"Sign of `x` as an integer: -1, 0 or 1."
 @inline _gf_isign(x::Float64) = x == 0.0 ? 0 : (x < 0.0 ? -1 : 1)
 
 """

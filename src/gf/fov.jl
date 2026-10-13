@@ -264,29 +264,50 @@ end
     "is not supported by this routine. Use the routine GFRFOV instead."))
 
 """
-    gftfov(inst, target, tshape, tframe, abcorr, obsrvr, step, cnfine; keywords) -> Window
+    gftfov([ctx,] inst, target, tshape, tframe, abcorr, obsrvr, step, cnfine;
+           tol, bail=nothing, report=nothing, threads=false) -> Window
 
-Window of the confinement window `cnfine` on which the body `target` is in the field of
-view of the instrument `inst`, as seen from `obsrvr`, as `gftfov_c`. `tshape` is
-`"ELLIPSOID"` (any part of the reference ellipsoid in the field of view counts;
-`tframe` is the body-fixed frame of the target) or `"POINT"` (`tframe` is not used).
-`inst` is the name or the ID of an instrument whose field of view is in the kernel
-pool ([`getfov`](@ref)); the frame of the instrument is evaluated at the epoch of the
-observer. `step` (seconds) must be shorter than the shortest interval, inside `cnfine`,
-on which the target is visible, and than the shortest gap between two such intervals.
+Return the window of epochs, in seconds past J2000 TDB, on which the body `target` is in
+the field of view of the instrument `inst`, as seen from `obsrvr`, as `gftfov_c`.
+
+The result is a new `Window` that is a subset of the confinement window `cnfine`;
+`cnfine` is not modified. The test at each epoch is the one of [`fovtrg`](@ref).
+
+# Arguments
+- `inst`: name or ID of an instrument whose field of view is in the kernel pool (see
+  [`getfov`](@ref)). The angular radius of the field of view must be below 90 degrees
+  minus 1e-6 rad. The frame of the instrument is evaluated at the epoch of the observer.
+- `tshape`: `"ELLIPSOID"` or `"POINT"`, in any case. For an ellipsoid, any part of the
+  reference ellipsoid in the field of view counts.
+- `tframe`: body-fixed frame of an ellipsoid, centered on `target`. It is not read for a
+  point.
+- `abcorr`: any aberration correction of [`spkezr`](@ref).
+- `step`: step of the search in seconds, positive. The search samples the visibility
+  from the start of each interval of `cnfine` at this step, so `step` must be shorter
+  than the shortest interval on which the target is visible, and than the shortest gap
+  between two such intervals. Each change is then bisected until the bracket is not
+  longer than `tol`.
+
 The keywords are those of [`gfdist`](@ref).
 
-Contract: the search is the search of CSPICE (`zzgfsolv` on each interval of `cnfine`
-with the state of `zzgffvst`, which is the test of [`fovtrg`](@ref)): the same samples
-and the same bisection, so an end point differs from the one of CSPICE by rounding of
-the states only, and by no more than about `tol`. The result is a new valid window
-that is a subset of `cnfine`; `cnfine` is not modified. Errors: `:invalidoption` (the
-shape `RAY`, or the correction), `:invalidstep`, `:invalidtolerance`,
-`:idcodenotfound`, `:invalidshape`, `:bodiesnotdistinct`, `:invalidframe`,
-`:frameinfonotfound`, `:fovtoowide`, the errors of the radii lookup, of `getfov` and of
-`spkpos`, `:unknownframe` for an instrument frame that is not known, and the errors of
-the geometry of the field of view (`:degeneratecase`, `:facenotfound`, `:notsupported`,
-`:invalidfov`, `:notdisjoint`).
+Throws `SpiceError(:invalidstep)` if `step <= 0`, `SpiceError(:invalidtolerance)` if
+`tol <= 0`, and
+- `SpiceError(:invalidoption)` if `tshape` is `"RAY"` (use [`gfrfov`](@ref)) or `abcorr`
+  is not a correction;
+- `SpiceError(:invalidshape)` if `tshape` is not known;
+- `SpiceError(:idcodenotfound)` if the observer, the target or the instrument is not
+  known, and `SpiceError(:bodiesnotdistinct)` if the target is the observer;
+- `SpiceError(:invalidframe)` if `tframe` is blank, not known or not centered on the
+  target, and `SpiceError(:frameinfonotfound)` if the frame has no data (ellipsoid only);
+- `SpiceError(:fovtoowide)` if the field of view is too wide;
+- `SpiceError(:unknownframe)` if the frame of the instrument is not known. This check is
+  made at the first epoch that is searched.
+
+An error also comes from the radii lookup, from `getfov`, from the geometry of the field
+of view (`:degeneratecase`, `:facenotfound`, `:notsupported`, `:invalidfov`,
+`:notdisjoint`), and from `spkpos` at the epochs that the search samples.
+
+See also [`gfrfov`](@ref), [`gffove`](@ref), [`fovtrg`](@ref).
 """
 function gftfov(ks::KernelSet, inst::NameOrID, target::NameOrID, tshape::AbstractString,
         tframe::NameOrID, abcorr::AbcorrArg, obsrvr::NameOrID, step::Real, cnfine::Window;
@@ -306,18 +327,25 @@ gftfov(inst::NameOrID, target::NameOrID, tshape::AbstractString, tframe::NameOrI
         kw...)
 
 """
-    gfrfov(inst, raydir, rframe, abcorr, obsrvr, step, cnfine; keywords) -> Window
+    gfrfov([ctx,] inst, raydir, rframe, abcorr, obsrvr, step, cnfine;
+           tol, bail=nothing, report=nothing, threads=false) -> Window
 
-Window of `cnfine` on which the ray along `raydir` (a vector of 3 elements in the frame
-`rframe`) is in the field of view of the instrument `inst`, as `gfrfov_c`. The ray
-starts at the observer `obsrvr`; `abcorr` is `"NONE"`, `"S"` (the direction is
-corrected for the stellar aberration of the observer, as for light that is received)
-or `"XS"` (as for light that is sent). The other arguments and the keywords are those
+Return the window of epochs, in seconds past J2000 TDB, on which the ray from `obsrvr`
+along `raydir` is in the field of view of the instrument `inst`, as `gfrfov_c`.
+
+`raydir` is a vector of 3 elements in the frame `rframe`. `abcorr` is `"NONE"`, `"S"`
+(the direction is corrected for the stellar aberration of the observer, as for light
+that is received) or `"XS"` (as for light that is sent). The test at each epoch is the
+one of [`fovray`](@ref). `inst`, `step`, `cnfine`, the keywords and the result are those
 of [`gftfov`](@ref).
 
-Contract: as `gftfov`, with the test of [`fovray`](@ref). Errors as `gftfov`, and
-`:zerovector` (`raydir`), `:badarg` (`raydir` has not 3 elements), `:invalidoption`
-(a correction with light time).
+Throws the errors of [`gftfov`](@ref) that do not concern the target, and
+`SpiceError(:badarg)` if `raydir` does not have 3 elements, `SpiceError(:zerovector)` if
+it is zero, `SpiceError(:invalidframe)` if `rframe` is blank or not known, and
+`SpiceError(:invalidoption)` if `abcorr` is not one of the three, such as a correction
+with light time.
+
+See also [`gftfov`](@ref), [`gffove`](@ref), [`fovray`](@ref).
 """
 function gfrfov(ks::KernelSet, inst::NameOrID, raydir::AbstractVector, rframe::NameOrID,
         abcorr::AbcorrArg, obsrvr::NameOrID, step::Real, cnfine::Window;
@@ -334,20 +362,28 @@ gfrfov(inst::NameOrID, raydir::AbstractVector, rframe::NameOrID, abcorr::AbcorrA
     gfrfov(default_context(), inst, raydir, rframe, abcorr, obsrvr, step, cnfine; kw...)
 
 """
-    gffove(inst, tshape, raydir, target, tframe, abcorr, obsrvr, tol, udstep, udrefn,
-           cnfine; bail=nothing, report=nothing, threads=false) -> Window
+    gffove([ctx,] inst, tshape, raydir, target, tframe, abcorr, obsrvr, tol, udstep,
+           udrefn, cnfine; bail=nothing, report=nothing, threads=false) -> Window
 
-The visibility search of [`gftfov`](@ref) and [`gfrfov`](@ref) with the step and the
-refinement of the caller, as `gffove_c`. `tshape` is `"ELLIPSOID"`, `"POINT"` or
-`"RAY"`; for a ray `raydir` is the direction, `tframe` its frame, and `target` is not
-used; for a body `raydir` is not used. `udstep` is the step in seconds, a positive
-number or a function `et -> step`; `udrefn` is the refinement function
-`(t1, t2, s1, s2) -> t` (`gfrefn` is the bisection of CSPICE); `tol` is the convergence
-tolerance in seconds, an argument here as in CSPICE.
+Return the visibility window of [`gftfov`](@ref) or [`gfrfov`](@ref), found with the
+step and the refinement of the caller, as `gffove_c`.
 
-Contract: as `gftfov`; `gffove(inst, tshape, raydir, target, tframe, abcorr, obsrvr,
-tol, step, gfrefn, cnfine)` is the search of `gftfov` or `gfrfov` with the step `step`
-and the tolerance `tol`.
+- `tshape`: `"ELLIPSOID"`, `"POINT"` or `"RAY"`. For a ray, `raydir` is the direction,
+  `tframe` its frame, and `target` is not read. For a body, `raydir` is not read, but it
+  must have 3 elements.
+- `tol`: convergence tolerance in seconds, positive. It is an argument, as in CSPICE;
+  the default of [`gfstol`](@ref) is not used.
+- `udstep`: the step in seconds, a positive number or a function `et -> step`.
+- `udrefn`: the refinement function `(t1, t2, s1, s2) -> t`. It returns an epoch in the
+  bracket [`t1`, `t2`], whose ends have the states `s1` and `s2`. [`gfrefn`](@ref) is
+  the bisection of CSPICE.
+
+The other arguments, the keywords `bail`, `report` and `threads`, the result and the
+errors are those of [`gftfov`](@ref) and [`gfrfov`](@ref).
+`gffove(inst, tshape, raydir, target, tframe, abcorr, obsrvr, tol, step, gfrefn, cnfine)`
+gives the window of `gftfov` or `gfrfov` with the step `step` and the tolerance `tol`.
+
+See also [`gftfov`](@ref), [`gfrfov`](@ref), [`gfevnt`](@ref).
 """
 function gffove(ks::KernelSet, inst::NameOrID, tshape::AbstractString,
         raydir::AbstractVector, target::NameOrID, tframe::NameOrID, abcorr::AbcorrArg,

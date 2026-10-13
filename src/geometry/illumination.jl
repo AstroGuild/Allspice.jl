@@ -96,39 +96,67 @@ function _geo_illumf(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
 end
 
 """
-    illumg(method, target, ilusrc, et, fixref, abcorr, obsrvr, spoint)
+    illumg([ctx,] method, target, ilusrc, et, fixref, abcorr, obsrvr, spoint)
         -> (trgepc, srfvec, phase, incdnc, emissn)
 
-Return the illumination angles at the surface point `spoint` of `target` (km, body-fixed
-frame `fixref`) for the illumination source `ilusrc` and the observer `obsrvr`, as
-`illumg_c`: the epoch `trgepc` at the point, the vector `srfvec` from the observer to
-the point, the phase angle, the incidence angle of the source and the emission angle
-(radians). Forms: on a `KernelSet`, on a `SpiceContext` (which gives the DSK
-tolerances), and on the default context.
+Return the illumination angles at the surface point `spoint` of `target`, for the
+illumination source `ilusrc` and the observer `obsrvr` at `et` (seconds past J2000
+TDB), as `illumg_c` of CSPICE.
 
-`method` is `"ELLIPSOID"` or `"DSK/UNPRIORITIZED[/SURFACES = <list>]"`; it selects the
-surface normal. The arguments are in the order of CSPICE.
+- `trgepc`: the epoch at the point. It is `et` corrected for the light time between
+  the observer and the point, and `et` itself without a correction.
+- `srfvec`: the vector from the observer to the point, in km, in the body-fixed frame
+  `fixref` at `trgepc`.
+- `phase`: the angle at the point between the directions to the source and to the
+  observer (rad).
+- `incdnc`: the angle between the outward surface normal and the direction to the
+  source (rad).
+- `emissn`: the angle between the outward surface normal and the direction to the
+  observer (rad).
 
-Contract: `spoint` has 3 elements and is taken as a surface point without a check;
-`fixref` is centered on `target`. For an ellipsoid the epoch can be a dual number, and
-the call does not allocate for integer IDs. Throws `SpiceError`: `:invalidoption`,
-`:idcodenotfound`, the kinds of the method string, `:invalidmethod`,
-`:bodiesnotdistinct`, `:noframe`, `:invalidframe`, and the errors of `spkcpt`, of the
-radii lookup and of [`srfnrm`](@ref) for DSK data.
+`spoint` is in km in `fixref` (3 elements). The call does not check that it is on the
+surface. `method` selects the surface normal: `"ELLIPSOID"` or `"DSK/UNPRIORITIZED"`;
+the DSK form can end with `"/SURFACES = <list>"`. `abcorr` is a correction string of
+[`spkezr`](@ref) or an [`Aberration`](@ref). With a correction, the source is taken
+where it appears from the point at `trgepc`.
+
+With `"ELLIPSOID"`, `et` can be a `ForwardDiff.Dual`, and the call does not allocate
+when the bodies and the frame are integer IDs. With a DSK method, a `ctx` gives the
+tolerances set by [`dskstl`](@ref).
+
+Throws `SpiceError` with the kind
+- `:invalidoption` if `abcorr` is not a valid correction;
+- `:idcodenotfound` if a body name is not known;
+- `:badmethodsyntax` or `:badpriorityspec` if `method` is malformed, `:invalidmethod`
+  if it holds a sub-point type;
+- `:bodiesnotdistinct` if `target` and `obsrvr` are the same body;
+- `:noframe` if `fixref` is not known, `:invalidframe` if it is not centered on `target`;
+- `:badarg` if `spoint` does not have 3 elements;
+- `:kernelvarnotfound`, `:invalidcount` or `:badaxislength` if the radii of `target`
+  are missing or not valid (ellipsoid).
+
+Also throws the errors of [`spkcpt`](@ref) and, with a DSK method, of [`srfnrm`](@ref).
+
+See also [`ilumin`](@ref), [`illumf`](@ref), [`gfilum`](@ref).
 """
 function illumg end
 
 """
-    illumf(method, target, ilusrc, et, fixref, abcorr, obsrvr, spoint)
+    illumf([ctx,] method, target, ilusrc, et, fixref, abcorr, obsrvr, spoint)
         -> (trgepc, srfvec, phase, incdnc, emissn, visibl, lit)
 
-As [`illumg`](@ref), with the two flags of `illumf_c`: `visibl` tells whether the point
-is seen from the observer and `lit` whether the source lights it. For an ellipsoid the
-flags compare the emission and the incidence angle with 90 degrees; for DSK data a
-point also fails if the surface blocks the ray toward the observer or the source.
+Return the outputs of [`illumg`](@ref) and two flags, as `illumf_c` of CSPICE: `visibl`
+tells whether the observer sees the point, and `lit` whether the source lights it.
 
-Contract: as [`illumg`](@ref). As in CSPICE, the DSK branch uses all loaded surfaces of
-the target and the epoch `trgepc`, whatever the surface list of `method` says.
+With `"ELLIPSOID"`, `visibl` is `emissn <= π/2` and `lit` is `incdnc <= π/2`. With a
+DSK method, a flag is also false if the surface blocks the ray from the point toward
+the observer or toward the source.
+
+As in CSPICE, a DSK method uses all loaded surfaces of the target, whatever the
+`SURFACES` list of `method` says, and takes the surface normal at the epoch `trgepc`.
+The arguments, the remaining notes and the errors are those of [`illumg`](@ref).
+
+See also [`ilumin`](@ref), [`illumg`](@ref).
 """
 function illumf end
 
@@ -148,15 +176,27 @@ for (f, g) in ((:illumg, :_geo_illumg), (:illumf, :_geo_illumf))
 end
 
 """
-    ilumin(method, target, et, fixref, abcorr, obsrvr, spoint)
+    ilumin([ctx,] method, target, et, fixref, abcorr, obsrvr, spoint)
         -> (trgepc, srfvec, phase, incdnc, emissn)
 
-Return the illumination angles at the surface point `spoint` of `target` with the Sun
-as the source, as `ilumin_c`: [`illumg`](@ref) with `ilusrc = 10`. The arguments are in
-the order of CSPICE.
+Return the illumination angles at the surface point `spoint` of `target`, with the Sun
+as the source, as `ilumin_c` of CSPICE.
 
-Contract: as [`illumg`](@ref). For an ellipsoid the epoch can be a dual number, and the
-call does not allocate for integer IDs.
+`phase`, `incdnc` and `emissn` are the phase angle, the solar incidence angle and the
+emission angle (rad). `trgepc` is the epoch at the point and `srfvec` the vector from
+the observer to the point (km, body-fixed frame `fixref`). This is [`illumg`](@ref)
+with `ilusrc = 10`; see there for the arguments, the notes and the errors.
+
+# Examples
+```julia
+# Needs an SPK, a PCK with the radii and the rotation of Mars, and a leap seconds kernel.
+et = str2et("2025 MAR 01 12:00:00 UTC")
+spoint, = subpnt("NEAR POINT/ELLIPSOID", "MARS", et, "IAU_MARS", "LT+S", "EARTH")
+trgepc, srfvec, phase, incdnc, emissn = ilumin("ELLIPSOID", "MARS", et, "IAU_MARS", "LT+S", "EARTH", spoint)
+daylight = incdnc < halfpi()           # the Sun is above the horizon of the point
+```
+
+See also [`illumg`](@ref), [`illumf`](@ref), [`phaseq`](@ref), [`subslr`](@ref).
 """
 ilumin(ks::KernelSet, method::AbstractString, target::NameOrID, et::Real, fixref::NameOrID,
     abcorr::AbcorrArg, obsrvr::NameOrID, spoint::AbstractVector) =
@@ -170,19 +210,23 @@ ilumin(method::AbstractString, target::NameOrID, et::Real, fixref::NameOrID, abc
     ilumin(default_context(), method, target, et, fixref, abcorr, obsrvr, spoint)
 
 """
-    phaseq(et, target, illmn, obsrvr, abcorr) -> phase
+    phaseq([ctx,] et, target, illmn, obsrvr, abcorr) -> phase
 
-Return the phase angle (radians) at `target` between the directions to the
-illumination source `illmn` and to the observer `obsrvr`, at ET `et`, as `phaseq_c`.
-With a correction the source is taken at the epoch `et - lt`, with `lt` the light time
-between the observer and the target. Forms: on a `KernelSet`, on a `SpiceContext`, and
-on the default context.
+Return the phase angle at `target`, in radians in [0, π]: the angle between the
+directions from the target to the illumination source `illmn` and to the observer
+`obsrvr` at `et` (seconds past J2000 TDB), as `phaseq_c` of CSPICE.
 
-Contract: the three bodies differ (`SpiceError(:bodiesnotdistinct)`); `abcorr` is a
-reception correction (`SpiceError(:invalidoption)` for a transmission correction or an
-unknown value). Postcondition: the result is in [0, pi]. The epoch can be a dual
-number. No allocation for integer IDs. Throws also `SpiceError(:idcodenotfound)` and
-the errors of `spkpos`.
+With a correction, the target is taken as seen by the observer, and the source as seen
+by the target at `et - lt`, where `lt` is the light time between the observer and the
+target. Bodies are names or integer IDs. `et` can be a `ForwardDiff.Dual`. The call
+does not allocate when the bodies are integer IDs.
+
+Throws `SpiceError(:invalidoption)` if `abcorr` is not a valid correction or is a
+transmission correction, `SpiceError(:bodiesnotdistinct)` if two of the three bodies
+are the same, and `SpiceError(:idcodenotfound)` if a body name is not known. Also
+throws the errors of [`spkpos`](@ref).
+
+See also [`ilumin`](@ref), [`gfpa`](@ref).
 """
 function phaseq(ks::KernelSet, et::Real, target::NameOrID, illmn::NameOrID, obsrvr::NameOrID,
         abcorr::AbcorrArg)

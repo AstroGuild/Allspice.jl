@@ -14,14 +14,14 @@ const _EK_TIME = 4
 "Names of the EK data types in code order; `EKColumnAttr.dtype` holds one of them."
 const _EK_TYPE_SYMBOLS = (:CHR, :DP, :INT, :TIME)
 
-"Code 1 to 4 of the data type symbol `s` (`:CHR`, `:DP`, `:INT`, `:TIME`), or 0."
 @inline _ek_dtype_code(s::Symbol) =
     s === :CHR ? 1 : s === :DP ? 2 : s === :INT ? 3 : s === :TIME ? 4 : 0
 
 """
     EKColumnAttr
 
-Attributes of one EK column, as the attribute descriptor of `ekcii_c` and `ekssum_c`:
+Attributes of one EK column, as the attribute descriptor of `ekcii_c` and `ekssum_c`.
+[`ekcii`](@ref) and [`ekssum`](@ref) return it.
 
 - `cclass`: the column class, 1 to 9 (the storage layout; classes 7 to 9 are the
   columns of a segment that the fast writers made);
@@ -31,6 +31,8 @@ Attributes of one EK column, as the attribute descriptor of `ekcii_c` and `ekssu
 - `size`: the number of values of an entry, -1 for entries of variable size;
 - `indexd`: true if the column has an index;
 - `nullok`: true if the column can hold null entries.
+
+CSPICE gives `strlen == 1` for a column that does not have character type.
 """
 struct EKColumnAttr
     cclass::Int
@@ -44,10 +46,14 @@ end
 """
     EKSegmentSummary
 
-Summary of one EK segment, as `ekssum_c` returns it: the table name `tabnam`, the
-numbers of rows and columns, and for each column (in the order of the segment) its
-name in `cnames` and its attributes in `cdescrs`. Invariant: `length(cnames) ==
-length(cdescrs) == ncols`.
+Summary of one EK segment, as `ekssum_c` returns it. [`ekssum`](@ref) returns it.
+
+- `tabnam`: the name of the table of the segment;
+- `nrows`, `ncols`: the numbers of rows and columns;
+- `cnames`: the column names, in the order of the segment;
+- `cdescrs`: the [`EKColumnAttr`](@ref) of each column, in the same order.
+
+`cnames` and `cdescrs` have `ncols` elements.
 """
 struct EKSegmentSummary
     tabnam::String
@@ -117,13 +123,20 @@ end
 """
     EKTable
 
-One loaded table of a `KernelSet`: its name (upper case), the names (upper case) and
-attributes of its columns, and its segments as (file number, segment number) pairs in
-load order, where the file number indexes `KernelSet.ekfiles`. All segments of a table
-have columns with the same names and attributes, as CSPICE requires at load time; the
-order of the columns is that of the first loaded segment, and `cols[k][i]` is the
-descriptor of column `i` of the table in segment `segs[k]`. Never modified after it was
-built.
+One loaded EK table: the entry of the table catalogue that [`ekntab`](@ref),
+[`ektnam`](@ref), [`ekccnt`](@ref) and [`ekcii`](@ref) read. A table is never modified
+after it was built.
+
+- `name`: the table name, in upper case;
+- `cnames`, `attrs`: the name (upper case) and the [`EKColumnAttr`](@ref) of each
+  column, in the order of the first loaded segment of the table;
+- `segs`: the segments of the table in load order, as (file number, segment number)
+  pairs; the file number counts the loaded EK files;
+- `cols`: internal; `cols[k][i]` is the descriptor of column `i` of the table in
+  segment `segs[k]`.
+
+All segments of a table have columns with the same names and attributes; a file whose
+segment does not fit is rejected at load time, as in CSPICE.
 """
 struct EKTable
     name::String
@@ -133,14 +146,12 @@ struct EKTable
     cols::Vector{Vector{_EKColumn}}
 end
 
-"`EKTable(name, cnames, attrs, segs)`: a catalogue entry without column descriptors."
+# A catalogue entry without column descriptors.
 EKTable(name, cnames, attrs, segs) = EKTable(name, cnames, attrs, segs, Vector{_EKColumn}[])
 
-"The public attributes of the column descriptor `c` (`ekssum`, `ekcii`)."
 _ek_attr(c::_EKColumn) = EKColumnAttr(Int(c.cclass), _EK_TYPE_SYMBOLS[c.dtype],
     c.dtype == _EK_CHR ? Int(c.strlen) : 0, Int(c.size), c.ixtype != -1, c.nullok)
 
-"True if the descriptors `a` and `b` have the attributes that `eklef` compares."
 _ek_same_attributes(a::_EKColumn, b::_EKColumn) = a.cclass == b.cclass && a.dtype == b.dtype &&
     a.strlen == b.strlen && a.size == b.size && (a.ixtype != -1) == (b.ixtype != -1) &&
     a.nullok == b.nullok

@@ -91,10 +91,8 @@ function _ek_fcmp(a::AbstractString, b::AbstractString)
     return _EK_EQ
 end
 
-"Relation code of two numbers."
 @inline _ek_ncmp(x, y) = x < y ? _EK_LT : x > y ? _EK_GT : _EK_EQ
 
-"True if the relation code `rel` satisfies the operator `op` (EQ, GE, GT, LE, LT, NE)."
 @inline function _ek_relop(op::Int, rel::Int)
     op == _EK_EQ && return rel == _EK_EQ
     op == _EK_LT && return rel == _EK_LT
@@ -105,7 +103,6 @@ end
     throw(SpiceError(:unnaturalrelation, "The relational operator $op was not recognized."))
 end
 
-"Upper case of an ASCII letter."
 @inline _ek_up(c::UInt8) = (UInt8('a') <= c <= UInt8('z')) ? c - 0x20 : c
 
 """
@@ -195,11 +192,9 @@ function _ek_matchi(string::AbstractString, templ::AbstractString)
     return false
 end
 
-"Throws the error of CSPICE for a scalar element that an entry does not have."
 @noinline _ek_noelt(col::_EKColumn, recptr::Integer) = throw(SpiceError(:invalidindex,
     "COLUMN = $(col.name); ROW = $recptr; ELTIDX = 1. Column entry element was not found."))
 
-"The first 1024 characters of the string `s`."
 _ek_trunc(s::String) = sizeof(s) > _EK_MAXSTR ? String(codeunits(s)[1:_EK_MAXSTR]) : s
 
 """
@@ -286,7 +281,6 @@ function _ek_ecmp(f1, col1::_EKColumn, row1::Integer, f2, col2::_EKColumn, row2:
     return _ek_ncmp(x, y)
 end
 
-"The first element of a numeric entry as a double (an integer is exact), and the null flag."
 @inline function _ek_number(f, col::_EKColumn, row::Integer)
     if col.dtype == _EK_INT
         v, isnull, found = _ek_elt_i(f, col, row, 1)
@@ -488,7 +482,6 @@ struct _EKRowSet
     rows::Vector{Vector{Int32}}
 end
 
-"Number of row vectors of the row set `rs`."
 _ek_nrows(rs::_EKRowSet) = sum(r -> length(r) ÷ rs.nt, rs.rows; init=0)
 
 "Remove the segment vectors without rows from `rs`, as `zzekjsqz`."
@@ -548,7 +541,6 @@ end
 
 _EKKeys(dtype::Int) = _EKKeys(dtype, Bool[], Int[], Float64[], String[])
 
-"Append the first element of the entry of `col` in the record `recptr` of `f` to `keys`."
 function _ek_pushkey!(keys::_EKKeys, f, col::_EKColumn, recptr::Integer)
     col.dtype == keys.dtype || throw(SpiceError(:bug, "Data type mismatch for the column " *
         "$(col.name): type $(col.dtype) in one segment, $(keys.dtype) in another"))
@@ -867,14 +859,30 @@ end
 """
     EKResult
 
-The result of one `ekfind`: the row combinations that satisfy the query, in the order
-of the ORDER BY clause, and the columns of the SELECT clause. The object owns the row
-vectors and keeps the EK data that it points to, so it stays valid after the EK files
-are unloaded and can be read by many tasks at the same time. `nmrows` is the number of
-matching rows; `length(result)` gives the same. The other fields are internal: the
-segments, one segment index and one record pointer for each row and each table of the
-FROM clause, and the table position, column position, data type and name of each
-SELECT column.
+The result of one [`ekfind`](@ref): the rows that satisfy the query, in the order of
+the ORDER BY clause, and the columns of the SELECT clause. It takes the place of the
+global result of the last query in CSPICE.
+
+Read it with [`ekgc`](@ref), [`ekgd`](@ref), [`ekgi`](@ref), [`eknelt`](@ref) and
+[`ekcolumn`](@ref), with rows and SELECT columns that count from 1.
+
+- `nmrows`: the number of matching rows; `length(result)` gives the same.
+- `seltype`: the data type of each SELECT column, `:CHR`, `:DP`, `:INT` or `:TIME`.
+- `selname`: the name of each SELECT column, as `TABLE.COLUMN` in upper case.
+
+The other fields are internal. A result stays valid after the EK files are unloaded,
+and many tasks can read one result at the same time. It is never modified.
+
+# Examples
+```julia
+result, failed, errmsg = ekfind("SELECT NAME, RADIUS FROM MOONS ORDER BY NAME")
+failed && error(errmsg)
+for row in 1:length(result)
+    name, _, _ = ekgc(result, 1, row)
+    radius, isnull, _ = ekgd(result, 2, row)
+    println(name, " ", isnull ? "unknown" : radius)
+end
+```
 """
 struct EKResult
     nmrows::Int
@@ -892,7 +900,6 @@ Base.length(r::EKResult) = r.nmrows
 Base.show(io::IO, r::EKResult) = print(io, "EKResult(", r.nmrows, " rows, columns ",
     join(r.selname, ", "), ")")
 
-"An `EKResult` without rows and columns: the result of a query that has an error."
 _ek_empty_result() = EKResult(0, 0, _EKQSeg[], Matrix{Int32}(undef, 0, 0),
     Matrix{Int32}(undef, 0, 0), Int[], Int[], Symbol[], String[])
 

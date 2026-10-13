@@ -5,13 +5,14 @@
     azlrec(range, az, el, azccw, elplsz) -> SVector{3}
     azlrec(range, az, el; azccw=true, elplsz=true)
 
-Return the rectangular coordinates of the point at the distance `range`, the azimuth
-`az` and the elevation `el` (radians), as `azlrec_c`. `azccw` tells whether the azimuth
-grows counterclockwise about the +Z axis (seen from +Z), and `elplsz` whether the
-elevation grows toward +Z.
+Return the rectangular coordinates of the point at distance `range`, azimuth `az` and
+elevation `el` (radians), as `azlrec_c` of CSPICE.
 
-Contract: no check of the ranges, as in CSPICE. Postcondition: the norm of the result
-is `|range|`.
+`azccw` tells whether the azimuth grows counterclockwise about +Z, seen from +Z.
+`elplsz` tells whether the elevation grows toward +Z. The ranges of the inputs are not
+checked. The result has the unit of `range`.
+
+See also [`recazl`](@ref), [`drdazl`](@ref).
 """
 function azlrec(range::Real, az::Real, el::Real, azccw::Bool, elplsz::Bool)
     r, a, e = promote(float(range), float(az), float(el))
@@ -25,11 +26,13 @@ azlrec(range::Real, az::Real, el::Real; azccw::Bool=true, elplsz::Bool=true) =
     recazl(rectan, azccw, elplsz) -> (range, az, el)
     recazl(rectan; azccw=true, elplsz=true)
 
-Return the distance, the azimuth in [0, 2 pi) and the elevation in [-pi/2, pi/2] of the
-point `rectan`, as `recazl_c`. The flags are those of [`azlrec`](@ref).
+Return the distance, the azimuth in [0, 2π) and the elevation in [-π/2, π/2] (radians)
+of the point `rectan`, as `recazl_c` of CSPICE.
 
-Contract: `rectan` has 3 elements. Postcondition: `azlrec` of the result gives
-`rectan` to rounding.
+`rectan` has 3 elements. The flags are those of [`azlrec`](@ref), which is the inverse
+conversion.
+
+See also [`dazldr`](@ref), [`azlcpo`](@ref).
 """
 function recazl(rectan::AbstractVector, azccw::Bool, elplsz::Bool)
     range, az, el = recrad(rectan)
@@ -47,11 +50,15 @@ recazl(rectan::AbstractVector; azccw::Bool=true, elplsz::Bool=true) =
     dazldr(x, y, z, azccw, elplsz) -> SMatrix{3,3}
     dazldr(x, y, z; azccw=true, elplsz=true)
 
-Return the Jacobian of the transformation from rectangular coordinates to range,
-azimuth and elevation at the point `(x, y, z)`, as `dazldr_c`: row `i` holds the
-partial derivatives of coordinate `i` of (range, azimuth, elevation).
+Return the Jacobian of the conversion from rectangular coordinates to (range, azimuth,
+elevation) at the point `(x, y, z)`, as `dazldr_c` of CSPICE.
 
-Contract: the point is not on the Z axis (`SpiceError(:pointonzaxis)`).
+Row `i` holds the partial derivatives of coordinate `i` of (range, azimuth, elevation)
+with respect to `x`, `y` and `z`. The flags are those of [`azlrec`](@ref).
+
+Throws `SpiceError(:pointonzaxis)` if `x` and `y` are both zero.
+
+See also [`drdazl`](@ref), [`recazl`](@ref).
 """
 function dazldr(x::Real, y::Real, z::Real, azccw::Bool, elplsz::Bool)
     (primal(x) == 0.0 && primal(y) == 0.0) && throw(SpiceError(:pointonzaxis,
@@ -69,11 +76,16 @@ dazldr(x::Real, y::Real, z::Real; azccw::Bool=true, elplsz::Bool=true) =
     drdazl(range, az, el, azccw, elplsz) -> SMatrix{3,3}
     drdazl(range, az, el; azccw=true, elplsz=true)
 
-Return the Jacobian of the transformation from range, azimuth and elevation to
-rectangular coordinates, as `drdazl_c`: column `j` holds the partial derivatives with
-respect to coordinate `j` of (range, azimuth, elevation).
+Return the Jacobian of the conversion from (range, azimuth, elevation) to rectangular
+coordinates, as `drdazl_c` of CSPICE.
 
-Contract: `range >= 0` (`SpiceError(:valueoutofrange)`).
+Column `j` holds the partial derivatives of `x`, `y` and `z` with respect to coordinate
+`j` of (range, azimuth, elevation). The angles are in radians. The flags are those of
+[`azlrec`](@ref).
+
+Throws `SpiceError(:valueoutofrange)` if `range` is negative.
+
+See also [`dazldr`](@ref), [`azlrec`](@ref).
 """
 function drdazl(range::Real, az::Real, el::Real, azccw::Bool, elplsz::Bool)
     primal(range) < 0.0 && throw(SpiceError(:valueoutofrange,
@@ -88,21 +100,44 @@ drdazl(range::Real, az::Real, el::Real; azccw::Bool=true, elplsz::Bool=true) =
     drdazl(range, az, el, azccw, elplsz)
 
 """
-    azlcpo(method, target, et, abcorr, azccw, elplsz, obspos, obsctr, obsref) -> (azlsta, lt)
+    azlcpo([ctx,] method, target, et, abcorr, azccw, elplsz, obspos, obsctr, obsref)
+        -> (azlsta, lt)
 
-Return the range, azimuth and elevation of `target` and their rates (km, rad, km/s,
-rad/s) as seen by an observer with the constant position `obspos` (km, relative to the
-body `obsctr`, in the body-fixed frame `obsref`), and the one-way light time, as
-`azlcpo_c`. The angles are in the topocentric frame at the observer: +Z along the
-outward normal of the reference ellipsoid of `obsctr` at the point below the observer,
-+X toward the north. `method` must be `"ELLIPSOID"`. Forms: on a `KernelSet`, on a
-`SpiceContext`, and on the default context. The arguments are in the order of CSPICE.
+Return the range, azimuth and elevation of `target` and their rates, seen from an
+observer at a constant position on the body `obsctr`, and the one-way light time `lt`
+(s), as `azlcpo_c` of CSPICE.
 
-Contract: `obspos` has 3 elements and `obsref` is centered on `obsctr`. The epoch can
-be a dual number. No allocation for integer IDs. Throws `SpiceError`:
-`:idcodenotfound`, `:unknownframe`, `:invalidframe`, `:invalidmethod`,
-`:invalidoption`, `:pointonzaxis` for a target on the local vertical, and the errors of
-[`spkcpo`](@ref) and of the radii lookup.
+`azlsta` is an `SVector{6}`: range (km), azimuth and elevation (rad), then their rates
+(km/s, rad/s). `obspos` is the observer position relative to the center of `obsctr`
+(km, 3 elements), in the body-fixed frame `obsref`, which must be centered on `obsctr`.
+`et` is in seconds past J2000 TDB.
+
+The angles are measured in the topocentric frame at the observer. Its +Z axis is the
+outward normal of the reference ellipsoid of `obsctr` at the point nearest to the
+observer, and its +X axis points north. For an observer on the polar axis, +X is the +X
+axis of `obsref`. `azccw` and `elplsz` are the flags of [`azlrec`](@ref).
+
+`method` must be `"ELLIPSOID"`. `abcorr` is a correction string of [`spkezr`](@ref) or
+an [`Aberration`](@ref). `et` can be a `ForwardDiff.Dual`. The call does not allocate
+when the bodies and the frame are integer IDs.
+
+Throws `SpiceError(:idcodenotfound)` for an unknown body, `SpiceError(:unknownframe)`
+if `obsref` is not known, `SpiceError(:invalidframe)` if `obsref` is not centered on
+`obsctr`, `SpiceError(:invalidmethod)`, `SpiceError(:invalidoption)` for an unknown
+correction, and `SpiceError(:pointonzaxis)` if the target is on the local vertical.
+Also throws the errors of [`spkcpo`](@ref) and, for missing or invalid radii of
+`obsctr`, `:kernelvarnotfound`, `:invalidcount` or `:badaxislength`.
+
+# Examples
+```julia
+# Needs an SPK, a PCK with the radii and the rotation of the Earth, and a leap seconds kernel.
+et = str2et("2025 MAR 01 12:00:00 UTC")
+station = georec(-116.79 * rpd(), 35.25 * rpd(), 1.0, 6378.1366, 1 / 298.257)   # km
+azlsta, lt = azlcpo("ELLIPSOID", "MOON", et, "LT+S", false, true, station, "EARTH", "IAU_EARTH")
+az, el = azlsta[2] * dpr(), azlsta[3] * dpr()    # degrees; azimuth clockwise from north
+```
+
+See also [`spkcpo`](@ref), [`recazl`](@ref), [`dazldr`](@ref).
 """
 function azlcpo(ks::KernelSet, method::AbstractString, target::NameOrID, et::Real,
         abcorr::AbcorrArg, azccw::Bool, elplsz::Bool, obspos::AbstractVector, obsctr::NameOrID,

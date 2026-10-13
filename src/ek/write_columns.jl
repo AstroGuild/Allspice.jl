@@ -21,21 +21,13 @@
 @inline _ekw_lcp(t::Int) = _EK_LCPIDX + t - 1
 @inline _ekw_lcw(t::Int) = _EK_LCWIDX + t - 1
 
-"Page type (2 or 3) of the numeric column with the descriptor `coldsc`."
 @inline _ekw_ntype(coldsc::Vector{Int32}) = coldsc[_EK_TYPIDX] == _EK_INT ? 3 : 2
 
-"Write the copy `segdsc` back to the segment descriptor in the file."
 @inline function _ekw_put_segdsc(h::DASHandle, segdsc::Vector{Int32})
     copyto!(h.ints, Int(segdsc[_EK_IMDIDX]) + 1, segdsc, 1, _EK_SDSCSZ)
     return nothing
 end
 
-"""
-    _ekw_putc!(dst, at, val, pos, n) -> Nothing
-
-Copy the characters `pos:pos+n-1` of the string `val`, which continues with blanks, to
-`dst[at:at+n-1]`.
-"""
 @inline function _ekw_putc!(dst::Vector{UInt8}, at::Int, val::AbstractVector{UInt8}, pos::Int,
         n::Int)
     m = clamp(length(val) - pos + 1, 0, n)
@@ -44,7 +36,6 @@ Copy the characters `pos:pos+n-1` of the string `val`, which continues with blan
     return nothing
 end
 
-"Write five base-128 digits of `val` to `buf[at:at+4]` (`prtenc`)."
 @inline function _ekw_enc!(buf::Vector{UInt8}, at::Int, val::Integer)
     n = Int(val)
     for k in 4:-1:0                      # invariant: digits after k are stored
@@ -114,7 +105,6 @@ function _ekw_dps(h::DASHandle, segdsc::Vector{Int32}, t::Int, p::Integer)
     return nothing
 end
 
-"Take one link from the data page `p`; free the page if that was its last link."
 @inline function _ekw_unlink(h::DASHandle, segdsc::Vector{Int32}, t::Int, p::Integer)
     nlinks = _ekw_glnk(h, t, p)
     if nlinks > 1
@@ -134,7 +124,6 @@ end
     coldsc[_EK_TYPIDX], coldsc[_EK_LENIDX], coldsc[_EK_SIZIDX], coldsc[_EK_IXTIDX],
     coldsc[_EK_IXPIDX], coldsc[_EK_NFLIDX] == 1, coldsc[_EK_ORDIDX], coldsc[_EK_METIDX])
 
-"The name of the column with the descriptor `coldsc` (`zzekcnam`)."
 _ekw_cnam(s, coldsc::AbstractVector{Int32}) =
     _ek_rstr(s.chars, Int(coldsc[_EK_NAMIDX]) + 1, Int(coldsc[_EK_NAMIDX]) + _EK_CNAMSZ)
 
@@ -218,7 +207,6 @@ function _ekw_ixlk(s, coldsc::AbstractVector{Int32}, key::Integer)
     return Int(s.ints[Int(coldsc[_EK_IXPIDX])+q*256+r])
 end
 
-"Throws unless the column `coldsc` has an index (`:notindexed`) of type 1 (`:invalidtype`)."
 function _ekw_index1_check(s, coldsc::AbstractVector{Int32})
     itype = coldsc[_EK_IXTIDX]
     itype == -1 && throw(SpiceError(:notindexed, "Column $(_ekw_cnam(s, coldsc)) is not indexed."))
@@ -434,7 +422,7 @@ end
 # ---------------------------------------------------------------------------------------
 
 """
-    _ekw_entry_checks(h, segdsc, coldsc, isnull) -> ptrloc base
+    _ekw_entry_checks(segdsc, coldsc, isnull) -> colidx
 
 The first checks of every `zzekad0n`: the ordinal position of the column is inside the
 segment (`:invalidindex`) and a null entry is given only to a column that allows nulls
@@ -462,7 +450,6 @@ end
     return nothing
 end
 
-"Store the number `val` at the address `addr` of the double (t = 2) or integer (t = 3) space."
 @inline function _ekw_putn(h::DASHandle, t::Int, addr::Int, val::Real)
     if t == 2
         h.dps[addr] = val
@@ -472,7 +459,6 @@ end
     return nothing
 end
 
-"Throws `:invalidtype` for an index that is not of type 1; returns whether the column has an index."
 @inline function _ekw_indexed(segdsc::Vector{Int32}, coldsc::Vector{Int32})
     itype = coldsc[_EK_IXTIDX]
     itype == -1 && return false
@@ -867,7 +853,6 @@ function _ekw_de456(h::DASHandle, segdsc::Vector{Int32}, coldsc::Vector{Int32}, 
     return nothing
 end
 
-"Delete the entry of the column `coldsc` from the record at `recptr`, for every class of a type 1 segment."
 function _ekw_de(h::DASHandle, segdsc::Vector{Int32}, coldsc::Vector{Int32}, recptr::Int)
     class = coldsc[_EK_CLSIDX]
     if class == 1 || class == 2
@@ -985,7 +970,6 @@ _ekw_order_c(vals::Vector{Vector{UInt8}}, n::Int, nullok::Bool, nlflgs) =
 # Fast writers: one whole column (classes 1 to 9)
 # ---------------------------------------------------------------------------------------
 
-"Number of the first `nrows` flags that are true."
 @inline _ekw_nnull(nlflgs, nrows::Int) = count(i -> nlflgs[i], 1:nrows)
 
 """
@@ -1007,7 +991,6 @@ function _ekw_fast_index(h::DASHandle, segdsc::Vector{Int32}, coldsc::Vector{Int
     return nothing
 end
 
-"Throws `:unrecognizedtype` unless the index type of a class 1 to 3 column is 1 or none."
 @inline function _ekw_fast_indexed(h::DASHandle, coldsc::Vector{Int32})
     idxtyp = coldsc[_EK_IXTIDX]
     idxtyp == -1 && return false
@@ -1070,14 +1053,12 @@ function _ekw_ac12(h::DASHandle, segdsc::Vector{Int32}, coldsc::Vector{Int32},
     return nothing
 end
 
-"Blank the character page buffer and set its link count to 0 (`zzekac03`)."
 @inline function _ekw_blank_page!(page::Vector{UInt8})
     fill!(page, UInt8(' '))
     _ekw_enc!(page, 1020, 0)
     return nothing
 end
 
-"Add 1 to the link count in the character page buffer."
 @inline _ekw_inc_link!(page::Vector{UInt8}) = _ekw_enc!(page, 1020, _ek_gei(page, 1020) + 1)
 
 """
@@ -1164,7 +1145,6 @@ function _ekw_ac03(h::DASHandle, segdsc::Vector{Int32}, coldsc::Vector{Int32},
     return nothing
 end
 
-"Entry size of row `row` of an array column in fast load."
 @inline _ekw_cursiz(size::Int, entszs, row::Int) = size != -1 ? size : Int(entszs[row])
 
 """

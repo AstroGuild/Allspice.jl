@@ -603,32 +603,83 @@ function _geo_termpt(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
 end
 
 """
-    limbpt(method, target, et, fixref, abcorr, corloc, obsrvr, refvec, rolstp, ncuts,
-           schstp, soltol, maxn) -> (npts, points, epochs, tangts)
+    limbpt([ctx,] method, target, et, fixref, abcorr, corloc, obsrvr, refvec, rolstp,
+           ncuts, schstp, soltol, maxn) -> (npts, points, epochs, tangts)
 
-Return limb points of `target` as seen by `obsrvr`, as `limbpt_c`. The points are in
-`ncuts` half planes that the observer-target line bounds; half plane `i` contains
-`refvec` (body-fixed frame `fixref`) rotated about that line by `(i - 1) * rolstp`
-radians. `npts[i]` is the number of points in half plane `i`; `points` (km, `fixref`),
-`epochs` and `tangts` (the vectors from the observer to the points) hold the points of
-all half planes in order. Forms: on a `KernelSet`, on a `SpiceContext` (which gives the
-DSK tolerances), and on the default context.
+Return limb points of `target` as seen by `obsrvr` at `et` (seconds past J2000 TDB),
+as `limbpt_c` of CSPICE.
 
-`method` is `"TANGENT/ELLIPSOID"`, `"GUIDED/ELLIPSOID"`, `"TANGENT/DSK/UNPRIORITIZED"`
-or `"GUIDED/DSK/UNPRIORITIZED"`, with `"/SURFACES = <list>"` for DSK data. `corloc` is
-`"CENTER"` or `"ELLIPSOID LIMB"` (the light time and the stellar aberration are those of
-the center or of each limb point of the ellipsoid). `schstp` and `soltol` (radians) are
-the search step and the tolerance of the tangent ray search on DSK data. `maxn` is the
-largest total number of points.
+The points lie in `ncuts` half planes bounded by the line from the target center to
+the observer. Half plane `i` contains `refvec` rotated about that line by
+`(i - 1) * rolstp` radians. `refvec` has 3 elements, in the body-fixed frame `fixref`.
 
-Contract: `refvec` is not zero and not parallel to the observer-target line;
-`1 <= ncuts <= maxn`; the result vectors are new. Throws `SpiceError`: `:invalidoption`,
-`:idcodenotfound`, `:bodiesnotdistinct`, `:noframe`, `:invalidframe`, the kinds of the
-method string, `:invalidlimbtype`, `:invalidmethod`, `:invalidlocus`, `:zerovector`,
-`:invalidsize`, `:invalidcount`, `:invalidsearchstep`, `:invalidtolerance`,
-`:invalidrollstep`, `:badradiuscount`, `:noseparation`, `:degeneratecase`,
-`:badlimblocusmix`, `:outofroom` if the points do not fit in `maxn`, and the errors of
-`spkpos`.
+- `npts`: `npts[i]` is the number of points found in half plane `i` (`ncuts` elements).
+- `points`: the limb points, in km in `fixref`, half plane after half plane.
+- `epochs`: the epoch at each point (see `corloc`).
+- `tangts`: the vector from the observer to each point, in km in `fixref` at that epoch.
+
+The three lists have `sum(npts)` elements, not `maxn` as the arrays of CSPICE. The
+points of half plane `i` start at index `sum(npts[1:i-1]) + 1`. They are new vectors of
+`SVector{3,Float64}` and `Float64`.
+
+| `method` | Limb points |
+|---|---|
+| `"TANGENT/ELLIPSOID"` | points of the reference ellipsoid where a ray from the observer is tangent; one per half plane |
+| `"TANGENT/DSK/UNPRIORITIZED"` | points of the DSK surface where a ray from the observer is tangent; none, one or several per half plane |
+| `"GUIDED/ELLIPSOID"` | as `"TANGENT/ELLIPSOID"` |
+| `"GUIDED/DSK/UNPRIORITIZED"` | the outermost DSK surface point on the ray from the center of the ellipsoid limb through each ellipsoid limb point; at most one per half plane |
+
+A DSK method can end with `"/SURFACES = <list>"`.
+
+`corloc` is the place for which the light time and the stellar aberration are
+computed: `"CENTER"` (the target center; all points have the same epoch) or
+`"ELLIPSOID LIMB"` (each limb point of the reference ellipsoid; `TANGENT` methods only).
+
+`schstp` and `soltol` (radians) are used by `"TANGENT/DSK"` only. The ray is rotated in
+the half plane in steps of `schstp`; a tangent point is missed if the ray enters and
+leaves the surface within one step. Each tangent ray is then located to the angle
+`soltol`. With an ellipsoid method both values are ignored.
+
+`maxn` is the largest total number of points. `abcorr` is a correction string of
+[`spkezr`](@ref) or an [`Aberration`](@ref). `et` must be a plain real number. With a
+DSK method, a `ctx` gives the tolerances set by [`dskstl`](@ref).
+
+Throws `SpiceError` with the kind
+- `:invalidoption` if `abcorr` is not a valid correction;
+- `:idcodenotfound` if a body name is not known;
+- `:bodiesnotdistinct` if `target` and `obsrvr` are the same body;
+- `:noframe` if `fixref` is not known, `:invalidframe` if it is not centered on `target`;
+- `:badmethodsyntax` or `:badpriorityspec` if `method` is malformed, `:invalidlimbtype`
+  if it has neither `TANGENT` nor `GUIDED`, `:invalidmethod` if it holds a sub-point
+  or a terminator type;
+- `:invalidlocus` if `corloc` is not one of the two values, `:badlimblocusmix` for
+  `GUIDED` with `"ELLIPSOID LIMB"`;
+- `:zerovector` if `refvec` is zero, `:degeneratecase` if it is parallel to the line
+  from the target to the observer;
+- `:invalidsize` if `maxn < 1`, `:invalidcount` unless `1 <= ncuts <= maxn`,
+  `:invalidrollstep` if `rolstp` is zero and `ncuts > 1`;
+- `:invalidsearchstep` or `:invalidtolerance` if `schstp` or `soltol` is not positive
+  with a DSK method, `:invalidconststep` if `schstp` is too small to change the angle;
+- `:outofroom` if more than `maxn` points are found, `:arraytoosmall` if one half
+  plane has more than 2000;
+- `:noseparation` if the observer is at the target center;
+- `:kernelvarnotfound` or `:badradiuscount` if the radii of `target` are missing or
+  not 3 in number.
+
+Also throws the errors of [`spkpos`](@ref).
+
+# Examples
+```julia
+# Needs an SPK, a PCK with the radii and the rotation of Mars, and a leap seconds kernel.
+et = str2et("2025 MAR 01 12:00:00 UTC")
+z = [0.0, 0.0, 1.0]                     # north pole of Mars in IAU_MARS
+npts, points, epochs, tangts = limbpt("TANGENT/ELLIPSOID", "MARS", et, "IAU_MARS", "LT+S",
+    "CENTER", "EARTH", z, twopi() / 36, 36, 0.0, 0.0, 36)
+length(points) == sum(npts) == 36       # one point per half plane on an ellipsoid
+lonlat = [reclat(p)[2:3] for p in points]
+```
+
+See also [`termpt`](@ref), [`tangpt`](@ref), [`edlimb`](@ref).
 """
 limbpt(ks::KernelSet, method::AbstractString, target::NameOrID, et::Real, fixref::NameOrID,
     abcorr::AbcorrArg, corloc::AbstractString, obsrvr::NameOrID, refvec::AbstractVector,
@@ -647,26 +698,62 @@ limbpt(method::AbstractString, target::NameOrID, et::Real, fixref::NameOrID, abc
         rolstp, ncuts, schstp, soltol, maxn)
 
 """
-    termpt(method, ilusrc, target, et, fixref, abcorr, corloc, obsrvr, refvec, rolstp,
-           ncuts, schstp, soltol, maxn) -> (npts, points, epochs, trmvcs)
+    termpt([ctx,] method, ilusrc, target, et, fixref, abcorr, corloc, obsrvr, refvec,
+           rolstp, ncuts, schstp, soltol, maxn) -> (npts, points, epochs, trmvcs)
 
-Return terminator points of `target` lit by the spherical source `ilusrc`, as seen by
-`obsrvr`, as `termpt_c`. The points are in `ncuts` half planes that the line from the
-target to the source bounds; half plane `i` contains `refvec` rotated about that line
-by `(i - 1) * rolstp` radians. The outputs have the layout of [`limbpt`](@ref), with
-`trmvcs` the vectors from the observer to the points. Forms: on a `KernelSet`, on a
-`SpiceContext` (which gives the DSK tolerances), and on the default context.
+Return terminator points of `target` lit by the source `ilusrc`, as seen by `obsrvr` at
+`et` (seconds past J2000 TDB), as `termpt_c` of CSPICE.
 
-`method` holds the shadow (`UMBRAL` or `PENUMBRAL`), the point definition (`TANGENT` or
-`GUIDED`) and the shape, for example `"UMBRAL/TANGENT/ELLIPSOID"` or
-`"PENUMBRAL/TANGENT/DSK/UNPRIORITIZED"`. `corloc` is `"CENTER"` or
-`"ELLIPSOID TERMINATOR"`. The correction must be a reception correction.
+The points lie in `ncuts` half planes bounded by the line from the target center to
+the source center. Half plane `i` contains `refvec` (body-fixed frame `fixref`)
+rotated about that line by `(i - 1) * rolstp` radians. The outputs have the layout of
+[`limbpt`](@ref); `trmvcs` holds the vectors from the observer to the points (km).
 
-Contract: as [`limbpt`](@ref), with `0 <= ncuts <= maxn`. As in CSPICE, the room left
-in the outputs goes down by the square of the number of points of each half plane, so
-that `:outofroom` can occur before `maxn` points are found. Throws `SpiceError`: the
-kinds of [`limbpt`](@ref), with `:invalidtermtype`, `:invalidshadow`,
-`:badtermlocusmix`, `:objectstooclose`, `:invalidconststep` and `:noconvergence`.
+The source is a sphere with the largest radius of `ilusrc`. `method` joins the shadow,
+the point definition and the shape, for example `"UMBRAL/TANGENT/ELLIPSOID"` or
+`"PENUMBRAL/TANGENT/DSK/UNPRIORITIZED"`:
+
+- `UMBRAL`: the boundary of the region from which no part of the source is visible.
+  `PENUMBRAL`: the boundary of the region from which the whole source is visible.
+- `TANGENT`: points where a ray tangent to the source is tangent to the surface.
+  `GUIDED`: on a DSK surface, the outermost point on the ray from the target center
+  through each terminator point of the reference ellipsoid.
+- `ELLIPSOID`, or `DSK/UNPRIORITIZED` with an optional `"/SURFACES = <list>"`.
+
+`corloc` is `"CENTER"` or `"ELLIPSOID TERMINATOR"` (`TANGENT` methods only), with the
+meaning it has in [`limbpt`](@ref). `abcorr` must be a reception correction. `schstp`,
+`soltol`, `maxn`, `et` and `ctx` are as in [`limbpt`](@ref).
+
+As in CSPICE, the room left in the outputs goes down by the square of the number of
+points of each half plane. With a DSK method `:outofroom` can therefore occur before
+`maxn` points are found.
+
+Throws the kinds of [`limbpt`](@ref) for the bodies, the frame, `refvec`, `rolstp`,
+`maxn` and the radii, and `SpiceError` with the kind
+- `:invalidoption` if `abcorr` is not valid or is a transmission correction;
+- `:bodiesnotdistinct` if `target` is also the observer or the source;
+- `:invalidtermtype` if `method` has neither `TANGENT` nor `GUIDED`, `:invalidshadow`
+  if it has neither `UMBRAL` nor `PENUMBRAL`, `:invalidmethod` if it holds a
+  sub-point type;
+- `:invalidlocus` if `corloc` is not one of the two values, `:badtermlocusmix` for
+  `GUIDED` with `"ELLIPSOID TERMINATOR"`;
+- `:invalidcount` unless `0 <= ncuts <= maxn`;
+- `:objectstooclose` if the source touches the bounding sphere of the target;
+- `:invalidconststep` or `:invalidtolerance` if `schstp` or `soltol` is not positive in
+  a `TANGENT/DSK` search, `:noconvergence` if an iteration does not converge.
+
+# Examples
+```julia
+# Needs an SPK, a PCK with the radii of Mars and the Sun and the rotation of Mars, and
+# a leap seconds kernel.
+et = str2et("2025 MAR 01 12:00:00 UTC")
+z = [0.0, 0.0, 1.0]
+npts, points, epochs, trmvcs = termpt("UMBRAL/TANGENT/ELLIPSOID", "SUN", "MARS", et,
+    "IAU_MARS", "LT+S", "CENTER", "EARTH", z, twopi() / 36, 36, 0.0, 0.0, 36)
+lonlat = [reclat(p)[2:3] for p in points]
+```
+
+See also [`limbpt`](@ref), [`edterm`](@ref), [`ilumin`](@ref).
 """
 termpt(ks::KernelSet, method::AbstractString, ilusrc::NameOrID, target::NameOrID, et::Real,
     fixref::NameOrID, abcorr::AbcorrArg, corloc::AbstractString, obsrvr::NameOrID,
@@ -687,25 +774,47 @@ termpt(method::AbstractString, ilusrc::NameOrID, target::NameOrID, et::Real, fix
 # --- tangent point of a ray -------------------------------------------------------------
 
 """
-    tangpt(method, target, et, fixref, abcorr, corloc, obsrvr, dref, dvec)
+    tangpt([ctx,] method, target, et, fixref, abcorr, corloc, obsrvr, dref, dvec)
         -> (tanpt, alt, range, srfpt, trgepc, srfvec)
 
-Return the tangent point of the ray from `obsrvr` along `dvec` (frame `dref`) on the
-reference ellipsoid of `target`, as `tangpt_c`: the point `tanpt` of the ray that is
-nearest to the ellipsoid, its altitude `alt`, its distance `range` from the observer,
-the point `srfpt` of the ellipsoid nearest to `tanpt`, the epoch `trgepc` at the
-correction locus and the vector `srfvec` from the observer to `srfpt` (km, body-fixed
-frame `fixref`). Forms: on a `KernelSet`, on a `SpiceContext`, and on the default
-context.
+Return the tangent point of the ray from `obsrvr` along `dvec` on the reference
+ellipsoid of `target`, as `tangpt_c` of CSPICE.
 
-`method` must be `"ELLIPSOID"`. `corloc` is `"TANGENT POINT"` or `"SURFACE POINT"`: the
-point for which the light time and the stellar aberration are computed.
+- `tanpt`: the point of the ray nearest to the ellipsoid, in km in the body-fixed
+  frame `fixref`.
+- `alt`: the altitude of `tanpt` above the ellipsoid (km).
+- `range`: the distance from the observer to `tanpt` (km).
+- `srfpt`: the point of the ellipsoid nearest to `tanpt`, in km in `fixref`.
+- `trgepc`: the epoch at the point named by `corloc`; `et` without a correction.
+- `srfvec`: the vector from the observer to `srfpt`, in km in `fixref`.
 
-Contract: `dvec` has 3 elements and is not zero; the observer is outside of the
-ellipsoid (`SpiceError(:invalidgeometry)`). The epoch is a plain number. No allocation
-for integer IDs. Throws `SpiceError`: `:invalidoption`, `:notsupported` (method or
-locus), `:zerovector`, `:idcodenotfound`, `:bodiesnotdistinct`, `:invalidcount`
-(radii), `:noframe`, `:invalidframe`, `:noseparation`, and the errors of `spkpos`.
+If the ray meets the ellipsoid, `alt` is 0 and `tanpt` equals `srfpt`. If
+the ray points away from the target, `tanpt` is the observer position and `range` is 0.
+
+`dvec` is the ray direction (3 elements, not zero) in the frame `dref`. `method` must
+be `"ELLIPSOID"`. `corloc` is `"TANGENT POINT"` or `"SURFACE POINT"`: the point for
+which the light time and the stellar aberration are computed. `abcorr` is a correction
+string of [`spkezr`](@ref) or an [`Aberration`](@ref). `et` is in seconds past J2000
+TDB and must be a plain real number. The call does not allocate when the bodies and
+the frames are integer IDs.
+
+Throws `SpiceError` with the kind
+- `:invalidoption` if `abcorr` is not a valid correction;
+- `:notsupported` if `method` is not `"ELLIPSOID"` or `corloc` is not one of the two
+  values;
+- `:zerovector` if `dvec` is zero, `:badarg` if it does not have 3 elements;
+- `:idcodenotfound` if a body name is not known;
+- `:bodiesnotdistinct` if `target` and `obsrvr` are the same body;
+- `:kernelvarnotfound` or `:invalidcount` if the radii of `target` are missing or not
+  3 in number;
+- `:noframe` if `fixref` or `dref` is not known, `:invalidframe` if `fixref` is not
+  centered on `target`;
+- `:noseparation` if the observer is at the target center, `:invalidgeometry` if it is
+  inside or on the ellipsoid.
+
+Also throws the errors of [`spkpos`](@ref).
+
+See also [`limbpt`](@ref), [`sincpt`](@ref), [`npedln`](@ref).
 """
 function tangpt(ks::KernelSet, method::AbstractString, target::NameOrID, et0::Real,
         fixref::NameOrID, abcorr::AbcorrArg, corloc::AbstractString, obsrvr::NameOrID,
@@ -811,7 +920,6 @@ tangpt(method::AbstractString, target::NameOrID, et::Real, fixref::NameOrID, abc
     corloc::AbstractString, obsrvr::NameOrID, dref::NameOrID, dvec::AbstractVector) =
     tangpt(default_context(), method, target, et, fixref, abcorr, corloc, obsrvr, dref, dvec)
 
-"True for the locus `TANGENT POINT`, false for `SURFACE POINT` (case and blanks ignored); `SpiceError(:notsupported)` otherwise."
 @inline function _geo_tanloc(corloc::AbstractString)
     corloc == "TANGENT POINT" && return true
     corloc == "SURFACE POINT" && return false

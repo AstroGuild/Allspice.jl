@@ -128,29 +128,47 @@ end
 @inline _gf_decreasing(q::GFIllumination, et::Float64) = _gf_ilurate(q, et) < 0.0
 
 """
-    gfilum(method, angtyp, target, illmn, fixref, abcorr, obsrvr, spoint, relate, refval,
-           adjust, step, cnfine; keywords) -> Window
+    gfilum([ctx,] method, angtyp, target, illmn, fixref, abcorr, obsrvr, spoint, relate,
+           refval, adjust, step, cnfine; tol, bail=nothing, report=nothing,
+           threads=false) -> Window
 
-Window of the confinement window `cnfine` on which an illumination angle at the surface
-point `spoint` of `target` satisfies the relation `relate` with the reference value
-`refval` (radians), as `gfilum_c`. `angtyp` is `"PHASE"` (the angle at the point
-between the directions to the source `illmn` and to the observer `obsrvr`),
-`"INCIDENCE"` (between the surface normal and the direction to the source) or
-`"EMISSION"` (between the normal and the direction to the observer). `spoint` is a
-vector of 3 elements (km) in the body-fixed frame `fixref`, which must be centered on
-`target`; the normal is the one of the reference ellipsoid, and `method` must be
-`"ELLIPSOID"`. `abcorr` is `"NONE"` or a reception correction. The other arguments and
-the keywords are those of [`gfdist`](@ref).
+Return the window of epochs, in seconds past J2000 TDB, on which an illumination angle
+in radians at the surface point `spoint` of `target` satisfies the relation `relate`
+with `refval`, as `gfilum_c`. The angle is the one of [`illumg`](@ref).
 
-Contract: as `gfdist`: the search is the search of CSPICE (`zzgfrelx`), the value is
-the angle of [`illumg`](@ref) and the test "is decreasing" uses the rate of `zzilusta`,
-so an end point differs from the one of CSPICE by rounding only, and by no more than
-about `tol`. The result is a new valid window that is a subset of `cnfine`. Errors:
-`:invalidstep`, `:invalidtolerance`, `:notrecognized` (relation), `:idcodenotfound`,
-`:bodiesnotdistinct`, `:invalidoption` (correction), `:notsupported` (a transmission
-correction, or the angle type), `:invalidmethod`, `:unknownframe`, `:invalidframe`,
-the errors of the radii lookup, `:badarg` (`spoint`), `:valueoutofrange`,
-`:invalidvalue`, and the errors of `spkcpt` and `spkcpo`.
+# Arguments
+- `method`: must be `"ELLIPSOID"`, in any case. The surface normal is the one of the
+  reference ellipsoid.
+- `angtyp`: `"PHASE"` (the angle at the point between the directions to the source
+  `illmn` and to the observer `obsrvr`), `"INCIDENCE"` (between the normal and the
+  direction to the source) or `"EMISSION"` (between the normal and the direction to the
+  observer). Case and blanks are ignored.
+- `target`, `illmn`, `obsrvr`: body names or IDs. The target must differ from the other
+  two; the source can be the observer.
+- `fixref`: body-fixed frame of `spoint`. It must be centered on `target`.
+- `abcorr`: `"NONE"` or a reception correction.
+- `spoint`: a vector of 3 elements in km. It is taken as a point of the surface without
+  a check.
+
+The other arguments, the keywords and the result are those of [`gfdist`](@ref).
+
+Throws `SpiceError(:invalidstep)`, `SpiceError(:invalidtolerance)`,
+`SpiceError(:notrecognized)`, `SpiceError(:valueoutofrange)` and
+`SpiceError(:invalidvalue)` as [`gfdist`](@ref) does, and
+- `SpiceError(:idcodenotfound)` if a body name is not known, and
+  `SpiceError(:bodiesnotdistinct)` if the target is the observer or the source;
+- `SpiceError(:invalidoption)` if `abcorr` is not a correction, and
+  `SpiceError(:notsupported)` if it is a transmission correction;
+- `SpiceError(:badarg)` if `spoint` does not have 3 elements;
+- `SpiceError(:invalidmethod)` if `method` is not `"ELLIPSOID"`;
+- `SpiceError(:unknownframe)` if `fixref` is not known, and `SpiceError(:invalidframe)`
+  if it is not centered on `target`;
+- `SpiceError(:notsupported)` if `angtyp` is not one of the three.
+
+An error also comes from the radii lookup if `target` has no valid radii, and from
+`spkcpt` and `spkcpo` at the epochs that the search samples.
+
+See also [`ilumin`](@ref), [`illumg`](@ref), [`gfpa`](@ref).
 """
 function gfilum(ks::KernelSet, method::AbstractString, angtyp::AbstractString,
         target::NameOrID, illmn::NameOrID, fixref::NameOrID, abcorr::AbcorrArg,

@@ -26,7 +26,6 @@
 
 const _EK_DPTBAS = 2              # the data pointers of a record follow two integers
 
-"Data pointer of the column `col` in the record at `recptr`."
 @inline _ek_datptr(s, col::_EKColumn, recptr::Integer) = Int(s.ints[Int(recptr)+_EK_DPTBAS+col.ord])
 
 "Throws the error of CSPICE for a data pointer that is not an address and not null."
@@ -40,7 +39,6 @@ const _EK_DPTBAS = 2              # the data pointers of a record follow two int
         "record pointer = $recptr"))
 end
 
-"Throws `SpiceError(:noclass)` for a column class that the data type does not have."
 @noinline _ek_noclass(col::_EKColumn, what::AbstractString) = throw(SpiceError(:noclass,
     "Class $(col.cclass) from input column descriptor is not a supported $what class.  " *
     "COLUMN = $(col.name)."))

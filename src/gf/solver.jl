@@ -22,13 +22,15 @@ const _GF_MXLOOP = 1000
 const _GF_ADDWIN = 0.5
 
 """
-    gfrefn(t1, t2, s1, s2) -> Float64
+    gfrefn(t1, t2, s1=false, s2=true) -> Float64
 
-Default refinement of the geometry finder, as `gfrefn_c`: the midpoint of the bracket
-[`t1`, `t2`], computed as `t1 * 0.5 + t2 * 0.5` and bracketed by the two ends. The
-states `s1` and `s2` at the two ends are not used.
+Return the midpoint of the bracket [`t1`, `t2`], as `gfrefn_c`. This is the default
+refinement function of the geometry finder.
 
-Contract: the result lies between `t1` and `t2` (in either order). No allocation.
+The result is `t1 * 0.5 + t2 * 0.5`, clamped between `t1` and `t2`; the two ends can be in
+either order. The states `s1` and `s2` at the two ends are not used.
+
+See also [`gfevnt`](@ref), [`gfocce`](@ref), [`gffove`](@ref).
 """
 @inline function gfrefn(t1::Real, t2::Real, s1::Bool=false, s2::Bool=true)
     a = Float64(t1)
@@ -78,11 +80,9 @@ function _gf_run(step, tol::Real; refine=gfrefn, bail=nothing, report=nothing,
     return _GFRun(st, refine, bail, report, Float64(tol), threads)
 end
 
-"The controls `run` with the tolerance `tol`."
 _gf_withtol(run::_GFRun, tol::Float64) =
     _GFRun(run.step, run.refine, run.bail, run.report, tol, run.threads)
 
-"Step of the search at epoch `et` (`udstep`)."
 @inline _gf_step(run::_GFRun{Float64}, et::Float64) = run.step
 @inline function _gf_step(run::_GFRun, et::Float64)
     st = Float64(run.step(et))::Float64
@@ -91,7 +91,6 @@ _gf_withtol(run::_GFRun, tol::Float64) =
     return st
 end
 
-"Stop the search with an `InterruptException` if the interrupt callback says so."
 @inline function _gf_bail(run::_GFRun)
     run.bail === nothing && return nothing
     (run.bail()::Bool) && throw(InterruptException())
@@ -325,15 +324,8 @@ const _GF_ABSMIN = 5
 const _GF_LOCMAX = 6
 const _GF_ABSMAX = 7
 
-"The CSPICE spelling of the relation with code `rel`."
 _gf_relname(rel::Int) = ("<", "=", ">", "LOCMIN", "ABSMIN", "LOCMAX", "ABSMAX")[rel]
 
-"""
-    _gf_relcode(relate) -> Int
-
-Code of the relation `relate`, left justified and in upper case as CSPICE reads it.
-Throws `SpiceError(:notrecognized)` for another string.
-"""
 function _gf_relcode(relate::AbstractString)
     s = uppercase(strip(relate, ' '))
     s == "<" && return _GF_LT
@@ -480,12 +472,21 @@ end
 """
     uddf(udfunc, x, dx) -> Float64
 
-Numerical derivative of the scalar function `udfunc` at `x`, as `uddf_c`: the
-difference quotient `(udfunc(x + dx) - udfunc(x - dx)) / (2 dx)`, with the arithmetic
-of `qderiv`.
+Return the numerical derivative of the scalar function `udfunc` at `x`, as `uddf_c`.
 
-Contract: precondition `dx != 0`, else `SpiceError(:dividebyzero)`. `udfunc` is called
-at `x - dx` and then at `x + dx`.
+The result is the central difference `(udfunc(x + dx) - udfunc(x - dx)) / (2 dx)`.
+`udfunc` is called once at `x - dx` and then once at `x + dx`. Unlike CSPICE, `udfunc`
+takes the abscissa alone.
+
+Throws `SpiceError(:dividebyzero)` if `dx == 0`.
+
+# Examples
+```jldoctest
+julia> uddf(x -> x^2, 3.0, 0.5)
+6.0
+```
+
+See also [`uddc`](@ref), [`gfuds`](@ref).
 """
 function uddf(udfunc::F, x::Real, dx::Real) where {F}
     h = Float64(dx)
@@ -499,9 +500,19 @@ end
 """
     uddc(udfunc, x, dx) -> Bool
 
-True if the numerical derivative `uddf(udfunc, x, dx)` is negative, as `uddc_c`: the
-"is decreasing" test of `gfuds` for a function without an analytical derivative.
+Return `true` if the numerical derivative `uddf(udfunc, x, dx)` is negative, as `uddc_c`.
 
-Contract: precondition `dx != 0`, else `SpiceError(:dividebyzero)`.
+This is the "is decreasing" test that [`gfuds`](@ref) needs, for a function without an
+analytical derivative: pass `et -> uddc(udfuns, et, dx)` as `udqdec`.
+
+Throws `SpiceError(:dividebyzero)` if `dx == 0`.
+
+# Examples
+```jldoctest
+julia> uddc(cos, 1.0, 1e-3)
+true
+```
+
+See also [`uddf`](@ref), [`gfuds`](@ref).
 """
 uddc(udfunc::F, x::Real, dx::Real) where {F} = uddf(udfunc, x, dx) < 0.0

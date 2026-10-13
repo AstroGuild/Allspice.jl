@@ -14,7 +14,6 @@
 @noinline _geo_no_intercept() = throw(SpiceError(:degeneratecase,
     "no intercept of the ray toward the target center was found"))
 
-"True for a near-point method, false for an intercept method (`SpiceError(:invalidsubtype)` otherwise)."
 @inline function _geo_near(m::_GeoMethod, method)
     m.subtyp == 0x00 && _geo_bad_subtype(method)
     near = m.dsk ? m.subtyp == _GEO_NADIR : (m.subtyp == _GEO_NEARPOINT || m.subtyp == _GEO_NADIR)
@@ -170,7 +169,6 @@ function _geo_subslr(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
     return spoint, trgepc, spoint - obspos
 end
 
-"The plain value of a vector of any number type."
 @inline _geo_frozen(v::SVector{3}) = Vec3{Float64}(primal(v[1]), primal(v[2]), primal(v[3]))
 
 """
@@ -203,39 +201,84 @@ end
 # --- public interface -------------------------------------------------------------------
 
 """
-    subpnt(method, target, et, fixref, abcorr, obsrvr) -> (spoint, trgepc, srfvec)
+    subpnt([ctx,] method, target, et, fixref, abcorr, obsrvr) -> (spoint, trgepc, srfvec)
 
-Return the sub-observer point `spoint` on `target` (km, body-fixed frame `fixref`), the
-epoch `trgepc` at the point and the vector `srfvec` from the observer to the point (in
-`fixref` at `trgepc`), as `subpnt_c`. Forms: on a `KernelSet`, on a `SpiceContext` (which
-gives the DSK tolerances), and on the default context.
+Return the sub-observer point on `target` as seen by `obsrvr` at `et` (seconds past
+J2000 TDB), as `subpnt_c` of CSPICE.
 
-`method` is `"NEAR POINT/ELLIPSOID"`, `"INTERCEPT/ELLIPSOID"` (also the legacy forms
-`"Near point: ellipsoid"` and `"Intercept: ellipsoid"`), `"NADIR/DSK/UNPRIORITIZED"` or
-`"INTERCEPT/DSK/UNPRIORITIZED"`, with `"/SURFACES = <list>"` for DSK data. `abcorr` is a
-correction string or an `Aberration`; the light time is the one to the sub-point.
+- `spoint`: the point, in km, in the body-fixed frame `fixref` of the target.
+- `trgepc`: the epoch at the point. It is `et` corrected for the light time between
+  the observer and the point, and `et` itself without a correction.
+- `srfvec`: the vector from the observer to the point, in km, in `fixref` at `trgepc`.
 
-Contract: `fixref` is centered on `target`, and `target` and `obsrvr` differ. For an
-ellipsoid the epoch can be a dual number, and the call does not allocate for integer
-IDs. Throws `SpiceError`: `:invalidoption`, `:idcodenotfound`, `:bodiesnotdistinct`,
-`:noframe`, `:invalidframe`, the kinds of the method string (`:badmethodsyntax`,
-`:badpriorityspec`, `:invalidsubtype`), `:noseparation`, `:subpointnotfound`,
-`:degeneratecase`, and the errors of `spkpos` and of the radii lookup.
+`method` selects the definition of the point and the shape of the target:
+
+| `method` | Point |
+|---|---|
+| `"NEAR POINT/ELLIPSOID"` | point of the reference ellipsoid nearest to the observer |
+| `"INTERCEPT/ELLIPSOID"` | where the line from the observer to the target center meets the ellipsoid |
+| `"NADIR/DSK/UNPRIORITIZED"` | where the ray from the observer toward the nearest point of the ellipsoid meets the DSK surface |
+| `"INTERCEPT/DSK/UNPRIORITIZED"` | where the ray from the observer toward the target center meets the DSK surface |
+
+Case is not significant. A DSK method can end with `"/SURFACES = <list>"`, a list
+of surface names or IDs. The CSPICE forms `"Near point: ellipsoid"` and
+`"Intercept: ellipsoid"` are also valid.
+
+`abcorr` is a correction string of [`spkezr`](@ref) or an [`Aberration`](@ref).
+Bodies and frames are names or integer IDs. With an ellipsoid method, `et` can be a
+`ForwardDiff.Dual`, and the call does not allocate when the bodies and the frame are
+integer IDs. With a DSK method, a `ctx` gives the tolerances set by [`dskstl`](@ref).
+
+Throws `SpiceError` with the kind
+- `:invalidoption` if `abcorr` is not a valid correction;
+- `:idcodenotfound` if a body name is not known;
+- `:bodiesnotdistinct` if `target` and `obsrvr` are the same body;
+- `:noframe` if `fixref` is not known, `:invalidframe` if it is not centered on `target`;
+- `:badmethodsyntax` or `:badpriorityspec` if `method` is malformed, `:invalidsubtype`
+  if it has no valid point definition;
+- `:noseparation` if the observer is at the target center;
+- `:subpointnotfound` if the ray misses the DSK surface, `:degeneratecase` if it
+  misses the ellipsoid;
+- `:kernelvarnotfound`, `:invalidcount` or `:badaxislength` if the radii of `target`
+  are missing or not valid.
+
+Also throws the errors of [`spkpos`](@ref).
+
+# Examples
+```julia
+# Needs an SPK, a PCK with the radii and the rotation of Mars, and a leap seconds kernel.
+et = str2et("2025 MAR 01 12:00:00 UTC")
+spoint, trgepc, srfvec = subpnt("NEAR POINT/ELLIPSOID", "MARS", et, "IAU_MARS", "LT+S", "EARTH")
+radius, lon, lat = reclat(spoint)      # km, rad, rad (planetocentric)
+distance = vnorm(srfvec)               # km from the Earth to the point
+```
+
+See also [`subslr`](@ref), [`sincpt`](@ref), [`gfsubc`](@ref).
 """
 function subpnt end
 
 """
-    subslr(method, target, et, fixref, abcorr, obsrvr) -> (spoint, trgepc, srfvec)
+    subslr([ctx,] method, target, et, fixref, abcorr, obsrvr) -> (spoint, trgepc, srfvec)
 
-Return the sub-solar point `spoint` on `target` as seen by `obsrvr` (km, body-fixed
-frame `fixref`), the epoch `trgepc` at the point and the vector `srfvec` from the
-observer to the point, as `subslr_c`. The methods and the forms are those of
-[`subpnt`](@ref); the correction must be a reception correction
-(`SpiceError(:notsupported)` otherwise) and the target must not be the Sun
-(`SpiceError(:invalidtarget)`).
+Return the sub-solar point on `target` as seen by `obsrvr` at `et` (seconds past J2000
+TDB), as `subslr_c` of CSPICE.
 
-Contract: as [`subpnt`](@ref). For an ellipsoid the epoch can be a dual number, and
-the call does not allocate for integer IDs.
+- `spoint`: the point, in km, in the body-fixed frame `fixref` of the target.
+- `trgepc`: the epoch at the point: `et` minus the light time between the observer and
+  the point, and `et` itself without a correction.
+- `srfvec`: the vector from the observer to the point, in km, in `fixref` at `trgepc`.
+
+The methods are those of [`subpnt`](@ref), with the Sun in place of the observer in the
+definition of the point. With a correction, the Sun is taken where it appears from the
+point at `trgepc`. The other arguments and the notes on `et`, allocation and `ctx` are
+those of [`subpnt`](@ref).
+
+Throws `SpiceError(:notsupported)` if `abcorr` is a transmission correction, and
+`SpiceError(:invalidtarget)` if `target` is the Sun. The other kinds are those of
+[`subpnt`](@ref), except `:bodiesnotdistinct` and `:noseparation`: the observer and the
+target can be the same body.
+
+See also [`subpnt`](@ref), [`ilumin`](@ref).
 """
 function subslr end
 

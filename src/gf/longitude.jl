@@ -16,7 +16,6 @@ _gf_proxy(q::GFCoordinate, sys::Int, idx::Int) =
 "`smsgnd`: true if `x` and `y` are both positive or both negative."
 @inline _gf_smsgnd(x::Float64, y::Float64) = (x > 0.0 && y > 0.0) || (x < 0.0 && y < 0.0)
 
-"Progress message of pass `i` from the template `t` (`#` is the pass)."
 _gf_pass(t::String, i::Int) = replace(t, "#" => string(i); count=1)
 
 # `zzgfrelx` on a coordinate, on its cosine and on its sine.

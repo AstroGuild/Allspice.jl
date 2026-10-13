@@ -89,11 +89,8 @@ const _EK_MNKEYR = 1
 const _EK_MNKIDR = 2
 const _EK_TRMXDP = 10             # largest depth of a tree
 
-"Address before the first word of character page `p`."
 @inline _ek_cbase(p::Integer) = (Int(p) - 1) * 1024
-"Address before the first word of double page `p`."
 @inline _ek_dbase(p::Integer) = (Int(p) - 1) * 128
-"Address before the first word of integer page `p`."
 @inline _ek_ibase(p::Integer) = (Int(p) - 1) * 256 + 256
 
 "The integer that five base-128 characters at the character address `addr` encode (`prtdec`)."
@@ -232,10 +229,8 @@ function _ek_tree_walk!(out::Vector{Int32}, pos::Int, ints::AbstractVector{Int32
     return pos
 end
 
-"Root page of the segment tree of the store `s`."
 @inline _ek_segtree(s) = Int(s.ints[_ek_ibase(1)+1])
 
-"Number of segments of the store `s` (`eknseg` after the checks)."
 @inline _ek_nseg(s) = _ek_trsz(s.ints, _ek_segtree(s))
 
 """
@@ -258,7 +253,6 @@ end
     return view(s.ints, base+1:base+_EK_SDSCSZ)
 end
 
-"The string of the characters `first:last` of `chars` without trailing blanks."
 function _ek_rstr(chars::AbstractVector{UInt8}, first::Int, last::Int)
     while last >= first && chars[last] == UInt8(' ')   # invariant: characters after `last` are blank
         last -= 1
@@ -266,7 +260,6 @@ function _ek_rstr(chars::AbstractVector{UInt8}, first::Int, last::Int)
     return String(chars[first:last])
 end
 
-"Decoded descriptor of column number `i` of the segment with the integer metadata base `mbase`."
 function _ek_column(s, mbase::Integer, i::Integer)
     b = Int(mbase) + _EK_SDSCSZ + (Int(i) - 1) * _EK_CDSCSZ
     ints = s.ints

@@ -35,7 +35,6 @@ state transformation from `f.ref` to `ref` at `et`.
     return _m_mxv(R, x), _m_mxv(dR, x) + _m_mxv(R, v)
 end
 
-"Barycentric state of the object `f` at `et` in the inertial frame `iref`."
 @inline function _geo_cvx_ssb(ks::KernelSet, f::_GeoFixed, et, iref::Int32)
     r, v = _geo_cvx(ks, f, et, iref)
     rc, vc = _ssb(ks, f.ctr, et, iref)
@@ -128,7 +127,6 @@ end
 "`zzcorsxf` applied to a state: `[R 0; (1 + s dlt) dR R] * (r, v)`."
 @inline _geo_corsxf(R, dR, scale, r, v) = vcat(_m_mxv(R, r), scale * _m_mxv(dR, r) + _m_mxv(R, v))
 
-"The class of the frame `ref` (`frinfo`); `SpiceError(:unknownframe)` if it is not known."
 @inline function _geo_frame_class(ks::KernelSet, ref::Int32)
     center, class, found = _geo_frinfo(ks, ref)
     found || throw(SpiceError(:unknownframe, "the frame with ID $ref is not recognized"))
@@ -228,7 +226,6 @@ end
 @noinline _geo_unknown_frame(ref) = throw(SpiceError(:unknownframe,
     "the reference frame $ref is not recognized"))
 
-"ID of the frame `ref`; `SpiceError(:unknownframe)` if the name or the ID is not known."
 @inline function _geo_known_frame(ks::KernelSet, ref::NameOrID)
     id = _geo_namfrm(ks, ref)
     _geo_frinfo(ks, id)[3] || _geo_unknown_frame(ref)
@@ -281,17 +278,14 @@ function _geo_cvt(ks::KernelSet, f::_GeoFixed, et, orfcde::Int32, evltyp::Int,
     return _geo_corsxf(R, dR, 1 + s * q.dlt, q.r, q.v), q.lt
 end
 
-"Position and velocity parts of a state."
 @inline _geo_pv(s::SVector{6}) = SVector(s[1], s[2], s[3]), SVector(s[4], s[5], s[6])
 
-"A state of length 6 as two plain `Vec3` (`SpiceError(:badarg)` otherwise)."
 @inline function _geo_state(s::AbstractVector)
     length(s) == 6 || throw(SpiceError(:badarg, "a state vector must have 6 elements"))
     @inbounds return Vec3{Float64}(s[begin], s[begin+1], s[begin+2]),
         Vec3{Float64}(s[begin+3], s[begin+4], s[begin+5])
 end
 
-"The position `p` of length 3 as a plain `Vec3` (`SpiceError(:badarg)` otherwise)."
 @inline function _geo_pos(p::AbstractVector)
     length(p) == 3 || throw(SpiceError(:badarg, "a position vector must have 3 elements"))
     @inbounds return Vec3{Float64}(p[begin], p[begin+1], p[begin+2])
@@ -300,19 +294,38 @@ end
 # --- public interface -------------------------------------------------------------------
 
 """
-    spkcvo(target, et, outref, refloc, abcorr, obssta, obsepc, obsctr, obsref) -> (SVector{6}, lt)
+    spkcvo([ctx,] target, et, outref, refloc, abcorr, obssta, obsepc, obsctr, obsref)
+        -> (state, lt)
 
-Return the state (km, km/s) of `target` relative to an observer that moves with a
-constant velocity relative to the body `obsctr`, and the one-way light time, as
-`spkcvo_c`. `obssta` is the state of the observer relative to `obsctr` in the frame
-`obsref` at the epoch `obsepc`; the result is in the frame `outref`, evaluated at the
-locus `refloc` (`"OBSERVER"`, `"TARGET"` or `"CENTER"`). Forms: on a `KernelSet`, on a
-`SpiceContext`, and on the default context.
+Return the state of `target` relative to an observer that moves at a constant velocity
+relative to the body `obsctr`, as an `SVector{6}` (km, km/s) in the frame `outref`, and
+the one-way light time `lt` (s), as `spkcvo_c` of CSPICE.
 
-Contract: `obssta` has 6 elements. Bodies and frames are names or integer IDs. The
-epoch can be a dual number. No allocation for integer IDs. Throws `SpiceError`:
-`:invalidoption` (correction), `:idcodenotfound` (body), `:unknownframe` (frame),
-`:notsupported` (locus), and the errors of `spkezr`.
+`obssta` is the state of the observer relative to the center of `obsctr` (km, km/s, 6
+elements) in the frame `obsref` at the epoch `obsepc`. The position at another epoch is
+extrapolated with the constant velocity. `et` and `obsepc` are in seconds past J2000
+TDB.
+
+`refloc` tells at which epoch a rotating `outref` is evaluated when `abcorr` uses the
+light time:
+
+| `refloc` | Epoch of `outref` |
+|---|---|
+| `"OBSERVER"` | `et` |
+| `"TARGET"` | `et` corrected for the light time to the target |
+| `"CENTER"` | `et` corrected for the light time to the center of `outref` |
+
+`abcorr` is a correction string of [`spkezr`](@ref) or an [`Aberration`](@ref).
+Bodies and frames are names or integer IDs. `et` can be a `ForwardDiff.Dual`. The call
+does not allocate when the bodies and the frames are integer IDs.
+
+Throws `SpiceError(:invalidoption)` if `abcorr` is not a valid correction,
+`SpiceError(:idcodenotfound)` if a body name is not known, `SpiceError(:unknownframe)`
+if `outref` or `obsref` is not known, `SpiceError(:notsupported)` if `refloc` is not one
+of the three values, and `SpiceError(:badarg)` if `obssta` does not have 6 elements.
+Also throws the errors of [`spkezr`](@ref).
+
+See also [`spkcpo`](@ref), [`spkcvt`](@ref), [`azlcpo`](@ref).
 """
 function spkcvo(ks::KernelSet, target::NameOrID, et::Real, outref::NameOrID,
         refloc::AbstractString, abcorr::AbcorrArg, obssta::AbstractVector, obsepc::Real,
@@ -329,15 +342,18 @@ function spkcvo(ks::KernelSet, target::NameOrID, et::Real, outref::NameOrID,
 end
 
 """
-    spkcpo(target, et, outref, refloc, abcorr, obspos, obsctr, obsref) -> (SVector{6}, lt)
+    spkcpo([ctx,] target, et, outref, refloc, abcorr, obspos, obsctr, obsref) -> (state, lt)
 
-Return the state of `target` relative to an observer with the constant position
-`obspos` (km, relative to the body `obsctr`, in the frame `obsref`), and the one-way
-light time, as `spkcpo_c`. The other arguments, the forms and the errors are those of
-[`spkcvo`](@ref).
+Return the state of `target` relative to an observer at a constant position on the
+body `obsctr`, as an `SVector{6}` (km, km/s) in the frame `outref`, and the one-way
+light time `lt` (s), as `spkcpo_c` of CSPICE.
 
-Contract: `obspos` has 3 elements. The epoch can be a dual number. No allocation for
-integer IDs.
+`obspos` is the observer position relative to the center of `obsctr` (km, 3 elements)
+in the frame `obsref`, for example a ground station in the body-fixed frame of its
+planet. This is [`spkcvo`](@ref) with a zero velocity; the other arguments, the notes
+and the errors are the same.
+
+See also [`spkcpt`](@ref), [`azlcpo`](@ref).
 """
 function spkcpo(ks::KernelSet, target::NameOrID, et::Real, outref::NameOrID,
         refloc::AbstractString, abcorr::AbcorrArg, obspos::AbstractVector, obsctr::NameOrID,
@@ -353,18 +369,25 @@ function spkcpo(ks::KernelSet, target::NameOrID, et::Real, outref::NameOrID,
 end
 
 """
-    spkcvt(trgsta, trgepc, trgctr, trgref, et, outref, refloc, abcorr, obsrvr) -> (SVector{6}, lt)
+    spkcvt([ctx,] trgsta, trgepc, trgctr, trgref, et, outref, refloc, abcorr, obsrvr)
+        -> (state, lt)
 
-Return the state (km, km/s) of a target that moves with a constant velocity relative
-to the body `trgctr`, relative to the observer `obsrvr`, and the one-way light time,
-as `spkcvt_c`. `trgsta` is the state of the target relative to `trgctr` in the frame
-`trgref` at the epoch `trgepc`; the result is in the frame `outref`, evaluated at the
-locus `refloc` (`"OBSERVER"`, `"TARGET"` or `"CENTER"`). Forms: on a `KernelSet`, on a
-`SpiceContext`, and on the default context.
+Return the state of a target that moves at a constant velocity relative to the body
+`trgctr`, relative to the observer `obsrvr`, as an `SVector{6}` (km, km/s) in the frame
+`outref`, and the one-way light time `lt` (s), as `spkcvt_c` of CSPICE.
 
-Contract: `trgsta` has 6 elements. The epoch can be a dual number. No allocation for
-integer IDs. Throws `SpiceError`: `:invalidoption`, `:idcodenotfound`, `:unknownframe`,
-`:notsupported` (locus), and the errors of `spkezr`.
+`trgsta` is the state of the target relative to the center of `trgctr` (km, km/s, 6
+elements) in the frame `trgref` at the epoch `trgepc`. The position at another epoch is
+extrapolated with the constant velocity. `refloc`, `abcorr` and the notes on `et` and
+allocation are those of [`spkcvo`](@ref).
+
+Throws `SpiceError(:invalidoption)` if `abcorr` is not a valid correction,
+`SpiceError(:idcodenotfound)` if a body name is not known, `SpiceError(:unknownframe)`
+if `outref` or `trgref` is not known, `SpiceError(:notsupported)` if `refloc` is not one
+of the three values, and `SpiceError(:badarg)` if `trgsta` does not have 6 elements.
+Also throws the errors of [`spkezr`](@ref).
+
+See also [`spkcpt`](@ref), [`spkcvo`](@ref).
 """
 function spkcvt(ks::KernelSet, trgsta::AbstractVector, trgepc::Real, trgctr::NameOrID,
         trgref::NameOrID, et::Real, outref::NameOrID, refloc::AbstractString,
@@ -381,15 +404,18 @@ function spkcvt(ks::KernelSet, trgsta::AbstractVector, trgepc::Real, trgctr::Nam
 end
 
 """
-    spkcpt(trgpos, trgctr, trgref, et, outref, refloc, abcorr, obsrvr) -> (SVector{6}, lt)
+    spkcpt([ctx,] trgpos, trgctr, trgref, et, outref, refloc, abcorr, obsrvr) -> (state, lt)
 
-Return the state of a target with the constant position `trgpos` (km, relative to the
-body `trgctr`, in the frame `trgref`) relative to the observer `obsrvr`, and the
-one-way light time, as `spkcpt_c`. The other arguments, the forms and the errors are
-those of [`spkcvt`](@ref).
+Return the state of a target at a constant position on the body `trgctr`, relative to
+the observer `obsrvr`, as an `SVector{6}` (km, km/s) in the frame `outref`, and the
+one-way light time `lt` (s), as `spkcpt_c` of CSPICE.
 
-Contract: `trgpos` has 3 elements. The epoch can be a dual number. No allocation for
-integer IDs.
+`trgpos` is the target position relative to the center of `trgctr` (km, 3 elements) in
+the frame `trgref`, for example a surface point in the body-fixed frame. This is
+[`spkcvt`](@ref) with a zero velocity; the other arguments, the notes and the errors
+are the same.
+
+See also [`spkcpo`](@ref), [`spkcvt`](@ref).
 """
 function spkcpt(ks::KernelSet, trgpos::AbstractVector, trgctr::NameOrID, trgref::NameOrID,
         et::Real, outref::NameOrID, refloc::AbstractString, abcorr::AbcorrArg,

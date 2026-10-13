@@ -82,7 +82,6 @@ through the lexer and the parser of `surfaces.jl`, which accept and reject what
     return _geo_method_slow(ks, bodyid, method)
 end
 
-"The general case of `_geo_method`."
 @noinline function _geo_method_slow(ks::KernelSet, bodyid::Integer, method::AbstractString)
     # The C wrappers of CSPICE reject an empty string before the parser sees it.
     isempty(method) && throw(SpiceError(:emptystring, "the method string is empty"))
@@ -154,7 +153,6 @@ end
 @noinline _geo_no_body(what, name) = throw(SpiceError(:idcodenotfound,
     "the $what, '$name', is not a recognized name for an ephemeris object"))
 
-"ID of the body `name` (`zzbods2c`); `SpiceError(:idcodenotfound)` for an unknown name."
 @inline _geo_body(::KernelSet, id::Integer, ::AbstractString) = Int32(id)
 function _geo_body(ks::KernelSet, name::AbstractString, what::AbstractString)
     code = bods2c(ks, name)
@@ -162,7 +160,6 @@ function _geo_body(ks::KernelSet, name::AbstractString, what::AbstractString)
     return Int32(code)
 end
 
-"ID of the frame `ref`, or 0 if the name is unknown (`namfrm`)."
 @inline _geo_namfrm(::KernelSet, ref::Integer) = Int32(ref)
 _geo_namfrm(ks::KernelSet, ref::AbstractString) = Int32(namfrm(ks, ref))
 
@@ -187,13 +184,6 @@ end
     "the reference frame $ref is not centered at the target body $target; the ID code " *
     "of the frame center is $center"))
 
-"""
-    _geo_fixfid(ks, fixref, trgcde, target) -> Int32
-
-The ID of the body-fixed frame `fixref` after the checks of the geometry calls: the
-frame is known (`SpiceError(:noframe)`) and its center is the target
-(`SpiceError(:invalidframe)`).
-"""
 @inline function _geo_fixfid(ks::KernelSet, fixref::NameOrID, trgcde::Int32, target)
     fixfid = _geo_namfrm(ks, fixref)
     center, _, found = _geo_frinfo(ks, fixfid)
@@ -202,7 +192,6 @@ frame is known (`SpiceError(:noframe)`) and its center is the target
     return fixfid
 end
 
-"The names of the pool variables `BODY<id>_RADII` for the IDs 1 to 999."
 const _GEO_RADII_KEYS = String[string("BODY", i, "_RADII") for i in 1:999]
 
 @noinline function _geo_bad_radii(body, v)
@@ -232,7 +221,6 @@ Postcondition: the three values are positive. No allocation for an ID in 1:999.
     return a, b, c
 end
 
-"The vector `a` of length 3 as a `Vec3` (`SpiceError(:badarg)` otherwise)."
 @inline _geo_v3(a::Vec3) = a
 @inline function _geo_v3(a::AbstractVector)
     length(a) == 3 || throw(SpiceError(:badarg, "a vector must have 3 elements"))
@@ -304,14 +292,12 @@ function _geo_dskshape(ks::KernelSet, tols::DSKTolerances, trgcde::Int32, fixfid
     return _GeoShape(true, trgcde, fixfid, 0.0, 0.0, 0.0, minrad, maxrad, srflst, tols)
 end
 
-"The shape of the method `m` (`zzsuelin` or `zzsudski`)."
 @inline _geo_shape(ks::KernelSet, tols::DSKTolerances, m::_GeoMethod, trgcde::Int32, fixfid::Int32) =
     m.dsk ? _geo_dskshape(ks, tols, trgcde, fixfid, m.srflst) : _geo_ellshape(ks, trgcde, fixfid)
 
 @noinline _geo_dsk_epoch() = throw(SpiceError(:notsupported,
     "a DSK shape needs a plain (Float64) epoch: the plate model is not differentiated"))
 
-"A plain vector for the DSK calls; `SpiceError(:notsupported)` for another number type."
 @inline _geo_plain(v::Vec3{Float64}) = v
 @inline _geo_plain(x::Float64) = x
 _geo_plain(::Any) = _geo_dsk_epoch()

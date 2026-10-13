@@ -35,32 +35,19 @@
 # Limits and codes
 # ---------------------------------------------------------------------------------
 
-"Largest number of characters of a query (`MAXQRY`)."
-const _EKQ_MAXQRY = 2000
-"Largest number of tokens of a query (`MAXTOK`)."
-const _EKQ_MAXTOK = 500
-"Largest number of numeric tokens of a query (`MAXNUM`), and the size of the double buffer."
-const _EKQ_MAXNUM = 100
-"Largest number of tables in a FROM clause (`MAXTAB`)."
-const _EKQ_MAXTAB = 10
-"Largest number of order-by columns (`MAXORD`)."
-const _EKQ_MAXORD = 10
-"Largest number of SELECT columns (`MAXSEL`)."
-const _EKQ_MAXSEL = 50
-"Largest number of constraints of a normalised WHERE clause (`MAXCON`)."
-const _EKQ_MAXCON = 1000
-"Size of the integer cell of an encoded query (`EQIMIN`)."
-const _EKQ_ISIZE = 27869
-"Size of the character buffer of an encoded query (`MAXCLN`)."
-const _EKQ_CSIZE = 2000
-"Length of a table name or an alias in name resolution (`TNAMSZ`)."
-const _EKQ_TNAMSZ = 64
-"Length of the time string that time resolution converts (`TIMLEN` of `zzektres`)."
-const _EKQ_TIMLEN = 32
-"Size of the relation, conjunction and disjunction tables of the normaliser."
-const _EKQ_NPOOL = 5000
-"Largest number of conjunctions that the normaliser can count (`MAXCNJ`)."
-const _EKQ_MAXCNJ = 1000
+const _EKQ_MAXQRY = 2000    # Largest number of characters of a query (`MAXQRY`)
+const _EKQ_MAXTOK = 500     # Largest number of tokens of a query (`MAXTOK`)
+const _EKQ_MAXNUM = 100     # Largest number of numeric tokens of a query (`MAXNUM`), and the size of the double buffer
+const _EKQ_MAXTAB = 10      # Largest number of tables in a FROM clause (`MAXTAB`)
+const _EKQ_MAXORD = 10      # Largest number of order-by columns (`MAXORD`)
+const _EKQ_MAXSEL = 50      # Largest number of SELECT columns (`MAXSEL`)
+const _EKQ_MAXCON = 1000    # Largest number of constraints of a normalised WHERE clause (`MAXCON`)
+const _EKQ_ISIZE = 27869    # Size of the integer cell of an encoded query (`EQIMIN`)
+const _EKQ_CSIZE = 2000     # Size of the character buffer of an encoded query (`MAXCLN`)
+const _EKQ_TNAMSZ = 64      # Length of a table name or an alias in name resolution (`TNAMSZ`)
+const _EKQ_TIMLEN = 32      # Length of the time string that time resolution converts (`TIMLEN` of `zzektres`)
+const _EKQ_NPOOL = 5000     # Size of the relation, conjunction and disjunction tables of the normaliser
+const _EKQ_MAXCNJ = 1000    # Largest number of conjunctions that the normaliser can count (`MAXCNJ`)
 
 # Token codes of `ektokn.inc`.
 const _EKQ_TKKEY = 1        # keyword, or a comparison operator written with special characters
@@ -119,14 +106,10 @@ const _EKQ_NOTNUL = 10
 "Complement of the operator codes 1 to 8: EQ/NE, GE/LT, GT/LE, LIKE/UNLIKE."
 const _EKQ_CMPNEG = (6, 5, 4, 3, 2, 1, 8, 7)
 
-"Constraint type: column operator column (`EQCOL`)."
-const _EKQ_EQCOL = 1
-"Constraint type: column operator value (`EQVAL`)."
-const _EKQ_EQVAL = 2
-"Order sense: ascending (`EQASND`)."
-const _EKQ_ASCEND = 0
-"Order sense: descending (`EQDSND`)."
-const _EKQ_DESCEND = 1
+const _EKQ_EQCOL = 1        # Constraint type: column operator column (`EQCOL`)
+const _EKQ_EQVAL = 2        # Constraint type: column operator value (`EQVAL`)
+const _EKQ_ASCEND = 0       # Order sense: ascending (`EQASND`)
+const _EKQ_DESCEND = 1      # Order sense: descending (`EQDSND`)
 
 "Names of the data types in the messages of the semantic check."
 const _EKQ_TYPSTR = ("CHARACTER", "DOUBLE PRECISION", "INTEGER", "TIME")
@@ -241,10 +224,8 @@ function _ek_qrep(msg::String, value::Union{AbstractString,Integer})::String
     return string(String(c[1:r-1]), v, String(c[r+1:end]))
 end
 
-"Contract: `1 <= b`; returns the bytes `b:e` of `qb` as a string (`\"\"` if `e < b`), cut at the end of `qb`."
 _ek_qlex(qb::AbstractVector{UInt8}, b::Int, e::Int) = String(qb[b:min(e, length(qb))])
 
-"Contract: returns the message `template` with the lexeme `lxb:lxe` of the query at its first `#` and then `lxb` at the next one, or the other order if `locfirst`."
 function _ek_qlexmsg(template::String, qb, lxb::Int, lxe::Int, locfirst::Bool)
     locfirst && return _ek_qrep(_ek_qrep(template, lxb), _ek_qlex(qb, lxb, lxe))
     return _ek_qrep(_ek_qrep(template, _ek_qlex(qb, lxb, lxe)), lxb)
@@ -303,7 +284,6 @@ end
 @inline _ek_qget(q::_EKQEnc, k::Int) = k - 5 <= length(q.i) ? Int(@inbounds q.i[k-5]) : 0
 @inline _ek_qput!(q::_EKQEnc, k::Int, v::Integer) = (@inbounds q.i[k-5] = Int32(v); nothing)
 
-"Contract: appends `x` to the integer cell as `appndi_`; throws `SpiceError(:celltoosmall)` if the cell is full."
 @inline function _ek_qappnd!(q::_EKQEnc, x::Integer)
     length(q.i) < _EKQ_ISIZE || _ek_qsignal(:celltoosmall,
         "The cell cannot accommodate the addition of the element $x")
@@ -311,7 +291,6 @@ end
     return nothing
 end
 
-"Contract: appends the six integers of the descriptor `d`."
 @inline function _ek_qappnd!(q::_EKQEnc, d::NTuple{6,Int})
     for x in d
         _ek_qappnd!(q, x)
@@ -361,7 +340,6 @@ function _ek_qinqn!(q::_EKQEnc, value::Float64, type::Int, lxb::Int, lxe::Int,
     return (type, lxb, lxe, free, 0, 0)
 end
 
-"Contract: `1 <= b <= e` are bounds in the character buffer; returns the string `b:e`."
 _ek_qstr(q::_EKQEnc, b::Int, e::Int) = String(q.c[b:e])
 
 # ---------------------------------------------------------------------------------
@@ -756,7 +734,6 @@ function _ek_qtloc(tk::_EKQTokens, tokid::Int, kwcode::Int)
     return tk.n + 1, false
 end
 
-"Contract: `1 <= k <= tk.n` is an identifier or a quoted string token; returns its text."
 @inline function _ek_qtext(tk::_EKQTokens, k::Int)
     v = tk.values[k]
     return view(tk.chrbuf, tk.chbegs[v]:tk.chends[v])
@@ -782,7 +759,6 @@ mutable struct _EKQPool
     free::Int
 end
 
-"Contract: `size >= 1`; returns a pool of `size` free nodes (`lnkini_`)."
 function _ek_qlnkini(size::Int)
     fwd = Int32.(2:size+1)
     fwd[size] = 0
@@ -794,14 +770,12 @@ end
 @noinline _ek_qlnkunalloc(node) = _ek_qsignal(:unallocatednode,
     "Node $node of the linked list pool is not allocated.")
 
-"Contract: throws `SpiceError` unless `node` is an allocated node of `p`."
 @inline function _ek_qlnkchk(node::Int, p::_EKQPool)
     (node < 1 || node > length(p.fwd)) && _ek_qlnkbad(node, p)
     p.bck[node] == 0 && _ek_qlnkunalloc(node)
     return nothing
 end
 
-"Contract: allocates a node of `p` as a list of one node and returns it (`lnkan_`)."
 function _ek_qlnkan!(p::_EKQPool)
     p.nfree == 0 && _ek_qsignal(:nofreenodes,
         "There are no free nodes left for allocating in the supplied linked list pool.")
@@ -813,12 +787,9 @@ function _ek_qlnkan!(p::_EKQPool)
     return new
 end
 
-"Contract: returns the forward pointer of `node` (`lnknxt_`): the next node, or minus the head at the tail."
 @inline _ek_qlnknxt(node::Int, p::_EKQPool) = (_ek_qlnkchk(node, p); Int(p.fwd[node]))
-"Contract: returns the backward pointer of `node` (`lnkprv_`): the previous node, or minus the tail at the head."
 @inline _ek_qlnkprv(node::Int, p::_EKQPool) = (_ek_qlnkchk(node, p); Int(p.bck[node]))
 
-"Contract: returns the head of the list of `node`, or 0 if `node < 1` (`lnkhl_`)."
 function _ek_qlnkhl(node::Int, p::_EKQPool)
     node < 1 && return 0
     _ek_qlnkchk(node, p)
@@ -828,7 +799,6 @@ function _ek_qlnkhl(node::Int, p::_EKQPool)
     return node
 end
 
-"Contract: returns the tail of the list of `node`, or 0 if `node < 1` (`lnktl_`)."
 function _ek_qlnktl(node::Int, p::_EKQPool)
     node < 1 && return 0
     _ek_qlnkchk(node, p)

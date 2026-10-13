@@ -152,26 +152,59 @@ function _geo_sincpt(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
 end
 
 """
-    sincpt(method, target, et, fixref, abcorr, obsrvr, dref, dvec)
-        -> Union{Nothing,Tuple{SVector{3},Real,SVector{3}}}
+    sincpt([ctx,] method, target, et, fixref, abcorr, obsrvr, dref, dvec)
+        -> Union{Nothing, Tuple{SVector{3}, Real, SVector{3}}}
 
-Return the first point where the ray from `obsrvr` along `dvec` (given in the frame
-`dref`) meets the surface of `target`: `(spoint, trgepc, srfvec)`, with `spoint` in the
-body-fixed frame `fixref` (km), the epoch `trgepc` at the point and the vector `srfvec`
-from the observer to the point, as `sincpt_c`; `nothing` if the ray misses the target.
-Forms: on a `KernelSet`, on a `SpiceContext` (which gives the DSK tolerances), and on
-the default context.
+Return the first point where the ray from `obsrvr` along `dvec` meets the surface of
+`target`, as `(spoint, trgepc, srfvec)`, or `nothing` if the ray misses the target. As
+`sincpt_c` of CSPICE, which returns a `found` flag instead of `nothing`.
 
-`method` is `"ELLIPSOID"` or `"DSK/UNPRIORITIZED[/SURFACES = <list>]"`. The light time
-is the one to the intercept point, and the ray direction is corrected for stellar
-aberration with the `+S` forms.
+- `spoint`: the intercept, in km, in the body-fixed frame `fixref` of the target.
+- `trgepc`: the epoch at the intercept. It is `et` corrected for the light time between
+  the observer and the intercept, and `et` itself without a correction.
+- `srfvec`: the vector from the observer to the intercept, in km, in `fixref` at
+  `trgepc`.
 
-Contract: `dvec` has 3 elements and is not zero (`SpiceError(:zerovector)`); `fixref`
-is centered on `target`. For an ellipsoid the epoch can be a dual number, and the call
-does not allocate for integer IDs. Throws `SpiceError`: `:invalidoption`,
-`:idcodenotfound`, `:bodiesnotdistinct`, `:noframe`, `:invalidframe`, the kinds of the
-method string, `:invalidmethod` (a sub-point type in the method), `:noseparation`, and
-the errors of `spkpos`, of the radii lookup and of [`dskxsi`](@ref).
+`dvec` is the ray direction (3 elements, any length but zero) in the frame `dref`.
+With a light time correction, a `dref` that is not inertial and not centered on the
+observer is evaluated at `et` corrected for the light time to its center. With a `+S`
+correction the direction is corrected for stellar aberration.
+
+`method` is `"ELLIPSOID"` or `"DSK/UNPRIORITIZED"`; the DSK form can end with
+`"/SURFACES = <list>"`. Case is not significant. `abcorr` is a correction string of
+[`spkezr`](@ref) or an [`Aberration`](@ref). `et` is in seconds past J2000 TDB. With
+`"ELLIPSOID"`, `et` can be a `ForwardDiff.Dual`, and the call does not allocate when
+the bodies and the frames are integer IDs. With a DSK method, a `ctx` gives the
+tolerances set by [`dskstl`](@ref).
+
+Throws `SpiceError` with the kind
+- `:invalidoption` if `abcorr` is not a valid correction;
+- `:idcodenotfound` if a body name is not known;
+- `:bodiesnotdistinct` if `target` and `obsrvr` are the same body;
+- `:noframe` if `fixref` or `dref` is not known, `:invalidframe` if `fixref` is not
+  centered on `target`;
+- `:zerovector` if `dvec` is zero, `:badarg` if it does not have 3 elements;
+- `:badmethodsyntax` or `:badpriorityspec` if `method` is malformed, `:invalidmethod`
+  if it holds a sub-point type such as `NEAR POINT`;
+- `:noseparation` if the observer is at the target center;
+- `:kernelvarnotfound`, `:invalidcount` or `:badaxislength` if the radii of `target`
+  are missing or not valid, `:dskdatanotfound` if no DSK data are loaded for it.
+
+Also throws the errors of [`spkpos`](@ref).
+
+# Examples
+```julia
+# Needs an SPK, a PCK with the radii and the rotation of Mars, and a leap seconds kernel.
+et = str2et("2025 MAR 01 12:00:00 UTC")
+toward_mars, _ = spkpos("MARS", et, "J2000", "LT+S", "EARTH")
+hit = sincpt("ELLIPSOID", "MARS", et, "IAU_MARS", "LT+S", "EARTH", "J2000", toward_mars)
+if hit !== nothing
+    spoint, trgepc, srfvec = hit
+    radius, lon, lat = reclat(spoint)  # km, rad, rad
+end
+```
+
+See also [`subpnt`](@ref), [`dskxsi`](@ref), [`gfsntc`](@ref), [`fovray`](@ref).
 """
 sincpt(ks::KernelSet, method::AbstractString, target::NameOrID, et::Real, fixref::NameOrID,
     abcorr::AbcorrArg, obsrvr::NameOrID, dref::NameOrID, dvec::AbstractVector) =
@@ -185,15 +218,20 @@ sincpt(method::AbstractString, target::NameOrID, et::Real, fixref::NameOrID, abc
     sincpt(default_context(), method, target, et, fixref, abcorr, obsrvr, dref, dvec)
 
 """
-    srfrec(body, lon, lat) -> SVector{3}
+    srfrec([ctx,] body, lon, lat) -> SVector{3}
 
 Return the point of the reference ellipsoid of `body` at the planetocentric longitude
-`lon` and latitude `lat` (radians), in the body-fixed frame (km), as `srfrec_c`.
-Forms: on a `KernelSet`, on a `SpiceContext`, and on the default context.
+`lon` and latitude `lat` (radians), in km in the body-fixed frame, as `srfrec_c` of
+CSPICE.
 
-Contract: the radii of `body` are in the kernel pool and positive (`SpiceError`
-`:kernelvarnotfound`, `:invalidcount`, `:badaxislength`). Postcondition: the point is
-on the ellipsoid. No allocation for an integer ID in 1:999.
+`body` is a name or an integer ID. The radii come from the pool variable
+`BODY<id>_RADII`. The call does not allocate for an integer ID in 1:999.
+
+Throws `SpiceError(:idcodenotfound)` if the body name is not known. Throws
+`SpiceError(:kernelvarnotfound)` if the radii are not loaded, `SpiceError(:invalidcount)`
+if there are not 3 of them, and `SpiceError(:badaxislength)` if one is not positive.
+
+See also [`latsrf`](@ref), [`latrec`](@ref), [`bodvrd`](@ref).
 """
 function srfrec(ks::KernelSet, body::NameOrID, lon::Real, lat::Real)
     a, b, c = _geo_radii(ks, _geo_body(ks, body, "body"))

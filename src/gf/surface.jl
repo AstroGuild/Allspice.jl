@@ -17,13 +17,11 @@
 # other method throws `SpiceError(:notsupported)` at the first evaluation of the state,
 # as in CSPICE.
 
-"Apply the state transformation with the rotation `R` and its derivative `dR` to the state `(r, v)`."
 @inline _gf_xf(R, dR, r, v) = (_m_mxv(R, r), _m_mxv(dR, r) + _m_mxv(R, v))
 
 "Apply the inverse of the state transformation with the blocks `R` and `dR` to the state `(r, v)` (`invstm`)."
 @inline _gf_xfi(R, dR, r, v) = (_m_mtxv(R, r), _m_mtxv(dR, r) + _m_mtxv(R, v))
 
-"The 3-vector zero and the state zero of the surface sources."
 const _GF_ZERO3 = zero(Vec3{Float64})
 const _GF_ZERO6 = zero(SVector{6,Float64})
 
@@ -378,31 +376,53 @@ end
 # --- public interface --------------------------------------------------------------------
 
 """
-    gfsubc(target, fixref, method, abcorr, obsrvr, crdsys, coord, relate, refval, adjust,
-           step, cnfine; keywords) -> Window
+    gfsubc([ctx,] target, fixref, method, abcorr, obsrvr, crdsys, coord, relate, refval,
+           adjust, step, cnfine; tol, bail=nothing, report=nothing, threads=false) -> Window
 
-Window of the confinement window `cnfine` on which the coordinate `coord` of the
-sub-observer point on `target`, as seen from `obsrvr`, satisfies the relation `relate`
-with the reference value `refval`, as `gfsubc_c`. The point is given in the body-fixed
-frame `fixref`, which must be centered on `target`. `method` is `"Near point:
-ellipsoid"` (the point of the reference ellipsoid nearest to the observer) or
-`"Intercept: ellipsoid"` (the point where the line from the observer to the center of
-the target meets the ellipsoid), in any case. The coordinate systems and coordinates
-are those of [`gfposc`](@ref); the other arguments and the keywords are those of
-[`gfdist`](@ref).
+Return the window of epochs, in seconds past J2000 TDB, on which the coordinate `coord`
+of the sub-observer point on `target`, as seen from `obsrvr`, satisfies the relation
+`relate` with `refval`, as `gfsubc_c`.
 
-Contract: as `gfdist`: the search is the search of CSPICE (`zzgfcslv`, `zzgflong`,
-`zzgfrelx`), the value is the coordinate of the point of [`subpnt`](@ref), and the test
-"is decreasing" uses the state of the point as `zzgfssob` computes it, so an end point
-differs from the one of CSPICE by rounding only, and by no more than about `tol`. The
-result is a new valid window that is a subset of `cnfine`. Errors: `:invalidstep`,
-`:invalidtolerance`, `:notrecognized` (relation), `:idcodenotfound`,
-`:bodiesnotdistinct`, `:invalidoption` (correction), `:notsupported` (system,
-coordinate, unequal equatorial radii, or a method other than the two above; the method
-is read at the first evaluation, so an empty `cnfine` gives no error, as in CSPICE),
-`:noframe`, `:invalidframe` (`fixref` is not centered on `target`), `:badframe` (no
-radii), `:valueoutofrange`, `:invalidvalue`, `:degeneratecase` (the velocity of the
-point is not defined), and the errors of `subpnt`.
+The point is the one of [`subpnt`](@ref), in the body-fixed frame `fixref`, which must
+be centered on `target`. `method` is `"Near point: ellipsoid"` (the point of the
+reference ellipsoid nearest to the observer) or `"Intercept: ellipsoid"` (the point
+where the line from the observer to the center of the target meets the ellipsoid); case
+and blanks are ignored. As in CSPICE, no other method and no DSK shape is accepted.
+
+The coordinate systems, the coordinates, their units and ranges, and the convergence of
+a longitude search are those of [`gfposc`](@ref). The other arguments, the keywords and
+the result are those of [`gfdist`](@ref).
+
+Throws `SpiceError(:invalidstep)`, `SpiceError(:invalidtolerance)`,
+`SpiceError(:notrecognized)`, `SpiceError(:valueoutofrange)` and
+`SpiceError(:invalidvalue)` as [`gfdist`](@ref) does, and
+- `SpiceError(:idcodenotfound)` if a body name is not known, and
+  `SpiceError(:bodiesnotdistinct)` if the two bodies are the same;
+- `SpiceError(:invalidoption)` if `abcorr` is not a correction;
+- `SpiceError(:notsupported)` if the system or the coordinate is not known, if the
+  equatorial radii differ (geodetic and planetographic systems), or if `method` is not
+  one of the two. The method is checked at the first epoch that is searched, so an
+  empty `cnfine` gives no error for it, as in CSPICE;
+- `SpiceError(:noframe)` if `fixref` is not known, `SpiceError(:invalidframe)` if it is
+  not centered on `target`, and `SpiceError(:badframe)` if its center has no radii;
+- `SpiceError(:degeneratecase)` if the velocity of the point is not defined at an epoch
+  of the search.
+
+The errors of `subpnt`, such as missing ephemeris data, come from the epochs that the
+search samples.
+
+# Examples
+The example needs a leapseconds kernel, an SPK, and a PCK with the radii and the
+orientation of Mars.
+```julia
+cnfine = Window([str2et("2025 JAN 01"), str2et("2025 JAN 03")])
+
+# Epochs at which the sub-Earth point on Mars crosses the prime meridian.
+gfsubc("MARS", "IAU_MARS", "Near point: ellipsoid", "LT+S", "EARTH", "GEODETIC",
+    "LONGITUDE", "=", 0.0, 0.0, 6 * 3600.0, cnfine)
+```
+
+See also [`gfsntc`](@ref), [`gfposc`](@ref), [`subpnt`](@ref).
 """
 function gfsubc(ks::KernelSet, target::NameOrID, fixref::NameOrID, method::AbstractString,
         abcorr::AbcorrArg, obsrvr::NameOrID, crdsys::AbstractString, coord::AbstractString,
@@ -427,25 +447,36 @@ gfsubc(target::NameOrID, fixref::NameOrID, method::AbstractString, abcorr::Abcor
         refval, adjust, step, cnfine; kw...)
 
 """
-    gfsntc(target, fixref, method, abcorr, obsrvr, dref, dvec, crdsys, coord, relate,
-           refval, adjust, step, cnfine; keywords) -> Window
+    gfsntc([ctx,] target, fixref, method, abcorr, obsrvr, dref, dvec, crdsys, coord,
+           relate, refval, adjust, step, cnfine; tol, bail=nothing, report=nothing,
+           threads=false) -> Window
 
-Window of `cnfine` on which the coordinate `coord` of the surface intercept on `target`
-of the ray from `obsrvr` along `dvec` (a vector of 3 elements in the frame `dref`)
-satisfies the relation, as `gfsntc_c`. The point is given in the body-fixed frame
-`fixref`, which must be centered on `target`. `method` is `"Ellipsoid"`, in any case.
-The coordinate systems and coordinates are those of [`gfposc`](@ref); the other
-arguments and the keywords are those of [`gfdist`](@ref).
+Return the window of epochs, in seconds past J2000 TDB, on which the coordinate `coord`
+of a surface intercept point on `target` satisfies the relation `relate` with `refval`,
+as `gfsntc_c`. The point is where the ray from `obsrvr` along `dvec` meets the reference
+ellipsoid of `target`.
 
-The search is confined to the epochs at which the ray meets the target: a first pass
+`dvec` is a vector of 3 elements in the frame `dref`. The point is the one of
+[`sincpt`](@ref), in the body-fixed frame `fixref`, which must be centered on `target`.
+`method` must be `"Ellipsoid"`; case and blanks are ignored. As in CSPICE, no DSK shape
+is accepted.
+
+The search is confined to the epochs at which the ray meets the target. A first pass
 with the step `step` finds the window on which the intercept exists, and each interval
-of that window is made shorter by `tol + 1` seconds at both ends (`zzgfcslv`). `step`
-must therefore also be shorter than the shortest interval on which the intercept
-exists, and than the shortest gap between two such intervals.
+of that window is then made shorter by `tol + 1` seconds at both ends. The result is a
+subset of that shortened window. `step` must therefore also be shorter than the shortest
+interval on which the intercept exists, and than the shortest gap between two such
+intervals.
 
-Contract: as [`gfsubc`](@ref), with the point of [`sincpt`](@ref) and the state of
-`zzgfssin`. The result is a subset of the existence window. Errors as `gfsubc`, and
-`:zerovector` (`dvec`), `:noframe` (`dref`), `:badarg` (`dvec` has not 3 elements).
+The coordinate systems, the coordinates, their units and ranges, and the convergence of
+a longitude search are those of [`gfposc`](@ref). The other arguments, the keywords and
+the result are those of [`gfdist`](@ref).
+
+Throws the errors of [`gfsubc`](@ref), with `"Ellipsoid"` as the only method, and
+`SpiceError(:badarg)` if `dvec` does not have 3 elements, `SpiceError(:zerovector)` if
+`dvec` is zero, and `SpiceError(:noframe)` if `dref` is not known.
+
+See also [`gfsubc`](@ref), [`gfposc`](@ref), [`sincpt`](@ref).
 """
 function gfsntc(ks::KernelSet, target::NameOrID, fixref::NameOrID, method::AbstractString,
         abcorr::AbcorrArg, obsrvr::NameOrID, dref::NameOrID, dvec::AbstractVector,

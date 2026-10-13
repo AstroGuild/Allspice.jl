@@ -13,6 +13,10 @@
 # fifth integer of the page), and a statement here can be compared with its C statement
 # one to one.
 #
+# A function `_ekw_<name>` ports the routine `zzek<name>` of CSPICE (`_ekw_pgal` is
+# `zzekpgal`, `_ekw_trin` is `zzektrin`); `_ekw_base` is `zzekpgbs` and `_ekw_udc` is
+# `dasudc`. A tree is known by the number of its root page.
+#
 # Nothing here keeps state outside the handle.
 
 "Data words of a page of type 1 (character), 2 (double), 3 (integer)."
@@ -36,11 +40,9 @@ The check of `zzekpgch` for write access: `h` is open (`:dasnosuchhandle`), writ
     return nothing
 end
 
-"Address before the first word of page `p` of type `t` (`zzekpgbs`)."
 @inline _ekw_base(t::Int, p::Integer) =
     t == 1 ? _ek_cbase(p) : t == 2 ? _ek_dbase(p) : _ek_ibase(p)
 
-"Page of type `t` that holds the address `addr`, and its base (`zzekpgpg`)."
 @inline function _ekw_pgpg(t::Int, addr::Integer)
     a = Int(addr)
     p = t == 1 ? (a + 1023) ÷ 1024 : t == 2 ? (a + 127) ÷ 128 : (a - 1) ÷ 256
@@ -65,7 +67,6 @@ function _ekw_sei(h::DASHandle, addr::Integer, val::Integer)
     return nothing
 end
 
-"Write the bytes `src[first:first+n-1]` at the character address `addr` (`dasudc`)."
 @inline function _ekw_udc(h::DASHandle, addr::Integer, src::AbstractVector{UInt8}, first::Int,
         n::Int)
     n > 0 && copyto!(h.chars, Int(addr), src, first, n)
@@ -175,14 +176,14 @@ function _ekw_pgfr(h::DASHandle, t::Int, p::Integer)
     return nothing
 end
 
-"Link count of page `p` of type `t` (`zzekglnk`)."
+# The link count of a data page is in its last word and the forward pointer, a page
+# number, in the word before it; in a character page each takes five characters.
 @inline function _ekw_glnk(h::DASHandle, t::Int, p::Integer)
     base = _ekw_base(t, p)
     return t == 1 ? _ek_gei(h.chars, base + 1020) : t == 2 ? round(Int, h.dps[base+128]) :
            Int(h.ints[base+256])
 end
 
-"Set the link count of page `p` of type `t` to `n` (`zzekslnk`)."
 @inline function _ekw_slnk(h::DASHandle, t::Int, p::Integer, n::Integer)
     base = _ekw_base(t, p)
     if t == 1
@@ -195,14 +196,12 @@ end
     return nothing
 end
 
-"Forward pointer of page `p` of type `t` (`zzekgfwd`)."
 @inline function _ekw_gfwd(h::DASHandle, t::Int, p::Integer)
     base = _ekw_base(t, p)
     return t == 1 ? _ek_gei(h.chars, base + 1015) : t == 2 ? round(Int, h.dps[base+127]) :
            Int(h.ints[base+255])
 end
 
-"Set the forward pointer of page `p` of type `t` to the page `fwd` (`zzeksfwd`)."
 @inline function _ekw_sfwd(h::DASHandle, t::Int, p::Integer, fwd::Integer)
     base = _ekw_base(t, p)
     if t == 1
@@ -232,24 +231,20 @@ _ekw_Page() = _ekw_Page(zeros(Int32, 256))
 @inline Base.getindex(p::_ekw_Page, k::Integer) = Int(p.v[k+1])
 @inline Base.setindex!(p::_ekw_Page, x::Integer, k::Integer) = (p.v[k+1] = x)
 
-"Throws `SpiceError(:invalidindex)` unless `p` is an integer page of the file."
 @inline function _ekw_ipage_check(h::DASHandle, p::Integer)
     np = Int(h.ints[14])
     (1 <= p <= np) || throw(SpiceError(:invalidindex, "INT page = $p; valid range is [1:$np]"))
     return nothing
 end
 
-"Read integer page `p` into the buffer `page` (`zzekpgri`); returns `page`."
 function _ekw_pgri!(page::_ekw_Page, h::DASHandle, p::Integer)
     _ekw_ipage_check(h, p)
     copyto!(page.v, 1, h.ints, _ek_ibase(p) + 1, 256)
     return page
 end
 
-"A copy of integer page `p` (`zzekpgri`)."
 _ekw_pgri(h::DASHandle, p::Integer) = _ekw_pgri!(_ekw_Page(Vector{Int32}(undef, 256)), h, p)
 
-"Write the buffer `page` to integer page `p` (`zzekpgwi`)."
 function _ekw_pgwi(h::DASHandle, p::Integer, page::_ekw_Page)
     _ekw_ipage_check(h, p)
     copyto!(h.ints, _ek_ibase(p) + 1, page.v, 1, 256)
@@ -262,13 +257,11 @@ end
     return nothing
 end
 
-"Set `n` integers from offset `k` of `page` to zero (`cleari`); nothing if `n <= 0`."
 @inline function _ekw_clear!(page::_ekw_Page, k::Int, n::Int)
     n > 0 && fill!(view(page.v, k+1:k+n), Int32(0))
     return nothing
 end
 
-"Integer at the 0-based offset `k` of the page with the base `b`, read from the file."
 @inline _ekw_w(ints::Vector{Int32}, b::Int, k::Int) = Int(ints[b+k+1])
 
 # ---------------------------------------------------------------------------------------
@@ -396,7 +389,6 @@ function _ekw_trsb(h::DASHandle, tree::Integer, key::Integer)
     return lsib, lkey, rsib, rkey
 end
 
-"Key of the first entry of the tree `tree` whose value is `ival`, or 0 (`zzektrls`)."
 function _ekw_trls(h::DASHandle, tree::Integer, ival::Integer)
     vals = _ek_tree_values(h.ints, tree)
     for i in eachindex(vals)             # invariant: the entries before i have another value
@@ -411,12 +403,6 @@ end
 # Tree: creation and insertion
 # ---------------------------------------------------------------------------------------
 
-"""
-    _ekw_trit(h) -> tree
-
-Make an empty tree and return its root page (`zzektrit`). Postcondition: the root page
-is zero but for the tree type 1, the node count 1 and the depth 1.
-"""
 function _ekw_trit(h::DASHandle)
     p, base = _ekw_pgal(h, 3)
     ints = h.ints
@@ -581,7 +567,6 @@ end
 "Key, data and child bases (0-based offsets) of a node: the root or another node."
 @inline _ekw_bases(isroot::Bool) = isroot ? (5, 172, 88) : (1, 128, 64)
 
-"Throws `:bug` unless the children `pkidx` and `pkidx + 1` of `ppage` are `left` and `right`."
 @inline function _ekw_sibling_check(ppage::_ekw_Page, kidbas::Int, pkidx::Int, left::Int,
         right::Int, parent::Int)
     lsib = ppage[kidbas+pkidx-1]
@@ -882,7 +867,6 @@ function _ekw_trin(h::DASHandle, tree::Integer, key::Integer, value::Integer)
     return nothing
 end
 
-"Append `value` to the tree `tree`; returns its key (`zzektrap`)."
 function _ekw_trap(h::DASHandle, tree::Integer, value::Integer)
     key = _ek_trsz(h.ints, tree) + 1
     _ekw_trin(h, tree, key, value)

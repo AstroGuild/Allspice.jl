@@ -11,11 +11,9 @@ const _GEO_MAXVRT = 10000
 
 @noinline _geo_fov_error(kind::Symbol, msg) = throw(SpiceError(kind, msg))
 
-"The pool variable `INS<instid><suffix>`, or `nothing`."
 @inline _geo_fov_var(ks::KernelSet, instid::Integer, suffix::String) =
     get(ks.pool, string("INS", instid, suffix), nothing)
 
-"The first value of a character pool variable, or `nothing` (`gcpool` with `found` false)."
 @inline function _geo_fov_text(ks::KernelSet, instid::Integer, suffix::String)
     v = _geo_fov_var(ks, instid, suffix)
     v isa Vector{String} || return nothing
@@ -23,7 +21,6 @@ const _GEO_MAXVRT = 10000
     return @inbounds v[1]
 end
 
-"The numeric pool variable of 3 values `INS<instid><suffix>` as a vector; the error kinds are `missing` and `bad`."
 function _geo_fov_vec3(ks::KernelSet, instid::Integer, suffix::String, missing::Symbol, bad::Symbol)
     v = _geo_fov_var(ks, instid, suffix)
     v === nothing && _geo_fov_error(missing,
@@ -127,22 +124,43 @@ function _geo_getfov(ks::KernelSet, instid::Integer, room::Integer)
 end
 
 """
-    getfov(instid, room=10000) -> (shape, frame, bsight, bounds)
+    getfov([ctx,] instid, room=10000) -> (shape, frame, bsight, bounds)
 
-Return the field of view of the instrument with the ID `instid`, as `getfov_c`: the
-shape (`"CIRCLE"`, `"ELLIPSE"`, `"RECTANGLE"` or `"POLYGON"`), the name of the frame of
-the vectors, the boresight vector, and the list of the boundary vectors (1 for a
-circle, 2 for an ellipse, 4 for a rectangle, the corners for a polygon). The data come
-from the pool variables `INS<instid>_FOV_*` and `INS<instid>_BORESIGHT`, with the
-`CORNERS` and the `ANGLES` forms of the specification. Forms: on a `KernelSet`, on a
-`SpiceContext`, and on the default context.
+Return the field of view of the instrument with the integer ID `instid`, as `getfov_c`
+of CSPICE.
 
-Contract: `room` is the largest number of boundary vectors accepted
-(`SpiceError(:boundarytoobig)`). The result vector is new. Throws `SpiceError`:
-`:framemissing`, `:shapemissing`, `:shapenotsupported`, `:boresightmissing`,
-`:badboresightspec`, `:zeroboresight`, `:boundarymissing`, `:badboundary`,
-`:refvectormissing`, `:badrefvectorspec`, `:refanglemissing`, `:unitsmissing`,
-`:crossanglemissing`, `:unsupportedspec`, and the errors of [`convrt`](@ref).
+- `shape`: `"CIRCLE"`, `"ELLIPSE"`, `"RECTANGLE"` or `"POLYGON"`.
+- `frame`: the name of the frame of the vectors.
+- `bsight`: the boresight vector, an `SVector{3}`.
+- `bounds`: a new `Vector` of boundary vectors (`SVector{3}`): 1 for a circle, 2 for an
+  ellipse, 4 for a rectangle, the corners for a polygon.
+
+The vectors are not unit vectors in general; only their directions matter. CSPICE also
+returns the number of boundary vectors; here it is `length(bounds)`.
+
+The data come from the pool variables `INS<instid>_FOV_FRAME`, `INS<instid>_FOV_SHAPE`,
+`INS<instid>_BORESIGHT` and the other `INS<instid>_FOV_*` variables of an instrument
+kernel. Both forms of the specification are read: `CORNERS` (the default) and `ANGLES`.
+`room` is the largest number of boundary vectors accepted.
+
+Throws `SpiceError` with the kind
+- `:framemissing`, `:shapemissing`, `:boresightmissing` or `:boundarymissing` if the
+  variable is not in the kernel pool;
+- `:shapenotsupported` if the shape is not one of the four, or is a polygon given by
+  angles; `:unsupportedspec` if the specification is not `CORNERS` or `ANGLES`;
+- `:badboresightspec` if the boresight does not hold 3 numbers, `:zeroboresight` if it
+  is zero;
+- `:badboundary` if the boundary does not hold a multiple of 3 numbers, if the number
+  of vectors does not fit the shape, or if a half angle of a rectangle is 90 degrees
+  or more;
+- `:boundarytoobig` if there are more than `room` boundary vectors;
+- `:refvectormissing`, `:refanglemissing`, `:crossanglemissing` or `:unitsmissing` if a
+  variable of the `ANGLES` form is absent, `:badrefvectorspec` if the reference vector
+  does not hold 3 numbers or is parallel to the boresight.
+
+Also throws the errors of [`convrt`](@ref) for the angle unit.
+
+See also [`getfvn`](@ref), [`fovtrg`](@ref), [`fovray`](@ref).
 """
 getfov(ks::KernelSet, instid::Integer, room::Integer=_GEO_MAXVRT) = _geo_getfov(ks, instid, room)
 getfov(ctx::SpiceContext, instid::Integer, room::Integer=_GEO_MAXVRT) =
@@ -150,14 +168,16 @@ getfov(ctx::SpiceContext, instid::Integer, room::Integer=_GEO_MAXVRT) =
 getfov(instid::Integer, room::Integer=_GEO_MAXVRT) = getfov(default_context(), instid, room)
 
 """
-    getfvn(inst, room=10000) -> (shape, frame, bsight, bounds)
+    getfvn([ctx,] inst, room=10000) -> (shape, frame, bsight, bounds)
 
-Return the field of view of the instrument with the name `inst`, as `getfvn_c`; the
-outputs are those of [`getfov`](@ref). Forms: on a `KernelSet`, on a `SpiceContext`, and
-on the default context.
+Return the field of view of the instrument with the name `inst`, as `getfvn_c` of
+CSPICE. The outputs and the errors are those of [`getfov`](@ref).
 
-Contract: `inst` is a name that the kernel set maps to an ID
-(`SpiceError(:idcodenotfound)`), or the ID as a string.
+`inst` is a name that the loaded kernels map to an ID, or the ID written as a string.
+
+Throws `SpiceError(:idcodenotfound)` if the name is not known.
+
+See also [`getfov`](@ref), [`bodn2c`](@ref).
 """
 getfvn(ks::KernelSet, inst::AbstractString, room::Integer=_GEO_MAXVRT) =
     _geo_getfov(ks, _geo_body(ks, inst, "instrument"), room)
@@ -446,7 +466,6 @@ end
 _geo_fov_raycorr(c::Aberration) = c.uselt ? _geo_fov_error(:invalidoption,
     "a correction with light time is not valid for a ray") : (c.stellar, c.transmit)
 
-"The code of the target shape of `fovtrg`; `SpiceError(:invalidshape)` otherwise."
 function _geo_fov_tshape(tshape::AbstractString)
     s = uppercase(rstrip(lstrip(tshape, ' '), ' '))
     s == "POINT" && return _GEO_FOV_POINT
@@ -590,22 +609,53 @@ function _geo_fovvis(ks::KernelSet, inst::NameOrID, tshape::Int, raydir::Vec3{Fl
 end
 
 """
-    fovtrg(inst, target, tshape, tframe, abcorr, obsrvr, et) -> Bool
+    fovtrg([ctx,] inst, target, tshape, tframe, abcorr, obsrvr, et) -> Bool
 
-Return true if the body `target` is in the field of view of the instrument `inst` at
-the epoch `et`, as seen by `obsrvr`, as `fovtrg_c`. `tshape` is `"ELLIPSOID"` (any part
-of the reference ellipsoid in the field of view counts; `tframe` is the body-fixed
-frame of the target) or `"POINT"` (`tframe` is not used). Forms: on a `KernelSet`, on a
-`SpiceContext`, and on the default context.
+Return `true` if the body `target` is in the field of view of the instrument `inst` at
+`et` (seconds past J2000 TDB), as seen by `obsrvr`, as `fovtrg_c` of CSPICE.
 
-Contract: the field of view of `inst` is in the kernel pool and its angular radius is
-below 90 degrees (`SpiceError(:fovtoowide)`). The frame of the instrument is evaluated
-at `et`. Throws `SpiceError`: `:invalidoption` (the shape `RAY`, or the correction),
-`:idcodenotfound`, `:invalidshape`, `:bodiesnotdistinct`, `:invalidframe`,
-`:frameinfonotfound`, the errors of the radii lookup, of [`getfov`](@ref) and of
-`spkpos`, `:unknownframe` for an instrument frame that is not known, and
-`:degeneratecase`, `:invalidcount`, `:facenotfound`, `:notsupported`, `:invalidfov`,
-`:notdisjoint` from the geometry of the field of view.
+`tshape` is the model of the target:
+
+| `tshape` | Test | `tframe` |
+|---|---|---|
+| `"ELLIPSOID"` | any part of the reference ellipsoid is in the field of view | body-fixed frame of the target |
+| `"POINT"` | the target center is in the field of view | not used; pass `" "` |
+
+`inst` is an instrument name or ID with a field of view in the kernel pool (see
+[`getfov`](@ref)). `obsrvr` is the body that carries the instrument. The instrument
+frame is evaluated at `et`, so a CK and an SCLK kernel for the spacecraft are needed
+if that frame is a CK frame. `abcorr` is a correction string of [`spkezr`](@ref) or an
+[`Aberration`](@ref). `et` must be a plain real number. The call allocates.
+
+The angular radius of the field of view about its axis must be below 90 degrees.
+
+Throws `SpiceError` with the kind
+- `:invalidoption` if `tshape` is `"RAY"` (use [`fovray`](@ref)) or if `abcorr` is not a
+  valid correction;
+- `:idcodenotfound` if a body or instrument name is not known;
+- `:invalidshape` if `tshape` is not `"ELLIPSOID"` or `"POINT"`;
+- `:bodiesnotdistinct` if `target` and `obsrvr` are the same body;
+- `:invalidframe` if `tframe` is blank, not known, or not centered on an ellipsoid
+  target; `:frameinfonotfound` if the frame has no definition loaded;
+- `:unknownframe` if the instrument frame is not known;
+- `:fovtoowide` if the field of view is 90 degrees or more from its axis;
+- `:degeneratecase`, `:invalidcount`, `:facenotfound`, `:notsupported` or `:invalidfov`
+  if the boundary vectors do not bound a usable pyramid;
+- `:notdisjoint` if the observer is inside the target ellipsoid.
+
+Also throws the errors of [`getfov`](@ref), of [`spkpos`](@ref) and of the radii
+lookup (`:kernelvarnotfound`, `:invalidcount`, `:badaxislength`).
+
+# Examples
+```julia
+# Needs an SPK, a PCK, a leap seconds kernel, and for the spacecraft an instrument
+# kernel, a frame kernel, a CK and an SCLK kernel. The names are those of Cassini.
+et = str2et("2004 JUN 11 19:32:00 UTC")
+fovtrg("CASSINI_ISS_NAC", "PHOEBE", "ELLIPSOID", "IAU_PHOEBE", "LT+S", "CASSINI", et)
+fovtrg("CASSINI_ISS_NAC", "SUN", "POINT", " ", "LT+S", "CASSINI", et)
+```
+
+See also [`fovray`](@ref), [`getfov`](@ref), [`gftfov`](@ref), [`occult`](@ref).
 """
 function fovtrg(ks::KernelSet, inst::NameOrID, target::NameOrID, tshape::AbstractString,
         tframe::NameOrID, abcorr::AbcorrArg, obsrvr::NameOrID, et::Real)
@@ -624,18 +674,32 @@ fovtrg(inst::NameOrID, target::NameOrID, tshape::AbstractString, tframe::NameOrI
     fovtrg(default_context(), inst, target, tshape, tframe, abcorr, obsrvr, et)
 
 """
-    fovray(inst, raydir, rframe, abcorr, obsrvr, et) -> Bool
+    fovray([ctx,] inst, raydir, rframe, abcorr, obsrvr, et) -> Bool
 
-Return true if the ray along `raydir` (frame `rframe`) is in the field of view of the
-instrument `inst` at the epoch `et`, as `fovray_c`. `abcorr` is `"NONE"`, `"S"`
-(the direction is corrected for the stellar aberration of the observer `obsrvr`, as
-for light that is received) or `"XS"` (as for light that is sent). Forms: on a
-`KernelSet`, on a `SpiceContext`, and on the default context.
+Return `true` if the ray along `raydir` is in the field of view of the instrument `inst`
+at `et` (seconds past J2000 TDB), as `fovray_c` of CSPICE.
 
-Contract: `raydir` has 3 elements and is not zero (`SpiceError(:zerovector)`). Throws
-`SpiceError`: `:idcodenotfound`, `:invalidframe`, `:frameinfonotfound`,
-`:invalidoption` (a correction with light time), and the errors of
-[`fovtrg`](@ref) for the field of view.
+`raydir` is a direction (3 elements, not zero) in the frame `rframe`, for example the
+direction of a star in `"J2000"`. `obsrvr` is the body that carries the instrument; its
+velocity gives the stellar aberration. `abcorr` is one of:
+
+| `abcorr` | Correction of the direction |
+|---|---|
+| `"NONE"` | none |
+| `"S"` | stellar aberration, for light that the observer receives |
+| `"XS"` | stellar aberration, for light that the observer sends |
+
+An [`Aberration`](@ref) without light time is also valid. `et` must be a plain real
+number. The call allocates. The notes of [`fovtrg`](@ref) on the instrument apply.
+
+Throws `SpiceError(:zerovector)` if `raydir` is zero, `SpiceError(:badarg)` if it does
+not have 3 elements, `SpiceError(:idcodenotfound)` if a name is not known,
+`SpiceError(:invalidframe)` if `rframe` is blank or not known,
+`SpiceError(:frameinfonotfound)` if it has no definition loaded, and
+`SpiceError(:invalidoption)` if `abcorr` is another value, such as a correction with
+light time. Also throws the errors of [`fovtrg`](@ref) for the field of view.
+
+See also [`fovtrg`](@ref), [`gfrfov`](@ref), [`sincpt`](@ref).
 """
 fovray(ks::KernelSet, inst::NameOrID, raydir::AbstractVector, rframe::NameOrID,
     abcorr::AbcorrArg, obsrvr::NameOrID, et::Real) =

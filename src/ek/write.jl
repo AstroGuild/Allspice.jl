@@ -20,13 +20,71 @@
 """
     ekopn(path, ifname, ncomch=0) -> DASHandle
 
-Create the new EK file `path` with the internal file name `ifname` and room for
-`ncomch` comment characters, and open it for write, as `ekopn_c`. Close the handle
-with [`ekcls`](@ref); the data are on disk when `ekcls` returns.
+Create the EK file `path` and return a handle that is open for write, as `ekopn_c` of
+CSPICE.
 
-Preconditions (each throws `SpiceError`): `ncomch >= 0` (`:invalidcount`); the names
-are not empty (`:emptystring`); the file does not exist (`:fileopenfailed`), and the
-other conditions of `dasonw`. Postcondition: the file is a paged EK with no segment.
+`ifname` is the internal file name and `ncomch` the number of comment characters to
+reserve. The new file holds no segment: start one with [`ekbseg`](@ref) or
+[`ekifld`](@ref). Close the handle with [`ekcls`](@ref); the data are on disk when
+`ekcls` returns.
+
+Throws `SpiceError(:emptystring)` if `path` or `ifname` is empty,
+`SpiceError(:invalidcount)` if `ncomch < 0`, and `SpiceError(:fileopenfailed)` if
+`path` exists or cannot be created.
+
+# Examples
+Write a segment with two rows record by record, then read it back. Segment and row
+numbers start at 1.
+```jldoctest
+julia> path = joinpath(mktempdir(), "example.bes");
+
+julia> h = ekopn(path, "example EK");
+
+julia> seg = ekbseg(h, "OBSERVATIONS", ["ID", "TARGET", "RANGE"],
+           ["DATATYPE = INTEGER, INDEXED = TRUE",
+            "DATATYPE = CHARACTER*(16), NULLS_OK = TRUE",
+            "DATATYPE = DOUBLE PRECISION, SIZE = 2"])
+1
+
+julia> row = ekappr(h, seg)
+1
+
+julia> ekacei(h, seg, row, "ID", [42])
+
+julia> ekacec(h, seg, row, "TARGET", ["MOON"])
+
+julia> ekaced(h, seg, row, "RANGE", [356.5e3, 406.7e3])
+
+julia> row = ekappr(h, seg)
+2
+
+julia> ekacei(h, seg, row, "ID", [43])
+
+julia> ekacec(h, seg, row, "TARGET", String[], true)    # a null entry
+
+julia> ekaced(h, seg, row, "RANGE", [0.0, 1.0])
+
+julia> ekcls(h)
+
+julia> h = ekopr(path);
+
+julia> eknseg(h), ekssum(h, 1).nrows
+(1, 2)
+
+julia> ekrcei(h, 1, 1, "ID")
+([42], false)
+
+julia> ekrced(h, 1, 1, "RANGE")
+([356500.0, 406700.0], false)
+
+julia> ekrcec(h, 1, 1, "TARGET"), ekrcec(h, 1, 2, "TARGET")
+((["MOON"], false), (String[], true))
+
+julia> ekcls(h)
+```
+
+See also [`ekopw`](@ref), [`ekops`](@ref), [`ekbseg`](@ref), [`ekappr`](@ref),
+[`ekacec`](@ref), [`ekfind`](@ref).
 """
 function ekopn(path::AbstractString, ifname::AbstractString, ncomch::Integer=0)
     (isempty(path) || isempty(ifname)) && throw(SpiceError(:emptystring,
@@ -44,11 +102,14 @@ end
 """
     ekops() -> DASHandle
 
-Open a scratch EK for write, as `ekops_c`: an EK with no segment that exists only
-while its handle is open. All record and fast writers and the read calls that take a
-handle accept it, and [`ekcls`](@ref) discards it; no file is made (see
-[`dasops`](@ref)). A scratch EK has no name, so `furnsh` cannot load it for queries, as
-in CSPICE.
+Return a write handle to a scratch EK, as `ekops_c` of CSPICE: an EK with no segment
+that exists only in memory while its handle is open.
+
+All record writers, fast writers and readers that take a handle accept it.
+[`ekcls`](@ref) discards it; no file is made (see [`dasops`](@ref)). A scratch EK has
+no name, so `furnsh` cannot load it for queries, as in CSPICE.
+
+See also [`ekopn`](@ref), [`ekifld`](@ref).
 """
 function ekops()
     h = dasops()
@@ -62,10 +123,17 @@ end
 """
     ekopw(path) -> DASHandle
 
-Open the existing EK file `path` for write, as `ekopw_c`. The file is read into
-memory; all changes are on disk when [`ekcls`](@ref) returns. Contract: `path` names a
-DAS file that holds a paged EK of architecture 8, else `SpiceError` with the kinds of
-`dasopw`, `:wrongarchitecture` or `:invalidformat`.
+Open the existing EK file `path` and return a handle that is open for write, as
+`ekopw_c` of CSPICE.
+
+The file is read into memory; all changes are on disk when [`ekcls`](@ref) returns.
+
+Throws `SpiceError(:emptystring)` if `path` is empty, `SpiceError(:filenotfound)` if
+the file does not exist, `SpiceError(:fileopenfailed)` if it is not writable, and
+`SpiceError(:wrongarchitecture)` or `SpiceError(:invalidformat)` if it is a DAS file
+that does not hold a paged EK. The other errors are those of [`dasopw`](@ref).
+
+See also [`ekopn`](@ref), [`ekopr`](@ref).
 """
 function ekopw(path::AbstractString)
     isempty(path) && throw(SpiceError(:emptystring, "ekopw: the file name must not be empty"))
@@ -78,7 +146,6 @@ end
 # Column declarations
 # ---------------------------------------------------------------------------------------
 
-"A string as the bytes of a Fortran string: without trailing blanks."
 @inline _ekw_bytes(s::AbstractString) = Vector{UInt8}(codeunits(rstrip(String(s), ' ')))
 @inline _ekw_bytes(s::AbstractVector{UInt8}) = Vector{UInt8}(s)
 
@@ -357,20 +424,39 @@ end
 """
     ekbseg(handle, tabnam, cnames, decls) -> segno
 
-Start a new segment of the table `tabnam` in the EK file of the write handle, as
-`ekbseg_c`, and return its number (from 1). `cnames` holds the column names and
-`decls` the column declarations, one for each column: a list of `KEYWORD = value`
-items with the keywords `DATATYPE` (`INTEGER`, `DOUBLE PRECISION`, `TIME`,
-`CHARACTER*(n)`, `CHARACTER*(*)`), `SIZE` (a number or `VARIABLE`), `INDEXED`,
-`NULLS_OK` and `FIXED_COUNT` (`TRUE` or `FALSE`).
+Start a new segment without rows for the table `tabnam` in the EK of the write handle
+and return its segment number, as `ekbseg_c` of CSPICE.
 
-Preconditions (each throws `SpiceError`): write handle (`:dasnosuchhandle`,
-`:dasinvalidaccess`); names of at most 64 (table) and 32 (column) printable characters
-(`:emptystring`, `:idstringtoolong`, `:nonprintablechars`) that start with a letter
-and hold letters, digits, `\$` and `_` (`:invalidname`); 1 to 100 columns and as many
-declarations (`:invalidcount`); valid declarations (`:badcolumndecl`, `:badcolumdecl`
-for a missing data type); no mixture of fixed-count and other columns
-(`:badattributes`). Postcondition: the segment exists and has no rows.
+Segment numbers start at 1 (the C interface of CSPICE counts from 0). `cnames` holds
+the column names and `decls` one declaration for each column. A table name has at
+most 64 and a column name at most 32 characters: a letter, then letters, digits, `\$`
+and `_`. The file stores the names in upper case. Two columns with the same name are
+not refused.
+
+A declaration is a list of `KEYWORD = value` items that commas separate, in any case:
+
+- `DATATYPE` (required): `INTEGER`, `DOUBLE PRECISION`, `TIME`, `CHARACTER*(n)`
+  (strings of at most `n` characters) or `CHARACTER*(*)` (strings of any length).
+- `SIZE`: the number of elements of an entry, or `VARIABLE`. Default 1. `VARIABLE` is
+  not valid with `CHARACTER*(*)`.
+- `INDEXED`: `TRUE` or `FALSE`. Default `FALSE`. Scalar columns only.
+- `NULLS_OK`: `TRUE` or `FALSE`. Default `FALSE`.
+- `FIXED_COUNT`: `TRUE` or `FALSE`. Default `FALSE`. Scalar columns only, and for all
+  columns of the segment or for none. Only the fast writers can fill such a segment
+  (see [`ekifld`](@ref)).
+
+Add rows with [`ekappr`](@ref) or [`ekinsr`](@ref).
+
+Throws `SpiceError` with the kind:
+- `:dasnosuchhandle` or `:dasinvalidaccess` if the handle is closed or open for read;
+- `:emptystring`, `:idstringtoolong`, `:nonprintablechars` or `:invalidname` for a
+  name that does not follow the rules;
+- `:invalidcount` unless there are 1 to 100 columns and as many declarations;
+- `:badcolumndecl` for a declaration that does not follow the rules, and
+  `:badcolumdecl` (the spelling of CSPICE) if `DATATYPE` is absent;
+- `:badattributes` if only some of the columns have `FIXED_COUNT = TRUE`.
+
+See the example of [`ekopn`](@ref).
 """
 function ekbseg(h::DASHandle, tabnam::AbstractString, cnames::AbstractVector{<:AbstractString},
         decls::AbstractVector{<:AbstractString})
@@ -414,15 +500,20 @@ end
 """
     ekinsr(handle, segno, recno) -> Nothing
 
-Add an empty record to segment `segno` so that it becomes row `recno`, as `ekinsr_c`;
-the rows from `recno` on move up by one. Fill the record with [`ekacec`](@ref),
-[`ekaced`](@ref), [`ekacei`](@ref): a segment that holds a record with an empty entry
-cannot be read by all of CSPICE.
+Insert an empty record as row `recno` of segment `segno`, as `ekinsr_c` of CSPICE.
 
-Preconditions (each throws `SpiceError`): write handle; valid segment number
-(`:invalidindex`) of a segment that the fast writers did not make with fixed-count
-columns (`:invalidtype`); `1 <= recno <= nrows + 1` (`:invalidindex`). Postcondition:
-the segment has one row more.
+Segment and row numbers start at 1 (the C interface of CSPICE counts from 0). The
+rows from `recno` on move up by one; `recno = nrows + 1` appends. Write every entry of
+the new record with [`ekacec`](@ref), [`ekaced`](@ref) or [`ekacei`](@ref): the
+readers throw for an entry that was never written, and not all of CSPICE can read a
+segment that holds one.
+
+Throws `SpiceError(:dasnosuchhandle)` or `SpiceError(:dasinvalidaccess)` if the
+handle is closed or open for read, `SpiceError(:invalidindex)` if there is no segment
+`segno` or `recno` is outside `1:nrows+1`, and `SpiceError(:invalidtype)` if the
+segment has fixed-count columns.
+
+See also [`ekappr`](@ref), [`ekdelr`](@ref).
 """
 function ekinsr(h::DASHandle, segno::Integer, recno::Integer)
     segdsc, _ = _ekw_segment(h, "ekinsr", segno)
@@ -430,7 +521,6 @@ function ekinsr(h::DASHandle, segno::Integer, recno::Integer)
     return nothing
 end
 
-"The body of `ekinsr` for the descriptor copy `segdsc`."
 function _ekw_insr(h::DASHandle, segdsc::Vector{Int32}, recno::Integer)
     ints = h.ints
     size = Int(segdsc[_EK_NCIDX]) + _EK_DPTBAS
@@ -464,8 +554,15 @@ end
 """
     ekappr(handle, segno) -> recno
 
-Add an empty record at the end of segment `segno`, as `ekappr_c`, and return its row
-number (from 1). Contract as [`ekinsr`](@ref).
+Append an empty record to segment `segno` and return its row number, as `ekappr_c` of
+CSPICE.
+
+Segment and row numbers start at 1 (the C interface of CSPICE counts from 0). Write
+every entry of the new record, as for [`ekinsr`](@ref).
+
+Throws the errors of [`ekinsr`](@ref).
+
+See the example of [`ekopn`](@ref).
 """
 function ekappr(h::DASHandle, segno::Integer)
     segdsc, _ = _ekw_segment(h, "ekappr", segno)
@@ -477,17 +574,24 @@ end
 """
     ekdelr(handle, segno, recno) -> Nothing
 
-Delete row `recno` of segment `segno`, as `ekdelr_c`: its entries leave the indexes
-and the data pages, and the rows after it move down by one. Preconditions (each throws
-`SpiceError`): write handle; valid segment number (`:invalidindex`) of a type 1
-segment (`:invalidtype`); `1 <= recno <= nrows` (`:invalidindex`). Postcondition: the
-segment has one row less. Pages that become empty go to the free list of the file.
+Delete row `recno` of segment `segno`, as `ekdelr_c` of CSPICE.
 
-Rows of a segment that the fast writers made can be deleted too. CSPICE cannot do
-that: it frees the record page of the row with all the records in it, it does not find
-the row in the index of a character column with equal strings, and it takes links
-from data pages that other array entries use. The record pages of a fast load are
-therefore never freed here.
+Segment and row numbers start at 1 (the C interface of CSPICE counts from 0). The
+rows after `recno` move down by one. The entries of the row leave the indexes, and
+pages that become empty go to the free list of the file.
+
+Rows of a segment that the fast writers made (without fixed-count columns) can be
+deleted too. CSPICE damages such a segment: it frees the record page of the row with
+all the records in it, it does not find the row in the index of a character column
+with equal strings, and it takes links from data pages that other array entries use.
+Here the record pages of a fast load are never freed.
+
+Throws `SpiceError(:dasnosuchhandle)` or `SpiceError(:dasinvalidaccess)` if the
+handle is closed or open for read, `SpiceError(:invalidindex)` if there is no segment
+`segno` or `recno` is outside `1:nrows`, and `SpiceError(:invalidtype)` if the segment
+has fixed-count columns.
+
+See also [`ekinsr`](@ref), [`ekappr`](@ref).
 """
 function ekdelr(h::DASHandle, segno::Integer, recno::Integer)
     segdsc, mbase = _ekw_segment(h, "ekdelr", segno)
@@ -523,7 +627,6 @@ function _ekw_cdsc(h::DASHandle, segdsc::AbstractVector{Int32}, column::Abstract
     return h.ints[b+1:b+_EK_CDSCSZ]
 end
 
-"Name of the data types `types` for an error message."
 _ekw_typename(types::Tuple) = types[1] == _EK_CHR ? "character" : types[1] == _EK_INT ?
                               "integer" : "d.p. or time"
 
@@ -555,21 +658,12 @@ end
     :noclass, "Class $(coldsc[_EK_CLSIDX]) from input column descriptor is not a supported " *
     "$what class.  COLUMN = $column; RECNO = $recno; SEGNO = $segno; EK = $(h.path)."))
 
-"The strings `vals` as byte vectors without trailing blanks."
 _ekw_cvals(vals::AbstractVector) = Vector{UInt8}[_ekw_bytes(v) for v in vals]
-"The first of the strings `vals` (a blank string if there is none) as bytes."
 _ekw_cval1(vals::AbstractVector) = isempty(vals) ? UInt8[] : _ekw_bytes(first(vals))
-"The first of the numbers `vals`, or zero if there is none."
 _ekw_nval1(::Type{T}, vals::AbstractVector) where {T} = isempty(vals) ? zero(T) :
                                                          convert(T, first(vals))
-"The numbers `vals` as a vector of `T`."
 _ekw_nvals(::Type{T}, vals::AbstractVector) where {T} = vals isa Vector{T} ? vals : T[v for v in vals]
 
-"""
-    _ekw_entry_c(h, who, update, segno, recno, column, vals, isnull) -> Nothing
-
-The body of `ekacec` (`update` false) and `ekucec` (`update` true).
-"""
 function _ekw_entry_c(h::DASHandle, who::AbstractString, update::Bool, segno::Integer,
         recno::Integer, column::AbstractString, vals::AbstractVector, isnull::Bool)
     segdsc, coldsc, recptr = _ekw_locate(h, who, segno, recno, column, (_EK_CHR,))
@@ -586,12 +680,6 @@ function _ekw_entry_c(h::DASHandle, who::AbstractString, update::Bool, segno::In
     return nothing
 end
 
-"""
-    _ekw_entry_n(h, who, update, T, types, segno, recno, column, vals, isnull) -> Nothing
-
-The body of `ekaced`, `ekacei` (`update` false) and `ekuced`, `ekucei` (`update`
-true); `T` is the element type of the column and `types` its data type codes.
-"""
 function _ekw_entry_n(h::DASHandle, who::AbstractString, update::Bool, ::Type{T}, types::Tuple,
         segno::Integer, recno::Integer, column::AbstractString, vals::AbstractVector,
         isnull::Bool) where {T}
@@ -617,18 +705,31 @@ end
 """
     ekacec(handle, segno, recno, column, cvals, isnull=false) -> Nothing
 
-Add the entry of the character column `column` to row `recno` of segment `segno`, as
-`ekacec_c`. `cvals` holds the strings of the entry (one for a scalar column); trailing
-blanks do not count, and a string longer than the string length of the column is cut.
-With `isnull` the entry is null and `cvals` is not used.
+Write the entry of the character column `column` in row `recno` of segment `segno`,
+as `ekacec_c` of CSPICE.
 
-Preconditions (each throws `SpiceError`): write handle (`:dasnosuchhandle`,
-`:dasinvalidaccess`); valid segment number (`:invalidindex`); the column exists
-(`:bug`, as CSPICE) and has character type (`:wrongdatatype`); the row exists
-(`:indexoutofrange`); a null entry only in a column that allows nulls
-(`:badattribute`); for an array column at least one string, and as many as a fixed
-entry size states (`:invalidcount`). Postcondition: the entry reads back as `cvals`
-(cut to the string length), and the index of an indexed column holds the row.
+Segment and row numbers start at 1 (the C interface of CSPICE counts from 0). `cvals`
+is a vector with the strings of the entry. A scalar column takes the first string (a
+blank string if `cvals` is empty); an array column takes all of them. Trailing blanks
+do not count, and a string longer than the string length of the column is cut. With
+`isnull = true` the entry is null and `cvals` is not used. The column name can be in
+any case.
+
+The entry must not be written yet. The call does not check that, as in CSPICE; use
+[`ekucec`](@ref) to replace an entry.
+
+Throws `SpiceError` with the kind:
+- `:dasnosuchhandle` or `:dasinvalidaccess` if the handle is closed or open for read;
+- `:invalidindex` if there is no segment `segno`;
+- `:bug` (as CSPICE) if the segment has no column `column`, and `:wrongdatatype` if
+  the column does not have character type;
+- `:indexoutofrange` if there is no row `recno`;
+- `:badattribute` if `isnull` is true and the column does not allow nulls;
+- `:invalidcount` if an array column gets no string, or not as many as its declared
+  entry size.
+
+See the example of [`ekopn`](@ref). See also [`ekaced`](@ref), [`ekacei`](@ref),
+[`ekrcec`](@ref).
 """
 ekacec(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
     cvals::AbstractVector, isnull::Bool=false) =
@@ -637,9 +738,18 @@ ekacec(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
 """
     ekaced(handle, segno, recno, column, dvals, isnull=false) -> Nothing
 
-Add the entry of the double precision or time column `column` to row `recno` of
-segment `segno`, as `ekaced_c`. Contract as [`ekacec`](@ref); in addition the entry of
-a scalar column must not have a value yet (`:nonemptyentry`).
+Write the entry of the double precision or time column `column` in row `recno` of
+segment `segno`, as `ekaced_c` of CSPICE.
+
+`dvals` is a vector with the values of the entry; a time is in seconds past J2000
+TDB. A scalar column takes the first value (zero if `dvals` is empty); an array
+column takes all of them. The other arguments are those of [`ekacec`](@ref).
+
+Throws the errors of [`ekacec`](@ref), with `:wrongdatatype` for a column of another
+type, and `SpiceError(:nonemptyentry)` if the entry of a scalar column is written
+already.
+
+See also [`ekuced`](@ref), [`ekrced`](@ref).
 """
 ekaced(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
     dvals::AbstractVector, isnull::Bool=false) = _ekw_entry_n(h, "ekaced", false, Float64,
@@ -648,8 +758,14 @@ ekaced(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
 """
     ekacei(handle, segno, recno, column, ivals, isnull=false) -> Nothing
 
-Add the entry of the integer column `column` to row `recno` of segment `segno`, as
-`ekacei_c`. Contract as [`ekaced`](@ref); the values must be 32-bit integers.
+Write the entry of the integer column `column` in row `recno` of segment `segno`, as
+`ekacei_c` of CSPICE.
+
+`ivals` is a vector with the values of the entry. The file stores 32-bit integers: a
+value that `Int32` cannot hold throws `InexactError`. The other arguments and the
+errors are those of [`ekaced`](@ref).
+
+See also [`ekucei`](@ref), [`ekrcei`](@ref).
 """
 ekacei(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
     ivals::AbstractVector, isnull::Bool=false) = _ekw_entry_n(h, "ekacei", false, Int32,
@@ -659,9 +775,16 @@ ekacei(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
     ekucec(handle, segno, recno, column, cvals, isnull=false) -> Nothing
 
 Replace the entry of the character column `column` in row `recno` of segment `segno`,
-as `ekucec_c`. The new entry can have another size than the old one, and it can be
-null. Contract as [`ekacec`](@ref). Postcondition: the entry reads back as `cvals`;
-the data pages that only the old entry used are free.
+as `ekucec_c` of CSPICE.
+
+The new entry can have another size than the old one, and it can be null. The
+arguments are those of [`ekacec`](@ref). Data pages that only the old entry used
+become free.
+
+Throws the errors of [`ekacec`](@ref). The old entry is deleted before the new one is
+checked: after `:badattribute` or `:invalidcount` the entry is not written.
+
+See also [`ekuced`](@ref), [`ekucei`](@ref).
 """
 ekucec(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
     cvals::AbstractVector, isnull::Bool=false) =
@@ -671,7 +794,17 @@ ekucec(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
     ekuced(handle, segno, recno, column, dvals, isnull=false) -> Nothing
 
 Replace the entry of the double precision or time column `column` in row `recno` of
-segment `segno`, as `ekuced_c`. Contract as [`ekucec`](@ref).
+segment `segno`, as `ekuced_c` of CSPICE.
+
+The arguments are those of [`ekaced`](@ref). An entry that was never written is
+written. In a scalar column, a value can be replaced by null also if the column does
+not allow nulls: that case has no check, as in CSPICE.
+
+Throws the errors of [`ekacec`](@ref), with `:wrongdatatype` for a column of another
+type. For an array column the old entry is deleted before the new one is checked, as
+for [`ekucec`](@ref).
+
+See also [`ekucei`](@ref), [`ekrced`](@ref).
 """
 ekuced(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
     dvals::AbstractVector, isnull::Bool=false) = _ekw_entry_n(h, "ekuced", true, Float64,
@@ -681,7 +814,10 @@ ekuced(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
     ekucei(handle, segno, recno, column, ivals, isnull=false) -> Nothing
 
 Replace the entry of the integer column `column` in row `recno` of segment `segno`, as
-`ekucei_c`. Contract as [`ekucec`](@ref).
+`ekucei_c` of CSPICE.
+
+The arguments are those of [`ekacei`](@ref); the behaviour and the errors are those
+of [`ekuced`](@ref).
 """
 ekucei(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
     ivals::AbstractVector, isnull::Bool=false) = _ekw_entry_n(h, "ekucei", true, Int32,
@@ -694,12 +830,14 @@ ekucei(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
 """
     EKFastLoad <: AbstractVector{Int32}
 
-The state of one fast load, which [`ekifld`](@ref) starts and [`ekffld`](@ref) ends.
-As a vector it holds the record pointers of the rows of the new segment (the `rcptrs`
-of CSPICE; empty for a segment with fixed-count columns). It also holds the handle,
-the segment number and, for every column that was stored, the column position and the
-data pointers of its rows (CSPICE keeps these in one global stack, so it can do one
-fast load at a time; here every load has its own state).
+The state of one fast load: the second result of [`ekifld`](@ref), which
+[`ekaclc`](@ref), [`ekacld`](@ref), [`ekacli`](@ref) and [`ekffld`](@ref) take.
+
+It takes the place of the `rcptrs` array of CSPICE. As a vector it holds the record
+pointers of the rows of the new segment (empty for a segment with fixed-count
+columns). It also holds the handle, the segment number and the data pointers of the
+columns that were stored. CSPICE keeps these in one global stack, so it can do one
+fast load at a time; here every load has its own state.
 """
 struct EKFastLoad <: AbstractVector{Int32}
     handle::DASHandle
@@ -714,15 +852,45 @@ Base.IndexStyle(::Type{EKFastLoad}) = IndexLinear()
 """
     ekifld(handle, tabnam, nrows, cnames, decls) -> (segno, rcptrs::EKFastLoad)
 
-Start a new segment of `nrows` rows that is written column by column, as `ekifld_c`.
-Store every column once with [`ekaclc`](@ref), [`ekacld`](@ref) or [`ekacli`](@ref)
-and then call [`ekffld`](@ref); between `ekifld` and `ekffld` no other call must
-change the file. Columns that are declared with `FIXED_COUNT = TRUE` give a segment
-with a fixed layout (all columns of the segment must then have that attribute).
+Start a new segment of `nrows` rows that is written column by column, as `ekifld_c`
+of CSPICE. Return the segment number (from 1) and the state of the load.
 
-Preconditions: `nrows >= 1` (`:invalidcount`) and those of [`ekbseg`](@ref).
-Postcondition: the segment exists with its metadata; it must not be read before
-`ekffld` has returned.
+`tabnam`, `cnames` and `decls` are those of [`ekbseg`](@ref). Store every column
+exactly once with [`ekaclc`](@ref), [`ekacld`](@ref) or [`ekacli`](@ref), then call
+[`ekffld`](@ref); pass `rcptrs` to each of these calls. Between `ekifld` and `ekffld`
+make no other change to the file and do not read the segment.
+
+If the columns are declared with `FIXED_COUNT = TRUE`, the segment has a fixed layout:
+[`ekappr`](@ref), [`ekinsr`](@ref) and [`ekdelr`](@ref) refuse it.
+
+Throws `SpiceError(:invalidcount)` if `nrows < 1`, and the errors of
+[`ekbseg`](@ref).
+
+# Examples
+A scalar column needs no entry sizes, and a column that does not allow nulls needs no
+null flags. The null row 2 of `XY` still takes the room of its entry size in the
+values.
+```jldoctest
+julia> h = ekops();
+
+julia> seg, rcptrs = ekifld(h, "POINTS", 3, ["ID", "XY"],
+           ["DATATYPE = INTEGER, INDEXED = TRUE",
+            "DATATYPE = DOUBLE PRECISION, SIZE = VARIABLE, NULLS_OK = TRUE"]);
+
+julia> ekacli(h, seg, "ID", [10, 20, 30], Int[], Bool[], rcptrs)
+
+julia> ekacld(h, seg, "XY", [1.0, 2.0, 0.0, 3.0], [2, 1, 1], [false, true, false], rcptrs)
+
+julia> ekffld(h, seg, rcptrs)
+
+julia> ekrcei(h, seg, 3, "ID")
+([30], false)
+
+julia> ekrced(h, seg, 1, "XY"), ekrced(h, seg, 2, "XY"), ekrced(h, seg, 3, "XY")
+(([1.0, 2.0], false), (Float64[], true), ([3.0], false))
+
+julia> ekcls(h)
+```
 """
 function ekifld(h::DASHandle, tabnam::AbstractString, nrows::Integer,
         cnames::AbstractVector{<:AbstractString}, decls::AbstractVector{<:AbstractString})
@@ -810,7 +978,6 @@ end
 @noinline _ekw_notsupported(coldsc, column) = throw(SpiceError(:notsupported, "Unsupported " *
     "column class code $(coldsc[_EK_CLSIDX]) found in descriptor for column $column."))
 
-"The null flags as a vector of `Bool`."
 _ekw_flags(nlflgs::AbstractVector) = nlflgs isa AbstractVector{Bool} ? nlflgs :
                                      Bool[f != 0 for f in nlflgs]
 
@@ -818,17 +985,29 @@ _ekw_flags(nlflgs::AbstractVector) = nlflgs isa AbstractVector{Bool} ? nlflgs :
     ekaclc(handle, segno, column, cvals, entszs, nlflgs, rcptrs) -> Nothing
 
 Store the whole character column `column` of the segment that [`ekifld`](@ref)
-started, as `ekaclc_c`. `cvals` holds the strings of all rows in row order (for an
-array column the strings of row 1, then those of row 2, and so on); `entszs[r]` is the
-number of strings of row `r` (used only for entries of variable size); `nlflgs[r]`
-tells that row `r` is null (used only if the column allows nulls). A null row also
-takes the room of its entry in `cvals`. `rcptrs` is the result of `ekifld`.
+started, as `ekaclc_c` of CSPICE.
 
-Preconditions (each throws `SpiceError`): write handle; valid segment number
-(`:invalidindex`); `rcptrs` belongs to this segment (`:wrongsegment`); the column
-exists (`:bug`) and has character type (`:wrongdatatype`); the inputs hold all rows
-(`:invalidcount`). A fixed-count column needs a string length of 1 to 1014
-(`:invalidsize`).
+- `cvals`: the strings of all rows in row order (for an array column the strings of
+  row 1, then those of row 2, and so on). A null row also takes the room of its entry.
+- `entszs[r]`: the number of strings of row `r`. Used only for a column with
+  `SIZE = VARIABLE`.
+- `nlflgs[r]`: true if row `r` is null. Used only for a column that allows nulls.
+- `rcptrs`: the second result of `ekifld`.
+
+Trailing blanks do not count, and a string longer than the string length of the
+column is cut.
+
+Throws `SpiceError` with the kind:
+- `:dasnosuchhandle` or `:dasinvalidaccess` if the handle is closed or open for read;
+- `:invalidindex` if there is no segment `segno`;
+- `:wrongsegment` if `rcptrs` belongs to another fast load;
+- `:bug` (as CSPICE) if the segment has no column `column`, and `:wrongdatatype` if
+  the column does not have character type;
+- `:invalidcount` if `cvals`, `entszs` or `nlflgs` do not hold all rows (CSPICE
+  cannot make this check);
+- `:invalidsize` if a fixed-count column has a string length outside 1 to 1014.
+
+See also [`ekacld`](@ref), [`ekacli`](@ref), [`ekffld`](@ref).
 """
 function ekaclc(h::DASHandle, segno::Integer, column::AbstractString, cvals::AbstractVector,
         entszs::AbstractVector, nlflgs::AbstractVector, rcptrs::EKFastLoad)
@@ -848,7 +1027,6 @@ function ekaclc(h::DASHandle, segno::Integer, column::AbstractString, cvals::Abs
     return nothing
 end
 
-"The body of `ekacld` and `ekacli`; `T` is the element type and `types` the data type codes."
 function _ekw_fast_n(h::DASHandle, who::AbstractString, ::Type{T}, types::Tuple, segno::Integer,
         column::AbstractString, nvals::AbstractVector, entszs::AbstractVector,
         nlflgs::AbstractVector, rcptrs::EKFastLoad) where {T}
@@ -874,7 +1052,13 @@ end
     ekacld(handle, segno, column, dvals, entszs, nlflgs, rcptrs) -> Nothing
 
 Store the whole double precision or time column `column` of the segment that
-[`ekifld`](@ref) started, as `ekacld_c`. Contract as [`ekaclc`](@ref).
+[`ekifld`](@ref) started, as `ekacld_c` of CSPICE.
+
+`dvals` holds the values of all rows in row order; a time is in seconds past J2000
+TDB. The other arguments and the errors are those of [`ekaclc`](@ref), with
+`:wrongdatatype` for a column of another type.
+
+See the example of [`ekifld`](@ref).
 """
 ekacld(h::DASHandle, segno::Integer, column::AbstractString, dvals::AbstractVector,
     entszs::AbstractVector, nlflgs::AbstractVector, rcptrs::EKFastLoad) =
@@ -885,7 +1069,14 @@ ekacld(h::DASHandle, segno::Integer, column::AbstractString, dvals::AbstractVect
     ekacli(handle, segno, column, ivals, entszs, nlflgs, rcptrs) -> Nothing
 
 Store the whole integer column `column` of the segment that [`ekifld`](@ref) started,
-as `ekacli_c`. Contract as [`ekaclc`](@ref).
+as `ekacli_c` of CSPICE.
+
+`ivals` holds the values of all rows in row order. The file stores 32-bit integers: a
+value that `Int32` cannot hold throws `InexactError`. The other arguments and the
+errors are those of [`ekaclc`](@ref), with `:wrongdatatype` for a column of another
+type.
+
+See the example of [`ekifld`](@ref).
 """
 ekacli(h::DASHandle, segno::Integer, column::AbstractString, ivals::AbstractVector,
     entszs::AbstractVector, nlflgs::AbstractVector, rcptrs::EKFastLoad) =
@@ -946,12 +1137,20 @@ end
 """
     ekffld(handle, segno, rcptrs) -> Nothing
 
-End the fast load of segment `segno` that [`ekifld`](@ref) started, as `ekffld_c`.
-Preconditions (each throws `SpiceError`): write handle; valid segment number
-(`:invalidindex`); `rcptrs` is the result of the `ekifld` call for this segment
-(`:wrongsegment`); every column was stored once (`:invalidaddress`). Postcondition:
-the segment is complete and can be read; rows can be added to it later, unless it has
-fixed-count columns.
+End the fast load of segment `segno` that [`ekifld`](@ref) started, as `ekffld_c` of
+CSPICE.
+
+After the call the segment is complete and can be read. Rows can be added to it later,
+unless it has fixed-count columns.
+
+Throws `SpiceError(:dasnosuchhandle)` or `SpiceError(:dasinvalidaccess)` if the
+handle is closed or open for read, `SpiceError(:invalidindex)` if there is no segment
+`segno`, `SpiceError(:wrongsegment)` if `rcptrs` is not the result of the `ekifld`
+call for this segment, and `SpiceError(:invalidaddress)` if a column was not stored.
+A column that was stored twice is not always detected. A segment with fixed-count
+columns has no check of its columns.
+
+See the example of [`ekifld`](@ref).
 """
 function ekffld(h::DASHandle, segno::Integer, rcptrs::EKFastLoad)
     _ekw_check(h, "ekffld")
