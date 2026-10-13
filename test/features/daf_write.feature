@@ -47,6 +47,13 @@ Feature: Write SPK and CK files that CSPICE reads as its own
     And CSPICE rejects the same input
     And the closed file is the file that holds the valid segments only
 
+  Scenario: A CK segment has angular velocity only when it is given
+    Given pointing records without the "avvs" argument
+    When ckw01 or ckw03 writes one record or several records
+    Then the segment has no angular velocity
+    When "avvs" holds one vector for each record
+    Then the segment has angular velocity
+
   Scenario: A file holds more segments than one summary record
     Given more than 25 segments
     When Allspice writes them to one file

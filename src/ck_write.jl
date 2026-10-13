@@ -72,10 +72,10 @@ end
 """
     _ck_avvs(who, avvs, nrec) -> (flat::Vector{Float64}, avflag::Bool)
 
-Angular velocities for `nrec` records, in the convention of SPICE.jl: the segment has
-angular velocity if `avvs` holds `nrec` vectors; `nothing` or one vector for more
-than one record (the default argument `[zeros(3)]`) means none. Another count throws
-`SpiceError(:badarg)`.
+Angular velocities for `nrec` records: the segment has angular velocity if `avvs` holds
+`nrec` vectors; `nothing` (the default argument) means none, and so does one vector for
+more than one record (the default argument `[zeros(3)]` of SPICE.jl). Another count
+throws `SpiceError(:badarg)`.
 """
 function _ck_avvs(who::AbstractString, avvs, nrec::Int)
     avvs === nothing && return Float64[], false
@@ -117,7 +117,7 @@ function _ck_pointing(q::Vector{Float64}, av::Vector{Float64}, nrec::Int, avflag
 end
 
 """
-    ckw01(handle, begtim, endtim, inst, ref, segid, sclkdp, quats, avvs=[zeros(3)];
+    ckw01(handle, begtim, endtim, inst, ref, segid, sclkdp, quats, avvs=nothing;
           ctx=default_context()) -> Nothing
 
 Write a CK segment of type 1 (discrete pointing) to the file of `handle`, as `ckw01_c`.
@@ -133,21 +133,14 @@ meaning in every `ckwNN` writer. [`ckw06`](@ref) names the coverage `first`, `la
 - `segid`: the segment identifier, at most 40 printable characters.
 - `sclkdp`: the times of the pointing records, encoded spacecraft clock ticks.
 - `quats`: one SPICE quaternion (scalar first) for each record.
-- `avvs`: the angular velocity vectors (rad/s).
+- `avvs`: one angular velocity vector (rad/s) for each record, or `nothing`.
 
 The number of records is `length(sclkdp)`. A table such as `quats` is a vector of vectors
 (the form of SPICE.jl), a matrix with one record in each column, or a flat vector.
 
-The segment has angular velocity if `avvs` holds one vector for each record, and none
-if `avvs` is `nothing`. Without the argument, the result depends on the number of
-records:
-
-| Records       | Segment without the `avvs` argument |
-|:--------------|:------------------------------------|
-| more than one | no angular velocity                 |
-| one           | angular velocity zero               |
-
-Pass `nothing` to write one record without angular velocity.
+The segment has angular velocity if `avvs` holds one vector for each record. It has none
+if `avvs` is `nothing`, which is the default. One vector for more than one record also
+gives none: that is the default argument `[zeros(3)]` of SPICE.jl.
 
 The segment is on disk when the call returns. It holds the same data as the segment that
 `ckw01_c` writes. A call that throws writes nothing.
@@ -171,7 +164,7 @@ See also [`ckw02`](@ref), [`ckw03`](@ref), [`ckw05`](@ref), [`ckw06`](@ref), and
 [`ckopn`](@ref) for an example.
 """
 function ckw01(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::SegFrame,
-        segid::AbstractString, sclkdp, quats, avvs=[zeros(3)]; ctx::SegContext=default_context())
+        segid::AbstractString, sclkdp, quats, avvs=nothing; ctx::SegContext=default_context())
     who = "ckw01"
     _daf_check_write(h, who)
     ref isa AbstractString && _seg_chkfstr(who, "ref", ref)
@@ -275,7 +268,7 @@ function ckw02(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::Seg
 end
 
 """
-    ckw03(handle, begtim, endtim, inst, ref, segid, sclkdp, quats, starts, avvs=[zeros(3)];
+    ckw03(handle, begtim, endtim, inst, ref, segid, sclkdp, quats, starts, avvs=nothing;
           ctx=default_context()) -> Nothing
 
 Write a CK segment of type 3 (pointing with linear interpolation inside intervals), as
@@ -298,7 +291,7 @@ Throws `SpiceError`:
 See [`ckopn`](@ref) for an example.
 """
 function ckw03(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::SegFrame,
-        segid::AbstractString, sclkdp, quats, starts, avvs=[zeros(3)];
+        segid::AbstractString, sclkdp, quats, starts, avvs=nothing;
         ctx::SegContext=default_context())
     who = "ckw03"
     _daf_check_write(h, who)

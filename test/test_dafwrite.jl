@@ -1206,6 +1206,23 @@ group("9. DAF access, SPK and CK writers") do
         SPICE.spkcls(hc)
         SPICE.unload(fk)
         @test read(pc) == read(p)
+        # (fault fixed: without the `avvs` argument a segment of one record got the angular
+        # velocity zero, and a segment of more records got none; the default is now no
+        # angular velocity for every count. An explicit argument keeps its meaning.)
+        p1 = joinpath(dir, "ck_default_avvs.bc")
+        h = ckopn(p1, "AVVS", 0)
+        q1 = [1.0, 0.0, 0.0, 0.0]
+        ckw01(h, 5.0, 5.0, -77001, "J2000", "one record, default", [5.0], [q1])
+        ckw03(h, 5.0, 5.0, -77001, "J2000", "one record, default", [5.0], [q1], [5.0])
+        ckw01(h, 5.0, 5.0, -77001, "J2000", "one record, one vector", [5.0], [q1], [zeros(3)])
+        ckw01(h, 5.0, 9.0, -77001, "J2000", "two records, one vector", [5.0, 9.0], [q1, q1], [zeros(3)])
+        ckcls(h)
+        @test [s[2][4] for s in neo_dump(p1).sums] == [0, 0, 1, 0]
+        # Only the writers that call `spkpds` in CSPICE reject the barycenter as body and
+        # a body equal to its center (`bad_pds`); `spkw02` is one of those that accept them.
+        c2 = writer_case("spkw02")
+        pc2, pn2 = write_both(c2, dir, "body_is_center", [merge(c2.gen(rng, 1), (body=0, center=0))])
+        @test read(pc2) == read(pn2)
     end
 
     @apart @testset "writers: every input check" begin
