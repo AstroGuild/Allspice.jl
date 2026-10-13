@@ -82,7 +82,7 @@ function ckgp(ks::KernelSet, inst::Integer, sclkdp::Real, tol::Real, ref::NameOr
     refreq = frame_id(ks, ref)
     if refreq != refseg
         et = _ck_change_epoch(ks, i, refreq, refseg, clkout)
-        cmat = cmat * frame_rotation(ks, refreq, refseg, et)
+        cmat = _m_mxm(cmat, frame_rotation(ks, refreq, refseg, et))
     end
     return cmat, clkout, true
 end
@@ -105,9 +105,9 @@ function ckgpav(ks::KernelSet, inst::Integer, sclkdp::Real, tol::Real, ref::Name
         x = _ck_state_rotation(ks, refreq, refseg, et)
         rot = map(e -> e.v, x)
         drdt = map(e -> e.d[1], x)
-        omega = transpose(drdt) * rot           # `xf2rav_`
-        cmat = cmat * rot
-        av = Vec3{Float64}(omega[3, 2], omega[1, 3], omega[2, 1]) + transpose(rot) * av
+        omega = _m_mtxm(drdt, rot)           # `xf2rav_`
+        cmat = _m_mxm(cmat, rot)
+        av = Vec3{Float64}(omega[3, 2], omega[1, 3], omega[2, 1]) + _m_mtxv(rot, av)
     end
     return cmat, av, clkout, true
 end

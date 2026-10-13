@@ -418,18 +418,18 @@ function _geo_limbpt(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
                 ptarg = _ssbpos(ks, trgcde, epoch, Int32(1)) - robs
                 cortrg = !corr.stellar ? ptarg : j == 0 ? _stelab(ptarg, vstl) : ptarg + stloff
                 xform = frame_rotation(ks, Int32(1), fixfid, epoch)
-                axis = -(xform * cortrg)
+                axis = -_m_mxv(xform, cortrg)
                 plnvec = _m_vrotv(refvec, axis, roll)
                 center, enorml = _geo_limb_frame(radii, axis)
                 epoint, _ = _geo_limb_point(radii, center, enorml, _m_ucrss(axis, plnvec), i)
-                isrfvc = transpose(xform) * epoint + ptarg
+                isrfvc = _m_mtxv(xform, epoint) + ptarg
                 corr.stellar && (stloff = _stelab(isrfvc, vstl) - isrfvc)
                 prvlt = lt
                 lt = _m_norm(isrfvc) / CLIGHT
                 lterr = abs(lt - prvlt) / max(1.0, abs(epoch))
                 j += 1
             end
-            axis = -(xform * cortrg)
+            axis = -_m_mxv(xform, cortrg)
             epoch = et + s * lt
         else
             axis = -pos
@@ -562,7 +562,7 @@ function _geo_termpt(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
                 axis, _ = _geo_spkezp(ks, ilucde, epoch, fixfid, corr, trgcde)
                 plnvec = _m_vrotv(refvec, axis, roll)
                 epoint = _geo_edtmpt(umbral, trad[1], trad[2], trad[3], ilurad, axis, plnvec)
-                trgpos = frame_rotation(ks, Int32(1), fixfid, epoch) * ptarg
+                trgpos = _m_mxv(frame_rotation(ks, Int32(1), fixfid, epoch), ptarg)
                 prvlt = lt
                 lt = _m_norm(epoint + trgpos) / CLIGHT
                 lterr = abs(lt - prvlt) / max(1.0, abs(epoch))
@@ -572,10 +572,10 @@ function _geo_termpt(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
             ptarg = _ssbpos(ks, trgcde, epoch, Int32(1)) - robs
             xform = frame_rotation(ks, Int32(1), fixfid, epoch)
             if corr.stellar
-                itrmvc = transpose(xform) * epoint + ptarg
-                stloff = xform * (_stelab(itrmvc, vobs) - itrmvc)
+                itrmvc = _m_mtxv(xform, epoint) + ptarg
+                stloff = _m_mxv(xform, _stelab(itrmvc, vobs) - itrmvc)
             end
-            trgpos = xform * ptarg
+            trgpos = _m_mxv(xform, ptarg)
             axis, _ = _geo_spkezp(ks, ilucde, epoch, fixfid, corr, trgcde)
         else
             axis, _ = _geo_spkezp(ks, ilucde, et, fixfid, corr, trgcde)
@@ -738,8 +738,8 @@ function tangpt(ks::KernelSet, method::AbstractString, target::NameOrID, et0::Re
         _, ltcent = _geo_spkezp(ks, dcentr, et, Int32(1), corr, obscde)
         refepc = et + s * ltcent
     end
-    j2dir = dfrcde == Int32(1) ? dvec : frame_rotation(ks, dfrcde, Int32(1), refepc) * dvec
-    fixdir = frame_rotation(ks, Int32(1), fixfid, trgepc) * j2dir
+    j2dir = dfrcde == Int32(1) ? dvec : _m_mxv(frame_rotation(ks, dfrcde, Int32(1), refepc), dvec)
+    fixdir = _m_mxv(frame_rotation(ks, Int32(1), fixfid, trgepc), j2dir)
     srfpt, alt = npedln(a, b, c, fixobs, fixdir)
     srfvec = srfpt - fixobs
     tanpt, _ = nplnpt(fixobs, fixdir, srfpt)
@@ -773,11 +773,11 @@ function tangpt(ks::KernelSet, method::AbstractString, target::NameOrID, et0::Re
         stlfix = zero(Vec3{Float64})
         if corr.stellar
             # The stellar aberration offset of the locus point, applied to the observer.
-            j2lpos = transpose(j2fixm) * (tanloc ? tanpt : srfpt) - j2opos
-            stlfix = j2fixm * (_stelab(j2lpos, vstl) - j2lpos)
+            j2lpos = _m_mtxv(j2fixm, tanloc ? tanpt : srfpt) - j2opos
+            stlfix = _m_mxv(j2fixm, _stelab(j2lpos, vstl) - j2lpos)
         end
-        fixobs = j2fixm * j2opos
-        fixdir = j2fixm * j2dir
+        fixobs = _m_mxv(j2fixm, j2opos)
+        fixdir = _m_mxv(j2fixm, j2dir)
         stlobs = fixobs - stlfix
         srfpt, alt = npedln(a, b, c, stlobs, fixdir)
         tanpt = alt != 0.0 ? nplnpt(stlobs, fixdir, srfpt)[1] : srfpt

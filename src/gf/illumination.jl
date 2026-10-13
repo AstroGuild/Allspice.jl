@@ -116,7 +116,7 @@ function _gf_ilurate(q::GFIllumination, et::Float64)
         sv = (1.0 - dlt) * sv
     end
     n = Vec3{Float64}(vhat(q.normal))
-    nrmsta = vcat(R * n, dR * n)
+    nrmsta = vcat(_m_mxv(R, n), _m_mxv(dR, n))
     obssta = vcat(-tr, -tv)
     src = vcat(sr, sv)
     q.idx == 1 && return Float64(dvsep(obssta, src))

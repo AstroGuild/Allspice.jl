@@ -18,10 +18,10 @@
 # as in CSPICE.
 
 "Apply the state transformation with the rotation `R` and its derivative `dR` to the state `(r, v)`."
-@inline _gf_xf(R, dR, r, v) = (R * r, dR * r + R * v)
+@inline _gf_xf(R, dR, r, v) = (_m_mxv(R, r), _m_mxv(dR, r) + _m_mxv(R, v))
 
 "Apply the inverse of the state transformation with the blocks `R` and `dR` to the state `(r, v)` (`invstm`)."
-@inline _gf_xfi(R, dR, r, v) = (transpose(R) * r, transpose(dR) * r + transpose(R) * v)
+@inline _gf_xfi(R, dR, r, v) = (_m_mtxv(R, r), _m_mtxv(dR, r) + _m_mtxv(R, v))
 
 "The 3-vector zero and the state zero of the surface sources."
 const _GF_ZERO3 = zero(Vec3{Float64})

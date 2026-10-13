@@ -401,7 +401,7 @@ function abcorr_state(ks::KernelSet, targ::Int32, et, ref::Int32, corr::Aberrati
         dltc = qc.dlt
     end
     R, dR = frame_jet(ks, Int32(1), ref, et + s * ltc, Val(1))
-    return vcat(R * q.r, (1 + s * dltc) * (dR * q.r) + R * q.v), q.lt
+    return vcat(_m_mxv(R, q.r), (1 + s * dltc) * _m_mxv(dR, q.r) + _m_mxv(R, q.v)), q.lt
 end
 
 """
@@ -426,7 +426,7 @@ function abcorr_position(ks::KernelSet, targ::Int32, et, ref::Int32, corr::Aberr
     ltc = center == obs ? zero(lt) : center == targ ? lt :
           _apo(ks, center, et, iref, corr, robs, vobs)[2]
     R = frame_rotation(ks, Int32(1), ref, et + _ltsign(corr) * ltc)
-    return R * r, lt
+    return _m_mxv(R, r), lt
 end
 
 # --- derivatives of any order -------------------------------------------------------
@@ -516,7 +516,7 @@ function abcorr_jet(ks::KernelSet, targ::Int32, et::T, ref::Int32, corr::Aberrat
             pc = _lt_series(ks, center, et, t, iref, corr, robs, vobs, ro)
             primal(_dot3(pc, pc)) > 0 && (tau = t + s * (_norm3(pc) / CLIGHT))
         end
-        q = frame_rotation(ks, Int32(1), ref, tau) * q
+        q = _m_mxv(frame_rotation(ks, Int32(1), ref, tau), q)
     end
     d = map(derivatives, q)
     return ntuple(k -> map(x -> x[k], d), Val(N + 1))

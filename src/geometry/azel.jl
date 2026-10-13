@@ -128,10 +128,10 @@ function azlcpo(ks::KernelSet, method::AbstractString, target::NameOrID, et::Rea
     f = _GeoFixed(pos, zero(Vec3{Float64}), 0.0, obscde, fxfcde)
     state, lt = _geo_cvo(ks, trgcde, check_epoch(et), fxfcde, _GEO_AT_OBSERVER, corr, f)
     r, v = _geo_pv(state)
-    lr = xftopo * r
-    lv = xftopo * v
+    lr = _m_mxv(xftopo, r)
+    lv = _m_mxv(xftopo, v)
     range, az, el = recazl(lr, azccw, elplsz)
-    rates = dazldr(lr[1], lr[2], lr[3], azccw, elplsz) * lv
+    rates = _m_mxv(dazldr(lr[1], lr[2], lr[3], azccw, elplsz), lv)
     return SVector(range, az, el, rates[1], rates[2], rates[3]), lt
 end
 azlcpo(ctx::SpiceContext, method::AbstractString, target::NameOrID, et::Real,

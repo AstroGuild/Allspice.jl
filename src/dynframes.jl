@@ -477,7 +477,7 @@ end
 
 "`[a3]_x3 * [a2]_x2 * [a1]_x1`, as `eul2m_` and (with `Taylor{1}` angles) `eul2xf_`."
 @inline _dyn_eul(a3::S, a2::S, a1::S, x3::Integer, x2::Integer, x1::Integer) where {S<:Real} =
-    _dyn_rot(a3, x3) * (_dyn_rot(a2, x2) * _dyn_rot(a1, x1))
+    _m_mxm(_dyn_rot(a3, x3), _m_mxm(_dyn_rot(a2, x2), _dyn_rot(a1, x1)))
 
 """
     _dyn_xf(mode, ks, from, to, et) -> Mat3
@@ -750,13 +750,13 @@ function _dyn_ofdate(mode, ks::KernelSet, def::DynFrame, et::T) where {T<:Real}
     if def.family == _DYN_TRUE_EQ
         dpsi, deps = _dyn_nutation(mode, et)
         mob = _dyn_mobliq(tv)
-        m = _dyn_eul(-mob - deps, -dpsi, mob, 1, 3, 1) * m
+        m = _m_mxm(_dyn_eul(-mob - deps, -dpsi, mob, 1, 3, 1), m)
     elseif def.family == _DYN_MEAN_ECL
-        m = _dyn_rot(_dyn_mobliq(tv), 1) * m
+        m = _m_mxm(_dyn_rot(_dyn_mobliq(tv), 1), m)
     end
     x = typeof(m)(transpose(m))
     def.base == _J2000_FRAME && return x
-    return _dyn_xf(mode, ks, _J2000_FRAME, def.base, et) * x
+    return _m_mxm(_dyn_xf(mode, ks, _J2000_FRAME, def.base, et), x)
 end
 
 # ---------------------------------------------------------------------------------------
@@ -808,7 +808,7 @@ function _dyn_apo(ks::KernelSet, targ::Int32, et::T, ref::Int32, corr,
     center = frame_def(ks, ref).center
     ltc = center == obs ? zero(lt) : center == targ ? lt :
           _apo(ks, center, et, iref, nos, robs, vobs)[2]::T
-    return _dyn_xf(_CKExact(), ks, _J2000_FRAME, ref, et + _ltsign(corr) * ltc) * r, lt
+    return _m_mxv(_dyn_xf(_CKExact(), ks, _J2000_FRAME, ref, et + _ltsign(corr) * ltc), r), lt
 end
 
 """
@@ -923,13 +923,13 @@ function _dyn_vector(mode::_CKExact, ks::KernelSet, vd::DynVector, et::T) where 
             vet = _dyn_corepc(corr, et, _dyn_apo(ks, vd.frcenter, et, _J2000_FRAME, corr,
                 vd.observer)[2])
         end
-        return (_dyn_xf(_CKExact(), ks, vd.frame, _J2000_FRAME, vet) * u)::Vec3{T}
+        return _m_mxv(_dyn_xf(_CKExact(), ks, vd.frame, _J2000_FRAME, vet), u)::Vec3{T}
     elseif vd.kind == 3
         p, lt = _dyn_apo(ks, vd.target, et, vd.frame, corr, vd.observer)
         pobs = -p
         d = _dyn_nearpt(pobs, vd.vec) - pobs
         fet = _dyn_corepc(corr, et, lt)
-        return (_dyn_xf(_CKExact(), ks, vd.frame, _J2000_FRAME, fet) * d)::Vec3{T}
+        return _m_mxv(_dyn_xf(_CKExact(), ks, vd.frame, _J2000_FRAME, fet), d)::Vec3{T}
     end
     # A constant vector.
     fet = et
@@ -938,7 +938,7 @@ function _dyn_vector(mode::_CKExact, ks::KernelSet, vd::DynVector, et::T) where 
             vd.observer)[2])
     end
     c = Vec3{T}(vd.vec)
-    vd.frame == _J2000_FRAME || (c = _dyn_xf(_CKExact(), ks, vd.frame, _J2000_FRAME, fet) * c)
+    vd.frame == _J2000_FRAME || (c = _m_mxv(_dyn_xf(_CKExact(), ks, vd.frame, _J2000_FRAME, fet), c))
     if corr.stellar
         vobs = spk_jet(ks, vd.observer, et, _J2000_FRAME, Int32(0), Val(1))[2]
         c = _dyn_stelab(c, corr.transmit ? -vobs : +vobs)
@@ -963,13 +963,13 @@ function _dyn_vector(mode::_CKState, ks::KernelSet, vd::DynVector, et::Float64)
             vet = _dyn_corepc(corr, et, _dyn_apo(ks, vd.frcenter, et, _J2000_FRAME, corr,
                 vd.observer)[2])
         end
-        return _dyn_xf(_CKState(), ks, vd.frame, _J2000_FRAME, vet) * s
+        return _m_mxv(_dyn_xf(_CKState(), ks, vd.frame, _J2000_FRAME, vet), s)
     elseif vd.kind == 3
         r, v, lt = _dyn_spkez(ks, vd.target, et, vd.frame, corr, vd.observer)
         sobs = _dyn_pack(-r, -v)
         d = _dyn_nearpt(sobs, vd.vec) - sobs
         fet = _dyn_corepc(corr, et, lt)
-        return _dyn_xf(_CKState(), ks, vd.frame, _J2000_FRAME, fet) * d
+        return _m_mxv(_dyn_xf(_CKState(), ks, vd.frame, _J2000_FRAME, fet), d)
     end
     fet = et
     if corr.uselt && !corr.stellar && vd.frclass != 1
@@ -977,7 +977,7 @@ function _dyn_vector(mode::_CKState, ks::KernelSet, vd::DynVector, et::Float64)
             vd.observer)[2])
     end
     c = _dyn_pack(vd.vec, zero(Vec3{Float64}))
-    vd.frame == _J2000_FRAME || (c = _dyn_xf(_CKState(), ks, vd.frame, _J2000_FRAME, fet) * c)
+    vd.frame == _J2000_FRAME || (c = _m_mxv(_dyn_xf(_CKState(), ks, vd.frame, _J2000_FRAME, fet), c))
     if corr.stellar
         vobs = spk_jet(ks, vd.observer, et, _J2000_FRAME, Int32(0), Val(1))[2]
         p = _stelab(map(x -> x.v, c), corr.transmit ? -vobs : +vobs)
@@ -1032,7 +1032,7 @@ function _dyn_twovec(mode, ks::KernelSet, def::DynFrame, et::T) where {T<:Real}
     end
     x = i1 == 1 ? hcat(c1, c2, c3) : i1 == 2 ? hcat(c3, c1, c2) : hcat(c2, c3, c1)
     def.base == _J2000_FRAME && return x
-    return _dyn_xf(mode, ks, _J2000_FRAME, def.base, et) * x
+    return _m_mxm(_dyn_xf(mode, ks, _J2000_FRAME, def.base, et), x)
 end
 
 """
@@ -1058,7 +1058,7 @@ product, last factor on the left, of the matrices from `def.to[i]` to `def.from[
 function _dyn_product(mode, ks::KernelSet, def::DynFrame, et::T) where {T<:Real}
     x = _dyn_xf(mode, ks, (@inbounds def.to[1]), (@inbounds def.from[1]), et)
     for i in 2:length(def.to)       # invariant: x is the product of the factors 1:i-1
-        x = _dyn_xf(mode, ks, (@inbounds def.to[i]), (@inbounds def.from[i]), et) * x
+        x = _m_mxm(_dyn_xf(mode, ks, (@inbounds def.to[i]), (@inbounds def.from[i]), et), x)
     end
     return x
 end

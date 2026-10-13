@@ -547,7 +547,7 @@ function _gf_cprx(state::SVector{6,Float64}, sys::Int, re::Float64, f::Float64, 
     else
         normal = SVector{3,Float64}(vhat(pos))
     end
-    rtnvel = _gf_rtnmat(normal) * vel
+    rtnvel = _m_mxv(_gf_rtnmat(normal), vel)
     r = (_gf_isign(rtnvel[1]), _gf_isign(rtnvel[2]), _gf_isign(rtnvel[3]))
     sys == _GF_SPHERICAL && return (r[1], -r[3], r[2])
     sys == _GF_GEODETIC && return (r[2], r[3], r[1])

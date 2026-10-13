@@ -238,7 +238,7 @@ function _ck_eval02(data::Vector{Float64}, seg::CKSegment, sclk::T, tol::Float64
     @inbounds rate = data[a+7]
     angle = ((clkout - start) * rate) * _ck_vnorm(av)
     rot = _ck_axisar(av, angle)
-    cmat = Mat3{T}(_ck_q2m(data, a) * transpose(rot))
+    cmat = Mat3{T}(_m_mxmt(_ck_q2m(data, a), rot))
     return true, cmat, Vec3{T}(av), primal(clkout)
 end
 
@@ -308,9 +308,9 @@ function _ck_eval03(data::Vector{Float64}, seg::CKSegment, sclk::T, tol::Float64
     frac = (sclk - lsclk) / (rsclk - lsclk)
     cmat1 = _ck_q2m(data, a1)
     cmat2 = _ck_q2m(data, a2)
-    axis, angle = _ck_raxisa(transpose(cmat2) * cmat1)
+    axis, angle = _ck_raxisa(_m_mtxm(cmat2, cmat1))
     delta = _ck_axisar(axis, angle * frac)
-    cmat = Mat3{T}(cmat1 * transpose(delta))
+    cmat = Mat3{T}(_m_mxmt(cmat1, delta))
     av = zero(Vec3{T})
     if seg.avflag
         @inbounds av1 = Vec3{Float64}(data[a1+4], data[a1+5], data[a1+6])
@@ -896,7 +896,7 @@ end
     found, cmat, av, _, ref = _ck_search(ks, fd.classid, ticks, 0.0, true)
     found || _ck_noconnect(fd, et, "no CK segment with angular velocity covers this epoch")
     r = Mat3{Float64}(transpose(cmat))
-    dr = _ck_skew(av) * r
+    dr = _m_mxm(_ck_skew(av), r)
     return ref, map((a, b) -> Taylor((a, b)), r, dr)
 end
 
@@ -935,7 +935,7 @@ function _ck_chain_to(mode, ks::KernelSet, id::Int32, stop::Int32, et::T) where 
         else
             cur, step = _frame_step(ks, cur, _ck_epoch(mode, et))
         end
-        rot = step * rot
+        rot = _m_mxm(step, rot)
     end
     return rot
 end
@@ -990,5 +990,5 @@ function _ck_state_rotation(ks::KernelSet, from::Int32, to::Int32, et::Float64)
     up = _ck_chain_to(_CKState(), ks, from, node, et)
     node == to && return up
     down = _ck_chain_to(_CKState(), ks, to, node, et)
-    return Mat3{Taylor{1,Float64}}(transpose(down) * up)
+    return Mat3{Taylor{1,Float64}}(_m_mtxm(down, up))
 end

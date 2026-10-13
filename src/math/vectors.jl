@@ -145,6 +145,18 @@ end
     return (c * v1 + s * v2) + p
 end
 
+"""
+    _m_mxv(m, v) -> SVector{3}
+
+Contract: the product of the 3 by 3 matrix `m` and the vector `v`, each component the
+sum of its three products from left to right, as `mxv_c`. The product `m * v` of
+StaticArrays lets the compiler join a multiplication and an addition into one fused
+operation, and compilers differ in where they do so; the result of this function does
+not depend on the compiler, which matters where a component is a small difference of
+large products.
+The forms `_m_mtxv`, `_m_mxm`, `_m_mtxm` and `_m_mxmt` obey the same rule; the package uses
+them in place of `*` for each 3 by 3 product.
+"""
 @inline _m_mxv(m::SMatrix{3,3}, v::SVector{3}) = SVector(
     m[1, 1] * v[1] + m[1, 2] * v[2] + m[1, 3] * v[3],
     m[2, 1] * v[1] + m[2, 2] * v[2] + m[2, 3] * v[3],

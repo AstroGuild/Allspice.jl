@@ -537,6 +537,11 @@ decision is made on `primal`.
   b, c) -> (npoint, alt)`, `_m_surfpt(positn, u, a, b, c) -> (found, point)`,
   `_m_surfnm`, `_m_cgv2el`, `_m_saelgv`, `_m_latrec`, `_m_reclat`, and vector helpers
   such as `_m_dot`, `_m_cross`, `_m_norm`, `_m_hat`.
+- Each 3 by 3 product in the package goes through `_m_mxv`, `_m_mtxv`, `_m_mxm`,
+  `_m_mtxm` or `_m_mxmt` and not through `*`: these add the three products of a
+  component from left to right, as `mxv_c` and `mxm_c` do, while the `*` of StaticArrays
+  lets the compiler fuse a multiplication with an addition, so its result changed with
+  the Julia version (Julia 1.10 and 1.13 differed in the last bit).
 
 ## `frame_info.jl`, `lst.jl`
 

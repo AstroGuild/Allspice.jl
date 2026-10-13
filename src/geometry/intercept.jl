@@ -59,12 +59,12 @@ function _geo_sfxcor(ks::KernelSet, sh::_GeoShape, et, corr::Aberration, obscde:
         _, ltcent = _geo_spkezp(ks, dcentr, et, Int32(1), corr, obscde)
         refepc = et + s * ltcent
     end
-    j2dir = frame_rotation(ks, dfrcde, Int32(1), refepc) * dvec
+    j2dir = _m_mxv(frame_rotation(ks, dfrcde, Int32(1), refepc), dvec)
     j2geom = j2dir
     j2tmat = frame_rotation(ks, Int32(1), fixfid, trgepc)
     robs, vobs = _ssb(ks, obscde, et, Int32(1))
     corr.stellar && (j2dir = _geo_stl_dir(j2dir, vobs, corr.transmit))
-    trgdir = j2tmat * j2dir
+    trgdir = _m_mxv(j2tmat, j2dir)
     none = (false, zero(obspos), trgepc, zero(obspos))
     range = primal(_norm3(obspos))
     range == 0.0 && throw(SpiceError(:noseparation,
@@ -88,8 +88,8 @@ function _geo_sfxcor(ks::KernelSet, sh::_GeoShape, et, corr::Aberration, obscde:
             lt = _norm3(obspos - pnear) / CLIGHT
             trgepc = et + s * lt
             xform = frame_rotation(ks, Int32(1), fixfid, trgepc)
-            obspos = xform * (robs - _ssbpos(ks, trgcde, trgepc, Int32(1)))
-            trgdir = xform * j2dir
+            obspos = _m_mxv(xform, robs - _ssbpos(ks, trgcde, trgepc, Int32(1)))
+            trgdir = _m_mxv(xform, j2dir)
             found, spoint = _geo_rayx(ks, sh, obspos, trgdir, trgepc)
             i += 1
         end
@@ -106,8 +106,8 @@ function _geo_sfxcor(ks::KernelSet, sh::_GeoShape, et, corr::Aberration, obscde:
     # invariant: `spoint` and `lt` are the intercept and its light time after i iterations
     while i < nitr && ltdiff > abs(primal(lt)) * 1e-17 && etdiff > 0.0
         xform = frame_rotation(ks, Int32(1), fixfid, trgepc)
-        obspos = xform * (robs - _ssbpos(ks, trgcde, trgepc, Int32(1)))
-        trgdir = xform * j2dir
+        obspos = _m_mxv(xform, robs - _ssbpos(ks, trgcde, trgepc, Int32(1)))
+        trgdir = _m_mxv(xform, j2dir)
         found, spoint = _geo_rayx(ks, sh, obspos, trgdir, trgepc)
         if !found
             i < nitr - 1 || return none
@@ -126,7 +126,7 @@ function _geo_sfxcor(ks::KernelSet, sh::_GeoShape, et, corr::Aberration, obscde:
     # the point of the ray nearest to the target: the ray misses the target (CSPICE
     # returns the flag of the last pass).
     found || return none
-    udir = _vhat(xform * j2geom)
+    udir = _vhat(_m_mxv(xform, j2geom))
     return true, spoint, trgepc, _norm3(spoint - obspos) * udir
 end
 

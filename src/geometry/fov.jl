@@ -536,11 +536,11 @@ function _geo_fovvis(ks::KernelSet, inst::NameOrID, tshape::Int, raydir::Vec3{Fl
     if etrg
         pos, lt = _geo_spkezp(ks, targ, et, tfid, corr, obs)
         ettarg = et + _geo_sign(corr) * lt
-        insmat = frame_rotation(ks, Int32(1), ifid, et) * frame_rotation(ks, tfid, Int32(1), ettarg)
+        insmat = _m_mxm(frame_rotation(ks, Int32(1), ifid, et), frame_rotation(ks, tfid, Int32(1), ettarg))
         if poly
             limb = edlimb(trad[1], trad[2], trad[3], -pos)
             lc, s1, s2 = el2cgv(limb)
-            fvlimb = _m_cgv2el(insmat * (pos + lc), insmat * s1, insmat * s2)
+            fvlimb = _m_cgv2el(_m_mxv(insmat, pos + lc), _m_mxv(insmat, s1), _m_mxv(insmat, s2))
             return _geo_elvupy(fvlimb, faxi, bounds)
         end
         # The field of view as a small ellipsoid, for the occultation test.
@@ -553,18 +553,18 @@ function _geo_fovvis(ks::KernelSet, inst::NameOrID, tshape::Int, raydir::Vec3{Fl
         escale = 1e-5 / (_m_norm(edct) + max(r3, r2))
         fsmx = hcat(escale * c1, escale * c2, escale * c3)
         trgsmx = hcat(trad[1] * insmat[:, 1], trad[2] * insmat[:, 2], trad[3] * insmat[:, 3])
-        return _geo_occed(origin, escale * edct, fsmx, insmat * pos, trgsmx) != 0
+        return _geo_occed(origin, escale * edct, fsmx, _m_mxv(insmat, pos), trgsmx) != 0
     end
     if uray
-        dir = frame_rotation(ks, tfid, ifid, et) * rdir
+        dir = _m_mxv(frame_rotation(ks, tfid, ifid, et), rdir)
         if ustl
             _, vobs = _ssb(ks, obs, et, Int32(1))
             m1 = frame_rotation(ks, ifid, Int32(1), et)
-            dir = transpose(m1) * _stelab(m1 * dir, xmit ? -vobs : vobs)
+            dir = _m_mtxv(m1, _stelab(_m_mxv(m1, dir), xmit ? -vobs : vobs))
         end
     else
         v, _ = _geo_spkezp(ks, targ, et, Int32(1), corr, obs)
-        dir = frame_rotation(ks, Int32(1), ifid, et) * v
+        dir = _m_mxv(frame_rotation(ks, Int32(1), ifid, et), v)
     end
     sep = vsep(dir, faxi)
     circle && return sep <= vsep(faxi, bounds[1])

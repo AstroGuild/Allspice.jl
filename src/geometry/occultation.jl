@@ -152,7 +152,7 @@ function _geo_occed(viewpt::Vec3{Float64}, centr1::Vec3{Float64}, semax1::Mat3{F
     ttdist <= minrad[1] + minrad[2] && throw(SpiceError(:notdisjoint,
         "the distance $ttdist between the targets is not larger than the sum of their " *
         "smallest radii"))
-    xtpos = (transpose(rmat[1]) * tpos[1], transpose(rmat[2]) * tpos[2])
+    xtpos = (_m_mtxv(rmat[1], tpos[1]), _m_mtxv(rmat[2], tpos[2]))
     for i in 1:2
         d1 = xtpos[i][1] / r[i][1]
         d2 = xtpos[i][2] / r[i][2]
@@ -179,17 +179,17 @@ function _geo_occed(viewpt::Vec3{Float64}, centr1::Vec3{Float64}, semax1::Mat3{F
     # The limb of the smaller target, in the frame in which the larger one is the unit
     # sphere at the origin of its own axes.
     smlmat = transpose(rmat[smlidx])
-    limb = edlimb(r[smlidx][1], r[smlidx][2], r[smlidx][3], smlmat * (viewpt - ctrs[smlidx]))
-    smlctr = ctrs[smlidx] + transpose(smlmat) * limb.center
-    smlmaj = transpose(smlmat) * limb.semimajor
-    smlmin = transpose(smlmat) * limb.semiminor
+    limb = edlimb(r[smlidx][1], r[smlidx][2], r[smlidx][3], _m_mxv(smlmat, viewpt - ctrs[smlidx]))
+    smlctr = ctrs[smlidx] + _m_mtxv(smlmat, limb.center)
+    smlmaj = _m_mtxv(smlmat, limb.semimajor)
+    smlmin = _m_mtxv(smlmat, limb.semiminor)
     rb = r[bigidx]
     sclmat = SMatrix{3,3,Float64,9}(1.0 / rb[1], 0.0, 0.0, 0.0, 1.0 / rb[2], 0.0, 0.0, 0.0, 1.0 / rb[3])
-    sclrot = sclmat * transpose(rmat[bigidx])
-    xview = sclrot * viewpt
-    bigctr = sclrot * ctrs[bigidx]
-    smlctr = sclrot * smlctr
-    smlmaj, smlmin = _m_saelgv(sclrot * smlmaj, sclrot * smlmin)
+    sclrot = _m_mxmt(sclmat, rmat[bigidx])
+    xview = _m_mxv(sclrot, viewpt)
+    bigctr = _m_mxv(sclrot, ctrs[bigidx])
+    smlctr = _m_mxv(sclrot, smlctr)
+    smlmaj, smlmin = _m_saelgv(_m_mxv(sclrot, smlmaj), _m_mxv(sclrot, smlmin))
     xlimb = _m_cgv2el(smlctr, smlmaj, smlmin)
     raydir = bigctr - xview
     minsep, minpt = _geo_asryel(true, xlimb, xview, raydir)

@@ -178,7 +178,7 @@ function _tis_jet(ks::KernelSet, ref::NameOrID, body::Integer, et::Real)
     r, dr = map(x -> x.v, m), map(x -> x.d[1], m)
     req == _J2000_FRAME && return r, dr
     c = transpose(inertial_rotation(req))
-    return r * c, dr * c
+    return _m_mxm(r, c), _m_mxm(dr, c)
 end
 
 """

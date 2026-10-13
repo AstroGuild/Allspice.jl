@@ -206,27 +206,27 @@ function _gf_visible(v::_GFFov, et::Float64)
         trad = v.trad
         pos, lt = _geo_spkezp(ks, v.targ, et, v.tfid, v.corr, v.obs)
         ettarg = et + _geo_sign(v.corr) * lt
-        insmat = frame_rotation(ks, _GF_J2000, ifid, et) *
-                 frame_rotation(ks, v.tfid, _GF_J2000, ettarg)
+        insmat = _m_mxm(frame_rotation(ks, _GF_J2000, ifid, et),
+            frame_rotation(ks, v.tfid, _GF_J2000, ettarg))
         if v.poly
             limb = edlimb(trad[1], trad[2], trad[3], -pos)
             lc, s1, s2 = el2cgv(limb)
-            fvlimb = _m_cgv2el(insmat * (pos + lc), insmat * s1, insmat * s2)
+            fvlimb = _m_cgv2el(_m_mxv(insmat, pos + lc), _m_mxv(insmat, s1), _m_mxv(insmat, s2))
             return _geo_elvupy(fvlimb, v.faxi, v.bounds)
         end
         trgsmx = hcat(trad[1] * insmat[:, 1], trad[2] * insmat[:, 2], trad[3] * insmat[:, 3])
-        return _geo_occed(origin, v.edct, v.fsmx, insmat * pos, trgsmx) != 0
+        return _geo_occed(origin, v.edct, v.fsmx, _m_mxv(insmat, pos), trgsmx) != 0
     end
     if v.tshape == _GEO_FOV_RAY
-        dir = frame_rotation(ks, v.tfid, ifid, et) * v.rdir
+        dir = _m_mxv(frame_rotation(ks, v.tfid, ifid, et), v.rdir)
         if v.ustl
             _, vobs = _ssb(ks, v.obs, et, _GF_J2000)
             m1 = frame_rotation(ks, ifid, _GF_J2000, et)
-            dir = transpose(m1) * _stelab(m1 * dir, v.xmit ? -vobs : vobs)
+            dir = _m_mtxv(m1, _stelab(_m_mxv(m1, dir), v.xmit ? -vobs : vobs))
         end
     else
         p, _ = _geo_spkezp(ks, v.targ, et, _GF_J2000, v.corr, v.obs)
-        dir = frame_rotation(ks, _GF_J2000, ifid, et) * p
+        dir = _m_mxv(frame_rotation(ks, _GF_J2000, ifid, et), p)
     end
     sep = vsep(dir, v.faxi)
     v.circle && return sep <= v.cang

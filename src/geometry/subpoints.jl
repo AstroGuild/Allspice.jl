@@ -89,14 +89,14 @@ function _geo_subpnt(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
     while i < nitr && ltdiff > abs(primal(lt)) * 1e-17 && etdiff > 0.0
         j2pos = robs - _ssbpos(ks, trgcde, trgepc, Int32(1))
         xform = frame_rotation(ks, Int32(1), fixfid, trgepc)
-        obspos = xform * j2pos
+        obspos = _m_mxv(xform, j2pos)
         if corr.stellar
             # The stellar aberration of the vector from the observer to the sub-point
             # is applied to the observer, with the opposite sign.
             subvec = spoint - obspos
-            subvj2 = transpose(xform) * subvec
+            subvj2 = _m_mtxv(xform, subvec)
             corvj2 = _stelab(subvj2, corr.transmit ? -vobs : vobs)
-            obspos = obspos - (xform * corvj2 - subvec)
+            obspos = obspos - (_m_mxv(xform, corvj2) - subvec)
         end
         spoint, alt = _geo_subpoint(ks, sh, radii, near, obspos, trgepc, "sub-observer")
         lt = alt / CLIGHT
@@ -151,7 +151,7 @@ function _geo_subslr(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
         spos = SVector(sunst[1], sunst[2], sunst[3]) + spoint
         spoint, _ = _geo_subpoint(ks, sh, radii, near, spos, trgepc, "sub-solar")
         xform = frame_rotation(ks, Int32(1), fixfid, trgepc)
-        obspos = xform * (robs - _ssbpos(ks, trgcde, trgepc, Int32(1)))
+        obspos = _m_mxv(xform, robs - _ssbpos(ks, trgcde, trgepc, Int32(1)))
         lt = _norm3(obspos - spoint) / CLIGHT
         trgepc = et + s * lt
         ltdiff = abs(primal(lt) - prevlt)
@@ -160,7 +160,7 @@ function _geo_subslr(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
         prevet = primal(trgepc)
         i += 1
         xform = frame_rotation(ks, Int32(1), fixfid, trgepc)
-        obspos = xform * (robs - _ssbpos(ks, trgcde, trgepc, Int32(1)))
+        obspos = _m_mxv(xform, robs - _ssbpos(ks, trgcde, trgepc, Int32(1)))
     end
     if corr.stellar
         f = _GeoFixed(_geo_frozen(spoint), zero(Vec3{Float64}), 0.0, trgcde, fixfid)

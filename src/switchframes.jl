@@ -106,7 +106,7 @@ end
     found, cmat, av, _, ref = _ck_search(ks, fd.classid, ticks, 0.0, true)
     found || return false, _J2000_FRAME, one(Mat3{Taylor{1,Float64}})
     r = Mat3{Float64}(transpose(cmat))
-    dr = _ck_skew(av) * r
+    dr = _m_mxm(_ck_skew(av), r)
     return true, ref, map((a, b) -> Taylor((a, b)), r, dr)
 end
 

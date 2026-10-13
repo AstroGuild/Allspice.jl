@@ -48,7 +48,7 @@ function _eul2m(a3::Float64, a2::Float64, a1::Float64, axis3::Integer, axis2::In
     axis1::Integer)
     all(a -> 1 <= a <= 3, (axis3, axis2, axis1)) ||
         throw(SpiceError(:badaxis, "Euler axis numbers are $axis3, $axis2, $axis1; each must be 1, 2 or 3"))
-    return _rotate(a3, axis3) * _rotate(a2, axis2) * _rotate(a1, axis1)
+    return _m_mxm(_m_mxm(_rotate(a3, axis3), _rotate(a2, axis2)), _rotate(a1, axis1))
 end
 
 """
@@ -242,7 +242,7 @@ function _text_pck_rotation(br::BodyRot, body::Integer, et::T) where {T<:Real}
     w = _reduce_twopi(w * _RPD)
     tipm = _eul313(w, _HALFPI - dec, ra + _HALFPI)
     br.ref == _J2000_FRAME && return tipm
-    return tipm * inertial_rotation(br.ref)
+    return _m_mxm(tipm, inertial_rotation(br.ref))
 end
 
 """
@@ -258,7 +258,7 @@ from J2000 to the reference frame of the segment. Requires `seg.t0 <= primal(et)
     # `pcke02_` reduces W with `d_mod`; the same arithmetic keeps the value of CSPICE.
     tipm = _eul313(_reduce_twopi(ang[3]), ang[2], ang[1])
     seg.frame == _J2000_FRAME && return tipm
-    return tipm * inertial_rotation(seg.frame)
+    return _m_mxm(tipm, inertial_rotation(seg.frame))
 end
 
 """
@@ -513,7 +513,7 @@ function _rotation_up(ks::KernelSet, id::Int32, stop::Int32, et::T) where {T<:Re
         n += 1
         n > MAX_FRAME_CHAIN && _chain_too_long(id)
         cur, step = _frame_step(ks, cur, et)
-        rot = n == 1 ? step : step * rot
+        rot = n == 1 ? step : _m_mxm(step, rot)
     end
     return rot
 end
@@ -555,7 +555,7 @@ function frame_rotation(ks::KernelSet, from::Int32, to::Int32, et::T) where {T<:
     node == to && return up
     down = _rotation_up(ks, to, node, et)       # to -> node
     node == from && return Mat3{T}(transpose(down))
-    return Mat3{T}(transpose(down) * up)
+    return Mat3{T}(_m_mtxm(down, up))
 end
 
 frame_rotation(ks::KernelSet, from::Integer, to::Integer, et::Real) =

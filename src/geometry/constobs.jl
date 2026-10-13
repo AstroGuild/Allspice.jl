@@ -32,7 +32,7 @@ state transformation from `f.ref` to `ref` at `et`.
     v = f.vel - zero(x)
     f.ref == ref && return x, v
     R, dR = frame_jet(ks, f.ref, ref, et, Val(1))
-    return R * x, dR * x + R * v
+    return _m_mxv(R, x), _m_mxv(dR, x) + _m_mxv(R, v)
 end
 
 "Barycentric state of the object `f` at `et` in the inertial frame `iref`."
@@ -126,7 +126,7 @@ of the observer; its acceleration is the central difference of the velocity over
 end
 
 "`zzcorsxf` applied to a state: `[R 0; (1 + s dlt) dR R] * (r, v)`."
-@inline _geo_corsxf(R, dR, scale, r, v) = vcat(R * r, scale * (dR * r) + R * v)
+@inline _geo_corsxf(R, dR, scale, r, v) = vcat(_m_mxv(R, r), scale * _m_mxv(dR, r) + _m_mxv(R, v))
 
 "The class of the frame `ref` (`frinfo`); `SpiceError(:unknownframe)` if it is not known."
 @inline function _geo_frame_class(ks::KernelSet, ref::Int32)
@@ -249,7 +249,7 @@ function _geo_cvo(ks::KernelSet, trgcde::Int32, et, orfcde::Int32, evltyp::Int,
         orfcde == Int32(1) && return st, lt
         R, dR = frame_jet(ks, Int32(1), orfcde, et, Val(1))
         r, v = _geo_pv(st)
-        return vcat(R * r, dR * r + R * v), lt
+        return vcat(_m_mxv(R, r), _m_mxv(dR, r) + _m_mxv(R, v)), lt
     end
     q = _geo_fao(ks, trgcde, et, Int32(1), corr, f)
     orfcde == Int32(1) && return vcat(q.r, q.v), q.lt
@@ -272,7 +272,7 @@ function _geo_cvt(ks::KernelSet, f::_GeoFixed, et, orfcde::Int32, evltyp::Int,
         orfcde == Int32(1) && return st, lt
         R, dR = frame_jet(ks, Int32(1), orfcde, et, Val(1))
         r, v = _geo_pv(st)
-        return vcat(R * r, dR * r + R * v), lt
+        return vcat(_m_mxv(R, r), _m_mxv(dR, r) + _m_mxv(R, v)), lt
     end
     q = _geo_fat(ks, f, et, Int32(1), corr, obscde)
     orfcde == Int32(1) && return vcat(q.r, q.v), q.lt
