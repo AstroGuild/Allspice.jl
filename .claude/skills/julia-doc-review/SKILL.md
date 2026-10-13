@@ -7,6 +7,14 @@ description: Use after a change of the README, the manual or public docstrings o
 
 The review is independent of the writing: the reviewer gets the text and reader tasks, not the source and not the reasons of the author. Use the `julia-doc-reader` agent for that isolation. The usual outcome of a review is to cut, clarify or move text; adding text needs a reader question that the text left open.
 
+## What the reader gets
+
+- README and manual pages: the Markdown files themselves.
+- Docstrings: the reference pages as text, written by `julia --project=docs docs/reference_text.jl <dir>`. Split the pages between readers so that each reads at most about 20,000 words in full.
+- A reader agent cannot write a file: ask for the full list of findings in its reply, one line each as `page / call: CUT | CLARIFY | MOVE | WRONG? — what`, with the quoted words.
+
+A `WRONG?` finding is two entries that disagree. Run the call before any edit: the text can be right and the code inconsistent, and then the text stays and the inconsistency goes to the report.
+
 ## Reader questions
 
 Pose three to five questions that the intended reader has, and for a task page add one task to complete from the page alone.
