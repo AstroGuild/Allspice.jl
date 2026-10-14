@@ -1,77 +1,85 @@
 # Allspice.jl
 
-Allspice.jl reads SPICE kernels and answers the questions that the CSPICE toolkit of NAIF answers (where a body is, how a frame is oriented, when an event occurs), in Julia code with no C library behind it. The calls keep the names and the argument order of CSPICE version N0067, and the results agree with CSPICE to rounding.
+NASA's Navigation and Ancillary Information Facility (NAIF) develops
+[SPICE](https://naif.jpl.nasa.gov/naif/), a system for computing spacecraft and
+planetary geometry from data files called kernels; CSPICE is its C implementation.
+Allspice.jl is a native Julia port of CSPICE N0067 that reads these kernels and
+performs the same position, orientation, time, and event calculations without a C
+library.
 
-SPICE.jl wraps the CSPICE C library, and a program written for it needs few changes to use this package. Pick this package when a Julia program needs one of the following:
+Choose Allspice.jl instead of a CSPICE wrapper when a native Julia implementation
+matters: separate kernel contexts permit concurrent queries without a lock, epochs
+can carry ForwardDiff dual numbers, and trajectory or rotation tables can run in
+inner loops and on GPUs. If you need to call NAIF's CSPICE library itself, use a
+wrapper such as SPICE.jl.
 
-| Need | What the package gives |
-|---|---|
-| Queries from many threads | The loaded kernels belong to a context object and no call keeps state between calls, so queries need no lock |
-| Derivatives for an optimizer or an integrator | `spkder` and `pxder` return time derivatives of any order, and an epoch can be a `ForwardDiff.Dual` |
-| Positions in an inner loop or on a GPU | `ephemeris_table` and `rotation_table` extract a trajectory or a rotation into one array of Chebyshev coefficients |
-| No binary dependency | Readers for SPK, CK, PCK, DSK and EK files and writers for SPK, CK, DSK and EK files are Julia code |
+Calls keep CSPICE names and argument order. Results are Julia return values, and
+failures throw exceptions, so programs written with SPICE.jl usually need few
+changes.
 
-The package is a prototype: the interface can still change.
+Allspice.jl is a prototype, and its interface can still change. Review its
+[coverage and validation](docs/src/explanation/coverage.md) before you rely on it.
 
 ## Installation
 
-The package needs Julia 1.10 or later.
+Allspice.jl requires Julia 1.10 or later. Install it directly from GitHub:
 
-```julia
-using Pkg
-Pkg.add("Allspice")
+```julia-repl
+pkg> add https://github.com/EllissoideRotondo/Allspice.jl
 ```
 
-## Example
+## Quick start
 
-Load kernels, convert a time, and ask for a state. The two kernels are generic kernels of NAIF, from <https://naif.jpl.nasa.gov/pub/naif/generic_kernels/>; use the paths of your copies.
+Download the NAIF generic kernels
+[`naif0012.tls`](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls)
+and
+[`de440s.bsp`](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp),
+then save both files in Julia's working directory or replace the filenames below
+with their paths:
 
 ```julia
 using Allspice
 
-furnsh("naif0012.tls")                      # leap seconds
-furnsh("de440s.bsp")                        # planetary ephemeris
+furnsh("naif0012.tls")
+furnsh("de440s.bsp")
 
-et = str2et("2025 MAR 01 12:00:00 UTC")     # seconds past J2000 TDB
+et = str2et("2025 MAR 01 12:00:00 UTC")  # seconds past J2000 TDB
+state, light_time = spkezr("MOON", et, "J2000", "LT+S", "EARTH")
 
-# State in the J2000 frame as seen from the Earth (light time and stellar aberration)
-state, lt = spkezr("MOON", et, "J2000", "LT+S", "EARTH")
-state[1:3]                                  # position, km
-state[4:6]                                  # velocity, km/s
-lt                                          # one-way light time, s
-
-r, v, a = spkder("MOON", et, "J2000", "EARTH", Val(2))    # geometric; a in km/s^2
+position = state[1:3]  # km
+velocity = state[4:6]  # km/s
+light_time             # one-way light time, s
 ```
 
-A call that cannot answer throws a `SpiceError`, whose `kind` field names the reason. Results are return values, vectors and matrices are static arrays, and indices count from 1.
+`spkezr` returns the state of the Moon relative to the Earth after light-time and
+stellar-aberration corrections. Allspice.jl returns Julia values instead of filling
+C output arguments, uses indices that start at 1, and throws [`SpiceError`](docs/src/reference/kernels.md)
+when a call cannot produce a result.
 
 ## Documentation
 
-The manual is in `docs/`; build it with `julia --project=docs docs/make.jl` and open `docs/build/index.html`.
+Start with the [first session](docs/src/tutorial.md) for a complete workflow from
+loading kernels to searching for an event. Before porting CSPICE or SPICE.jl code,
+read the [differences from CSPICE](docs/src/explanation/cspice.md); the manual also
+groups the [API reference by subject](docs/src/reference/).
 
-| Page | Content |
-|---|---|
-| `docs/src/tutorial.md` | A first session, from kernels to an event search |
-| `docs/src/howto/` | Contexts and threads, derivatives, tables, event searches, writing kernels |
-| `docs/src/explanation/cspice.md` | What behaves differently from CSPICE |
-| `docs/src/explanation/coverage.md` | Which parts of the toolkit exist, and how the results were checked |
-| `docs/src/reference/` | Every exported call, by subject |
+## Relationship to NAIF
 
-## Development
+Allspice.jl is an independent project that NAIF and the Jet Propulsion Laboratory
+do not develop, support, or endorse. Report defects through this repository, not to
+NAIF. The repository does not redistribute CSPICE or SPICE kernels; CSPICE remains
+available from [NAIF](https://naif.jpl.nasa.gov/naif/toolkit.html) under its [rules
+of use](https://naif.jpl.nasa.gov/naif/rules.html).
 
-`CONTRACT.md` records the internal interfaces for maintainers. Run the tests with `julia --threads=8 test/parallel.jl`; they need SPICE.jl and kernels from NAIF, whose paths `CONTRACT.md` lists.
+Publications that use SPICE should cite the references requested by NAIF:
 
-## Relation to NAIF
-
-This package is an independent work, which the Navigation and Ancillary Information Facility (NAIF) of the Jet Propulsion Laboratory does not develop, support or endorse. Questions and defect reports about the package go to its author through the issue tracker of the repository, and not to NAIF.
-
-The package is derived from the CSPICE toolkit, version N0067: each routine follows the algorithm of the CSPICE routine of the same name, and the error messages keep the wording of CSPICE where a program can depend on it. The repository contains no file of the toolkit (no source, header, library or document of NAIF) and no kernel. The CSPICE toolkit itself is available from NAIF at <https://naif.jpl.nasa.gov/naif/toolkit.html>, and its rules of use are at <https://naif.jpl.nasa.gov/naif/rules.html>.
-
-The SPICE system is the work of NAIF, and a publication that uses this package should acknowledge it with the two references that NAIF asks for:
-
-- C. H. Acton, "Ancillary data services of NASA's Navigation and Ancillary Information Facility", *Planetary and Space Science* 44 (1), 65-70, 1996.
-- C. Acton, N. Bachman, B. Semenov and E. Wright, "A look towards the future in the handling of space science mission geometry", *Planetary and Space Science* 150, 9-12, 2018.
+- C. H. Acton, "Ancillary data services of NASA's Navigation and Ancillary
+  Information Facility", *Planetary and Space Science* 44 (1), 65–70, 1996.
+- C. Acton, N. Bachman, B. Semenov, and E. Wright, "A look towards the future in
+  the handling of space science mission geometry", *Planetary and Space Science*
+  150, 9–12, 2018.
 
 ## Licence
 
-The code of this package is under the MIT licence; see `LICENSE`. That licence covers the work of the author and gives no right over the CSPICE toolkit, which stays under the terms of NAIF.
+Allspice.jl is available under the [MIT licence](LICENSE). This licence covers only
+the work in this repository and grants no rights over CSPICE.
