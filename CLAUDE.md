@@ -2,11 +2,11 @@
 
 Native Julia port of CSPICE N0067. `CONTRACT.md` records the internal interfaces.
 
-Use the project skills whenever you change an exported name, a docstring, the README, the manual or a test:
+Use the skills whenever you change an exported name, a docstring, the README, the manual or a test. The global skills hold the general rules; the project skills add the rules of this repository:
 
-- `julia-doc-quality`: README, docstrings, Documenter manual.
-- `julia-doc-review`: independent reader review after a documentation change (agent `julia-doc-reader`).
-- `julia-test-quality`: test design, regression tests, trimming.
+- `julia-docstrings`, `julia-manual`, `julia-readme`, with `allspice-docs`: docstrings, the Documenter manual, the README.
+- `julia-doc-reader-review` (agent `julia-doc-reader`): independent reader review after a documentation change; `allspice-docs` says what the reader gets.
+- `julia-tests`, with `allspice-tests`: test design, regression tests, trimming.
 
 Commands:
 

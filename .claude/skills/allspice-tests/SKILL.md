@@ -1,11 +1,11 @@
 ---
-name: julia-test-quality
-description: Use when adding, changing, reviewing or trimming tests of this Julia package, and when a fault is fixed and needs a regression test.
+name: allspice-tests
+description: Use when adding, changing, reviewing or trimming tests of Allspice.jl, or when a fault is fixed and needs a regression test; the rules of this repository on top of the global julia-tests skill.
 ---
 
-# Julia test quality
+# Allspice test rules
 
-The goal is the smallest set of tests that detects a real change of behaviour. The count of tests, the count of assertions and the coverage percentage are not goals; report them, do not optimise them.
+The general rules (what earns a test, what does not, the review trigger) are in the global skill `julia-tests`. This file holds only what is particular to Allspice.jl.
 
 ## Before writing tests: the behaviour matrix
 
@@ -15,27 +15,6 @@ Write one row for each scenario before any code, and delete duplicate rows first
 |---|---|---|---|
 
 Layers in this repository: differential (result compared with CSPICE through SPICE.jl), analytic (closed-form answer), invariant (round trip, identity), error (kind of `SpiceError`), concurrency, allocation.
-
-## What earns a test
-
-- One representative case for each class of behaviour: each data type, each branch of a method string, each aberration correction family, not each combination of them.
-- Boundaries: first and last epoch of coverage, empty input, degenerate geometry, the largest and smallest accepted value.
-- Each error kind that a caller can meet, once.
-- Each fixed fault, as one focused regression test with a comment that names the fault.
-- Differences from CSPICE that are deliberate, pinned by a test that says so.
-
-## What does not
-
-- A Cartesian product of arguments where the factors are independent in the code.
-- A random sample larger than what first exposes each branch. The large sample belongs to the exhaustive tier (`nsample(fast, full)`, `ALLSPICE_TEST_FULL=1`). When a smaller sample loses a branch, do not restore the sample: add a fixed case that reaches the branch, with a comment on how rare it is for random input. Do not shrink a sample that is the only oracle for a mode.
-- A check that does not depend on the loop variable, repeated for each epoch or each sample (the forms of a call, a result type, `isbits`).
-- One `@test` for each sample where one accumulated flag or one maximum gives the same failure; print the first failing samples instead.
-- A test of a test fixture (a helper compared with the package through the same oracle).
-- The same comparison repeated through a second entry point that only forwards. An entry point forwards if its check lives in a shared routine; keep one case per shared routine and one per entry point, and every entry point whose check takes an argument of its own.
-- A syntax or message layer tested again in the group that consumes it. One group owns the layer; the consumer keeps the cases that need its own state.
-- Behaviour of Base, StaticArrays or SPICE.jl.
-- Internal layout that can change without a change of the public result.
-- The exact text of an error message, except where the package states that the text equals CSPICE.
 
 ## Rules of this repository
 
@@ -48,10 +27,6 @@ Layers in this repository: differential (result compared with CSPICE through SPI
 - The cases of a fixture share one random stream: add a new case after the existing ones, so that the earlier cases keep their data.
 - Each group has a time budget; a group that grows states its new time. The default suite stays under 120 s in one process.
 - User-visible behaviour has a Given/When/Then scenario in `test/features/`; remove or change the scenario with the test.
-
-## Review trigger
-
-More than about 12 new scenarios or 150 new lines for one feature: stop, justify each group of scenarios in one line, and merge what protects the same behaviour.
 
 ## Trimming existing tests
 
