@@ -17,9 +17,6 @@ Calls keep CSPICE names and argument order. Results are Julia return values, and
 failures throw exceptions, so programs written with SPICE.jl usually need few
 changes.
 
-Allspice.jl is a prototype, and its interface can still change. Review its
-[coverage and validation](docs/src/explanation/coverage.md) before you rely on it.
-
 ## Installation
 
 Allspice.jl requires Julia 1.10 or later. Install it directly from GitHub:
@@ -56,12 +53,41 @@ stellar-aberration corrections. Allspice.jl returns Julia values instead of fill
 C output arguments, uses indices that start at 1, and throws [`SpiceError`](docs/src/reference/kernels.md)
 when a call cannot produce a result.
 
+## Tasks
+
+| Task | Functions | Guide |
+|---|---|---|
+| Load kernels, keep separate kernel sets | `furnsh`, `unload`, `SpiceContext` | [Contexts and threads](docs/src/howto/contexts.md) |
+| Positions and states of bodies | `spkezr`, `spkpos`, `spkgeo` | [States and aberration](docs/src/reference/states.md) |
+| Orientation of frames | `pxform`, `sxform` | [Frames and orientation](docs/src/reference/frames.md) |
+| Time conversion | `str2et`, `et2utc`, `timout` | [Time](docs/src/reference/time.md) |
+| Derivatives with respect to the epoch | `spkder`, `pxder` | [Time derivatives](docs/src/howto/derivatives.md) |
+| Search for events | `gfdist`, `gfoclt`, `gfposc` | [Event searches](docs/src/howto/events.md) |
+| Surface points and illumination | `subpnt`, `sincpt`, `ilumin` | [Geometry](docs/src/reference/geometry.md) |
+| Fast tables for inner loops and GPUs | `ephemeris_table`, `rotation_table` | [Ephemeris and rotation tables](docs/src/howto/tables.md) |
+| Write kernels | `spkopn`, `spkw02`, `ckw03`, `dskw02`, `ekopn` | [Writing kernels](docs/src/howto/writing.md) |
+
+## Limits
+
+- Allspice.jl is a prototype. Its interface can still change.
+- It ports the library calls of CSPICE N0067. Utilities that Julia Base covers (cells, sets, strings, error handling) are not ported; see [coverage and validation](docs/src/explanation/coverage.md).
+- A result differs from CSPICE by rounding only. The measured differences are in [coverage and validation](docs/src/explanation/coverage.md#Known-limits-of-accuracy).
+
 ## Documentation
 
 Start with the [first session](docs/src/tutorial.md) for a complete workflow from
 loading kernels to searching for an event. Before porting CSPICE or SPICE.jl code,
 read the [differences from CSPICE](docs/src/explanation/cspice.md); the manual also
 groups the [API reference by subject](docs/src/reference/).
+
+To build the manual, run from the repository root:
+
+```sh
+julia --project=docs -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate()'
+julia --project=docs docs/make.jl
+```
+
+Then open `docs/build/index.html`.
 
 ## Relationship to NAIF
 
