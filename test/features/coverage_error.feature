@@ -77,6 +77,16 @@ Feature: Errors for queries that cannot be answered
       | "de440s.bsp"             | body 599, which is in no file    | spkinsuffdata |
       | no SPK file              | body 301                         | noloadedfiles |
 
+  Scenario: An SPK chain of any length
+    Given an SPK file in which each of 30 bodies is centered on the next one
+    When the user asks for the state of any of them relative to any other
+    Then the answer agrees with CSPICE
+
+  Scenario: An SPK chain with a cycle
+    Given an SPK file in which two bodies are centered on each other
+    When the user asks for the state of one of them relative to a body outside the cycle
+    Then a "SpkInsufficientDataError" is thrown, where CSPICE does not return
+
   Scenario: Missing SPK data carry the query
     When a state query fails for missing SPK data
     Then the error is a "SpkInsufficientDataError", a subtype of "SpiceError"

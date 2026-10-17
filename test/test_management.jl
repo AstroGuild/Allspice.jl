@@ -242,6 +242,41 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test sprint(showerror, SpiceError(:badarg, "text")) == "SpiceError(badarg): text"
     end
 
+    @apart @testset "an SPK chain of any length, as SPKGEO" begin
+        # Body 1000 + k is centered on 1000 + k + 1, the last one on the barycenter. The
+        # offsets differ, so that a segment taken twice or left out changes the answer.
+        n, T = 30, 1000.0
+        epochs = collect(range(-T - 100, T + 100; length=9))
+        dir = mktempdir()
+        spk = joinpath(dir, "chain.bsp")
+        h = SPICE.spkopn(spk, "chain", 0)
+        for k in 1:n
+            states = [[2.0^k, 0, 0, 0, k, 0] for _ in epochs]
+            SPICE.spkw08(h, 1000 + k, k == n ? 0 : 1000 + k + 1, "J2000", -T, T, "c$k", 1,
+                states, epochs[1], epochs[2] - epochs[1])
+        end
+        SPICE.spkcls(h)
+        oracle_load([spk])
+        ctx = neo_context([spk])
+        bodies = [0; 1001:1000+n]
+        worst = maximum(maximum(abs, spkgeo(ctx, t, 1.0, "J2000", o)[1] .-
+                                     SPICE.spkgeo(t, 1.0, "J2000", o)[1])
+                        for t in bodies, o in bodies)
+        @test worst == 0
+        # A cycle: CSPICE does not return.
+        cyc = joinpath(dir, "cycle.bsp")
+        h = SPICE.spkopn(cyc, "cycle", 0)
+        states = [[1.0, 0, 0, 0, 0, 0] for _ in epochs]
+        for (body, center) in ((2001, 2002), (2002, 2001))
+            SPICE.spkw08(h, body, center, "J2000", -T, T, "c", 1, states, epochs[1], epochs[2] - epochs[1])
+        end
+        SPICE.spkcls(h)
+        furnsh(ctx, cyc)
+        @test spkgeo(ctx, 2001, 0.0, "J2000", 2002)[1][1] == 1.0
+        @test throws_kind(() -> spkgeo(ctx, 2001, 0.0, "J2000", 1001), :spkinsuffdata)
+        @test throws_kind(() -> spkgeo(ctx, 1001, 0.0, "J2000", 2001), :spkinsuffdata)
+    end
+
     @apart @testset "the kind of an error is the short message of CSPICE" begin
         # Regression: these calls had kinds of their own (`:nofile`, `:badarg`,
         # `:unknownbody`, `:notfound`, `:badtype`, `:baddaf`, `:unsupported`), so that the

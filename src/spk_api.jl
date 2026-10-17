@@ -4,7 +4,7 @@
 "Speed of light in km/s, the value of `clight_c`."
 const CLIGHT = 299792.458
 
-"Largest number of bodies on one chain from a body toward the solar system barycenter."
+"Number of bodies of a target chain that `spk_jet` holds; a longer chain goes to `spk_jet_long`."
 const MAXCHAIN = 10
 
 """
@@ -98,32 +98,37 @@ CSPICE signals NOLOADEDFILES with no SPK file and SPKINSUFFDATA for every other 
         "and the observer chain ends at body $oend", targ, obs, t, missing_body, false))
 end
 
-@noinline throw_chain_depth(targ, obs, t::Float64) = throw(SpkInsufficientDataError(
+# CSPICE does not return on a cycle; `spk_jet` stops after as many steps as there are
+# bodies with SPK data, which no chain without a cycle exceeds.
+@noinline throw_chain_cycle(targ, obs, t::Float64) = throw(SpkInsufficientDataError(
     :spkinsuffdata, "the SPK chain between target $targ and observer $obs at ET $t s " *
-    "is longer than $MAXCHAIN bodies", targ, obs, t, nothing, false))
+    "has a cycle", targ, obs, t, nothing, false))
 
 """
     spk_jet(ks, targ::Int32, et, ref::Int32, obs::Int32, ::Val{N}) -> NTuple{N+1,Vec3}
 
 Return the geometric position of `targ` relative to `obs` in frame `ref` at `et` and
 its time derivatives to order N (no aberration correction). The function does not
-allocate. Throws [`SpkInsufficientDataError`](@ref).
+allocate, except for a target chain of more than MAXCHAIN bodies. Throws
+[`SpkInsufficientDataError`](@ref).
 """
 function spk_jet(ks::KernelSet, targ::Int32, et::T, ref::Int32, obs::Int32,
         ::Val{N}) where {T<:Real,N}
     t = primal(et)
-    # Pass 1: bodies and segment indices of the target chain, without evaluation.
+    # Pass 1: bodies and segment indices of the target chain up to the observer or the
+    # root, without evaluation.
     tbody = ntuple(_ -> Int32(0), Val(MAXCHAIN))
     tseg = ntuple(_ -> 0, Val(MAXCHAIN))
     tbody = Base.setindex(tbody, targ, 1)
     nt = 1
     body = targ
-    while body != 0
+    while body != 0 && body != obs
+        # invariant: tbody[1:nt] are the bodies reached, tseg[1:nt-1] their segments
+        nt == MAXCHAIN && return spk_jet_long(ks, targ, et, ref, obs, Val(N))
         segs = get(ks.spk, body, nothing)
         segs === nothing && break
         i = find_segment(segs, t)
         i == 0 && break
-        nt == MAXCHAIN && throw_chain_depth(targ, obs, t)
         tseg = Base.setindex(tseg, i, nt)
         body = segs[i].center
         nt += 1
@@ -140,7 +145,7 @@ function spk_jet(ks::KernelSet, targ::Int32, et::T, ref::Int32, obs::Int32,
         i = find_segment(segs, t)
         i == 0 && throw_no_connection(ks, targ, obs, t, tbody[nt], body)
         depth += 1
-        depth > MAXCHAIN && throw_chain_depth(targ, obs, t)
+        depth > length(ks.spk) && throw_chain_cycle(targ, obs, t)
         seg = segs[i]
         ojet = map(+, ojet, segment_jet(ks, seg, et, Val(N)))
         body = seg.center
@@ -151,6 +156,53 @@ function spk_jet(ks::KernelSet, targ::Int32, et::T, ref::Int32, obs::Int32,
     for k in 1:common-1
         seg = ks.spk[tbody[k]][tseg[k]]
         tjet = map(+, tjet, segment_jet(ks, seg, et, Val(N)))
+    end
+    jet = map(-, tjet, ojet)
+    ref == Int32(1) && return jet
+    return rotate_jet(frame_jet(ks, Int32(1), ref, et, Val(N)), jet)
+end
+
+"""
+    spk_jet_long(ks, targ::Int32, et, ref::Int32, obs::Int32, ::Val{N}) -> NTuple{N+1,Vec3}
+
+`spk_jet` for a target chain of more than MAXCHAIN bodies; it allocates. CSPICE
+(`SPKGEO`) has no limit on the length of a chain either.
+"""
+@noinline function spk_jet_long(ks::KernelSet, targ::Int32, et::T, ref::Int32, obs::Int32,
+        ::Val{N}) where {T<:Real,N}
+    t = primal(et)
+    tbody = Int32[targ]
+    tseg = Segment[]
+    body = targ
+    while body != 0 && body != obs
+        # invariant: tseg[k] is the segment from tbody[k] to tbody[k+1]
+        segs = get(ks.spk, body, nothing)
+        segs === nothing && break
+        i = find_segment(segs, t)
+        i == 0 && break
+        length(tseg) < length(ks.spk) || throw_chain_cycle(targ, obs, t)
+        push!(tseg, segs[i])
+        body = segs[i].center
+        push!(tbody, body)
+    end
+    ojet = ntuple(_ -> zero(Vec3{T}), Val(N + 1))
+    body = obs
+    depth = 0
+    common = findfirst(==(body), tbody)
+    while common === nothing
+        segs = get(ks.spk, body, nothing)
+        segs === nothing && throw_no_connection(ks, targ, obs, t, last(tbody), body)
+        i = find_segment(segs, t)
+        i == 0 && throw_no_connection(ks, targ, obs, t, last(tbody), body)
+        depth += 1
+        depth > length(ks.spk) && throw_chain_cycle(targ, obs, t)
+        ojet = map(+, ojet, segment_jet(ks, segs[i], et, Val(N)))
+        body = segs[i].center
+        common = findfirst(==(body), tbody)
+    end
+    tjet = ntuple(_ -> zero(Vec3{T}), Val(N + 1))
+    for k in 1:common-1
+        tjet = map(+, tjet, segment_jet(ks, tseg[k], et, Val(N)))
     end
     jet = map(-, tjet, ojet)
     ref == Int32(1) && return jet
