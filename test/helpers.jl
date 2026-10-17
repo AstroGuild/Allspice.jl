@@ -173,6 +173,50 @@ function throws_kind(f, kind::Symbol)
     return false
 end
 
+"""
+    spksub_both(src, dir, tag, ident, t0, t1; descr=identity) -> (pc, kc, pn, kn)
+
+Write the subset `[t0, t1]` of the first segment of the SPK file `src` with `spksub`
+into `pn` and with `spksub_c` into `pc`, two new files of `dir`. `descr` maps the
+descriptor before the call. `kn` and `kc` are the error kinds, `:none` without one.
+CSPICE is not called when Allspice gives `:spkstructureerror` (`kc` is `:skipped`):
+for such a type 19 segment CSPICE N0067 reads `data[0]` in `spks19_` and aborts.
+"""
+function spksub_both(src::AbstractString, dir::AbstractString, tag::AbstractString,
+        ident::AbstractString, t0::Real, t1::Real; descr=identity)
+    pc, pn = joinpath(dir, "sub_c_" * tag * ".bsp"), joinpath(dir, "sub_n_" * tag * ".bsp")
+    h = dafopr(src)
+    dafbfs(h)
+    @assert daffna(h)
+    nn = spkopn(pn, "SUBSET", 0)
+    kn = try
+        spksub(nn, h, descr(dafgs(h)), ident, t0, t1)
+        :none
+    catch e
+        e isa Allspice.SpiceError || rethrow()
+        e.kind
+    end
+    dafcls(nn)
+    dafcls(h)
+    kn === :spkstructureerror && return pc, :skipped, pn, kn
+    hc = SPICE.dafopr(src)
+    SPICE.dafbfs(hc)
+    @assert SPICE.daffna()
+    nc = SPICE.spkopn(pc, "SUBSET", 0)
+    ccall((:spksub_c, SPICE.libcspice), Cvoid, (Cint, Ptr{Cdouble}, Cstring, Cdouble, Cdouble, Cint),
+        hc, descr(SPICE.dafgs(5)), ident, t0, t1, nc)
+    kc = :none
+    if ccall((:failed_c, SPICE.libcspice), Cint, ()) != 0
+        buf = zeros(UInt8, 64)
+        ccall((:getmsg_c, SPICE.libcspice), Cvoid, (Cstring, Cint, Ptr{UInt8}), "SHORT", 64, buf)
+        kc = Symbol(lowercase(replace(unsafe_string(pointer(buf)), "SPICE(" => "", ")" => "")))
+        ccall((:reset_c, SPICE.libcspice), Cvoid, ())
+    end
+    SPICE.dafcls(nc)
+    SPICE.dafcls(hc)
+    return pc, kc, pn, kn
+end
+
 # Tolerances of the state comparison, used by the groups states, identities, rotations,
 # aberration and management.
 

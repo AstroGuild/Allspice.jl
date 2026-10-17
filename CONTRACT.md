@@ -139,6 +139,9 @@ evaluator pair `spkrNN`/`spkeNN` of CSPICE, so a plain epoch gives the CSPICE st
   evaluator reads them from the end of the segment at each call and checks them with
   `_seg_count`, which throws `SpiceError(:baddaf)`. `_lstltd(data, base, n, x)` and
   `_lstled(...)` mirror `lstltd` and `lstled` on a part of the data array.
+- `_spk14_layout(data, seg) -> NamedTuple` reads and checks the generic-segment
+  directory of a type 14 segment (bases, counts, packet size, Chebyshev degree);
+  `_spk14` evaluates from it, and `spksub` reads the records with it.
 - `_ad_order(::Type{T}) -> Int` is the number of derivative orders that `T` carries,
   and `_with_primal(x::T, p::Float64) -> T` replaces the plain value of `x` and keeps
   its derivative parts. An iterative solution runs on plain numbers as CSPICE does, and
@@ -382,7 +385,9 @@ The write interface of the kernel pool (`pdpool`, `pcpool`, `pipool`, `dvpool`,
 Every public call has the form `f(ctx::SpiceContext, args...)`, plus `f(args...)` on
 the default context, plus an inner form on a `KernelSet`.
 
-- `spkgeo(targ::Integer, et, ref, obs::Integer) -> (SVector{6}, lt)`
+- `spkgeo(targ::Integer, et, ref, obs::Integer) -> (SVector{6}, lt)`;
+  `spkgps(targ::Integer, et, ref, obs::Integer) -> (SVector{3}, lt)` is its position
+  part, from the order-0 jet.
 - `spkezr(targ, et, ref, abcorr, obs) -> (SVector{6}, lt)`; `spkpos -> (SVector{3}, lt)`.
   `abcorr` is a CSPICE correction string or an `Aberration`; `lt` is the one-way light
   time.
@@ -413,6 +418,8 @@ the default context, plus an inner form on a `KernelSet`.
   `spkaps(targ, et, ref, abcorr, stobs, accobs)`, `spkacs(targ, et, ref, abcorr, obs)`,
   `spkapo(targ, et, ref, sobs, abcorr)`, `ltime(etobs, obs, dir, targ)`,
   `stelab(pobj, vobs)`, `stlabx(pobj, vobs)`, with the argument order of CSPICE.
+- `spkez` and `spkezp` (integer IDs) call `spkezr` and `spkpos`, so their results are
+  equal bit for bit.
 
 ## `windows.jl`
 
@@ -572,6 +579,35 @@ equator, mean equinox), which `type10.jl` turns to J2000 as `zzteme.f` does.
   jet of a type 10 segment in the convention of `spk_eval`; it does not allocate, and
   it throws `SpiceError(:baddaf)` for a segment that is not valid. This type is the
   only one that needs a leap-second kernel, because the element epoch is turned to UTC.
+- `_t10_closest(data, lay, x) -> Int` is the index of the reference epoch closest to
+  `x`, a tie going to the later one (the index type 4 of the generic segments); the
+  evaluator and `spksub` use it.
+- `_t10_data(con, refs, packets) -> Vector{Float64}` is the whole data of a type 10
+  segment (constants, records of a reference epoch and a 14-double packet, the epochs,
+  their directory, the 17 meta items); `spkw10` and `spksub` write it with `dafada`.
+
+## `spk_segments.jl`
+
+`spksfs`, `spkpvn`, `spkuds` and `spksub`: SPK segments named by a file and a
+descriptor.
+
+- A loaded file has no handle, so `spksfs(ks, body, et) -> Union{Nothing,Tuple{String,
+  Vector{Float64},String}}` returns the path of the file. The segment is
+  `find_segment` on `ks.spk[body]`; the descriptor is built with `dafps` and the name is
+  read from the name record of the mapped file, in either byte order. `spkpvn` takes
+  either a `DAFHandle` or such a path with the kernel set that holds it (otherwise
+  `:nosuchhandle`).
+- `spkpvn` checks `first <= et <= last` for every type (`:timeoutofbounds`); CSPICE
+  checks this for some types only, and the others extrapolate or read outside the
+  segment.
+- `_spksNN(r::_SegReader, baddr, eaddr, t0, t1) -> Vector{Float64}` port `spksNN` of
+  CSPICE line by line, so that the data of the new segment are those of `spksub_c`,
+  double for double. `_SegReader` holds the source segment and reads by DAF address,
+  with `dafgda` outside the segment. Types 10 and 14 write through their own writers
+  (`_spks10` with `_t10_data`, `_spks14` with `spk14b`).
+- Defect of CSPICE: `spks19` reads `data[0]` and stops the process when the block of
+  100 epochs in which the search for the stop epoch ends begins after that epoch;
+  `_spks19` throws `:spkstructureerror` there.
 
 ## `kernel_info.jl`
 

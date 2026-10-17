@@ -257,26 +257,45 @@ function spkw10(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
             "$who: reference values are out of order; the value $(ep[i-1]) was found to " *
             "be out of order for index $(i - 1)"))
     end
+    packets = Vector{Float64}(undef, 14n)
+    for i in 1:n          # invariant: the packets of the sets before `i` are in `packets`
+        copyto!(packets, 14(i - 1) + 1, el, 10(i - 1) + 1, 10)
+        psi, eps, dpsi, deps = _t10_wahr(ep[i])
+        packets[14i-3:14i] .= (eps, psi, deps, dpsi)
+    end
+    dafbna(h, descr, segid)
+    dafada(h, _t10_data(con, ep, packets))
+    dafena(h)
+    return nothing
+end
+
+"""
+    _t10_data(consts, refs, packets) -> Vector{Float64}
+
+The data of a type 10 segment as `sgbwfs`, `sgwfpk` and `sgwes` of CSPICE write it: the
+eight constants, one record of the epoch and the 14 doubles of each packet, the epochs,
+every 100th epoch, and the 17 meta data items. `packets` holds the packets one after the
+other.
+"""
+function _t10_data(con::AbstractVector{Float64}, refs::AbstractVector{Float64},
+        packets::AbstractVector{Float64})
+    n = length(refs)
+    @assert length(con) == 8 && length(packets) == 14n
     data = Vector{Float64}(undef, 0)
     sizehint!(data, 8 + 16 * n + (n - 1) ÷ 100 + 17)
     append!(data, con)
-    for i in 1:n          # invariant: the records of the sets before `i` are in `data`
-        push!(data, ep[i])
-        append!(data, @view el[(i-1)*10+1:i*10])
-        psi, eps, dpsi, deps = _t10_wahr(ep[i])
-        push!(data, eps, psi, deps, dpsi)
+    for i in 1:n          # invariant: the records of the packets before `i` are in `data`
+        push!(data, refs[i])
+        append!(data, @view packets[14(i-1)+1:14i])
     end
-    append!(data, ep)
+    append!(data, refs)
     for i in 1:(n-1)÷100
-        push!(data, ep[100i])
+        push!(data, refs[100i])
     end
     # Meta data: CONBAS, NCON, RDRBAS, NRDR, RDRTYP, REFBAS, NREF, PDRBAS, NPDR, PDRTYP,
     # PKTBAS, NPKT, RSVBAS, NRSV, PKTSZ, PKTOFF, NMETA.
     refbas = 8 + 15 * n
     append!(data, Float64[0, 8, refbas + n, (n - 1) ÷ 100, 4, refbas, n, 0, 0, 0, 8, n, 0, 0,
         14, 1, 17])
-    dafbna(h, descr, segid)
-    dafada(h, data)
-    dafena(h)
-    return nothing
+    return data
 end

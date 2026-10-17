@@ -866,6 +866,42 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         @test true
     end
 
+    @apart @testset "spksub and spkpvn of type 10 against CSPICE" begin
+        # The CSPICE files of 1 and 250 sets of the test set "spkw10 against CSPICE". The
+        # windows end on a set epoch, between two sets and before the first set, so the
+        # subset takes the set before the start and the set after the stop.
+        rng10 = MersenneTwister(SEED + 1710)
+        for n in (1, 250)
+            src = joinpath(dir, "many_c_$n.bsp")
+            hn = dafopr(src)
+            dafbfs(hn)
+            daffna(hn)
+            d = dafgs(hn)
+            _, _, _, _, t0, t1 = spkuds(d)
+            ref = (t0 + 100.0) + 600.0 * min(n - 1, 50)       # a set epoch
+            windows = [(t0, t1), (t0 + 10.0, ref), (max(t0, ref - 900.0), min(t1, ref + 1300.0)), (t0, t0 + 50.0)]
+            for (i, (a, b)) in enumerate(windows)
+                pc, kc, pn, kn = spksub_both(src, dir, "t10_$(n)_$i", "TLE SUBSET", a, b)
+                @test kn === kc === :none
+                @test read(pn) == read(pc)
+            end
+            hc = SPICE.dafopr(src)
+            SPICE.dafbfs(hc)
+            SPICE.daffna()
+            w = 0.0
+            for et in random_epochs(rng10, 5, t0, t1)
+                rc = SPICE.spkpvn(hc, SPICE.dafgs(5), et)
+                rn = spkpvn(ctx0, hn, d, et)
+                @test rn[1] == rc[1] && rn[3] == rc[3]
+                w = max(w, sgp4_reldiff(rn[2], rc[2]))
+            end
+            @test w <= SGP4_RTOL
+            @test throws_kind(() -> spkpvn(SpiceContext(), hn, d, t0), :noleapseconds)
+            SPICE.dafcls(hc)
+            dafcls(hn)
+        end
+    end
+
     SPICE.kclear()
 end
 

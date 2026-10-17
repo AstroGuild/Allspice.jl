@@ -255,6 +255,28 @@ spkgeo(targ::Integer, et::Real, ref::NameOrID, obs::Integer) =
     spkgeo(default_context(), targ, et, ref, obs)
 
 """
+    spkgps([ctx,] targ::Integer, et, ref, obs::Integer) -> (pos, lt)
+
+Return the geometric position of body `targ` relative to body `obs` in frame `ref` at
+`et`, and the one-way light time, as `spkgps_c`.
+
+`pos` is an `SVector{3}` in km and `lt` is in seconds. The arguments and the errors are
+those of [`spkgeo`](@ref). As in CSPICE, `targ == obs` gives a zero position and a zero
+light time before `ref` and `et` are checked.
+
+See also [`spkezp`](@ref), [`spkpos`](@ref).
+"""
+function spkgps(ks::KernelSet, targ::Integer, et::Real, ref::NameOrID, obs::Integer)
+    targ == obs && return zero(Vec3{typeof(float(et))}), zero(float(et))
+    (r,) = spk_jet(ks, Int32(targ), check_epoch(et), frame_id(ks, ref), Int32(obs), Val(0))
+    return r, norm(r) / CLIGHT
+end
+spkgps(ctx::SpiceContext, targ::Integer, et::Real, ref::NameOrID, obs::Integer) =
+    spkgps(kernelset(ctx), targ, et, ref, obs)
+spkgps(targ::Integer, et::Real, ref::NameOrID, obs::Integer) =
+    spkgps(default_context(), targ, et, ref, obs)
+
+"""
     spkezr([ctx,] targ, et, ref, abcorr, obs) -> (state, lt)
 
 Return the state of `targ` relative to `obs` in frame `ref` at `et`, and the one-way

@@ -20,6 +20,27 @@ explicit reference values with the index type "last less than or equal"); anothe
 one throws `SpiceError(:notsupported)`.
 """
 function _spk14(data::Vector{Float64}, seg::Segment, et::T) where {T<:Real}
+    lay = _spk14_layout(data, seg)
+    b, ncoef, stride = seg.baddr, lay.ncoef, lay.stride
+    k = clamp(_lstled(data, b - 1 + lay.refbas, lay.nref, primal(et)), 1, lay.npkt)
+    a = b + lay.pktbas + (k - 1) * stride + lay.pktoff  # address of MID
+    @inbounds mid, radius = data[a], data[a+1]
+    tau = (et - mid) / radius
+    (pos,) = _cheb3(data, a + 2, ncoef, tau, 1 / radius, Val(0))
+    (vel,) = _cheb3(data, a + 2 + 3 * ncoef, ncoef, tau, 1 / radius, Val(0))
+    return pos, vel
+end
+
+"""
+    _spk14_layout(data, seg) -> NamedTuple
+
+The parts of the type 14 segment `seg` from its meta data, as offsets from the address
+before the segment: `conbas`, `refbas`, `pktbas`, the counts `nref` and `npkt`, the
+packet size `pktsz`, the packet offset `pktoff`, `stride = pktsz + pktoff`, and the
+coefficient count `ncoef` of a series. Throws `SpiceError(:notsupported)` for a layout
+that `spk14b` does not write and `SpiceError(:baddaf)` for one that does not fit.
+"""
+@inline function _spk14_layout(data::Vector{Float64}, seg::Segment)
     b, e = seg.baddr, seg.eaddr
     len = e - b + 1
     nmeta = _seg_count(seg, @inbounds(data[e]), 15, len, "meta data count")
@@ -46,13 +67,7 @@ function _spk14(data::Vector{Float64}, seg::Segment, et::T) where {T<:Real}
         _badsegment(seg, "the meta data do not agree with the length")
     ncoef = _seg_count(seg, @inbounds(data[b-1+conbas+1]), 1, len, "coefficient count")
     6 * ncoef + 2 == pktsz || _badsegment(seg, "the packet size is not 2 + 6*NCOEF")
-    k = clamp(_lstled(data, b - 1 + refbas, nref, primal(et)), 1, npkt)
-    a = b + pktbas + (k - 1) * stride + pktoff  # address of MID
-    @inbounds mid, radius = data[a], data[a+1]
-    tau = (et - mid) / radius
-    (pos,) = _cheb3(data, a + 2, ncoef, tau, 1 / radius, Val(0))
-    (vel,) = _cheb3(data, a + 2 + 3 * ncoef, ncoef, tau, 1 / radius, Val(0))
-    return pos, vel
+    return (; conbas, refbas, nref, pktbas, npkt, pktsz, pktoff, stride, ncoef)
 end
 
 """

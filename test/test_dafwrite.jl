@@ -1982,6 +1982,127 @@ group("9. DAF access, SPK and CK writers") do
         r = compare_files(serial[1][1], spawned[1][1])
         @test files_agree(r)
     end
+
+    @apart @testset "segments: spksub, spkpvn and spkuds against CSPICE" begin
+        # One CSPICE file of one segment for each SPK writer. On the same source the two
+        # engines write the same bytes for the whole span and for an interior window, and
+        # spkpvn reads the source as CSPICE does.
+        ctxs = SpiceContext()
+        for c in WRITER_CASES
+            c.kind === :spk || continue
+            @testset "$(c.name)" begin
+                a = c.gen(rng, 1)
+                src = joinpath(dir, "seg_$(c.name).bsp")
+                hw = SPICE.spkopn(src, "SOURCE", 0)
+                c.cspice(hw, a)
+                SPICE.spkcls(hw)
+                w = a.last - a.first
+                x = a.first + rand(rng) * w
+                for (i, (t0, t1)) in enumerate(((a.first, a.last), (x, x + rand(rng) * (a.last - x))))
+                    pc, kc, pn, kn = spksub_both(src, dir, "$(c.name)_$i", "SUBSET $i", t0, t1)
+                    @test kn === kc || kc === :skipped
+                    kn === :none && @test read(pn) == read(pc)
+                end
+                hc = SPICE.dafopr(src)
+                SPICE.dafbfs(hc)
+                SPICE.daffna()
+                dc = SPICE.dafgs(5)
+                hn = dafopr(src)
+                dafbfs(hn)
+                daffna(hn)
+                dn = dafgs(hn)
+                @test spkuds(dn) == SPICE.spkuds(dc)
+                furnsh(ctxs, src)
+                # Type 17: the evaluator of the package differs by 8.9e-15 relative at most.
+                rtol = c.name == "spkw17" ? 1e-14 : 0.0
+                for et in (a.first, a.last, x)
+                    rc = SPICE.spkpvn(hc, dc, et)
+                    rn = spkpvn(ctxs, hn, dn, et)
+                    @test rn[1] == rc[1] && rn[3] == rc[3] && isapprox(rn[2], rc[2]; rtol)
+                    @test spkpvn(ctxs, src, dn, et) == rn
+                end
+                @test throws_kind(() -> spkpvn(ctxs, hn, dn, a.last + w), :timeoutofbounds)
+                SPICE.dafcls(hc)
+                dafcls(hn)
+            end
+        end
+        @test throws_kind(() -> spkpvn(ctxs, joinpath(dir, "not_loaded.bsp"), zeros(5), 0.0), :nosuchhandle)
+    end
+
+    @apart @testset "spksfs: the segment of the highest priority against CSPICE" begin
+        # The files of the test set above all have the body -1001, with spans that
+        # overlap; a copy of the other byte order is loaded last.
+        srcs = [joinpath(dir, "seg_$(c.name).bsp") for c in WRITER_CASES if c.kind === :spk]
+        push!(srcs, write_other_endian(srcs[1], joinpath(dir, "seg_other_endian.bsp")))
+        ctxs = SpiceContext()
+        @test throws_kind(() -> spksfs(ctxs, -1001, 0.0), :noloadedfiles)
+        SPICE.kclear()
+        try
+            for p in srcs
+                furnsh(ctxs, p)
+                SPICE.furnsh(p)
+            end
+            path = Dict(SPICE.kinfo(p)[3] => p for p in srcs)
+            lo = minimum(p -> minimum(spkcov(p, -1001)), srcs)
+            hi = maximum(p -> maximum(spkcov(p, -1001)), srcs)
+            ets = random_epochs(rng, 40, lo - 10.0, hi + 10.0)
+            same = count(ets) do et
+                rc = SPICE.spksfs(-1001, et)
+                rn = spksfs(ctxs, -1001, et)
+                rc === nothing ? rn === nothing :
+                    rn !== nothing && path[rc[1]] == rn[1] && rn[2] == rc[2] && rn[3] == rc[3]
+            end
+            @test same == length(ets)
+            # The copy is loaded last, so it has the segment inside its span.
+            mid = (first(spkcov(srcs[1], -1001)) + last(spkcov(srcs[1], -1001))) / 2
+            @test spksfs(ctxs, -1001, mid)[1] == srcs[end]
+            @test spksfs(ctxs, -5, mid) === SPICE.spksfs(-5, mid) === nothing
+        finally
+            SPICE.kclear()
+        end
+    end
+
+    @apart @testset "spksub: input checks against CSPICE" begin
+        c = writer_case("spkw13")
+        a = c.gen(rng, 1)
+        p13 = joinpath(dir, "check13.bsp")
+        h = spkopn(p13, "CHECK", 0)
+        c.neo(h, a)
+        spkcls(h)
+        c14 = writer_case("spk14")
+        b = c14.gen(rng, 1)
+        coeffs21 = randn(rng, 2 + 6 * 22, size(b.coeffs, 2))
+        coeffs21[1:2, :] = b.coeffs[1:2, :]
+        files14 = map((("j2000", b), ("degree21", merge(b, (degree=21, coeffs=coeffs21))),
+                ("iau_earth", merge(b, (frame="IAU_EARTH",))))) do (tag, s)
+            p = joinpath(dir, "check14_$tag.bsp")
+            h = spkopn(p, "CHECK", 0)
+            c14.neo(h, s)
+            spkcls(h)
+            return p
+        end
+        type4(d) = (x = dafus(d, 2, 6); dafps(x[1], [x[2][1:3]; 4; x[2][5:6]]))
+        mid = (b.first + b.last) / 2
+        cases = [
+            (p13, "", a.first, a.last, identity, :emptystring),
+            (p13, "S", a.first - 1.0, a.last, identity, :spknotasubset),
+            (p13, "S", a.last, a.first, identity, :spknotasubset),
+            (p13, "S", a.first, a.last, type4, :spktypenotsupp),
+            (files14[1], "S", mid, mid, identity, :baddescrtimes),     # spkpds in spk14b
+            (files14[1], "x"^41, b.first, b.last, identity, :segidtoolong),
+            (files14[2], "S", b.first, b.last, identity, :spkrectoolarge),
+            (files14[3], "S", b.first, b.last, identity, :invalidrefframe),
+        ]
+        for (i, (p, ident, t0, t1, f, kind)) in enumerate(cases)
+            _, kc, _, kn = spksub_both(p, dir, "check_$i", ident, t0, t1; descr=f)
+            @test kn === kind
+            @test kc === kind
+        end
+        # The other types cut a long name to 40 characters, as CSPICE does.
+        pc, kc, pn, kn = spksub_both(p13, dir, "long_name", "x"^60, a.first, a.last)
+        @test kn === kc === :none
+        @test read(pn) == read(pc)
+    end
 end
 
 FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

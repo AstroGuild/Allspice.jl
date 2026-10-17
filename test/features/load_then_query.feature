@@ -34,3 +34,8 @@ Feature: Load kernels, then query states and rotations
     Given the same kernels are loaded with "furnsh(path)" and no context argument
     When the user calls "spkezr" with no context argument
     Then the answer is equal to the answer of the explicit context
+
+  Scenario: Integer-ID forms of spkezr and spkpos, and the geometric position
+    When the user calls "spkez" and "spkezp" with integer IDs, a frame and a correction
+    Then the answers are equal to those of "spkezr" and "spkpos" and agree with CSPICE
+    And "spkgps" gives the position and light time of "spkgeo"

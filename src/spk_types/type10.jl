@@ -69,6 +69,18 @@ end
 @inline _t10_elems(data::Vector{Float64}, lay, i::Int) =
     ntuple(k -> @inbounds(data[lay.pkt+(i-1)*lay.stride+k]), Val(10))
 
+"Index of the reference epoch closest to `x` (`sgfrvi` with the index type 4); of two at the same distance the later one."
+@inline function _t10_closest(data::Vector{Float64}, lay, x::Float64)
+    n = lay.n
+    i = _lstled(data, lay.ref, n, x)
+    if i == 0
+        i = 1
+    elseif i < n
+        @inbounds (data[lay.ref+i+1] - x <= x - data[lay.ref+i]) && (i += 1)
+    end
+    return i
+end
+
 """
     _t10_record(data, seg, x::Float64) -> (geophs, elems1, elems2)
 
@@ -81,12 +93,7 @@ the end set. Postcondition: `elems1[10] <= elems2[10]`.
 function _t10_record(data::Vector{Float64}, seg::Segment, x::Float64)
     lay = _t10_layout(data, seg)
     n = lay.n
-    i = _lstled(data, lay.ref, n, x)
-    if i == 0
-        i = 1
-    elseif i < n
-        @inbounds (data[lay.ref+i+1] - x <= x - data[lay.ref+i]) && (i += 1)
-    end
+    i = _t10_closest(data, lay, x)
     value = @inbounds data[lay.ref+i]
     from, to = x <= value ? (max(i - 1, 1), i) : (i, min(i + 1, n))
     geophs = ntuple(k -> @inbounds(data[lay.con+k]), Val(8))

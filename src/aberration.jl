@@ -586,6 +586,44 @@ spkpos(targ::NameOrID, et::Real, ref::NameOrID, corr::Aberration, obs::NameOrID)
     spkpos(default_context(), targ, et, ref, corr, obs)
 
 """
+    spkez([ctx,] targ::Integer, et, ref, abcorr, obs::Integer) -> (state, lt)
+
+Return the state of body `targ` relative to body `obs` in frame `ref` at `et`, and the
+one-way light time, as `spkez_c`.
+
+This is [`spkezr`](@ref), which takes names or IDs, restricted to NAIF ID codes for the
+bodies, as in CSPICE; the other arguments, the result and the errors are those of
+`spkezr`. `state` is an `SVector{6}` in km and km/s, and `lt` is in seconds.
+
+See also [`spkezp`](@ref), [`spkgeo`](@ref).
+"""
+spkez(ks::KernelSet, targ::Integer, et::Real, ref::NameOrID, abcorr::AbcorrArg,
+    obs::Integer) = spkezr(ks, targ, et, ref, abcorr, obs)
+spkez(ctx::SpiceContext, targ::Integer, et::Real, ref::NameOrID, abcorr::AbcorrArg,
+    obs::Integer) = spkezr(kernelset(ctx), targ, et, ref, abcorr, obs)
+spkez(targ::Integer, et::Real, ref::NameOrID, abcorr::AbcorrArg, obs::Integer) =
+    spkez(default_context(), targ, et, ref, abcorr, obs)
+
+"""
+    spkezp([ctx,] targ::Integer, et, ref, abcorr, obs::Integer) -> (pos, lt)
+
+Return the position of body `targ` relative to body `obs` in frame `ref` at `et`, and
+the one-way light time, as `spkezp_c`.
+
+This is [`spkpos`](@ref), which takes names or IDs, restricted to NAIF ID codes for the
+bodies, as in CSPICE; the other arguments, the result and the errors are those of
+`spkpos`. `pos` is an `SVector{3}` in km and `lt` is in seconds.
+
+See also [`spkez`](@ref), [`spkgps`](@ref).
+"""
+spkezp(ks::KernelSet, targ::Integer, et::Real, ref::NameOrID, abcorr::AbcorrArg,
+    obs::Integer) = spkpos(ks, targ, et, ref, abcorr, obs)
+spkezp(ctx::SpiceContext, targ::Integer, et::Real, ref::NameOrID, abcorr::AbcorrArg,
+    obs::Integer) = spkpos(kernelset(ctx), targ, et, ref, abcorr, obs)
+spkezp(targ::Integer, et::Real, ref::NameOrID, abcorr::AbcorrArg, obs::Integer) =
+    spkezp(default_context(), targ, et, ref, abcorr, obs)
+
+"""
     spkder([ctx,] targ, et, ref, obs, Val(N)) -> NTuple{N+1,SVector{3}}
     spkder([ctx,] targ, et, ref, abcorr, obs, Val(N)) -> NTuple{N+1,SVector{3}}
 

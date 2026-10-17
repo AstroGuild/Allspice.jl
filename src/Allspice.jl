@@ -7,7 +7,7 @@ using LinearAlgebra
 export SpiceContext, default_context
 export SpiceError, SpiceKindError, SpkInsufficientDataError
 export furnsh, unload, kclear, ktotal
-export spkezr, spkpos, spkgeo, spkder
+export spkezr, spkpos, spkgeo, spkder, spkez, spkezp, spkgps
 export Aberration, spkssb, spkltc, spkaps, spkacs, spkapo, ltime, stelab, stlabx
 export pxform, sxform, pxder, pxfrm2
 export gdpool, gcpool, gipool, bodvrd, bodn2c, bodc2n, bodc2s, bods2c, namfrm, frmnam
@@ -23,6 +23,7 @@ export dafbna, dafada, dafena, dafws, dafrs, dafrn, dafac, dafec, dafdc
 export spkopn, spkopa, spkcls, spkpds, spkw01, spkw02, spkw03, spkw05, spkw08, spkw09
 export spkw12, spkw13, spkw15, spkw17, spkw18, spkw19, spkw20, spkw21
 export spk14b, spk14a, spk14e, SPK14Writer
+export spksfs, spkpvn, spkuds, spksub
 export getelm, evsgp4, spkw10
 export ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
 export pckopn, pckw02, pckcls
@@ -118,6 +119,7 @@ include("surfaces.jl")      # srfc2s, srfs2c, srfcss, srfscc, latsrf, srfnrm
 include("spk_types/sgp4.jl")    # SGP4/SDP4 propagation of two-line elements
 include("spk_types/type10.jl")  # SPK type 10: generic segment, TEME to J2000
 include("tle.jl")           # getelm, evsgp4, spkw10
+include("spk_segments.jl")  # spksfs, spkpvn, spkuds, spksub
 include("kernel_info.jl")   # spkobj, spkcov, ktotal(kind), kdata, kinfo, tkvrsn
 include("math/vectors.jl")      # vadd ... vsep, mxv, mxm, invert, rotate, twovec, dvhat, g forms
 include("math/rotations.jl")    # eul2m, m2eul, m2q, q2m, qxq, axisar, raxisa, rav2xf, xf2eul

@@ -112,3 +112,35 @@ Feature: Write SPK, CK and binary PCK files that CSPICE reads as its own
     Given one handle for each task
     When the tasks write, comment and read their own files concurrently
     Then each file is equal byte for byte to the file of a serial run
+
+  Scenario: A subset of a segment is written as CSPICE writes it
+    Given an SPK file with one segment of any type that spksub supports
+    When spksub writes the subset of the segment for a time window inside its span
+    Then the new file is equal byte for byte to the file of spksub_c of CSPICE
+
+  Scenario: The state of one segment
+    Given a segment descriptor from a DAF search or from spksfs
+    When spkpvn evaluates the segment by handle or by the path of a loaded file
+    Then the frame, the state and the center are those of CSPICE
+    And an epoch outside the span throws SpiceError(:timeoutofbounds)
+
+  Scenario: The segment that the readers would use
+    Given several SPK files loaded with spans that overlap for one body
+    When spksfs searches for the body at an epoch
+    Then it gives the path, the descriptor and the name of the segment that CSPICE gives
+    And it gives nothing when no segment has the body at that epoch
+
+  Scenario Outline: Subset that spksub refuses
+    When the user calls spksub with <defect>
+    Then CSPICE and Allspice give an error of the kind <kind>
+
+    Examples:
+      | defect                                         | kind            |
+      | an empty segment name                          | emptystring     |
+      | a window that starts before the segment        | spknotasubset   |
+      | a window that ends before it starts            | spknotasubset   |
+      | a descriptor of type 4                         | spktypenotsupp  |
+      | type 14 and a window of one instant            | baddescrtimes   |
+      | type 14 and a segment name of 41 characters    | segidtoolong    |
+      | type 14 of degree 21                           | spkrectoolarge  |
+      | type 14 in a frame that is not inertial        | invalidrefframe |

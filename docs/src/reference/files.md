@@ -68,6 +68,18 @@ SPK14Writer
 spkw10
 ```
 
+## SPK segments
+
+A loaded file has no handle, so [`spksfs`](@ref) returns the path of the file, which
+[`spkpvn`](@ref) takes with the same context.
+
+```@docs
+spksfs
+spkpvn
+spkuds
+spksub
+```
+
 ## Two-line element sets
 
 [`spkw10`](@ref) writes element sets to an SPK segment.

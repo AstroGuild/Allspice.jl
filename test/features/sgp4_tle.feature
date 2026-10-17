@@ -114,3 +114,9 @@ Feature: Two-line elements and SPK segments of type 10
       | the body equal to the center        | bodyandcentersame |
       | a frame name that is not known      | invalidrefframe   |
       | the first epoch after the last one  | baddescrtimes     |
+
+  Scenario: A subset of a type 10 segment
+    Given an SPK file of type 10 that CSPICE wrote
+    When spksub writes the subset of the segment for a time window
+    Then the new file is equal byte for byte to the file of spksub_c
+    And spkpvn gives the state of CSPICE within rounding

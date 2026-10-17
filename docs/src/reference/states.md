@@ -7,6 +7,9 @@ spkezr
 spkpos
 spkgeo
 spkssb
+spkez
+spkezp
+spkgps
 ```
 
 ## Derivatives

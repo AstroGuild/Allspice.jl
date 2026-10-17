@@ -15,6 +15,7 @@ isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 alloc_spkezr(ctx, et) = @allocated spkezr(ctx, 301, et, 1, "NONE", 399)
 alloc_spkpos(ctx, et) = @allocated spkpos(ctx, 301, et, 1, "NONE", 399)
 alloc_spkgeo(ctx, et) = @allocated spkgeo(ctx, 301, et, 1, 399)
+alloc_spkgps(ctx, et) = @allocated spkgps(ctx, 301, et, 1, 399)
 alloc_spkezr_chain(ctx, et) = @allocated spkezr(ctx, 301, et, 1, "NONE", 10)
 alloc_spkezr_rot(ctx, et, ref) = @allocated spkezr(ctx, 301, et, ref, "NONE", 399)
 alloc_spkder(ctx, et, ::Val{N}) where {N} = @allocated spkder(ctx, 301, et, 1, 399, Val(N))
@@ -44,6 +45,7 @@ group("8. quality gates", Kernels.FULL_SET_FILES...) do
         @test warm(alloc_spkezr, ctx, et) == 0
         @test warm(alloc_spkpos, ctx, et) == 0
         @test warm(alloc_spkgeo, ctx, et) == 0
+        @test warm(alloc_spkgps, ctx, et) == 0
         @test warm(alloc_spkezr_chain, ctx, et) == 0
         for ref in (eclip, iau_earth, moon_pa, moon_me)
             @test warm(alloc_spkezr_rot, ctx, et, ref) == 0

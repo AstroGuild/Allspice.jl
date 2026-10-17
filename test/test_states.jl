@@ -108,6 +108,33 @@ group("1. states against CSPICE", Kernels.FULL_SET_FILES...) do
         end
         kclear()
     end
+
+    @apart @testset "spkez, spkezp and spkgps against CSPICE" begin
+        # spkez and spkezp are spkezr and spkpos with integer IDs; spkgps is the position
+        # of spkgeo. The frames and corrections are those of the test sets above.
+        for et in random_epochs(rng, nsample(2, 20), DE440S_COVERAGE...),
+                (t, o, ref, abcorr) in ((301, 399, "IAU_EARTH", "LT+S"), (5, 3, "ECLIPJ2000", "XCN+S"))
+            s, lt = spkez(ctx, t, et, ref, abcorr, o)
+            @test (s, lt) == spkezr(ctx, t, et, ref, abcorr, o)
+            @test spkezp(ctx, t, et, ref, abcorr, o) == spkpos(ctx, t, et, ref, abcorr, o)
+            cs, clt = SPICE.spkez(t, et, ref, abcorr, o)
+            @test isapprox(s, cs; rtol=1e-13) && isapprox(lt, clt; rtol=1e-13)
+            p, plt = spkgps(ctx, t, et, ref, o)
+            g, glt = spkgeo(ctx, t, et, ref, o)
+            @test p == g[SOneTo(3)] && plt == glt
+            cp, cplt = SPICE.spkgps(t, et, ref, o)
+            @test isapprox(p, cp; rtol=1e-13) && isapprox(plt, cplt; rtol=1e-13)
+        end
+        # A body relative to itself: zero before the frame is checked, as in CSPICE.
+        @test spkgps(ctx, 399, 0.0, "NOSUCH", 399) == (zero(SVector{3,Float64}), 0.0)
+        @test SPICE.spkgps(399, 0.0, "NOSUCH", 399) == ([0.0, 0.0, 0.0], 0.0)
+        kclear()
+        foreach(furnsh, set)
+        @test spkez(301, 0.0, "J2000", "LT", 399) == spkez(ctx, 301, 0.0, "J2000", "LT", 399)
+        @test spkezp(301, 0.0, "J2000", "LT", 399) == spkezp(ctx, 301, 0.0, "J2000", "LT", 399)
+        @test spkgps(301, 0.0, "J2000", 399) == spkgps(ctx, 301, 0.0, "J2000", 399)
+        kclear()
+    end
 end
 
 group("1b. states against CSPICE, de405", Kernels.DE405, Kernels.LSK) do
