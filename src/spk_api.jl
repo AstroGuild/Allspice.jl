@@ -241,11 +241,15 @@ TDB. `targ` and `obs` are NAIF ID codes; `ref` is a frame name or a frame ID.
 Throws `SpiceError(:unknownframe)` if `ref` is not a known frame name,
 `SpiceError(:badarg)` if `et` is not finite, and [`SpkInsufficientDataError`](@ref) if
 no SPK file is loaded (`:noloadedfiles`) or the loaded SPK files do not connect `targ`
-and `obs` at `et` (`:spkinsuffdata`).
+and `obs` at `et` (`:spkinsuffdata`). As in CSPICE, `targ == obs` gives a zero state
+and a zero light time before `ref` and `et` are checked; so does [`spkezr`](@ref) with
+the correction `"NONE"`.
 
 See also [`spkezr`](@ref), [`spkssb`](@ref).
 """
 function spkgeo(ks::KernelSet, targ::Integer, et::Real, ref::NameOrID, obs::Integer)
+    # As in CSPICE, a body relative to itself is zero before `ref` and `et` are checked.
+    targ == obs && return zero(SVector{6,typeof(float(et))}), zero(float(et))
     r, v = spk_jet(ks, Int32(targ), check_epoch(et), frame_id(ks, ref), Int32(obs), Val(1))
     return vcat(r, v), norm(r) / CLIGHT
 end

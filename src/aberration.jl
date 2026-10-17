@@ -559,7 +559,11 @@ end
 
 function spkezr(ks::KernelSet, targ::NameOrID, et::Real, ref::NameOrID, corr::Aberration,
         obs::NameOrID)
-    t, e, f, o = body_code(ks, targ), check_epoch(et), frame_id(ks, ref), body_code(ks, obs)
+    t, o = body_code(ks, targ), body_code(ks, obs)
+    # As in CSPICE, a geometric state of a body relative to itself is zero before `ref`
+    # and `et` are checked.
+    corr.geometric && t == o && return zero(SVector{6,typeof(float(et))}), zero(float(et))
+    e, f = check_epoch(et), frame_id(ks, ref)
     if corr.geometric
         r, v = spk_jet(ks, t, e, f, o, Val(1))
         return vcat(r, v), norm(r) / CLIGHT
@@ -573,7 +577,9 @@ spkezr(targ::NameOrID, et::Real, ref::NameOrID, corr::Aberration, obs::NameOrID)
 
 function spkpos(ks::KernelSet, targ::NameOrID, et::Real, ref::NameOrID, corr::Aberration,
         obs::NameOrID)
-    t, e, f, o = body_code(ks, targ), check_epoch(et), frame_id(ks, ref), body_code(ks, obs)
+    t, o = body_code(ks, targ), body_code(ks, obs)
+    corr.geometric && t == o && return zero(Vec3{typeof(float(et))}), zero(float(et))
+    e, f = check_epoch(et), frame_id(ks, ref)
     if corr.geometric
         (r,) = spk_jet(ks, t, e, f, o, Val(0))
         return r, norm(r) / CLIGHT

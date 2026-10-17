@@ -202,6 +202,13 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         @test throws_kind(() -> spkder(ctx, "NO_SUCH_BODY", 0.0, "J2000", "EARTH", Val(1)), :idcodenotfound)
         @test_throws Allspice.SpiceError spkezr(ctx, 599, 0.0, "J2000", "NONE", 399)
         @test_throws Allspice.SpiceError spkezr(ctx, "PHOBOS", 0.0, "J2000", "NONE", "EARTH")
+        # A geometric state of a body relative to itself is zero before the frame is
+        # checked, as in CSPICE; a corrected one checks the frame.
+        oracle_load(Kernels.full_set())
+        @test spkgeo(ctx, 399, 0.0, "NO_SUCH_FRAME", 399) == SPICE.spkgeo(399, 0.0, "NO_SUCH_FRAME", 399)
+        @test spkpos(ctx, 399, 0.0, "NO_SUCH_FRAME", "NONE", 399) == SPICE.spkpos("399", 0.0, "NO_SUCH_FRAME", "NONE", "399")
+        @test throws_kind(() -> spkezr(ctx, 399, 0.0, "NO_SUCH_FRAME", "LT", 399), :unknownframe)
+        @test_throws SPICE.SpiceError SPICE.spkezr("399", 0.0, "NO_SUCH_FRAME", "LT", "399")
         # Unknown frame.
         @test throws_kind(() -> spkezr(ctx, 301, 0.0, "NO_SUCH_FRAME", "NONE", 399), :unknownframe)
         @test throws_kind(() -> pxform(ctx, "J2000", "NO_SUCH_FRAME", 0.0), :unknownframe)

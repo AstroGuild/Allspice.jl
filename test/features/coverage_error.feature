@@ -77,6 +77,11 @@ Feature: Errors for queries that cannot be answered
       | "de440s.bsp"             | body 599, which is in no file    | spkinsuffdata |
       | no SPK file              | body 301                         | noloadedfiles |
 
+  Scenario: A body relative to itself
+    When the user asks for the geometric state of body 399 relative to body 399 in a frame that is not known
+    Then the state and the light time are zero, as in CSPICE
+    And with a light-time correction a "SpiceError" with kind "unknownframe" is thrown, as in CSPICE
+
   Scenario: An SPK chain of any length
     Given an SPK file in which each of 30 bodies is centered on the next one
     When the user asks for the state of any of them relative to any other
