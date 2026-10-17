@@ -7,6 +7,7 @@ Use the skills whenever you change an exported name, a docstring, the README, th
 - `julia-docstrings`, `julia-manual`, `julia-readme`, with `allspice-docs`: docstrings, the Documenter manual, the README.
 - `julia-doc-reader-review` (agent `julia-doc-reader`): independent reader review after a documentation change; `allspice-docs` says what the reader gets.
 - `julia-tests`, with `allspice-tests`: test design, regression tests, trimming.
+- `julia-dependencies`: every environment (root, `test`, `docs`) on the latest versions that `[compat]` allows, checked before a test run or a measurement.
 
 Commands:
 
