@@ -1,6 +1,6 @@
 name = "Allspice"
 uuid = "1c6edf61-da3a-4136-b24a-0cb478996395"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Alex Pascarella <alex.pascarella@ellissoide.com>"]
 
 [workspace]
