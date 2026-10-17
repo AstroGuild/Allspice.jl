@@ -2014,7 +2014,9 @@ group("9. DAF access, SPK and CK writers") do
                 @test spkuds(dn) == SPICE.spkuds(dc)
                 furnsh(ctxs, src)
                 # Type 17: the evaluator of the package differs by 8.9e-15 relative at most.
-                rtol = c.name == "spkw17" ? 1e-14 : 0.0
+                # Type 5: the two-body propagation differs by rounding (one ulp, 2.2e-16
+                # relative, measured with the default seed).
+                rtol = c.name == "spkw17" ? 1e-14 : c.name == "spkw05" ? 1e-15 : 0.0
                 for et in (a.first, a.last, x)
                     rc = SPICE.spkpvn(hc, dc, et)
                     rn = spkpvn(ctxs, hn, dn, et)

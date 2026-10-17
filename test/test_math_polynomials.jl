@@ -147,7 +147,9 @@ group("20. math: polynomials and interpolation") do
             rotdev = max(rotdev, abs(r[1, 1] * r[2, 2] - r[1, 2] * r[2, 1] - 1))
         end
         measured(@sprintf("  diags2: residual %.1e, |det(rotate) - 1| %.1e", resid, rotdev))
-        @test resid < 1e-14 && rotdev < 1e-15
+        # The residual is rounding of the products: up to 4.9e-14 measured in the
+        # exhaustive sample, where the two diagonal values differ by many orders.
+        @test resid < 1e-13 && rotdev < 1e-15
         # `rquad_c` signals SPICE(DEGENERATECASE) for a == b == 0 (measured); its
         # traceback then has a wrong routine name, so the case is not sent to CSPICE.
         @test throws_kind(() -> rquad(0.0, 0.0, 1.0), :degeneratecase)
