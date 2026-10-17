@@ -207,7 +207,8 @@ end
 Check that `path` is an existing DAF file that this machine can read, and return its
 summary format and whether its byte order is the other one. Throws `SpiceError` with
 kind `:blankfilename`, `:filenotfound`, `:filereadfailed`, `:unknownfilarc`,
-`:filarchmismatch`, `:ftpxfererror`, `:unknownbff` or `:dafinvalidparams`.
+`:filarchmismatch`, `:ftpxfererror`, `:unknownbff`, `:unsupportedbff` or
+`:dafinvalidparams`.
 """
 function _daf_probe(path::AbstractString, who::AbstractString)
     isempty(strip(path)) && throw(SpiceError(:blankfilename, "$who: the file name is blank"))
@@ -216,10 +217,10 @@ function _daf_probe(path::AbstractString, who::AbstractString)
     length(raw) == _DAF_RECLEN || throw(SpiceError(:filereadfailed,
         "$who: $path is too short ($(length(raw)) bytes) to hold a DAF file record"))
     arch, _ = idw2at(String(raw[1:8]))
-    arch == "?" && throw(SpiceError(:unknownfilarc,
-        "$who: the file $path has an unidentified file architecture"))
-    arch == "DAF" || throw(SpiceError(:filarchmismatch,
-        "$who: the file $path has the architecture $arch, not DAF"))
+    arch == "DAS" && throw(SpiceError(:filarchmismatch,
+        "$who: the file $path is a DAS file, not a DAF"))
+    arch == "DAF" || throw(SpiceError(:unknownfilarc,
+        "$who: the file $path is neither a DAF nor a DAS file"))
     if raw[700:705] == _DAF_FTPSTR[1:6] && raw[700:727] != _DAF_FTPSTR
         throw(SpiceError(:ftpxfererror, "$who: the FTP validation string of $path is " *
             "damaged; the file was most likely moved in text mode"))
@@ -229,11 +230,14 @@ function _daf_probe(path::AbstractString, who::AbstractString)
         true
     elseif bff == "BIG-IEEE"
         false
+    elseif bff in ("VAX-GFLT", "VAX-DFLT")
+        throw(SpiceError(:unsupportedbff,
+            "$who: the binary file format $bff of $path is not supported"))
     else
         # Files older than the binary-file-format string: ND tells the byte order.
         ndl = Int(_daf_i32(raw, 8, true))
         ndb = Int(_daf_i32(raw, 8, false))
-        if all(b -> b == 0x00 || b == UInt8(' '), raw[89:96]) && (1 <= ndl <= 124) != (1 <= ndb <= 124)
+        if all(iszero, raw[89:96]) && (1 <= ndl <= 124) != (1 <= ndb <= 124)
             1 <= ndl <= 124
         else
             throw(SpiceError(:unknownbff,
@@ -266,9 +270,11 @@ The file can have either byte order. No array search is begun. Close the handle 
 Throws `SpiceError`:
 - `:blankfilename` if `path` is blank, `:filenotfound` if the file does not exist;
 - `:filereadfailed` if the file is shorter than one record (1024 bytes);
-- `:unknownfilarc` or `:filarchmismatch` if the file is not a DAF;
+- `:filarchmismatch` if the file is a DAS file, `:unknownfilarc` if it is neither
+  a DAF nor a DAS file (a text kernel, for example);
 - `:ftpxfererror` if the file was damaged by a transfer in text mode;
-- `:unknownbff` if the byte order of the file is not known;
+- `:unknownbff` if the binary file format of the file is not known, `:unsupportedbff`
+  if it is a VAX format;
 - `:dafinvalidparams` if the summary format in the file record is not valid;
 - `:fileopenfailed` if the system cannot open the file.
 

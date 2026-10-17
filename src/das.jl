@@ -105,8 +105,8 @@ end
 Check that `path` is an existing DAS file that this machine can read, and return its
 file record and whether its byte order is the other one. Throws `SpiceError` with kind
 `:blankfilename`, `:filenotfound`, `:filereadfailed`, `:unknownfilarc`,
-`:filarchmismatch`, `:ftpxfererror` or `:unknownbff`. A file from before the
-binary-file-format string (bytes 85 to 92 blank or zero) is taken as native.
+`:filarchmismatch`, `:ftpxfererror`, `:unknownbff` or `:unsupportedbff`. A file from
+before the binary-file-format string (bytes 85 to 92 zero) is taken as native.
 """
 function _das_probe(path::AbstractString, who::AbstractString)
     isempty(strip(path)) && throw(SpiceError(:blankfilename, "$who: the file name is blank"))
@@ -115,20 +115,23 @@ function _das_probe(path::AbstractString, who::AbstractString)
     length(raw) == _DAS_RECLEN || throw(SpiceError(:filereadfailed,
         "$who: $path is too short ($(length(raw)) bytes) to hold a DAS file record"))
     arch, _ = idw2at(String(raw[1:8]))
-    arch == "?" && throw(SpiceError(:unknownfilarc,
-        "$who: the file $path has an unidentified file architecture"))
-    arch == "DAS" || throw(SpiceError(:filarchmismatch,
-        "$who: the file $path has the architecture $arch, not DAS"))
+    arch == "DAF" && throw(SpiceError(:filarchmismatch,
+        "$who: the file $path is a DAF, not a DAS file"))
+    arch == "DAS" || throw(SpiceError(:unknownfilarc,
+        "$who: the file $path is neither a DAF nor a DAS file"))
     if raw[700:705] == _DAF_FTPSTR[1:6] && raw[700:727] != _DAF_FTPSTR
         throw(SpiceError(:ftpxfererror, "$who: the FTP validation string of $path is " *
             "damaged; the file was most likely moved in text mode"))
     end
-    bff = rstrip(String(raw[85:92]), [' ', '\0'])
+    bff = String(raw[85:92])
     little = if bff == "LTL-IEEE"
         true
     elseif bff == "BIG-IEEE"
         false
-    elseif isempty(bff)
+    elseif bff in ("VAX-GFLT", "VAX-DFLT")
+        throw(SpiceError(:unsupportedbff,
+            "$who: the binary file format $bff of $path is not supported"))
+    elseif all(iszero, raw[85:92])
         _DAS_NATIVE_LITTLE
     else
         throw(SpiceError(:unknownbff,
@@ -180,9 +183,10 @@ end
 Read the DAS file `path` and return an open handle on it. Contract: `path` is a DAS
 file of either byte order whose directory records are consistent; the handle holds the
 complete address spaces (owned copies if `writable`, else memory-mapped where the file
-allows it). Throws the errors of `_das_probe`, and `SpiceError(:baddasdirectory)` for
-a directory that points outside the file, has a cycle, or does not cover the last
-addresses that it states.
+allows it). Throws the errors of `_das_probe`, `SpiceError(:dasfilereadfailed)` for a
+directory record past the end of the file, and `SpiceError(:baddasdirectory)` for a
+directory that points to data records outside the file, has a cycle, or does not
+cover the last addresses that it states.
 """
 function _das_load(path::AbstractString, who::AbstractString, writable::Bool)
     frec, swap = _das_probe(path, who)
@@ -196,9 +200,11 @@ function _das_load(path::AbstractString, who::AbstractString, writable::Bool)
     return open(path, "r") do io
         nrecords = Int(filesize(io) ÷ _DAS_RECLEN)
         raw = Mmap.mmap(io, Vector{UInt8}, (nrecords * _DAS_RECLEN,))
-        (nresvr >= 0 && ncomr >= 0 && nresvr + ncomr + 2 <= nrecords) ||
-            bad("the file record gives $nresvr reserved and $ncomr comment records, " *
-                "but the file has $nrecords records")
+        (nresvr >= 0 && ncomr >= 0) ||
+            bad("the file record gives $nresvr reserved and $ncomr comment records")
+        nresvr + ncomr + 2 <= nrecords || throw(SpiceError(:dasfilereadfailed,
+            "$who: the first directory record $(nresvr + ncomr + 2) of $path is past " *
+            "the end of the file ($nrecords records)"))
         (0 <= ncomc <= ncomr * _DAS_RECLEN) ||
             bad("the comment area of $ncomr records cannot hold $ncomc characters")
         clusters = (NTuple{2,Int}[], NTuple{2,Int}[], NTuple{2,Int}[])
@@ -213,7 +219,8 @@ function _das_load(path::AbstractString, who::AbstractString, writable::Bool)
             # `visited <= nrecords`; `clusters` holds their data records in address order
             visited += 1
             visited <= nrecords || bad("the chain of directory records has a cycle")
-            rec <= nrecords || bad("directory record $rec is outside the file")
+            rec <= nrecords || throw(SpiceError(:dasfilereadfailed,
+                "$who: directory record $rec of $path is past the end of the file"))
             base = (rec - 1) * _DAS_RECLEN
             word(k) = _das_i32(raw, base + 4 * (k - 1), swap)
             lastrec = max(lastrec, rec)
@@ -390,9 +397,12 @@ The file can have either byte order, and it need not be segregated (see
 Throws `SpiceError`:
 - `:blankfilename` if `path` is blank, `:filenotfound` if the file does not exist;
 - `:filereadfailed` if the file is shorter than one record (1024 bytes);
-- `:unknownfilarc` or `:filarchmismatch` if the file is not a DAS file;
+- `:filarchmismatch` if the file is a DAF, `:unknownfilarc` if it is neither a DAF
+  nor a DAS file (a text kernel, for example);
 - `:ftpxfererror` if the file was damaged by a transfer in text mode;
-- `:unknownbff` if the byte order of the file is not known;
+- `:unknownbff` if the binary file format of the file is not known, `:unsupportedbff`
+  if it is a VAX format;
+- `:dasfilereadfailed` if a directory record is past the end of the file;
 - `:baddasdirectory` if the directory records do not agree with the file.
 
 See also [`dasopw`](@ref), [`dlabfs`](@ref), [`dasrdd`](@ref).

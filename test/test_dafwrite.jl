@@ -1481,8 +1481,16 @@ group("9. DAF access, SPK and CK writers") do
         @test throws_kind(() -> dafopr(sclk), :filereadfailed)       # shorter than one record
         longtext = joinpath(dir, "long.tpc")
         write(longtext, "KPL/PCK\n" * "a line of text\n"^200)
-        @test throws_kind(() -> dafopr(longtext), :filarchmismatch)
+        @test throws_kind(() -> dafopr(longtext), :unknownfilarc)   # as dafopr_c
         @test_throws SPICE.SpiceError SPICE.dafopr(longtext)
+        # The binary file format: VAX is known but not supported; blanks are not known.
+        for (bff, kind) in (("VAX-GFLT", :unsupportedbff), (" "^8, :unknownbff))
+            bytes = read(joinpath(dir, "empty_c_spk_0.bsp"))
+            bytes[89:96] = codeunits(bff)
+            pb = joinpath(dir, "bff.bsp")
+            write(pb, bytes)
+            @test throws_kind(() -> dafopr(pb), kind)
+        end
         junk = joinpath(dir, "junk.bin")
         write(junk, rand(rng, UInt8, 3000) .| 0x80)
         @test throws_kind(() -> dafopr(junk), :unknownfilarc)

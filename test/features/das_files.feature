@@ -75,8 +75,11 @@ Feature: Read and write DAS files through a handle that the caller owns
       | call    | input                          | kind             |
       | dasopr  | a file that does not exist     | filenotfound     |
       | dasopr  | a damaged FTP string           | ftpxfererror     |
+      | dasopr  | a text kernel                  | unknownfilarc    |
       | dasopr  | a file cut short               | baddasdirectory  |
-      | dasopr  | an unknown binary format       | unknownbff       |
+      | dasopr  | no directory record            | dasfilereadfailed |
+      | dasopr  | a VAX binary format            | unsupportedbff   |
+      | dasopr  | a blank binary format          | unknownbff       |
       | dasrdi  | an address outside the file    | dasnosuchaddress |
       | dasadi  | a read handle                  | dasinvalidaccess |
       | dashfn  | a closed handle                | dasnosuchhandle  |

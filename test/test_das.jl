@@ -353,7 +353,7 @@ group("11. DAS files and DLA segment lists") do
         @test neo_kind(() -> dasopr(" ")) === :blankfilename
         text = joinpath(dir, "text.tk")
         write(text, "KPL/FK\n\\begindata\nA = 1\n" * " "^1100)
-        @test neo_kind(() -> dasopr(text)) in (:filarchmismatch, :unknownfilarc)
+        @test neo_kind(() -> dasopr(text)) === :unknownfilarc === c_open_kind(text)
         short = joinpath(dir, "short.das")
         write(short, read(cfile)[1:500])
         @test neo_kind(() -> dasopr(short)) === :filereadfailed
@@ -367,11 +367,18 @@ group("11. DAS files and DLA segment lists") do
         cut = joinpath(dir, "cut.bds")
         write(cut, read(cfile)[1:end-4096])
         @test neo_kind(() -> dasopr(cut)) === :baddasdirectory
-        bytes = read(cfile)
-        bytes[85:92] = codeunits("VAX-GFLT")
-        vax = joinpath(dir, "vax.bds")
-        write(vax, bytes)
-        @test neo_kind(() -> dasopr(vax)) === :unknownbff
+        # A first directory record past the end of the file.
+        one = joinpath(dir, "one.bds")
+        write(one, read(cfile)[1:1024])
+        @test neo_kind(() -> dasopr(one)) === :dasfilereadfailed === c_open_kind(one)
+        # The binary file format: VAX is known but not supported; blanks are not known.
+        for (bff, kind) in (("VAX-GFLT", :unsupportedbff), (" "^8, :unknownbff))
+            bytes = read(cfile)
+            bytes[85:92] = codeunits(bff)
+            pb = joinpath(dir, "bff.bds")
+            write(pb, bytes)
+            @test neo_kind(() -> dasopr(pb)) === kind === c_open_kind(pb)
+        end
 
         h = dasopr(cfile)
         lastc, lastd, lasti = daslla(h)
