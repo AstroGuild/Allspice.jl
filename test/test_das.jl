@@ -411,7 +411,7 @@ group("11. DAS files and DLA segment lists") do
         w = dasonw(joinpath(dir, "w.das"), "TEST", "x", 0)
         @test neo_kind(() -> dasac(w, String[])) === :invalidargument
         @test neo_kind(() -> dasac(w, ["tab\there"])) === :illegalcharacter
-        @test neo_kind(() -> dasudd(w, 1, 2, [1.0, 2.0])) === :dasnosuchaddress
+        @test neo_kind(() -> dasudd(w, 1, 2, [1.0, 2.0])) === :invalidaddress
         # (fault fixed: `dasadi` appended the values before the one that does not fit in 32
         # bits and then threw `InexactError`; a call that throws now changes nothing)
         dasadi(w, [7, 8])
@@ -421,6 +421,28 @@ group("11. DAS files and DLA segment lists") do
         @test (daslla(w)[3], dasrdi(w, 1, 2)) == (2, [7, 8])
         @test occursin("write", sprint(show, w))
         dascls(w)
+
+        # Updates outside the address spaces, against CSPICE. (fault fixed: `dasudd` and
+        # `dasudi` threw `:dasnosuchaddress` and accepted an empty range outside the
+        # file; SPICELIB checks both addresses before the order.)
+        cp(joinpath(dir, "generic.das"), joinpath(dir, "upd_c.das"))
+        cp(joinpath(dir, "generic.das"), joinpath(dir, "upd_a.das"))
+        ch = c_dasopw(joinpath(dir, "upd_c.das"))
+        h = dasopw(joinpath(dir, "upd_a.das"))
+        lastc, lastd, lasti = daslla(h)
+        c_udi(f, l) = c_kind(() -> ccall((:dasudi_, DSKLIB), Cint, (Ref{Cint}, Ref{Cint},
+            Ref{Cint}, Ptr{Cint}), ch, f, l, zeros(Cint, 4)))
+        c_udd(f, l) = c_kind(() -> ccall((:dasudd_, DSKLIB), Cint, (Ref{Cint}, Ref{Cint},
+            Ref{Cint}, Ptr{Float64}), ch, f, l, zeros(4)))
+        for (f, l) in ((0, 1), (lasti, lasti + 1), (lasti + 2, lasti + 1), (lasti, lasti - 1))
+            @test neo_kind(() -> dasudi(h, f, l, zeros(Int, 4))) === c_udi(f, l)
+        end
+        for (f, l) in ((0, 1), (lastd, lastd + 1), (lastd + 2, lastd + 1), (lastd, lastd - 1))
+            @test neo_kind(() -> dasudd(h, f, l, zeros(4))) === c_udd(f, l)
+        end
+        @test c_udi(lasti + 2, lasti + 1) === :invalidaddress
+        c_dascls(ch)
+        dascls(h)
     end
 end
 
