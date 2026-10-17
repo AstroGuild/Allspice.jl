@@ -36,6 +36,13 @@ Feature: Illumination angles
     When the correction calls for transmission
     Then a "SpiceError" is thrown, of the kind that CSPICE gives
 
+  Scenario: Angular separation of two bodies
+    When the user calls "trgsep" for two targets, each a point or a sphere, and an observer
+    Then the angle agrees with "trgsep_c" of CSPICE
+    And a shape is read from its first 6 characters, as CSPICE reads it
+    When the observer is inside a sphere, or two of the three bodies are the same
+    Then a "SpiceError" is thrown, of the kind that CSPICE gives
+
   Scenario: Epoch as a dual number
-    When the user calls "ilumin", "illumg" or "phaseq" on an ellipsoid with a "ForwardDiff.Dual" epoch
+    When the user calls "ilumin", "illumg", "phaseq" or "trgsep" with a "ForwardDiff.Dual" epoch
     Then the derivative parts of the angles agree with a central difference

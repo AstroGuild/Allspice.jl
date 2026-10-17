@@ -40,6 +40,7 @@ const ERROR_KINDS = (
     :degeneratecase,
     :degenerateinterval, :degeneratesurface, :degreeoutofrange, :dependentvectors,
     :difflinetoolarge, :difflinetoosmall, :dividebyzero, :dskdatanotfound, :dtoutofrange,
+    :eccoutofbounds, :eccoutofrange,
     :ekcolnummismatch, :ekmissingcolumn, :eknosegments, :emptysegment, :emptystring,
     :endpointsmatch, :facenotfound, :filarchmismatch, :fileisnotspk, :filenotfound,
     :fileopenfailed, :filereadfailed, :fovtoowide, :framechain, :framedatanotfound,

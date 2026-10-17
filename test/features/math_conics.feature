@@ -59,6 +59,12 @@ Feature: Two-body motion
     And places 9 to 11 are the true anomaly, the semi-major axis and the period
     And the semi-major axis and the period are 0 where they are not defined
 
+  Scenario: State from equinoctial elements
+    When the user calls "eqncpv" with nine equinoctial elements and the pole of the reference plane
+    Then the state agrees with "eqncpv_c" of CSPICE to rounding level
+    And the derivative of the position with respect to the time is the velocity
+    And an eccentricity of 0.9 or more gives a SpiceError of the kind that CSPICE gives
+
   Scenario: Stumpff functions
     When the user calls "stmp03" with an argument
     Then the four values agree with "stmp03_" of CSPICE to rounding level

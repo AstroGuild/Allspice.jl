@@ -441,33 +441,24 @@ const _CK5_MAXWND = (12, 24, 12, 24)
 "Largest number of values that one interpolation uses (24 packets, or 12 with derivatives)."
 const _CK5_MAXN = 24
 
+"No check of the abscissae in the CK kernels: `cke05_` does not check them either."
+@inline _ck_noequal(_, _) = nothing
+
 """
     _ck_lagrange!(w, dw, data, xb, yb, stride, n, sg, x::T) -> (p, dp)
 
 Value and derivative at `x` of the polynomial through the `n` points with abscissae
 `data[xb+j]` and ordinates `sg[j] * data[yb+(j-1)*stride]`, `j = 1:n`, by Neville's
-scheme as `lgrind_`. `w` and `dw` are work vectors of length `>= n`. Requires
-`1 <= n` and distinct abscissae.
+scheme as `lgrind_` (`_neville_d!`). `w` and `dw` are work vectors of length `>= n`.
+Requires `1 <= n` and distinct abscissae.
 """
 @inline function _ck_lagrange!(w::MVector{_CK5_MAXN,T}, dw::MVector{_CK5_MAXN,T},
         data::Vector{Float64}, xb::Int, yb::Int, stride::Int, n::Int,
         sg::MVector{_CK5_MAXN,Float64}, x::T) where {T<:Real}
-    @inbounds begin
-        for j in 1:n
-            w[j] = convert(T, sg[j] * data[yb+(j-1)*stride])
-            dw[j] = zero(T)
-        end
-        for j in 1:n-1          # invariant: w[i] interpolates the points i:i+j-1
-            for i in 1:n-j
-                denom = data[xb+i] - data[xb+i+j]
-                c1 = x - data[xb+i+j]
-                c2 = data[xb+i] - x
-                dw[i] = (c1 * dw[i] + c2 * dw[i+1] + (w[i] - w[i+1])) / denom
-                w[i] = (c1 * w[i] + c2 * w[i+1]) / denom
-            end
-        end
-        return w[1], dw[1]
+    @inbounds for j in 1:n
+        w[j] = convert(T, sg[j] * data[yb+(j-1)*stride])
     end
+    return _neville_d!(w, dw, n, i -> @inbounds(data[xb+i]), x, _ck_noequal)
 end
 
 """
@@ -475,46 +466,17 @@ end
 
 Value and derivative at `x` of the Hermite polynomial that has the values
 `data[yb+(j-1)*stride]` and the derivatives `rate * data[yb+doff+(j-1)*stride]` at the
-abscissae `data[xb+j]`, `j = 1:n`, as `hrmint_`. `w` and `dw` are work vectors of
-length `>= 2n`. Requires `1 <= n <= 12` and distinct abscissae.
+abscissae `data[xb+j]`, `j = 1:n`, as `hrmint_` (`_hermite_table!`). `w` and `dw` are
+work vectors of length `>= 2n`. Requires `1 <= n <= 12` and distinct abscissae.
 """
 @inline function _ck_hermite!(w::MVector{_CK5_MAXN,T}, dw::MVector{_CK5_MAXN,T},
         data::Vector{Float64}, xb::Int, yb::Int, doff::Int, stride::Int, n::Int,
         rate::Float64, x::T) where {T<:Real}
-    @inbounds begin
-        for j in 1:n
-            w[2j-1] = convert(T, data[yb+(j-1)*stride])
-            w[2j] = convert(T, data[yb+doff+(j-1)*stride] * rate)
-        end
-        for i in 1:n-1          # first column of the table: pairs of neighbours
-            xi, xn = data[xb+i], data[xb+i+1]
-            c1 = xn - x
-            c2 = x - xi
-            denom = xn - xi
-            prev = 2i - 1
-            this = prev + 1
-            next = this + 1
-            dw[prev] = w[this]
-            dw[this] = (w[next] - w[prev]) / denom
-            temp = w[this] * (x - xi) + w[prev]
-            w[this] = (c1 * w[prev] + c2 * w[next]) / denom
-            w[prev] = temp
-        end
-        dw[2n-1] = w[2n]
-        w[2n-1] = w[2n] * (x - data[xb+n]) + w[2n-1]
-        for j in 2:2n-1         # invariant: w[i] interpolates the conditions i:i+j-1
-            for i in 1:2n-j
-                xi = data[xb+(i+1)÷2]
-                xij = data[xb+(i+j+1)÷2]
-                c1 = xij - x
-                c2 = x - xi
-                denom = xij - xi
-                dw[i] = (c1 * dw[i] + c2 * dw[i+1] + (w[i+1] - w[i])) / denom
-                w[i] = (c1 * w[i] + c2 * w[i+1]) / denom
-            end
-        end
-        return w[1], dw[1]
+    @inbounds for j in 1:n
+        w[2j-1] = convert(T, data[yb+(j-1)*stride])
+        w[2j] = convert(T, data[yb+doff+(j-1)*stride] * rate)
     end
+    return _hermite_table!(w, dw, n, i -> @inbounds(data[xb+i]), x, _ck_noequal)
 end
 
 @noinline _ck_badsign() = throw(SpiceError(:badquatsign,

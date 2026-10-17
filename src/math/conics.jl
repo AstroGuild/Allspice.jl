@@ -1,11 +1,13 @@
-# Two-body (conic) calls of CSPICE: Stumpff functions, propagation of a state, and the
-# conversions between a state and osculating elements.
+# Two-body (conic) calls of CSPICE: Stumpff functions, propagation of a state, the
+# conversions between a state and osculating elements, and the propagation of
+# equinoctial elements with secular rates.
 #
 # Elements are in the CSPICE order: perifocal distance `rp`, eccentricity `ecc`,
 # inclination `inc`, longitude of the ascending node `lnode`, argument of periapsis
 # `argp`, mean anomaly at epoch `m0`, epoch `t0` and gravitational parameter `mu`.
 # The propagator is the private `_prop2b` of `spk_types/conic.jl`, which SPK types 5
-# and 15 use; nothing of it is repeated here.
+# and 15 use, and the state from equinoctial elements of `eqncpv` is the private
+# `_eqn_state` of SPK type 17; nothing of them is repeated here.
 
 """
     stmp03(x) -> (c0, c1, c2, c3)
@@ -323,4 +325,58 @@ function oscltx(state::AbstractVector, et::Real, mu::Real)
     z = zero(T)
     return SVector{20,T}(el[1], el[2], el[3], el[4], el[5], el[6], el[7], el[8], nu, a, tau,
         z, z, z, z, z, z, z, z, z)
+end
+
+"""
+    eqncpv(et, epoch, eqel, rapol, decpol) -> SVector{6}
+
+Return the state at `et` of a body whose orbit is given by equinoctial elements with
+the rates of the node and of the periapsis, as `eqncpv_c` of CSPICE.
+
+`eqel` holds the elements at `epoch` (seconds past J2000 TDB):
+
+| Index | Meaning                                                  |
+|:------|:---------------------------------------------------------|
+| 1     | semi-major axis `a`, km                                  |
+| 2, 3  | `h = e sin(argp + node)`, `k = e cos(argp + node)`       |
+| 4     | mean longitude `argp + node + M0`, rad                   |
+| 5, 6  | `p = tan(inc/2) sin(node)`, `q = tan(inc/2) cos(node)`   |
+| 7     | rate of the longitude of periapsis, rad/s                |
+| 8     | mean longitude rate, rad/s                               |
+| 9     | rate of the longitude of the ascending node, rad/s       |
+
+The elements are relative to the equator of a pole with the right ascension `rapol`
+and the declination `decpol` (rad), given in the frame of the result. This is the
+model of SPK type 17. The result is in km and km/s. The arguments other than `et` are
+converted to `Float64`; `et` can be a `ForwardDiff.Dual` or `Allspice.Taylor` number.
+A zero mean longitude rate gives a velocity of NaN, as in CSPICE.
+
+Throws `SpiceError`:
+- `:badsemiaxis` if `a <= 0`;
+- `:eccoutofrange` if `sqrt(h² + k²) > 0.9`;
+- `:eccoutofbounds` if `h² + k² >= 0.81` at `et` (an eccentricity of 0.9 that the
+  first check passes);
+- `:badarg` if `eqel` does not have 9 elements.
+
+# Examples
+A circular equatorial orbit (pole on the z axis) a quarter period after the epoch:
+```jldoctest
+julia> n = 1e-3; s = eqncpv(pi / 2 / n, 0, [7000, 0, 0, 0, 0, 0, 0, n, 0], -pi / 2, pi / 2);
+
+julia> s ≈ [0, 7000, 0, -7, 0, 0]
+true
+```
+
+See also [`conics`](@ref).
+"""
+function eqncpv(et::Real, epoch::Real, eqel::AbstractVector, rapol::Real, decpol::Real)
+    length(eqel) == 9 || _m_baddim("a set of equinoctial elements", 9)
+    a, h, k, l, p, q, dlpdt, mldt, nodedt = ntuple(i -> Float64(eqel[begin+i-1]), Val(9))
+    a > 0.0 || throw(SpiceError(:badsemiaxis, "the semi-major axis is $a; it must be positive"))
+    ecc = sqrt(h * h + k * k)
+    ecc > 0.9 && throw(SpiceError(:eccoutofrange,
+        "the eccentricity of the elements is $ecc; it must not be above 0.9"))
+    pos, vel = _eqn_state(_m_f(et), Float64(epoch), a, h, k, l, p, q, dlpdt, mldt, nodedt,
+        Float64(rapol), Float64(decpol))
+    return _m_state(pos, vel)
 end

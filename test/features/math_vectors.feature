@@ -59,6 +59,11 @@ Feature: Vector and matrix calls
     Then the error "numericoverflow" is thrown
     And the test does not call "dvsep_c", because CSPICE stops the process for this input
 
+  Scenario: Inverse of a state transformation matrix
+    When the user calls "invstm" with a 6 by 6 state transformation matrix
+    Then the result agrees with "invstm_c" of CSPICE exactly
+    And the result times the matrix is the identity
+
   Scenario: Singular matrix
     When the user calls "invert" with a matrix that has a determinant below 1e-16
     Then the result is the zero matrix, as in CSPICE

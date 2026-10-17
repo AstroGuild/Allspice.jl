@@ -291,6 +291,79 @@ end
 c(:conics, V, :v8, :d, :o6); c(:oscelt, V, :v6, :d, :d, :o8); c(:oscltx, V, :v6, :d, :d, :o20)
 c(:prop2b, V, :d, :v6, :d, :o6); f(:stmp03, I, :rd, :od, :od, :od, :od)
 
+c(:eqncpv, V, :d, :d, :v9, :d, :d, :o6)
+# matrices of states, quadratic equations, symmetric 2 by 2 matrices
+c(:invstm, V, :m6, :om6); c(:rquad, V, :d, :d, :d, :o2, :o2); c(:diags2, V, :m2, :om2, :om2)
+
+# polynomials and interpolation: the lengths of the arrays are written out
+const P = Ptr{Cdouble}
+dv(a) = collect(Float64, a)
+"`chbval_c`, `chbint_c`, `chbder_c` and `chbigr_c`, with the degree `length(cp) - 1`."
+chbval(cp, x2s, x) = (p = Ref(NaN); ccall(Libdl.dlsym(HANDLE, :chbval_c), Cvoid,
+    (P, Cint, P, Cdouble, Ref{Cdouble}), dv(cp), length(cp) - 1, dv(x2s), x, p); check(); p[])
+function chbint(cp, x2s, x)
+    p = Ref(NaN); d = Ref(NaN)
+    ccall(Libdl.dlsym(HANDLE, :chbint_c), Cvoid, (P, Cint, P, Cdouble, Ref{Cdouble}, Ref{Cdouble}),
+        dv(cp), length(cp) - 1, dv(x2s), x, p, d)
+    check()
+    return p[], d[]
+end
+function chbder(cp, x2s, x, nderiv)
+    work = fill(NaN, 3 * (nderiv + 1)); o = fill(NaN, nderiv + 1)
+    ccall(Libdl.dlsym(HANDLE, :chbder_c), Cvoid, (P, Cint, P, Cdouble, Cint, P, P),
+        dv(cp), length(cp) - 1, dv(x2s), x, nderiv, work, o)
+    check()
+    return o
+end
+function chbigr(cp, x2s, x)
+    p = Ref(NaN); i = Ref(NaN)
+    ccall(Libdl.dlsym(HANDLE, :chbigr_c), Cvoid, (Cint, P, P, Cdouble, Ref{Cdouble}, Ref{Cdouble}),
+        length(cp) - 1, isempty(cp) ? [NaN] : dv(cp), dv(x2s), x, p, i)
+    check()
+    return p[], i[]
+end
+"`lgrint_c`, `lgrind_c`, `lgresp_c`, `hrmint_c`, `hrmesp_c` with `n` from the arguments."
+lgrint(xs, ys, x) = (r = ccall(Libdl.dlsym(HANDLE, :lgrint_c), Cdouble, (Cint, P, P, Cdouble),
+    length(xs), dv(xs), dv(ys), x); check(); r)
+function lgrind(xs, ys, x)
+    p = Ref(NaN); d = Ref(NaN); work = fill(NaN, 2 * max(length(xs), 1))
+    ccall(Libdl.dlsym(HANDLE, :lgrind_c), Cvoid, (Cint, P, P, P, Cdouble, Ref{Cdouble}, Ref{Cdouble}),
+        length(xs), dv(xs), dv(ys), work, x, p, d)
+    check()
+    return p[], d[]
+end
+lgresp(first, step, ys, x) = (r = ccall(Libdl.dlsym(HANDLE, :lgresp_c), Cdouble,
+    (Cint, Cdouble, Cdouble, P, Cdouble), length(ys), first, step, dv(ys), x); check(); r)
+function hrmint(xs, ys, x)
+    f = Ref(NaN); d = Ref(NaN); work = fill(NaN, 4 * max(length(xs), 1))
+    ccall(Libdl.dlsym(HANDLE, :hrmint_c), Cvoid, (Cint, P, P, Cdouble, P, Ref{Cdouble}, Ref{Cdouble}),
+        length(xs), dv(xs), dv(ys), x, work, f, d)
+    check()
+    return f[], d[]
+end
+function hrmesp(first, step, ys, x)
+    f = Ref(NaN); d = Ref(NaN)
+    ccall(Libdl.dlsym(HANDLE, :hrmesp_c), Cvoid, (Cint, Cdouble, Cdouble, P, Cdouble,
+        Ref{Cdouble}, Ref{Cdouble}), length(ys) ÷ 2, first, step, dv(ys), x, f, d)
+    check()
+    return f[], d[]
+end
+"`polyds_c` and `qderiv_c`."
+function polyds(coeffs, nderiv, t)
+    o = fill(NaN, max(nderiv + 1, 1))
+    ccall(Libdl.dlsym(HANDLE, :polyds_c), Cvoid, (P, Cint, Cint, Cdouble, P),
+        isempty(coeffs) ? [NaN] : dv(coeffs), length(coeffs) - 1, nderiv, t, o)
+    check()
+    return o[1:max(nderiv + 1, 0)]
+end
+function qderiv(f0, f2, delta)
+    o = fill(NaN, length(f0))
+    ccall(Libdl.dlsym(HANDLE, :qderiv_c), Cvoid, (Cint, P, P, Cdouble, P), length(f0), dv(f0),
+        dv(f2), delta, o)
+    check()
+    return o
+end
+
 end # module CS
 
 # --- comparison helpers ----------------------------------------------------------------

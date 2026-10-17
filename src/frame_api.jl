@@ -1,4 +1,5 @@
-# Frame interface: rotation matrices between reference frames and their derivatives.
+# Frame interface: rotation matrices between reference frames, at one epoch or at two
+# epochs, and their derivatives.
 
 """
     pxform([ctx,] from, to, et) -> SMatrix{3,3}
@@ -46,6 +47,40 @@ pxform(ks::KernelSet, from::NameOrID, to::NameOrID, et::Real) =
 pxform(ctx::SpiceContext, from::NameOrID, to::NameOrID, et::Real) =
     pxform(kernelset(ctx), from, to, et)
 pxform(from::NameOrID, to::NameOrID, et::Real) = pxform(default_context(), from, to, et)
+
+"""
+    pxfrm2([ctx,] from, to, etfrom, etto) -> SMatrix{3,3}
+
+Return the matrix that rotates a position vector from frame `from` at the epoch
+`etfrom` to frame `to` at the epoch `etto`, as `pxfrm2_c` of CSPICE.
+
+The matrix is the product of the rotation from `from` to J2000 at `etfrom` and the
+rotation from J2000 to `to` at `etto`. It is the rotation that the light-time
+corrections need, where the frames of the observer and of the target are evaluated
+at different epochs. The arguments and the errors are those of [`pxform`](@ref); with
+`etfrom == etto` the result is the matrix of `pxform` to rounding.
+
+# Examples
+```jldoctest
+julia> R = pxfrm2(SpiceContext(), "J2000", "ECLIPJ2000", 0.0, 1.0e9);
+
+julia> R == pxform(SpiceContext(), "J2000", "ECLIPJ2000", 0.0)    # inertial frames
+true
+```
+
+See also [`pxform`](@ref), [`spkcpt`](@ref).
+"""
+function pxfrm2(ks::KernelSet, from::NameOrID, to::NameOrID, etfrom::Real, etto::Real)
+    fcode = frame_id(ks, from)
+    tcode = frame_id(ks, to)
+    jf = frame_rotation(ks, fcode, Int32(1), check_epoch(etfrom))
+    tj = frame_rotation(ks, Int32(1), tcode, check_epoch(etto))
+    return _m_mxm(tj, jf)
+end
+pxfrm2(ctx::SpiceContext, from::NameOrID, to::NameOrID, etfrom::Real, etto::Real) =
+    pxfrm2(kernelset(ctx), from, to, etfrom, etto)
+pxfrm2(from::NameOrID, to::NameOrID, etfrom::Real, etto::Real) =
+    pxfrm2(default_context(), from, to, etfrom, etto)
 
 """
     pxder([ctx,] from, to, et, Val(N)) -> NTuple{N+1,SMatrix{3,3}}

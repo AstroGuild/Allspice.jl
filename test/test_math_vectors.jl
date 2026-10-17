@@ -147,6 +147,7 @@ group("12. math: vectors and matrices") do
             versus!(t, :xpose, () -> xpose(m1), () -> CS.xpose(m1))
             m6 = rmag(rng) * randn(rng, 6, 6)
             versus!(t, :xpose6, () -> xpose6(m6), () -> CS.xpose6(m6))
+            versus!(t, :invstm, () -> invstm(m6), () -> CS.invstm(m6))
             versus!(t, :det, () -> Allspice.det(m1), () -> CS.det(m1))
             versus!(t, :trace, () -> trace(m1), () -> CS.trace(m1))
             # singular matrices: a repeated row, and a tiny determinant
@@ -192,6 +193,9 @@ group("12. math: vectors and matrices") do
         @test throws_kind(() -> twovec([1.0, 0, 0], 1, [0.0, 1, 0], 1), :undefinedframe)
         @test throws_kind(() -> twovec([1.0, 0, 0], 0, [0.0, 1, 0], 1), :badindex)
         @test rotate(0.0, 3) == ident() && rotate(0.3, 4) == rotate(0.3, 1)
+        # the inverse of a state transformation
+        x = eul2xf([0.4, -1.1, 2.0, 1e-3, -2e-4, 5e-5], 3, 1, 3)
+        @test invstm(x) * x ≈ I atol = 1e-15
     end
 
     @apart @testset "derivatives of vector functions of a state" begin
@@ -383,7 +387,7 @@ group("12. math: vectors and matrices") do
             (vrotv, (a, b, 0.3), V3), (vzero, (a,), Bool), (vequ, (a,), V3),
             (vpack, (1.0, 2.0, 3.0), V3), (vupack, (a,), NTuple{3,Float64}), (ucrss, (a, b), V3),
             (vtmv, (a, m, b), Float64), (mxv, (m, a), V3), (mtxv, (m, a), V3), (mxm, (m, m), M3),
-            (mtxm, (m, m), M3), (mxmt, (m, m), M3), (xpose, (m,), M3), (xpose6, (m6,), M6),
+            (mtxm, (m, m), M3), (mxmt, (m, m), M3), (xpose, (m,), M3), (xpose6, (m6,), M6), (invstm, (m6,), M6),
             (Allspice.det, (m,), Float64), (trace, (m,), Float64), (invert, (m,), M3),
             (invort, (m,), M3), (isrot, (m, 1e-10, 1e-10), Bool), (ident, (), M3),
             (rotate, (0.3, 2), M3), (rotmat, (m, 0.3, 2), M3), (rotvec, (a, 0.3, 2), V3),

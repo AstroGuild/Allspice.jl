@@ -14,6 +14,122 @@ const _GRID = -1
 @inline _abscissa(data::Vector{Float64}, xbase::Int, i::Int) =
     xbase < 0 ? Float64(i) : @inbounds data[xbase+i]
 
+# --- interpolation kernels, shared with `ck.jl` and `math/polynomials.jl` -------------
+#
+# Each kernel works in place on a work vector that the caller has filled with the values
+# at the abscissas, and takes the abscissas as a function `xa(i)` and the reaction to
+# two equal abscissas as a function `onequal(i, j)`, so that the SPK and CK evaluators
+# keep their data layout and their error kinds. With the kernels inlined, a static work
+# vector of the caller stays on the stack.
+
+"""
+    _neville!(w, n, xa, x, onequal) -> w[1]
+
+Value at `x` of the polynomial through the `n` points `(xa(i), w[i])`, by the Neville
+recurrence of `lgrint`; `w` is overwritten. `onequal(i, j)` is called before the
+division by `xa(i) - xa(j)` when that difference is zero.
+"""
+@inline function _neville!(w::AbstractVector, n::Int, xa::F, x, onequal::G) where {F,G}
+    # invariant: after pass j, w[i] is the value at x of the polynomial through the
+    # points i .. i+j, for i = 1 .. n-j
+    @inbounds for j in 1:n-1
+        for i in 1:n-j
+            xi = xa(i)
+            xij = xa(i + j)
+            denom = xi - xij
+            primal(denom) == 0.0 && onequal(i, i + j)
+            c1 = x - xij
+            c2 = xi - x
+            w[i] = (c1 * w[i] + c2 * w[i+1]) / denom
+        end
+    end
+    return @inbounds w[1]
+end
+
+"""
+    _neville_d!(w, dw, n, xa, x, onequal) -> (w[1], dw[1])
+
+As `_neville!`, with the derivative of the polynomial at `x`, by the recurrence of
+`lgrind`; `w` and `dw` are overwritten, and `dw[1:n]` need not be set by the caller.
+"""
+@inline function _neville_d!(w::AbstractVector, dw::AbstractVector, n::Int, xa::F, x,
+        onequal::G) where {F,G}
+    @inbounds for i in 1:n
+        dw[i] = zero(eltype(dw))
+    end
+    # invariant: after pass j, w[i] and dw[i] are the value and the derivative at x of
+    # the polynomial through the points i .. i+j
+    @inbounds for j in 1:n-1
+        for i in 1:n-j
+            xi = xa(i)
+            xij = xa(i + j)
+            denom = xi - xij
+            primal(denom) == 0.0 && onequal(i, i + j)
+            c1 = x - xij
+            c2 = xi - x
+            dw[i] = (c1 * dw[i] + c2 * dw[i+1] + (w[i] - w[i+1])) / denom
+            w[i] = (c1 * w[i] + c2 * w[i+1]) / denom
+        end
+    end
+    return @inbounds (w[1], dw[1])
+end
+
+"""
+    _hermite_table!(w1, w2, n, xa, x, onequal) -> (w1[1], w2[1])
+
+Value and derivative at `x` of the Hermite polynomial that has the value `w1[2k-1]` and
+the derivative `w1[2k]` at the abscissa `xa(k)`, `k = 1:n`, by the recurrence of
+`hrmint`; `w1[1:2n]` and `w2[1:2n]` are overwritten. With `xa(k) = k` the operations
+are those of `hrmesp`. `onequal(i, j)` is called before a division by a zero
+difference of the abscissas `i` and `j`.
+"""
+@inline function _hermite_table!(w1::AbstractVector, w2::AbstractVector, n::Int, xa::F, x,
+        onequal::G) where {F,G}
+    # First column of the table: the polynomials through two consecutive entries of
+    # the doubled abscissa list (x1, x1, x2, x2, ...).
+    @inbounds for i in 1:n-1
+        xi = xa(i)
+        xn = xa(i + 1)
+        c1 = xn - x
+        c2 = x - xi
+        denom = xn - xi
+        primal(denom) == 0.0 && onequal(i, i + 1)
+        prev = 2i - 1
+        this = prev + 1
+        next = this + 1
+        w2[prev] = w1[this]
+        w2[this] = (w1[next] - w1[prev]) / denom
+        temp = w1[this] * (x - xi) + w1[prev]
+        w1[this] = (c1 * w1[prev] + c2 * w1[next]) / denom
+        w1[prev] = temp
+    end
+    @inbounds begin
+        w2[2n-1] = w1[2n]
+        w1[2n-1] = w1[2n] * (x - xa(n)) + w1[2n-1]
+    end
+    # invariant: after pass j, w1[i] and w2[i] are the value and the derivative at x of
+    # the polynomial through the entries i .. i+j of the doubled list
+    @inbounds for j in 2:2n-1
+        for i in 1:2n-j
+            ki = (i + 1) ÷ 2
+            kij = (i + j + 1) ÷ 2
+            xi = xa(ki)
+            xij = xa(kij)
+            c1 = xij - x
+            c2 = x - xi
+            denom = xij - xi
+            primal(denom) == 0.0 && onequal(ki, kij)
+            w2[i] = (c1 * w2[i] + c2 * w2[i+1] + (w1[i+1] - w1[i])) / denom
+            w1[i] = (c1 * w1[i] + c2 * w1[i+1]) / denom
+        end
+    end
+    return @inbounds (w1[1], w2[1])
+end
+
+"`onequal` of the kernels for the interpolation types of an SPK segment."
+@noinline _equal_epochs(seg::Segment) =
+    _badsegment(seg, "two epochs of one interpolation window are equal")
+
 """
     _lagrange(seg, data, pbase, n, xbase, x::T) -> SVector{6,T}
 
@@ -32,20 +148,7 @@ function _lagrange(seg::Segment, data::Vector{Float64}, pbase::Int, n::Int, xbas
         a = pbase + 6 * (i - 1)
         work[i] = SVector{6,T}(data[a+1], data[a+2], data[a+3], data[a+4], data[a+5], data[a+6])
     end
-    # invariant: after pass j, work[i] is the value at x of the polynomial through the
-    # points i .. i+j, for i = 1 .. n-j
-    @inbounds for j in 1:n-1
-        for i in 1:n-j
-            xi = _abscissa(data, xbase, i)
-            xij = _abscissa(data, xbase, i + j)
-            denom = xi - xij
-            denom == 0.0 && _badsegment(seg, "two epochs of one interpolation window are equal")
-            c1 = x - xij
-            c2 = xi - x
-            work[i] = (c1 * work[i] + c2 * work[i+1]) / denom
-        end
-    end
-    return @inbounds work[1]
+    return _neville!(work, n, i -> _abscissa(data, xbase, i), x, (_, _) -> _equal_epochs(seg))
 end
 
 """
@@ -70,43 +173,8 @@ function _hermite(seg::Segment, data::Vector{Float64}, pbase::Int, psize::Int, o
         w1[2k-1] = Vec3{T}(data[a+1], data[a+2], data[a+3])
         w1[2k] = Vec3{T}(data[a+4] * dscale, data[a+5] * dscale, data[a+6] * dscale)
     end
-    # First column of the table: the polynomials through two consecutive entries of
-    # the doubled abscissa list (x1, x1, x2, x2, ...).
-    @inbounds for i in 1:n-1
-        xi = _abscissa(data, xbase, i)
-        xn = _abscissa(data, xbase, i + 1)
-        c1 = xn - x
-        c2 = x - xi
-        denom = xn - xi
-        denom == 0.0 && _badsegment(seg, "two epochs of one interpolation window are equal")
-        prev = 2i - 1
-        this = prev + 1
-        next = this + 1
-        w2[prev] = w1[this]
-        w2[this] = (w1[next] - w1[prev]) / denom
-        temp = w1[this] * (x - xi) + w1[prev]
-        w1[this] = (c1 * w1[prev] + c2 * w1[next]) / denom
-        w1[prev] = temp
-    end
-    @inbounds begin
-        w2[2n-1] = w1[2n]
-        w1[2n-1] = w1[2n] * (x - _abscissa(data, xbase, n)) + w1[2n-1]
-    end
-    # invariant: after pass j, w1[i] and w2[i] are the value and the derivative at x of
-    # the polynomial through the entries i .. i+j of the doubled list
-    @inbounds for j in 2:2n-1
-        for i in 1:2n-j
-            xi = _abscissa(data, xbase, (i + 1) ÷ 2)
-            xij = _abscissa(data, xbase, (i + j + 1) ÷ 2)
-            c1 = xij - x
-            c2 = x - xi
-            denom = xij - xi
-            denom == 0.0 && _badsegment(seg, "two epochs of one interpolation window are equal")
-            w2[i] = (c1 * w2[i] + c2 * w2[i+1] + (w1[i+1] - w1[i])) / denom
-            w1[i] = (c1 * w1[i] + c2 * w1[i+1]) / denom
-        end
-    end
-    return @inbounds (w1[1], w2[1])
+    return _hermite_table!(w1, w2, n, i -> _abscissa(data, xbase, i), x,
+        (_, _) -> _equal_epochs(seg))
 end
 
 @inline _split6(s::SVector{6,T}) where {T} = (Vec3{T}(s[1], s[2], s[3]), Vec3{T}(s[4], s[5], s[6]))

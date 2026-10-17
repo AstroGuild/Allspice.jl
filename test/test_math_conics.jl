@@ -219,9 +219,47 @@ group("16. math: conics") do
         end
     end
 
+    @apart @testset "equinoctial elements" begin
+        "Equinoctial elements of an orbit about the Earth, with secular rates; some are not valid."
+        function reqel()
+            a = 10.0^(3.8 + 1.5 * rand(rng))
+            u = rand(rng)
+            e = u < 0.1 ? 0.0 : u < 0.97 ? 0.9 * rand(rng) : 0.9 + 0.1 * rand(rng)
+            w, node, inc = 2pi * rand(rng), 2pi * rand(rng), 0.5pi * rand(rng)
+            rand(rng) < 0.02 && (a = -rand(rng) * a)
+            return [a, e * sin(w), e * cos(w), 2pi * rand(rng), tan(inc / 2) * sin(node),
+                tan(inc / 2) * cos(node), 1e-7 * randn(rng), sqrt(398600.4418 / abs(a)^3), 1e-7 * randn(rng)]
+        end
+        for _ in 1:n
+            el = reqel()
+            epoch = 1e8 * randn(rng)
+            et = epoch + (rand(rng) < 0.1 ? 0.0 : 1e8 * randn(rng))
+            ra, dec = pi * (2 * rand(rng) - 1), pi * (rand(rng) - 0.5)
+            versus!(t, :eqncpv, () -> eqncpv(et, epoch, el, ra, dec), () -> CS.eqncpv(et, epoch, el, ra, dec))
+            versus!(t, :eqncpv_vel, () -> eqncpv(et, epoch, el, ra, dec)[SVector(4, 5, 6)],
+                () -> CS.eqncpv(et, epoch, el, ra, dec)[SVector(4, 5, 6)])
+        end
+        # An eccentricity of exactly 0.9 passes the first check of CSPICE and fails the
+        # check of `kepleq` (measured: SPICE(ECCOUTOFBOUNDS)).
+        el = [7000.0, 0.9, 0.0, 0.0, 0.0, 0.0, 0.0, 1e-3, 0.0]
+        @test throws_kind(() -> eqncpv(10.0, 0.0, el, 0.0, 0.0), :eccoutofbounds)
+        @test outcome(() -> CS.eqncpv(10.0, 0.0, el, 0.0, 0.0)) === :eccoutofbounds
+        @test throws_kind(() -> eqncpv(10.0, 0.0, el[1:8], 0.0, 0.0), :badarg)
+        # The velocity is the derivative of the position.
+        el = [8000.0, 0.05, -0.1, 1.0, 0.2, -0.1, 2e-7, sqrt(398600.4418 / 8000.0^3), -1e-7]
+        s = eqncpv(5.0e6, 0.0, el, 0.3, 1.2)
+        d = ForwardDiff.derivative(τ -> eqncpv(τ, 0.0, el, 0.3, 1.2), 5.0e6)
+        @test d[SVector(1, 2, 3)] ≈ s[SVector(4, 5, 6)] rtol = 1e-12
+        tt = Allspice.taylor_var(5.0e6, Val(1))
+        @test map(c -> Allspice.derivatives(c)[2], eqncpv(tt, 0.0, el, 0.3, 1.2)) ≈ d rtol = 1e-12
+    end
+
     @apart @testset "differences against CSPICE" begin
+        # eqncpv: the sine and the cosine of Julia and of the C library differ in the
+        # last place for some angles, and the Kepler equation multiplies a difference by
+        # up to 1 / (1 - e) = 10; measured 2.4e-16 (state) and 3e-16 (velocity).
         report!(t, "conics"; tol=4eps(), tols=Dict(:prop2b => 1e-13, :conics => 1e-10,
-            :conics_nearparabola => 1e-1))
+            :conics_nearparabola => 1e-1, :eqncpv => 1e-14, :eqncpv_vel => 1e-14))
     end
 
     @apart @testset "inferred types and no allocation for static arguments" begin
@@ -230,7 +268,9 @@ group("16. math: conics") do
         el = oscelt(s, 50.0, mu)
         calls = Any[(stmp03, (0.3,), NTuple{4,Float64}), (stmp03, (-7.0,), NTuple{4,Float64}),
             (prop2b, (mu, s, 5000.0), SVector{6,Float64}), (conics, (el, 900.0), SVector{6,Float64}),
-            (oscelt, (s, 50.0, mu), SVector{8,Float64}), (oscltx, (s, 50.0, mu), SVector{20,Float64})]
+            (oscelt, (s, 50.0, mu), SVector{8,Float64}), (oscltx, (s, 50.0, mu), SVector{20,Float64}),
+            (eqncpv, (900.0, 0.0, SVector(7000.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 1e-3, 0.0), 0.0, 1.0),
+                SVector{6,Float64})]
         for (fn, args, T) in calls
             @test (@inferred fn(args...)) isa T
             @test alloc_of(fn, args...) == 0

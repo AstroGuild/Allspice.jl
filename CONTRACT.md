@@ -143,6 +143,21 @@ evaluator pair `spkrNN`/`spkeNN` of CSPICE, so a plain epoch gives the CSPICE st
   and `_with_primal(x::T, p::Float64) -> T` replaces the plain value of `x` and keeps
   its derivative parts. An iterative solution runs on plain numbers as CSPICE does, and
   Newton steps then give the derivative parts.
+- Interpolation kernels in `interp.jl`, shared by the SPK types 8, 9, 12, 13, 18 and
+  19, the CK type 5 (`ck.jl`) and the public calls of `math/polynomials.jl`:
+  `_neville!(w, n, xa, x, onequal)` (the recurrence of `lgrint`), `_neville_d!(w, dw, n,
+  xa, x, onequal)` (of `lgrind`) and `_hermite_table!(w1, w2, n, xa, x, onequal)` (of
+  `hrmint`). `xa(i)` is the i-th abscissa, the work arrays hold the values on entry and
+  the result in their first place on return, and `onequal(i, j)` is called for two equal
+  abscissas: it throws (`:dividebyzero` for the public calls, `:badsegment` for an SPK
+  segment) or returns `nothing` for CK type 5, which CSPICE does not check. No
+  allocation.
+- `_chbigr(data, a, ncof, scale, mid, radius, x)` in `chebyshev.jl` is the integral of a
+  Chebyshev expansion for SPK type 20 and for the public `chbigr`; `_eqn_state(et,
+  epoch, a, h, k, l, p, q, dlpdt, mldt, nodedt, rapol, decpol) -> (pos, vel)` in
+  `conic.jl` is the state of `eqncpv` for SPK type 17 and for the public `eqncpv`. It
+  reduces the mean longitude with `_f2c_dmod`, the `d_mod` of f2c, and throws
+  `SpiceError(:eccoutofbounds)` for an eccentricity of 0.9 or more, as `kepleq` does.
 
 ## `textkernel.jl`
 
@@ -560,9 +575,10 @@ Information calls: `spkobj`, `spkobj!`, `spkcov`, `spkcov!`, `ktotal(kind)`, `kd
 - Deviation from CSPICE: the handle that `kdata` and `kinfo` return is always 0,
   because a loaded kernel has no DAF handle in this package.
 
-## `math/vectors.jl`, `rotations.jl`, `ellipsoid.jl`, `coordinates.jl`, `conics.jl`
+## `math/vectors.jl`, `rotations.jl`, `ellipsoid.jl`, `coordinates.jl`, `conics.jl`, `polynomials.jl`
 
-The vector, matrix, rotation, ellipsoid, coordinate and conic calls of CSPICE. Each
+The vector, matrix, rotation, ellipsoid, coordinate, conic, polynomial and
+interpolation calls of CSPICE. Each
 public function has the CSPICE name, returns its results instead of filling output
 arguments, and follows the arithmetic of the CSPICE source, so a `Float64` input gives
 the CSPICE result. The functions are generic over the number type, and every discrete
@@ -606,7 +622,7 @@ does the computation after the checks, which the geometry finder calls at many e
 | `constobs.jl` | `spkcpo`, `spkcpt`, `spkcvo`, `spkcvt` | `_GeoFixed`, `_geo_cvo`, `_geo_cvt`, `_geo_pos` |
 | `subpoints.jl` | `subpnt`, `subslr` | `_geo_subpnt`, `_geo_same_bodies` |
 | `intercept.jl` | `sincpt`, `srfrec` | `_geo_sincpt`, `_geo_sfxcor`, `_geo_sub_in_method` |
-| `illumination.jl` | `ilumin`, `illumg`, `illumf`, `phaseq` | `_geo_illum_states` |
+| `illumination.jl` | `ilumin`, `illumg`, `illumf`, `phaseq`, `trgsep` | `_geo_illum_states` |
 | `occultation.jl` | `occult` | `_GeoOccBody`, `_geo_occ_parse`, `_geo_occ_eval`, `_geo_occed` |
 | `limbterm.jl` | `limbpt`, `termpt`, `tangpt` | none |
 | `fov.jl` | `getfov`, `getfvn`, `fovray`, `fovtrg` | `_geo_getfov`, `_geo_fovaxi`, `_geo_elvupy`, `_geo_wind2d` |
@@ -755,7 +771,7 @@ SPICE.jl from a spawned task.
 
 | Item | File | Rule |
 |---|---|---|
-| Groups | `test/runtests.jl` | `GROUPS` lists 48 names; group `g` is the file `test/test_g.jl`. Run with `julia --startup-file=no --threads=8 --project=test test/runtests.jl [groups]`; an unknown name is an error. |
+| Groups | `test/runtests.jl` | `GROUPS` lists 50 names; group `g` is the file `test/test_g.jl`. Run with `julia --startup-file=no --threads=8 --project=test test/runtests.jl [groups]`; an unknown name is an error. |
 | Several processes | `test/parallel.jl` | `julia --startup-file=no --threads=8 test/parallel.jl [groups]`; `ALLSPICE_TEST_JOBS` processes (default a quarter of the CPU threads, 8 at most), balanced with the times of the last run in `test/.group_seconds`; exit status 1 if a process failed. |
 | Exhaustive tier | `test/helpers.jl` | `ALLSPICE_TEST_FULL=1` sets `FULL`; `nsample(fast, full)` gives `fast` in the default run and `full` in the exhaustive run, and requires `0 <= fast <= full`. |
 | Seed | `test/helpers.jl` | `ALLSPICE_TEST_SEED` sets `SEED` (default 20261011), the seed of every random sample. |

@@ -4,6 +4,7 @@
 
 ```@docs
 pxform
+pxfrm2
 sxform
 ```
 

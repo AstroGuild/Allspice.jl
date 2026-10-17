@@ -101,6 +101,28 @@ group("2. rotations against CSPICE", Kernels.TEXT_SET_FILES..., Kernels.MOON_BPC
         @test n.q99 <= 5e-16
         @test n.max <= 2e-15
     end
+
+    @apart @testset "pxfrm2: rotation between two epochs" begin
+        d = Float64[]
+        for _ in 1:200
+            from, to = rand(rng, ROT_FRAMES), rand(rng, ROT_FRAMES)
+            e1 = rand(rng, epochs)
+            e2 = e1 + 1e4 * randn(rng)
+            append!(d, abs.(pxfrm2(ctx, from, to, e1, e2) .- SPICE.pxfrm2(from, to, e1, e2)))
+        end
+        r = report_quantiles("pxfrm2, all pairs at two epochs", d)
+        @test r.q99 <= ROT_TOL_BODYFIXED.q99
+        @test r.max <= ROT_TOL_BODYFIXED.max
+        et = epochs[2]
+        # with one epoch: the rotation of pxform, through J2000
+        @test isapprox(pxfrm2(ctx, "IAU_EARTH", "IAU_MOON", et, et),
+            pxform(ctx, "IAU_EARTH", "IAU_MOON", et); atol=1e-15)
+        @test pxfrm2(ctx, 1, SPICE.namfrm("IAU_MARS"), et, et + 60.0) ==
+              pxfrm2(ctx, "J2000", "IAU_MARS", et - 1e5, et + 60.0)
+        # measured: SPICE(UNKNOWNFRAME) for either name
+        @test throws_kind(() -> pxfrm2(ctx, "NO_SUCH_FRAME", "J2000", et, et), :unknownframe)
+        @test throws_kind(() -> pxfrm2(ctx, "J2000", "NO_SUCH_FRAME", et, et), :unknownframe)
+    end
 end
 
 FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

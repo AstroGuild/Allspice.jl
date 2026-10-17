@@ -25,6 +25,11 @@ Feature: Load kernels, then query states and rotations
     Then the result is a 3 by 3 rotation matrix that agrees with CSPICE
     And the matrix times its transpose is the identity
 
+  Scenario: Rotation between two frames at two epochs
+    When the user asks for "pxfrm2" from "IAU_EARTH" at one epoch to "IAU_MOON" at another epoch
+    Then the result agrees with "pxfrm2_c" of CSPICE
+    And with two equal epochs the result is the "pxform" matrix
+
   Scenario: Query without a context argument
     Given the same kernels are loaded with "furnsh(path)" and no context argument
     When the user calls "spkezr" with no context argument

@@ -9,7 +9,7 @@ export SpiceError, SpiceKindError, SpkInsufficientDataError
 export furnsh, unload, kclear, ktotal
 export spkezr, spkpos, spkgeo, spkder
 export Aberration, spkssb, spkltc, spkaps, spkacs, spkapo, ltime, stelab, stlabx
-export pxform, sxform, pxder
+export pxform, sxform, pxder, pxfrm2
 export gdpool, gcpool, gipool, bodvrd, bodn2c, bodc2n, bods2c, namfrm, frmnam
 export deltet, utc2et, str2et, et2utc, etcal, timout, tpictr, tparse, timdef, unitim, tsetyr
 export jul2gr, gr2jul
@@ -39,7 +39,7 @@ export pltexp, pltnp, pltnrm, pltar, pltvol
 export latsrf, srfnrm, srfc2s, srfs2c, srfcss, srfscc
 export vadd, vsub, vscl, vminus, vdot, vcrss, vnorm, vhat, vdist, vsep, vrel, vproj, vperp
 export vlcom, vlcom3, vrotv, vzero, vequ, vpack, vupack, ucrss, unorm, vtmv
-export mxv, mtxv, mxm, mtxm, mxmt, xpose, xpose6, invert, invort, trace, isrot, ident
+export mxv, mtxv, mxm, mtxm, mxmt, xpose, xpose6, invstm, invert, invort, trace, isrot, ident
 export rotate, rotmat, rotvec, twovec, twovxf, dvhat, dvdot, dvcrss, ducrss, dvnorm, dvsep
 export vaddg, vsubg, vsclg, vminug, vequg, vdotg, vnormg, vhatg, unormg, vdistg, vsepg, vrelg
 export vprojg, vlcomg, vzerog, vtmvg, mxvg, mtxvg, mxmg, mtxmg, mxmtg, xposeg
@@ -51,13 +51,15 @@ export pl2nvc, pl2nvp, pl2psv, pjelpl, ednmpt, edpnt, vprjp, vprjpi
 export reclat, latrec, recrad, radrec, recsph, sphrec, reccyl, cylrec, cyllat, latcyl, cylsph
 export sphcyl, sphlat, latsph, recgeo, georec, recpgr, pgrrec, xfmsta, convrt
 export drdlat, dlatdr, drdsph, dsphdr, drdcyl, dcyldr, drdgeo, dgeodr, drdpgr, dpgrdr
-export conics, oscelt, oscltx, prop2b, stmp03
+export conics, oscelt, oscltx, prop2b, stmp03, eqncpv
+export chbval, chbint, chbder, chbigr, lgrint, lgrind, lgresp, hrmint, hrmesp, polyds, qderiv
+export rquad, diags2
 export frinfo, cidfrm, cnmfrm, ccifrm, tkfram, tipbod, tisbod, pckfrm, pckfrm!, pckcov, pckcov!
 export bodfnd, bodvcd, boddef
 export pdpool, pcpool, pipool, dvpool, expool, dtpool, gnpool, szpool, lmpool, clpool
 export stpool, ldpool, swpool, cvpool, poolversion
 export et2lst, lspcn
-export subpnt, subslr, sincpt, srfrec, ilumin, illumg, illumf, phaseq, occult
+export subpnt, subslr, sincpt, srfrec, ilumin, illumg, illumf, phaseq, trgsep, occult
 export limbpt, termpt, tangpt, fovtrg, fovray, getfov, getfvn
 export spkcpo, spkcpt, spkcvo, spkcvt, azlcpo, azlrec, recazl, dazldr, drdazl
 export gfdist, gfsep, gfposc, gfrr, gfpa, gfuds, gfudb, gfevnt, gfstol, gfrefn, uddc, uddf
@@ -94,7 +96,7 @@ include("pool_write.jl")    # pdpool, pcpool, pipool, dvpool, lmpool, ldpool, cl
 include("context.jl")       # build_kernelset, SpiceContext, furnsh, unload, kclear
 include("spk_api.jl")       # spkgeo, spkezr, spkpos, spkder
 include("aberration.jl")    # Aberration, light time, stellar aberration, spkltc, ...
-include("frame_api.jl")     # pxform, sxform, pxder
+include("frame_api.jl")     # pxform, pxfrm2, sxform, pxder
 include("pool_api.jl")      # gdpool, gcpool, gipool, bodvrd, bodn2c, ...
 include("time_api.jl")      # context forms of the time calls, timdef
 include("ck_api.jl")        # ckgp, ckgpav, ckcov, ckobj, ckmeta; CSPICE state rotation
@@ -119,14 +121,15 @@ include("math/vectors.jl")      # vadd ... vsep, mxv, mxm, invert, rotate, twove
 include("math/rotations.jl")    # eul2m, m2eul, m2q, q2m, qxq, axisar, raxisa, rav2xf, xf2eul
 include("math/ellipsoid.jl")    # SpicePlane, SpiceEllipse, nearpt, surfpt, edlimb, inedpl, npedln
 include("math/coordinates.jl")  # reclat, recgeo, recpgr, ..., Jacobians, xfmsta, convrt
-include("math/conics.jl")       # stmp03, prop2b, conics, oscelt, oscltx
+include("math/conics.jl")       # stmp03, prop2b, conics, oscelt, oscltx, eqncpv
+include("math/polynomials.jl")  # chbval ... chbigr, lgrint ... hrmesp, polyds, qderiv, rquad, diags2
 include("frame_info.jl")    # frinfo, cidfrm, cnmfrm, ccifrm, tkfram, tipbod, tisbod, pckfrm, pckcov, bodfnd, bodvcd
 include("lst.jl")           # et2lst, lspcn
 include("geometry/methods.jl")       # method strings, corrections, bodies, frames, radii, shapes
 include("geometry/constobs.jl")      # spkcpo, spkcpt, spkcvo, spkcvt
 include("geometry/subpoints.jl")     # subpnt, subslr
 include("geometry/intercept.jl")     # sincpt, srfrec
-include("geometry/illumination.jl")  # ilumin, illumg, illumf, phaseq
+include("geometry/illumination.jl")  # ilumin, illumg, illumf, phaseq, trgsep
 include("geometry/occultation.jl")   # occult
 include("geometry/limbterm.jl")      # limbpt, termpt, tangpt
 include("geometry/fov.jl")           # getfov, getfvn, fovray, fovtrg

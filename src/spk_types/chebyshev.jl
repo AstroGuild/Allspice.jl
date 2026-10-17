@@ -60,11 +60,11 @@ end
 
 Value at `x` of the Chebyshev series with the `ncof` coefficients
 `data[a:a+ncof-1] * scale` on the interval `mid ± radius`, and its integral from
-`mid` to `x`, by the recurrences of `chbigr`. Requires `ncof >= 1`, `radius > 0` and
-the coefficients inside `data` (not checked).
+`mid` to `x`, by the recurrences of `chbigr`; also the kernel of the public `chbigr`.
+Requires `ncof >= 1`, `radius > 0` and the coefficients inside `data` (not checked).
 """
-@inline function _chbigr(data::Vector{Float64}, a::Int, ncof::Int, scale::Float64, mid::Float64,
-        radius::Float64, x::T) where {T}
+@inline function _chbigr(data::AbstractVector, a::Int, ncof::Int, scale::Float64, mid::Real,
+        radius::Real, x::T) where {T}
     cp(i) = @inbounds data[a+i-1] * scale       # coefficient i, 1-based
     degp = ncof - 1
     s = (x - mid) / radius
@@ -72,11 +72,11 @@ the coefficients inside `data` (not checked).
     # Coefficients of the integral: a_i = (c_{i-1} - c_{i+1}) / (2 (i-1)), with the
     # special cases of the ends.
     a2 = ncof >= 3 ? cp(1) - cp(3) * 0.5 : cp(1)
-    adegp1 = degp >= 2 ? cp(degp) * 0.5 / degp : 0.0
-    adegp2 = degp >= 1 ? cp(degp + 1) * 0.5 / (degp + 1) : 0.0
+    adegp1 = degp >= 2 ? cp(degp) * 0.5 / degp : zero(a2)
+    adegp2 = degp >= 1 ? cp(degp + 1) * 0.5 / (degp + 1) : zero(a2)
     f0 = zero(T) + (degp == 0 ? a2 : adegp2)
     f1 = zero(T)
-    z0, z1 = (degp == 0 ? a2 : adegp2), 0.0     # the integral series at s = 0
+    z0, z1 = (degp == 0 ? a2 : adegp2), zero(a2)    # the integral series at s = 0
     w0 = zero(T)
     w1 = zero(T)
     i = ncof

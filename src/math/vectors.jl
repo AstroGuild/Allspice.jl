@@ -749,6 +749,37 @@ function xpose6(m1::AbstractMatrix)
 end
 
 """
+    invstm(mat) -> SMatrix{6,6}
+
+Return the inverse of a state transformation matrix, as `invstm_c` of CSPICE.
+
+A state transformation `[R 0; dR R]`, as [`sxform`](@ref) returns it, has the inverse
+`[R' 0; dR' R']`. The call transposes each of the four 3 by 3 blocks of `mat` in its
+place. It does not check that `mat` is a state transformation.
+
+Throws `SpiceError(:badarg)` if `mat` is not 6 by 6.
+
+# Examples
+```jldoctest
+julia> x = eul2xf([0.1, 0.2, 0.3, 1e-3, 2e-3, 3e-3], 3, 1, 3);
+
+julia> invstm(x) * x ≈ [i == j for i in 1:6, j in 1:6]
+true
+```
+
+See also [`xpose6`](@ref), [`invert`](@ref).
+"""
+function invstm(mat::AbstractMatrix)
+    m = _m_m6(mat)
+    # element k in column order is (i, j); its source is the transposed place in its block
+    return SMatrix{6,6}(ntuple(Val(36)) do k
+        i, j = (k - 1) % 6, (k - 1) ÷ 6
+        bi, bj = 3 * (i ÷ 3), 3 * (j ÷ 3)
+        m[bi+j-bj+1, bj+i-bi+1]
+    end)
+end
+
+"""
     det(m1)
 
 Return the determinant of a 3 by 3 matrix, as `det_c` (expansion along the first row).

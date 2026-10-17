@@ -78,6 +78,13 @@ function g_phaseq(et, target, illmn, obsrvr, abcorr)
     return r
 end
 
+function g_trgsep(et, t1, s1, f1, t2, s2, f2, obsrvr, abcorr)
+    r = ccall((:trgsep_c, GEOLIB), Float64, (Float64, Cstring, Cstring, Cstring, Cstring, Cstring,
+            Cstring, Cstring, Cstring), et, t1, s1, f1, t2, s2, f2, obsrvr, abcorr)
+    c_check()
+    return r
+end
+
 function g_occult(t1, s1, f1, t2, s2, f2, abcorr, obsrvr, et)
     id = Ref{Cint}(0)
     ccall((:occult_c, GEOLIB), Cvoid, (Cstring, Cstring, Cstring, Cstring, Cstring, Cstring, Cstring,

@@ -315,32 +315,26 @@ function _kepler_equinoctial(h::Float64, k::Float64)
     return x
 end
 
-"""
-    _spk17(data, seg, et::T) -> (pos, vel)
+"`x - y * trunc(x / y)`, the remainder of `d_mod` of the f2c library."
+@inline function _f2c_dmod(x::Float64, y::Float64)
+    q = x / y
+    return x - y * (q >= 0.0 ? floor(q) : -floor(-q))
+end
 
-State of a type 17 segment (equinoctial elements), as `spke17` with `eqncpv`. The
-segment is one record: epoch, semi-major axis, H, K, mean longitude, P, Q, rate of
-the longitude of periapsis, mean longitude rate, rate of the node, and the right
-ascension and declination of the pole of the reference plane.
-
-The elements are moved to `et` with their rates, the Kepler equation is solved in
-its equinoctial form (plain root as `kpsolv`, derivative parts by Newton steps, see
-`_with_primal`), and the state in the equatorial frame of the pole is turned to the
-frame of the segment. Throws `SpiceError(:baddaf)` unless the semi-major axis is
-positive and the eccentricity is not above 0.9.
 """
-function _spk17(data::Vector{Float64}, seg::Segment, et::T) where {T<:Real}
-    bs = seg.baddr
-    seg.eaddr - bs + 1 == 12 || _badsegment(seg, "the segment does not have 12 doubles")
-    @inbounds begin
-        epoch = data[bs]
-        a, h0, k0, l = data[bs+1], data[bs+2], data[bs+3], data[bs+4]
-        p0, q0 = data[bs+5], data[bs+6]
-        dlpdt, mldt, nodedt = data[bs+7], data[bs+8], data[bs+9]
-        rapol, decpol = data[bs+10], data[bs+11]
-    end
-    (a > 0.0 && sqrt(h0 * h0 + k0 * k0) <= 0.9) || _badsegment(seg,
-        "the semi-major axis is not positive or the eccentricity is above 0.9")
+    _eqn_state(et::T, epoch, a, h0, k0, l, p0, q0, dlpdt, mldt, nodedt, rapol, decpol)
+        -> (pos::Vec3{T}, vel::Vec3{T})
+
+State at `et` from equinoctial elements, as `eqncpv`, without its checks of the
+semi-major axis and of the eccentricity. The elements are moved to `et` with their
+rates, the Kepler equation is solved in its equinoctial form (plain root as `kpsolv`,
+derivative parts by Newton steps, see `_with_primal`), and the state in the equatorial
+frame of the pole `(rapol, decpol)` is turned to the frame of the pole's coordinates.
+Throws `SpiceError(:eccoutofbounds)` if `h² + k² >= 0.81` at `et`, as `kepleq`.
+"""
+function _eqn_state(et::T, epoch::Float64, a::Float64, h0::Float64, k0::Float64, l::Float64,
+        p0::Float64, q0::Float64, dlpdt::Float64, mldt::Float64, nodedt::Float64,
+        rapol::Float64, decpol::Float64) where {T<:Real}
     sa, ca = sincos(rapol)
     sd, cd = sincos(decpol)
     dt = et - epoch
@@ -359,14 +353,14 @@ function _spk17(data::Vector{Float64}, seg::Segment, et::T) where {T<:Real}
     vg = Vec3(p * 2.0 * q * di, (p * p + 1.0 - q * q) * di, q * 2.0 * di)
     # Mean longitude, with the whole revolutions of the rate term removed.
     mlrate = mldt * dt
-    ml = l + _with_primal(mlrate, rem(primal(mlrate), 2.0 * _PI))
+    ml = l + _with_primal(mlrate, _f2c_dmod(primal(mlrate), 2.0 * _PI))
+    primal(h)^2 + primal(k)^2 >= 0.81 && throw(SpiceError(:eccoutofbounds,
+        "the eccentricity of the equinoctial elements at the epoch is not below 0.9"))
     # Eccentric longitude: ml plus the root of the Kepler equation in the elements
     # turned by ml (`kepleq`).
     sml, cml = sincos(ml)
     ev1 = -h * cml + k * sml
     ev2 = h * sml + k * cml
-    primal(h)^2 + primal(k)^2 >= 0.81 &&
-        _conic_error("the eccentricity of the equinoctial elements is above 0.9")
     x = convert(T, _kepler_equinoctial(primal(ev1), primal(ev2)))
     for _ in 1:_ad_order(T)       # invariant: one more derivative order of x is exact
         sx, cx = sincos(x)
@@ -394,4 +388,29 @@ function _spk17(data::Vector{Float64}, seg::Segment, et::T) where {T<:Real}
     r3 = Vec3(0.0, cd, sd)
     return Vec3(_dot(r1, xh), _dot(r2, xh), _dot(r3, xh)),
         Vec3(_dot(r1, vh), _dot(r2, vh), _dot(r3, vh))
+end
+
+"""
+    _spk17(data, seg, et::T) -> (pos, vel)
+
+State of a type 17 segment (equinoctial elements), as `spke17` with `eqncpv`
+(`_eqn_state`). The segment is one record: epoch, semi-major axis, H, K, mean
+longitude, P, Q, rate of the longitude of periapsis, mean longitude rate, rate of the
+node, and the right ascension and declination of the pole of the reference plane.
+Throws `SpiceError(:baddaf)` unless the semi-major axis is positive and the
+eccentricity is not above 0.9.
+"""
+function _spk17(data::Vector{Float64}, seg::Segment, et::T) where {T<:Real}
+    bs = seg.baddr
+    seg.eaddr - bs + 1 == 12 || _badsegment(seg, "the segment does not have 12 doubles")
+    @inbounds begin
+        epoch = data[bs]
+        a, h0, k0, l = data[bs+1], data[bs+2], data[bs+3], data[bs+4]
+        p0, q0 = data[bs+5], data[bs+6]
+        dlpdt, mldt, nodedt = data[bs+7], data[bs+8], data[bs+9]
+        rapol, decpol = data[bs+10], data[bs+11]
+    end
+    (a > 0.0 && sqrt(h0 * h0 + k0 * k0) <= 0.9) || _badsegment(seg,
+        "the semi-major axis is not positive or the eccentricity is above 0.9")
+    return _eqn_state(et, epoch, a, h0, k0, l, p0, q0, dlpdt, mldt, nodedt, rapol, decpol)
 end

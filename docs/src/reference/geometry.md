@@ -18,6 +18,7 @@ ilumin
 illumg
 illumf
 phaseq
+trgsep
 ```
 
 ## Occultation, limb and terminator
