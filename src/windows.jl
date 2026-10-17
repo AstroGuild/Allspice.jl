@@ -445,3 +445,228 @@ function wnsumd(w::Window)
     stddev = sqrt(max(sumsqr * 2.0 / card - avg * avg, 0.0))
     return (sum, avg, stddev, idxsml, idxlon)
 end
+
+# --- changes of a window in place, and the comparison of two windows ------------------
+
+"""
+    wnexpd!(window, left, right) -> window
+
+Expand each interval of `window` and return `window`, as `wnexpd_c` of CSPICE.
+
+`left` is subtracted from each left endpoint and `right` is added to each right
+endpoint. A negative value contracts the interval. An interval whose left endpoint then
+exceeds its right endpoint is removed. Intervals that overlap or touch after the change
+are merged. The window is the first argument; CSPICE has it last.
+
+# Examples
+```jldoctest
+julia> wnexpd!(Window([1, 3, 7, 11, 20, 21]), 2, 1) == Window([-1, 4, 5, 12, 18, 22])
+true
+
+julia> wnexpd!(Window([1, 3, 7, 11]), -1.5, -1.5) == Window([8.5, 9.5])
+true
+```
+
+See also [`wncond!`](@ref), [`wnfild!`](@ref).
+"""
+function wnexpd!(w::Window, left::Real, right::Real)
+    l = Float64(left)
+    r = Float64(right)
+    d = w.data
+    card = length(d)
+    gone = 0
+    for i in 1:2:card                    # invariant: d[1:i-1-gone] holds the kept intervals
+        d[i-gone] = d[i] - l
+        d[i-gone+1] = d[i+1] + r
+        d[i-gone] > d[i-gone+1] && (gone += 2)
+    end
+    card -= gone
+    if card == 0
+        empty!(d)
+        return w
+    end
+    # The intervals were all moved by the same amounts, so they are still in order and
+    # only neighbours can overlap.
+    i = 2
+    j = 2
+    while j < card                       # invariant: d[1:i-1] is final; j is the next right endpoint
+        if d[j] < d[j+1]
+            d[i] = d[j]
+            d[i+1] = d[j+1]
+            i += 2
+        end
+        j += 2
+    end
+    d[i] = d[j]
+    resize!(d, i)
+    return w
+end
+
+"""
+    wncond!(window, left, right) -> window
+
+Contract each interval of `window` and return `window`, as `wncond_c` of CSPICE.
+
+`left` is added to each left endpoint and `right` is subtracted from each right
+endpoint; this is [`wnexpd!`](@ref) with `-left` and `-right`. An interval whose left
+endpoint then exceeds its right endpoint is removed, and an interval of one point
+remains. The window is the first argument; CSPICE has it last.
+
+# Examples
+```jldoctest
+julia> wncond!(Window([1, 3, 7, 11, 20, 21]), 1, 1) == Window([2, 2, 8, 10])
+true
+```
+"""
+wncond!(w::Window, left::Real, right::Real) = wnexpd!(w, -Float64(left), -Float64(right))
+
+"""
+    wnextd!(window, side) -> window
+
+Replace each interval of `window` by the interval of one point at its left
+(`side = 'L'`) or right (`side = 'R'`) endpoint, and return `window`, as `wnextd_c`
+of CSPICE.
+
+Letter case of `side` is ignored. The window is the first argument; CSPICE has it last.
+
+Throws `SpiceError(:invalidendpntspec)` if `side` is not `'L'`, `'l'`, `'R'` or `'r'`;
+the window is then unchanged.
+
+# Examples
+```jldoctest
+julia> wnextd!(Window([1, 3, 7, 11]), 'R') == Window([3, 3, 11, 11])
+true
+```
+"""
+function wnextd!(w::Window, side::AbstractChar)
+    d = w.data
+    if side == 'L' || side == 'l'
+        for i in 1:2:length(d)
+            d[i+1] = d[i]
+        end
+    elseif side == 'R' || side == 'r'
+        for i in 1:2:length(d)
+            d[i] = d[i+1]
+        end
+    else
+        throw(SpiceError(:invalidendpntspec, "wnextd!: side was '$side'; it must be 'L' or 'R'"))
+    end
+    return w
+end
+
+"""
+    wnfild!(window, smlgap) -> window
+
+Fill each gap of `window` that is not longer than `smlgap` and return `window`, as
+`wnfild_c` of CSPICE.
+
+The two intervals on each side of such a gap are merged. A gap is the distance between
+the right endpoint of an interval and the left endpoint of the next one. The window is
+the first argument; CSPICE has it last.
+
+# Examples
+```jldoctest
+julia> wnfild!(Window([1, 3, 4, 6, 9, 11]), 1) == Window([1, 6, 9, 11])
+true
+```
+
+See also [`wnfltd!`](@ref), [`wnexpd!`](@ref).
+"""
+function wnfild!(w::Window, smlgap::Real)
+    gap = Float64(smlgap)
+    d = w.data
+    card = length(d)
+    card == 0 && return w
+    i = 2
+    j = 2
+    while j < card                       # invariant: d[1:i-1] is final; j is the next right endpoint
+        if d[j] + gap < d[j+1]
+            d[i] = d[j]
+            d[i+1] = d[j+1]
+            i += 2
+        end
+        j += 2
+    end
+    d[i] = d[j]
+    resize!(d, i)
+    return w
+end
+
+"""
+    wnfltd!(window, smlint) -> window
+
+Remove each interval of `window` that is not longer than `smlint` and return `window`,
+as `wnfltd_c` of CSPICE.
+
+An interval stays only if its length is greater than `smlint`, so `smlint = 0` removes
+the intervals of one point. The window is the first argument; CSPICE has it last.
+
+# Examples
+```jldoctest
+julia> wnfltd!(Window([1, 3, 4, 4, 9, 11.5]), 2) == Window([9, 11.5])
+true
+```
+
+See also [`wnfild!`](@ref).
+"""
+function wnfltd!(w::Window, smlint::Real)
+    small = Float64(smlint)
+    d = w.data
+    card = length(d)
+    i = 0
+    for j in 2:2:card                    # invariant: d[1:i] holds the kept intervals before j-1
+        if d[j] - d[j-1] > small
+            i += 2
+            d[i-1] = d[j-1]
+            d[i] = d[j]
+        end
+    end
+    resize!(d, i)
+    return w
+end
+
+"""
+    wnreld(a, op, b) -> Bool
+
+Return `true` if the relation `a op b` holds between the windows `a` and `b`, as
+`wnreld_c` of CSPICE.
+
+| `op` | Relation |
+|:-----|:---------|
+| `"="` | `a` and `b` hold the same intervals |
+| `"<>"` | `a` and `b` differ |
+| `"<="` | each interval of `a` is inside an interval of `b` |
+| `"<"` | as `"<="`, and `a` and `b` differ |
+| `">="`, `">"` | as `"<="` and `"<"` with `a` and `b` exchanged |
+
+Trailing blanks of `op` are ignored; leading blanks are not, as in CSPICE.
+
+Throws `SpiceError(:emptystring)` if `op` is empty and `SpiceError(:invalidoperation)`
+if it is not one of the above.
+
+# Examples
+```jldoctest
+julia> a = Window([1, 3, 7, 11]); b = Window([0, 4, 6, 12]);
+
+julia> wnreld(a, "<", b), wnreld(a, "=", b), wnreld(a, ">=", b)
+(true, false, false)
+```
+
+See also [`wnincd`](@ref).
+"""
+function wnreld(a::Window, op::AbstractString, b::Window)
+    isempty(op) && throw(SpiceError(:emptystring, "wnreld: the relational operator is empty"))
+    o = rstrip(op, ' ')
+    equal = a.data == b.data
+    o == "=" && return equal
+    o == "<>" && return !equal
+    if o == "<=" || o == "<"
+        sub = all(i -> wnincd(b, a.data[i], a.data[i+1]), 1:2:length(a.data))
+        return o == "<=" ? sub : sub && !equal
+    elseif o == ">=" || o == ">"
+        sub = all(i -> wnincd(a, b.data[i], b.data[i+1]), 1:2:length(b.data))
+        return o == ">=" ? sub : sub && !equal
+    end
+    throw(SpiceError(:invalidoperation, "wnreld: the relational operator '$op' is not " *
+        "recognized; it must be one of =, <>, <=, <, >=, >"))
+end

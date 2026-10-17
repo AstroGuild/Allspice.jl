@@ -197,20 +197,21 @@ const _MONTH_ABBR = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SE
     "NOV", "DEC")
 
 """
-    _tparse(s, yearbound=1969) -> Float64
+    _tparse(s, yearbound=1969, check=false) -> Float64
 
 Contract: `s` is a kernel date without the leading `@`, `yearbound > 0`; returns the
 seconds past J2000 without leap seconds that `tparse` gives, since the reader of CSPICE
 (`zzrvar_`) calls `tparse_` for such a date. A year of two digits is a year of the 100
-years from `yearbound` (the bound of `tsetyr`). Throws `SpiceError(:badtime)` for a
-string that `tparse` rejects. The range check of `tparch` is off, which is the start
-state of CSPICE (there `str2et_` can leave the check on, and the reader then rejects
-dates such as `@1-JAN-49` that it accepted before).
+years from `yearbound` (the bound of `tsetyr`), and `check` is the range check of
+`tparch`. Both are the settings of the context at the load. Throws
+`SpiceError(:badtime)` for a string that `tparse` rejects. The check is off at start,
+as in CSPICE (there `str2et_` can leave the check on, and the reader then rejects dates
+such as `@1-JAN-49` that it accepted before).
 """
-function _tparse(s::AbstractString, yearbound::Int=1969)::Float64
+function _tparse(s::AbstractString, yearbound::Int=1969, check::Bool=false)::Float64
     @assert yearbound > 0
     d = TimeDefaults()
-    return tparse(s, TimeDefaults(d.calendar, d.system, d.zone, yearbound))
+    return tparse(s, TimeDefaults(d.calendar, d.system, d.zone, yearbound, check))
 end
 
 # ---------------------------------------------------------------------------------
@@ -357,15 +358,17 @@ function _tk_finish!(out::Vector{Assignment}, kind::Int, name, append::Bool, str
 end
 
 """
-    parse_text_lines(path, lines, yearbound=1969) -> TextKernel
+    parse_text_lines(path, lines, yearbound=1969, check=false) -> TextKernel
 
 Contract: `lines` iterates the physical lines of a text kernel; returns the
 assignments in file order with the values CSPICE puts in the kernel pool. `path` is
 used for the result and for error messages only; `yearbound` is the bound of `tsetyr`
-for a year of two digits in an `@` date. Throws `SpiceError(:badkernel)` for
+for a year of two digits in an `@` date, and `check` the range check of `tparch` for
+it. Throws `SpiceError(:badkernel)` for
 a malformed assignment.
 """
-function parse_text_lines(path::AbstractString, lines, yearbound::Int=1969)::TextKernel
+function parse_text_lines(path::AbstractString, lines, yearbound::Int=1969,
+        check::Bool=false)::TextKernel
     out = Assignment[]
     indata = false
     invec = false
@@ -430,7 +433,7 @@ function parse_text_lines(path::AbstractString, lines, yearbound::Int=1969)::Tex
                                          "is not a number or a time")
                 if line[b] == UInt8('@')
                     e == b && _tk_fail(path, lineno, "'@' is not followed by a time")
-                    push!(nums, _tparse(String(line[b+1:e]), yearbound))
+                    push!(nums, _tparse(String(line[b+1:e]), yearbound, check))
                 else
                     push!(nums, _nparsd(view(line, b:e)))
                 end
@@ -445,7 +448,7 @@ function parse_text_lines(path::AbstractString, lines, yearbound::Int=1969)::Tex
 end
 
 """
-    parse_text_kernel(path, yearbound=1969) -> TextKernel
+    parse_text_kernel(path, yearbound=1969, check=false) -> TextKernel
 
 Contract: `path` names a readable text kernel; returns its assignments in file order.
 Only text between `\\begindata` and `\\begintext` is data. Values are numbers (with
@@ -453,10 +456,11 @@ Only text between `\\begindata` and `\\begintext` is data. Values are numbers (w
 `''` as an escaped quote; string elements are kept raw, so a continuation marker is
 still in place (see `pool_string_joined`). Variable names are case-sensitive.
 """
-function parse_text_kernel(path::AbstractString, yearbound::Int=1969)::TextKernel
+function parse_text_kernel(path::AbstractString, yearbound::Int=1969,
+        check::Bool=false)::TextKernel
     isfile(path) || throw(SpiceError(:filenotfound, "kernel file '$path' does not exist"))
     text = read(path, String)
-    return parse_text_lines(path, eachsplit(text, r"\r\n|\n|\r"), yearbound)
+    return parse_text_lines(path, eachsplit(text, r"\r\n|\n|\r"), yearbound, check)
 end
 
 # ---------------------------------------------------------------------------------

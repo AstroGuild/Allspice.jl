@@ -38,6 +38,7 @@ vupack
 ucrss
 unorm
 vtmv
+frame
 ```
 
 ## Matrices
@@ -236,6 +237,16 @@ polyds
 qderiv
 rquad
 diags2
+```
+
+## Hexadecimal strings
+
+A double is written as hexadecimal digits of a mantissa in [1/16, 1) and an exponent of
+16, so that the string holds every bit of the number.
+
+```@docs
+dp2hx
+hx2dp
 ```
 
 ## Constants

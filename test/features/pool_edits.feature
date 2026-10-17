@@ -92,3 +92,22 @@ Feature: Kernel-pool edits and watchers
     And every state is equal, bit for bit, to the state before the edits
     And every writer finds its own update with "cvpool" after each edit
     And at the end each variable has its last value
+
+  Scenario: Body names for messages
+    When the user calls "bodc2s" with a code that has a name and with one that has none
+    Then the answer is the name, or the code as a string, as CSPICE
+
+  Scenario Outline: Checks of a kernel variable
+    Given a pool variable with a number of values and a type
+    When the user calls "badkpv" with a comparison, a size, a divisor and a type
+    Then a variable that passes gives false
+    And a variable that fails throws a "SpiceError" of the kind of CSPICE
+
+    Examples:
+      | case                   | kind             |
+      | variable not in pool   | variablenotfound |
+      | comparison ">="        | unknowncompare   |
+      | wrong size             | badvariablesize  |
+      | divisor 0              | badvariablesize  |
+      | wrong type             | badvariabletype  |
+      | type letter "X"        | invalidtype      |

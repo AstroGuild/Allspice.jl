@@ -71,3 +71,8 @@ Feature: Frame information, body constants and local solar time
   Scenario: Longitude of the Sun
     When the user asks for "lspcn" of the Earth, the Moon, Venus and Mercury with five corrections
     Then the angle agrees with CSPICE to 2e-13 rad
+
+  Scenario: Built-in frames and frames of the kernel pool
+    When the user calls "bltfrm" and "kplfrm" for each frame class and for all classes
+    Then the frame IDs are those of CSPICE, sorted and without duplicates
+    And a class outside -1 and 1 to 6 throws a "SpiceError" of kind "badframeclass"

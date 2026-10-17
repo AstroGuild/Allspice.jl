@@ -126,6 +126,41 @@ group("10. windows") do
         measured(@sprintf("  %-58s trials=%d mismatches=%d", "windows: wnelmd/wnincd/wnfetd/wnsumd vs CSPICE", ntrial, bad))
     end
 
+    @apart @testset "changes in place and wnreld are equal to CSPICE" begin
+        bad = Dict(k => 0 for k in (:wnexpd!, :wncond!, :wnfild!, :wnfltd!, :wnextd!, :wnreld))
+        ops = ("=", "<>", "<=", "<", ">=", ">")
+        for _ in 1:ntrial
+            w = Window(random_pairs(rng, rand(rng, 0:8)))
+            # Amounts of both signs, on the grid of the endpoints, so that intervals
+            # vanish, become points and touch their neighbours.
+            l, r = rand(rng, -6:6) / 2, rand(rng, -6:6) / 2
+            for (f!, g!, k) in ((wnexpd!, SPICE.wnexpd!, :wnexpd!), (wncond!, SPICE.wncond!, :wncond!))
+                a = copy(w)
+                bad[k] += f!(a, l, r) !== a
+                bad[k] += collect(a) != cell_values(g!(cell_window(w.data), l, r))
+                bad[k] += !valid_window(a.data)
+            end
+            small = rand(rng, -2:6) / 2
+            for (f!, g!, k) in ((wnfild!, SPICE.wnfild!, :wnfild!), (wnfltd!, SPICE.wnfltd!, :wnfltd!))
+                bad[k] += collect(f!(copy(w), small)) != cell_values(g!(cell_window(w.data), small))
+            end
+            side = rand(rng, ('L', 'l', 'R', 'r'))
+            bad[:wnextd!] += collect(wnextd!(copy(w), side)) !=
+                             cell_values(SPICE.wnextd!(cell_window(w.data), side))
+            # A second window that is often equal to, inside, or around the first.
+            v = rand(rng, (copy(w), wnexpd!(copy(w), 0.5, 0.5), wncond!(copy(w), 0.5, 0),
+                Window(random_pairs(rng, rand(rng, 0:8)))))
+            cw, cv = cell_window(w.data), cell_window(v.data)
+            for op in ops
+                bad[:wnreld] += wnreld(w, op, v) != SPICE.wnreld(cw, op, cv)
+            end
+        end
+        for (k, v) in sort!(collect(bad); by=first)
+            @test v == 0
+            measured(@sprintf("  %-58s trials=%d mismatches=%d", "windows: $k vs CSPICE", ntrial, v))
+        end
+    end
+
     @apart @testset "input checks" begin
         w = Window([1.0, 2.0, 5.0, 6.0])
         @test throws_kind(() -> wninsd!(w, 3.0, 2.0), :badendpoints)
@@ -137,6 +172,14 @@ group("10. windows") do
         @test throws_kind(() -> wnfetd(w, 0), :nointerval)
         @test throws_kind(() -> wnfetd(w, 3), :nointerval)
         @test_throws SPICE.SpiceError SPICE.wnfetd(cell_window(w.data), 3)
+        @test throws_kind(() -> wnextd!(w, 'X'), :invalidendpntspec)
+        @test_throws SPICE.SpiceError SPICE.wnextd!(cell_window(w.data), 'X')
+        @test collect(w) == [1.0, 2.0, 5.0, 6.0]
+        # Trailing blanks of the operator are ignored and leading ones are not, as in CSPICE.
+        @test wnreld(w, "<= ", w) && SPICE.wnreld(cell_window(w.data), "<= ", cell_window(w.data))
+        @test throws_kind(() -> wnreld(w, " =", w), :invalidoperation)
+        @test_throws SPICE.SpiceError SPICE.wnreld(cell_window(w.data), " =", cell_window(w.data))
+        @test throws_kind(() -> wnreld(w, "", w), :emptystring)
         @test wnsumd(Window()) == (0.0, 0.0, 0.0, 0, 0)
         @test card(Window()) == 0 && wncard(Window()) == 0
         # A window is a vector of its endpoints, and `copy` is independent.

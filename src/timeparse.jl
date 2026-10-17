@@ -1031,7 +1031,7 @@ function _timdef_set(defs::TimeDefaults, item::AbstractString, value::AbstractSt
     if it == "SYSTEM"
         val in ("TDB", "TDT", "TT", "UTC") || throw(SpiceError(:badtimedefault,
             "the default time system '$value' is not one of UTC, TDB, TDT, TT"))
-        return TimeDefaults(defs.calendar, val, "", defs.yearbound)
+        return TimeDefaults(defs.calendar, val, "", defs.yearbound, defs.check)
     elseif it == "ZONE"
         zone = findfirst(==(val), _TK_ZONES)
         zone === nothing || (val = _TK_OFFSETS[zone])
@@ -1040,11 +1040,11 @@ function _timdef_set(defs::TimeDefaults, item::AbstractString, value::AbstractSt
         ok || throw(SpiceError(:badtimedefault, "the default time zone '$value' is not " *
             "one of EST, EDT, CST, CDT, MST, MDT, PST, PDT and is not an offset " *
             "UTC+h[:mm] or UTC-h[:mm] with h below 13"))
-        return TimeDefaults(defs.calendar, "", String(val), defs.yearbound)
+        return TimeDefaults(defs.calendar, "", String(val), defs.yearbound, defs.check)
     elseif it == "CALENDAR"
         val in ("JULIAN", "GREGORIAN", "MIXED") || throw(SpiceError(:badtimedefault,
             "the default calendar '$value' is not one of GREGORIAN, JULIAN, MIXED"))
-        return TimeDefaults(val, defs.system, defs.zone, defs.yearbound)
+        return TimeDefaults(val, defs.system, defs.zone, defs.yearbound, defs.check)
     end
     throw(SpiceError(:badtimedefault,
         "the default item '$item' is not one of CALENDAR, SYSTEM, ZONE"))
@@ -1229,6 +1229,15 @@ function str2et(ks::KernelSet, s::AbstractString, defs::TimeDefaults=TimeDefault
     return _ttrans(l, ptype, _TT_TDB, tv())[1]
 end
 
+# The range check of `tcheck_` that `tparch` turns on, for `utc2et` and `tparse`: it
+# runs on the components as parsed, before a year of two digits is expanded.
+function _tparch_check(s::AbstractString, defs::TimeDefaults, p)
+    defs.check || return nothing
+    ok, why = _tcheck(p.tvec, p.type, p.mods, p.modify)
+    ok || _badtime(s, why)
+    return nothing
+end
+
 """
     utc2et([ctx,] s) -> Float64
 
@@ -1241,10 +1250,12 @@ CSPICE routine:
   and without a time system other than `UTC`.
 - The defaults of [`timdef`](@ref) are not used: the string is UTC and the date is
   Gregorian. The year bound of [`tsetyr`](@ref) is used.
-- The components are not checked against their ranges, so `1996-02-30` is March 1.
+- The components are not checked against their ranges, so `1996-02-30` is March 1,
+  unless [`tparch`](@ref) has turned the check on for the context.
 
-Throws `SpiceError(:badtime)` if `s` is not a time string of these forms and
-`SpiceError(:noleapseconds)` if no leap-second kernel is loaded.
+Throws `SpiceError(:badtime)` if `s` is not a time string of these forms or, with the
+check on, if a component is out of range, and `SpiceError(:noleapseconds)` if no
+leap-second kernel is loaded.
 """
 function utc2et(ks::KernelSet, s::AbstractString, defs::TimeDefaults=TimeDefaults())::Float64
     l = _lsk(ks)
@@ -1261,6 +1272,7 @@ function utc2et(ks::KernelSet, s::AbstractString, defs::TimeDefaults=TimeDefault
     tvec = p.tvec
     p.type == "JD" && isnan(tvec[1]) && _badtime(s, _NOJDVALUE)
     p.type == "JD" && return _ttrans(l, _TT_JDUTC, _TT_TDB, _tvec(tvec[1]))[1]
+    _tparch_check(s, defs, p)
     year = _nint(tvec[1])
     if modify[_MOD_ERA] == "B.C."
         year = 1 - year
@@ -1283,10 +1295,13 @@ that [`etcal`](@ref) writes back. `s` has a form that [`str2et`](@ref) accepts,
 without a time zone, a time system, or `A.M.` and `P.M.`.
 
 A year of two digits follows [`tsetyr`](@ref) of the context: at start the year 69 is
-1969 and the year 68 is 2068.
+1969 and the year 68 is 2068. The components are not checked against their ranges, so
+`"1996-02-30"` is March 1, unless [`tparch`](@ref) has turned the check on for the
+context.
 
-Throws `SpiceError(:badtime)` if the string cannot be parsed; the message is the one
-that `tparse_c` returns in `errmsg`.
+Throws `SpiceError(:badtime)` if the string cannot be parsed or, with the check on, if
+a component is out of range; the message is the one that `tparse_c` returns in
+`errmsg`.
 
 # Examples
 ```jldoctest
@@ -1309,6 +1324,7 @@ function tparse(s::AbstractString, defs::TimeDefaults)::Float64
     tvec = p.tvec
     p.type == "JD" && isnan(tvec[1]) && _badtime(s, _NOJDVALUE)
     p.type == "JD" && return (tvec[1] - _JD2000) * _SPD
+    _tparch_check(s, defs, p)
     if p.type == "YD"
         tvec[6] = tvec[5]
         tvec[5] = tvec[4]

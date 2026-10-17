@@ -1,4 +1,4 @@
-# Group 12: vector and matrix calls against CSPICE.
+# Group 12: vector and matrix calls, and the base 16 strings of doubles, against CSPICE.
 #
 # Feature file: features/math_vectors.feature
 #
@@ -74,6 +74,64 @@ function twovxf_overflows(axdef, indexa, plndef, indexp)
     return ducrss_overflows(plndef, axdef) || ducrss_overflows(axdef, CS.ducrss(plndef, axdef))
 end
 
+"""
+    oracle_hx2dp(s) -> Union{Float64,Symbol,String}
+
+`hx2dp_c` of CSPICE: the number, the short message of a signalled error as a lower-case
+symbol, or the text that CSPICE writes into `errmsg` with its error flag.
+"""
+function oracle_hx2dp(s::AbstractString)
+    num = Ref{Cdouble}(NaN)
+    err = Ref{Cint}(0)
+    msg = zeros(UInt8, 256)
+    ccall((:hx2dp_c, SPICE.libcspice), Cvoid, (Cstring, Cint, Ref{Cdouble}, Ref{Cint},
+        Ptr{UInt8}), s, length(msg), num, err, msg)
+    try
+        CS.check()
+    catch e
+        e isa CS.CError || rethrow()
+        return e.kind
+    end
+    return err[] != 0 ? GC.@preserve(msg, unsafe_string(pointer(msg))) : num[]
+end
+
+"`hx2dp(s)` in the form of `oracle_hx2dp`: the number, an error kind, or the message of `:badnumber`."
+function neo_hx2dp(s::AbstractString)
+    try
+        return hx2dp(s)
+    catch e
+        e isa SpiceError || rethrow()
+        return e.kind === :badnumber ? e.msg : e.kind
+    end
+end
+
+"""
+A random string in the neighbourhood of the base 16 form: an optional sign, up to 33
+digits (with now and then a character that is not a digit), the caret or not, and an
+exponent of up to 4 digits, with blanks around. The exponent is kept short because
+CSPICE scales by one factor of 16 per unit of the exponent.
+"""
+function random_hex(rng::AbstractRNG)
+    pick(chars) = chars[rand(rng, 1:length(chars))]
+    digit() = rand(rng) < 0.03 ? pick("G -.") : pick("0123456789ABCDEFabcdef")
+    io = IOBuffer()
+    rand(rng) < 0.2 && print(io, " "^rand(rng, 1:2))
+    rand(rng) < 0.4 && print(io, pick("+-"))
+    for _ in 1:(rand(rng) < 0.1 ? rand(rng, 30:33) : rand(rng, 0:14))
+        print(io, digit())
+    end
+    if rand(rng) < 0.95
+        print(io, '^')
+        rand(rng) < 0.1 && print(io, ' ')
+        rand(rng) < 0.5 && print(io, pick("+-"))
+        for _ in 1:rand(rng, 0:4)
+            print(io, digit())
+        end
+    end
+    rand(rng) < 0.2 && print(io, " "^rand(rng, 1:2))
+    return String(take!(io))
+end
+
 group("12. math: vectors and matrices") do
     rng = MersenneTwister(SEED + 12)
     n = nsample(100, 400)
@@ -112,6 +170,8 @@ group("12. math: vectors and matrices") do
             versus!(t, :vpack, () -> vpack(x, y, z), () -> CS.vpack(x, y, z))
             versus!(t, :vupack, () -> vupack(a), () -> CS.vupack(a))
             versus!(t, :ucrss, () -> ucrss(a, b), () -> CS.ucrss(a, b))
+            # `frame_c` overwrites its input with the unit vector; SPICE.jl passes a copy.
+            versus!(t, :frame, () -> frame(a), () -> SPICE.frame(collect(Float64, a)))
             m = rm3()
             versus!(t, :vtmv, () -> vtmv(a, m, b), () -> CS.vtmv(a, m, b))
         end
@@ -126,6 +186,8 @@ group("12. math: vectors and matrices") do
         @test CS.vperp(e1, z3) == z3            # the defect of `vperp_c`
         @test ucrss(e1, 5.0 * e1) == z3 && ucrss(z3, e1) == z3
         @test vrotv(e1, z3, 1.0) == e1
+        @test frame(z3) == (e1, SVector(0.0, 1.0, 0.0), SVector(0.0, 0.0, 1.0)) == SPICE.frame(zeros(3))
+        @test throws_kind(() -> frame([1.0, 2.0]), :badarg)
         @test vrel(z3, z3) == 0.0 && vrel(e1, e1) == 0.0
         @test vnorm(SVector(1e300, 1e300, 1e300)) == CS.vnorm([1e300, 1e300, 1e300]) < Inf
         @test vnorm(SVector(1e-300, 1e-300, 0.0)) > 0.0
@@ -371,6 +433,38 @@ group("12. math: vectors and matrices") do
         @test Allspice.derivatives(vcrss(r, b)[1])[1] == vcrss(a, b)[1]
     end
 
+    @apart @testset "base 16 strings of doubles: dp2hx and hx2dp" begin
+        specials = [0.0, -0.0, 1.0, -1.0, 672.0, -11.0, 0.1, 16.0^-3, nextfloat(0.0),
+            -nextfloat(0.0), floatmin(), prevfloat(floatmin()), floatmax(), -floatmax(), NaN]
+        nbad = 0
+        for x in vcat(specials, [rmag(rng) * randn(rng) for _ in 1:n])
+            h = dp2hx(x)
+            nbad += h != SPICE.dp2hx(x)
+            # Every finite double has an exact string, so the round trip is the identity;
+            # the string of -0.0 is the one of 0.0.
+            isnan(x) || (nbad += hx2dp(h) !== (iszero(x) ? 0.0 : x))
+        end
+        @test nbad == 0
+        @test throws_kind(() -> dp2hx(Inf), :valueoutofrange)   # dp2hx_c does not return
+        # The error messages of CSPICE, each limit of the exponent and of the mantissa, and
+        # a random sample around the form.
+        strings = ["2A^3", "-B^1", "", " ", "   1^1  ", "1^ 2", "1^", "1", "^1", "-^0", "- 1^1",
+            "1 ^1", "+1^1", "1^-", "1^G", "G^1", "1\t^1", "0123456789ABCDEF0123456789ABCDE^0",
+            "0123456789ABCDEF0123456789ABCDEF^0", "1^7FFFFFFF", "1^80000000", "1^-80000001",
+            "-1^7FFFFFFF", "FFFFFFFFFFFFF8^100", "FFFFFFFFFFFFF8^101", "-FFFFFFFFFFFFF8^100",
+            "-FFFFFFFFFFFFF8^101", "4^-10C", "8^-10E", "abc^-1f", "-8^-80000000"]
+        nbad = 0
+        for str in vcat(strings, [random_hex(rng) for _ in 1:4n])
+            got, want = neo_hx2dp(str), oracle_hx2dp(str)
+            same = got isa Float64 && want isa Float64 ? got === want : isequal(got, want)
+            same || @info "hx2dp" str got want
+            nbad += !same
+        end
+        @test nbad == 0
+        # CSPICE scales a zero 2^31 times here; the result is zero by arithmetic.
+        @test hx2dp("0^7FFFFFFF") === 0.0 && hx2dp("1^-7FFFFFFF") === 0.0
+    end
+
     @apart @testset "inferred types and no allocation for static arguments" begin
         a = SVector(1.2, -0.7, 2.1)
         b = SVector(0.3, 1.9, -0.4)
@@ -391,7 +485,8 @@ group("12. math: vectors and matrices") do
             (Allspice.det, (m,), Float64), (trace, (m,), Float64), (invert, (m,), M3),
             (invort, (m,), M3), (isrot, (m, 1e-10, 1e-10), Bool), (ident, (), M3),
             (rotate, (0.3, 2), M3), (rotmat, (m, 0.3, 2), M3), (rotvec, (a, 0.3, 2), V3),
-            (twovec, (a, 1, b, 2), M3), (twovxf, (s, 1, s2, 2), M6), (dvhat, (s,), V6),
+            (twovec, (a, 1, b, 2), M3), (twovxf, (s, 1, s2, 2), M6), (frame, (a,), NTuple{3,V3}),
+            (dvhat, (s,), V6),
             (dvdot, (s, s2), Float64), (dvcrss, (s, s2), V6), (ducrss, (s, s2), V6),
             (dvnorm, (s,), Float64), (dvsep, (s, s2), Float64),
             (vaddg, (a, b), V3), (vsubg, (a, b), V3), (vsclg, (2.0, a), V3), (vminug, (a,), V3),

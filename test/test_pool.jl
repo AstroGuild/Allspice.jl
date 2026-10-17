@@ -115,7 +115,7 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
         @test throws_kind(() -> bodvrd(ctx, "NO_SUCH_BODY", "RADII"), :notranslation)
     end
 
-    @apart @testset "bodn2c, bods2c, bodc2n" begin
+    @apart @testset "bodn2c, bods2c, bodc2n, bodc2s" begin
         names = ["EARTH", "earth", "  Earth  ", "MOON", "SUN", "SSB", "SOLAR SYSTEM BARYCENTER",
             "EMB", "EARTH BARYCENTER", "Earth-Moon   Barycenter", "MARS", "PHOBOS", "IO",
             "JUPITER BARYCENTER", "PLUTO", "CHARON", "CERES", "CASSINI", "VOYAGER 1", "MRO",
@@ -128,7 +128,9 @@ group("5. kernel pool and names against CSPICE", Kernels.TEXT_SET_FILES...,
             2000001, -82, -31, -32, -74, 399014, 1000005, 123456789, -99999]
         for code in codes
             @test bodc2n(ctx, code) == SPICE.bodc2n(code)
+            @test bodc2s(ctx, code) == SPICE.bodc2s(code)
         end
+        @test bodc2s(ctx, typemin(Int32)) == SPICE.bodc2s(typemin(Int32)) == "-2147483648"
         # Round trip for a random sample of the built-in codes.
         for code in rand(rng, 1:999, 200)
             name = SPICE.bodc2n(code)

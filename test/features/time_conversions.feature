@@ -126,3 +126,11 @@ Feature: Conversions between time strings, ephemeris time and uniform time scale
       | timout | missingtimeinfo   |
       | unitim | missingtimeinfo   |
       | deltet | kernelvarnotfound |
+
+  Scenario: Range check of the time fields
+    Given a context where "tparch" is set to "YES"
+    When the user converts "1996-02-30", "1996-13-01" or "1996-367//"
+    Then "utc2et" and "tparse" reject the string, as CSPICE with the check on
+    And an "@" date in a text kernel that the context loads is checked in the same way
+    But another context still accepts the string
+    And any value other than "YES" turns the check off

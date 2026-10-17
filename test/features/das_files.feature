@@ -93,3 +93,14 @@ Feature: Read and write DAS files through a handle that the caller owns
     Given a file open for writing with integers in it
     When dasadi or dasudi gets a list in which a later value does not fit in 32 bits
     Then the error "valueoutofrange" occurs and the integers of the file are as before
+
+  Scenario: Update of characters
+    Given two copies of one file open for writing, one in Allspice and one in CSPICE
+    When dasudc changes the same range of character addresses in both copies
+    Then the two files hold the same characters
+    And a string shorter than the range throws "badarg"
+
+  Scenario: Update outside the file
+    Given a file open for writing
+    When dasudc, dasudd or dasudi gets a first or last address outside the address space
+    Then the error "invalidaddress" occurs, as in CSPICE, also for an empty range

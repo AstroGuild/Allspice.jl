@@ -42,6 +42,7 @@ dtpool
 gnpool
 szpool
 stpool
+badkpv
 ```
 
 ## Changing the kernel pool
@@ -64,6 +65,7 @@ poolversion
 ```@docs
 bodn2c
 bodc2n
+bodc2s
 bods2c
 boddef
 namfrm

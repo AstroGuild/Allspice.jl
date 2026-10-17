@@ -41,4 +41,10 @@ wnelmd
 wnincd
 wnfetd
 wnsumd
+wnreld
+wnexpd!
+wncond!
+wnfild!
+wnfltd!
+wnextd!
 ```

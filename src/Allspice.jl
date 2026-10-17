@@ -10,9 +10,9 @@ export furnsh, unload, kclear, ktotal
 export spkezr, spkpos, spkgeo, spkder
 export Aberration, spkssb, spkltc, spkaps, spkacs, spkapo, ltime, stelab, stlabx
 export pxform, sxform, pxder, pxfrm2
-export gdpool, gcpool, gipool, bodvrd, bodn2c, bodc2n, bods2c, namfrm, frmnam
+export gdpool, gcpool, gipool, bodvrd, bodn2c, bodc2n, bodc2s, bods2c, namfrm, frmnam
 export deltet, utc2et, str2et, et2utc, etcal, timout, tpictr, tparse, timdef, unitim, tsetyr
-export jul2gr, gr2jul
+export tparch, jul2gr, gr2jul
 export j1900, j1950, j2000, j2100, jyear, tyear, spd, b1900, b1950, clight
 export halfpi, twopi, rpd, dpr
 export sct2e, sce2c, sce2t, sce2s, scs2e, scencd, scdecd, sctiks, scfmt, scpart, sctype
@@ -28,9 +28,9 @@ export ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
 export pckopn, pckw02, pckcls
 export spkobj, spkobj!, spkcov, spkcov!, kinfo, kdata, tkvrsn
 export Window, card, wncard, wninsd!, wnvald!, wnunid, wnintd, wndifd, wncomd
-export wnelmd, wnincd, wnfetd, wnsumd
+export wnelmd, wnincd, wnfetd, wnsumd, wnreld, wncond!, wnexpd!, wnextd!, wnfild!, wnfltd!
 export DASHandle, dasopr, dasopw, dasonw, dasops, dascls, dasllc, dashfn, dasrfr, daslla, dashfs
-export dasrdd, dasrdi, dasrdc, dasadd, dasadi, dasadc, dasudd, dasudi, dasac, dasec, dasdc
+export dasrdd, dasrdi, dasrdc, dasadd, dasadi, dasadc, dasudd, dasudi, dasudc, dasac, dasec, dasdc
 export DLADescr, dlaopn, dlabns, dlaens, dlabfs, dlafns, dlabbs, dlafps
 export DSKDescr, DSKSegment, dskobj, dsksrf, dskgd, dskb02, dskz02, dskn02, dskp02, dskv02
 export dski02, dskd02, dskx02, dskxv, dskxv!, dskxsi, dskgtl, dskstl
@@ -40,7 +40,7 @@ export latsrf, srfnrm, srfc2s, srfs2c, srfcss, srfscc
 export vadd, vsub, vscl, vminus, vdot, vcrss, vnorm, vhat, vdist, vsep, vrel, vproj, vperp
 export vlcom, vlcom3, vrotv, vzero, vequ, vpack, vupack, ucrss, unorm, vtmv
 export mxv, mtxv, mxm, mtxm, mxmt, xpose, xpose6, invstm, invert, invort, trace, isrot, ident
-export rotate, rotmat, rotvec, twovec, twovxf, dvhat, dvdot, dvcrss, ducrss, dvnorm, dvsep
+export rotate, rotmat, rotvec, twovec, twovxf, frame, dvhat, dvdot, dvcrss, ducrss, dvnorm, dvsep
 export vaddg, vsubg, vsclg, vminug, vequg, vdotg, vnormg, vhatg, unormg, vdistg, vsepg, vrelg
 export vprojg, vlcomg, vzerog, vtmvg, mxvg, mtxvg, mxmg, mtxmg, mxmtg, xposeg
 export eul2m, m2eul, eul2xf, xf2eul, axisar, raxisa, m2q, q2m, qxq, qdq2av, rav2xf, xf2rav
@@ -54,10 +54,12 @@ export drdlat, dlatdr, drdsph, dsphdr, drdcyl, dcyldr, drdgeo, dgeodr, drdpgr, d
 export conics, oscelt, oscltx, prop2b, stmp03, eqncpv
 export chbval, chbint, chbder, chbigr, lgrint, lgrind, lgresp, hrmint, hrmesp, polyds, qderiv
 export rquad, diags2
-export frinfo, cidfrm, cnmfrm, ccifrm, tkfram, tipbod, tisbod, pckfrm, pckfrm!, pckcov, pckcov!
+export dp2hx, hx2dp
+export frinfo, cidfrm, cnmfrm, ccifrm, bltfrm, kplfrm, tkfram, tipbod, tisbod
+export pckfrm, pckfrm!, pckcov, pckcov!
 export bodfnd, bodvcd, boddef
 export pdpool, pcpool, pipool, dvpool, expool, dtpool, gnpool, szpool, lmpool, clpool
-export stpool, ldpool, swpool, cvpool, poolversion
+export stpool, ldpool, swpool, cvpool, poolversion, badkpv
 export et2lst, lspcn
 export subpnt, subslr, sincpt, srfrec, ilumin, illumg, illumf, phaseq, trgsep, occult
 export limbpt, termpt, tangpt, fovtrg, fovray, getfov, getfvn
@@ -100,14 +102,14 @@ include("frame_api.jl")     # pxform, pxfrm2, sxform, pxder
 include("pool_api.jl")      # gdpool, gcpool, gipool, bodvrd, bodn2c, ...
 include("time_api.jl")      # context forms of the time calls, timdef
 include("ck_api.jl")        # ckgp, ckgpav, ckcov, ckobj, ckmeta; CSPICE state rotation
-include("windows.jl")       # Window, wninsd!, wnunid, wnintd, wndifd, wncomd, ...
+include("windows.jl")       # Window, wninsd!, wnunid, wnintd, wndifd, wncomd, wnexpd!, wnreld, ...
 include("daf_access.jl")    # DAFHandle, dafopr, dafbfs, daffna, dafgs, dafgda, dafec, getfat
 include("daf_write.jl")     # dafonw, dafopw, dafbna, dafada, dafena, dafac, dafdc
 include("spk_write.jl")     # spkopn, spkopa, spkcls, spkw01 ... spkw21
 include("ck_write.jl")      # ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
 include("pck_write.jl")     # pckopn, pckw02, pckcls
 include("ck_records.jl")    # cknr02, ckgr02, cknr03, ckgr03
-include("das.jl")           # DASHandle, dasopr, dasonw, dascls, dasrdi, dasadi, dasac, dasec
+include("das.jl")           # DASHandle, dasopr, dasonw, dascls, dasrdi, dasadi, dasudc, dasac, dasec
 include("dla.jl")           # dlaopn, dlabns, dlaens, dlabfs, dlafns, dlabbs, dlafps
 include("dsk.jl")           # type 2 geometry, open_dsk, intercept and segment selection
 include("dsk_api.jl")       # dskgtl, dskstl, dskgd, dskb02 ... dskx02, dskxsi, dskxv, plt*
@@ -123,7 +125,8 @@ include("math/ellipsoid.jl")    # SpicePlane, SpiceEllipse, nearpt, surfpt, edli
 include("math/coordinates.jl")  # reclat, recgeo, recpgr, ..., Jacobians, xfmsta, convrt
 include("math/conics.jl")       # stmp03, prop2b, conics, oscelt, oscltx, eqncpv
 include("math/polynomials.jl")  # chbval ... chbigr, lgrint ... hrmesp, polyds, qderiv, rquad, diags2
-include("frame_info.jl")    # frinfo, cidfrm, cnmfrm, ccifrm, tkfram, tipbod, tisbod, pckfrm, pckcov, bodfnd, bodvcd
+include("hex.jl")               # dp2hx, hx2dp: base 16 strings of doubles
+include("frame_info.jl")    # frinfo, cidfrm, cnmfrm, ccifrm, bltfrm, kplfrm, tkfram, tipbod, tisbod, pckfrm, pckcov, bodfnd, bodvcd
 include("lst.jl")           # et2lst, lspcn
 include("geometry/methods.jl")       # method strings, corrections, bodies, frames, radii, shapes
 include("geometry/constobs.jl")      # spkcpo, spkcpt, spkcvo, spkcvt

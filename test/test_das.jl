@@ -424,7 +424,8 @@ group("11. DAS files and DLA segment lists") do
 
         # Updates outside the address spaces, against CSPICE. (fault fixed: `dasudd` and
         # `dasudi` threw `:dasnosuchaddress` and accepted an empty range outside the
-        # file; SPICELIB checks both addresses before the order.)
+        # file; SPICELIB checks both addresses before the order.) Then the same updates
+        # inside, with `dasudc`, on two copies of one file.
         cp(joinpath(dir, "generic.das"), joinpath(dir, "upd_c.das"))
         cp(joinpath(dir, "generic.das"), joinpath(dir, "upd_a.das"))
         ch = c_dasopw(joinpath(dir, "upd_c.das"))
@@ -440,9 +441,25 @@ group("11. DAS files and DLA segment lists") do
         for (f, l) in ((0, 1), (lastd, lastd + 1), (lastd + 2, lastd + 1), (lastd, lastd - 1))
             @test neo_kind(() -> dasudd(h, f, l, zeros(4))) === c_udd(f, l)
         end
+        c_udc(f, l, data) = c_kind(() -> ccall((:dasudc_c, DSKLIB), Cvoid, (Cint, Cint, Cint,
+            Cint, Cint, Cint, Ptr{UInt8}), ch, f, l, 0, sizeof(data) - 1, sizeof(data), data))
+        for (f, l) in ((0, 1), (lastc, lastc + 1), (lastc + 2, lastc + 1), (lastc, lastc - 1))
+            @test neo_kind(() -> dasudc(h, f, l, "abcd")) === c_udc(f, l, "abcd")
+        end
         @test c_udi(lasti + 2, lasti + 1) === :invalidaddress
+        @test neo_kind(() -> dasudc(h, 1, 3, "ab")) === :badarg
+        # The same updates with both libraries give the same file; a longer string is cut.
+        @test c_udc(lastc - 2, lastc, "XYZ") === nothing
+        dasudc(h, lastc - 2, lastc, "XYZW")
+        @test c_udi(2, 3) === nothing && c_udd(2, 3) === nothing
+        dasudi(h, 2, 3, zeros(Int, 4))
+        dasudd(h, 2, 3, zeros(4))
+        @test dasrdc(h, lastc - 3, lastc)[2:end] == "XYZ"
         c_dascls(ch)
         dascls(h)
+        ci, cd, cc = c_das_data(joinpath(dir, "upd_c.das"))
+        ai, ad, ac = c_das_data(joinpath(dir, "upd_a.das"))
+        @test ci == ai && bits_equal(cd, ad) && cc == ac
     end
 end
 

@@ -25,7 +25,7 @@ The kind of an error is the short message of CSPICE in lower case where the same
 CSPICE keeps buffers and saved search results between calls, for speed. This package keeps no such state: a query is a function of the loaded kernels and of its arguments. Three visible consequences follow.
 
 - **Threads.** Queries from many threads need no lock, and a kernel can be loaded while other threads query; see [Contexts and threads](@ref).
-- **Settings.** The defaults of [`timdef`](@ref) and [`tsetyr`](@ref), the tolerance of [`gfstol`](@ref) and the settings of [`dskstl`](@ref) belong to a context, not to the process.
+- **Settings.** The defaults of [`timdef`](@ref), [`tsetyr`](@ref) and [`tparch`](@ref), the tolerance of [`gfstol`](@ref) and the settings of [`dskstl`](@ref) belong to a context, not to the process.
 - **Repeatable answers.** Where the answer of CSPICE depends on an earlier call (for example `ckgp` directly after `ckgpav` on overlapping segments, the dates in a text kernel loaded after certain `str2et` calls, or the four padding bytes of each segment summary of a binary PCK, which CSPICE fills from the last SPK or CK summary it handled), this package returns the answer that CSPICE gives in a new process.
 
 ## Numerical results

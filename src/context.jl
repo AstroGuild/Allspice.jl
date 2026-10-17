@@ -109,33 +109,34 @@ Return the current snapshot of `ctx` with one atomic read; the result never chan
 kernelset(ctx::SpiceContext) = @atomic ctx.ks
 
 """
-    read_kernel(path, yearbound=1969) -> Union{DAF,TextKernel}
+    read_kernel(path, yearbound=1969, check=false) -> Union{DAF,TextKernel}
 
 Open the binary kernel (DAF, or DSK) or parse the text kernel at `path` (with the year
-bound `yearbound` of `tsetyr` for its `@` dates); throws `SpiceError` if the file does
-not exist.
+bound `yearbound` of `tsetyr` and the range check `check` of `tparch` for its `@`
+dates); throws `SpiceError` if the file does not exist.
 """
-function read_kernel(path::AbstractString, yearbound::Int=1969)
+function read_kernel(path::AbstractString, yearbound::Int=1969, check::Bool=false)
     isfile(path) || throw(SpiceError(:nosuchfile, "kernel file not found: $path"))
     arch = kernel_arch(path)
     arch === :DSK && return open_dsk(path)
     arch === :EK && return open_ek(path)
-    return (arch === :SPK || arch === :PCK || arch === :CK) ? open_daf(path) : parse_text_kernel(path, yearbound)
+    return (arch === :SPK || arch === :PCK || arch === :CK) ? open_daf(path) :
+        parse_text_kernel(path, yearbound, check)
 end
 
 """
-    load_entries(path, yearbound=1969) -> Vector{Loaded}
+    load_entries(path, yearbound=1969, check=false) -> Vector{Loaded}
 
 Read the kernel at `path` and return its load-list entries: one entry for the kernel
 and, for a meta-kernel, one entry for each listed file (in order, `source == path`).
 """
-function load_entries(path::AbstractString, yearbound::Int=1969)
+function load_entries(path::AbstractString, yearbound::Int=1969, check::Bool=false)
     p = String(path)
-    content = read_kernel(p, yearbound)
+    content = read_kernel(p, yearbound, check)
     entries = Loaded[Loaded(p, "", content)]
     if content isa TextKernel
         for file in metakernel_files(content)
-            sub = read_kernel(file, yearbound)
+            sub = read_kernel(file, yearbound, check)
             if sub isa TextKernel && !isempty(metakernel_files(sub))
                 throw(SpiceError(:recursiveloading,
                     "meta-kernel $p lists the meta-kernel $file; CSPICE does not allow this"))
@@ -185,7 +186,8 @@ See also [`unload`](@ref), [`kclear`](@ref), [`ktotal`](@ref), [`kdata`](@ref).
 function furnsh(ctx::SpiceContext, path::AbstractString)
     isempty(strip(path)) && throw(SpiceError(:blankfilename, "furnsh: the kernel path is blank"))
     lock(ctx.lock) do
-        entries = load_entries(path, (@atomic ctx.timedefs).yearbound)
+        defs = @atomic ctx.timedefs
+        entries = load_entries(path, defs.yearbound, defs.check)
         list = copy(kernelset(ctx).loaded)
         append!(list, entries)
         _pool_x_swap_loaded!(ctx, list, entries)

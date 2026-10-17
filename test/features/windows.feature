@@ -29,3 +29,25 @@ Feature: Windows of time intervals
     When the user inserts an interval whose left endpoint is greater than the right one
     Then a "SpiceError" of kind "badendpoints" is thrown
     And the window is unchanged
+
+  Scenario: Changes in place
+    Given a window with random intervals, some of them singletons or touching
+    When the user calls "wnexpd!", "wncond!", "wnfild!", "wnfltd!" or "wnextd!"
+    Then the window is equal, endpoint for endpoint, to the window that CSPICE changes
+    And intervals that overlap after the change are merged
+
+  Scenario: Comparison of two windows
+    Given two windows
+    When the user calls "wnreld" with "=", "<>", "<=", "<", ">=" or ">"
+    Then the answer is equal to the answer of CSPICE
+    And blanks after the operator are ignored
+
+  Scenario Outline: Invalid side or operator
+    When the user calls "<call>" with the argument "<argument>"
+    Then a "SpiceError" of kind "<kind>" is thrown
+
+    Examples:
+      | call    | argument | kind              |
+      | wnextd! | X        | invalidendpntspec |
+      | wnreld  | " ="     | invalidoperation  |
+      | wnreld  | ""       | emptystring       |

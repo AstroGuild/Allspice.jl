@@ -122,12 +122,58 @@ function tsetyr(ctx::SpiceContext, year::Integer)
     year > 0 || return nothing
     lock(ctx.lock) do
         d = timedefaults(ctx)
-        @atomic ctx.timedefs = TimeDefaults(d.calendar, d.system, d.zone, Int(year))
+        @atomic ctx.timedefs = TimeDefaults(d.calendar, d.system, d.zone, Int(year), d.check)
     end
     @assert timedefaults(ctx).yearbound > 0
     return nothing
 end
 tsetyr(year::Integer) = tsetyr(default_context(), year)
+
+"""
+    tparch([ctx,] type) -> Nothing
+
+Turn the range check of the components of a time string on (`type = "YES"`) or off
+(any other value), as `tparch_c`.
+
+Letter case and blanks of `type` are ignored. At start the check is off: then
+[`tparse`](@ref) and [`utc2et`](@ref) accept `"1996-02-30"` as March 1 and a time of
+`"24:00:00"` as the next day. With the check on they throw for a month outside 1 to 12,
+a day outside its month or year, an hour, minute or second outside its range, or a
+fraction in a component that is not the last one. The setting applies to these two
+calls on the context and to the `@` dates of the text kernels that the context loads
+afterwards ([`furnsh`](@ref), [`ldpool`](@ref), [`lmpool`](@ref)). [`str2et`](@ref)
+always checks. The setting belongs to the context; CSPICE keeps one for the process.
+
+Throws `SpiceError(:emptystring)` if `type` is empty.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> etcal(tparse(ctx, "1996-02-30"))
+"1996 MAR 01 00:00:00.000"
+
+julia> tparch(ctx, "YES")
+
+julia> try
+           tparse(ctx, "1996-02-30")
+       catch err
+           err.kind
+       end
+:badtime
+```
+"""
+function tparch(ctx::SpiceContext, type::AbstractString)
+    isempty(type) && throw(SpiceError(:emptystring, "tparch: the argument type is empty"))
+    check = uppercase(replace(type, ' ' => "")) == "YES"
+    lock(ctx.lock) do
+        d = timedefaults(ctx)
+        @atomic ctx.timedefs = TimeDefaults(d.calendar, d.system, d.zone, d.yearbound, check)
+        @assert timedefaults(ctx).check == check
+    end
+    return nothing
+end
+tparch(type::AbstractString) = tparch(default_context(), type)
 
 # These three need no kernel; the context forms exist so that every call has them. The
 # context form of `tparse` uses the interval of abbreviated years of the context.

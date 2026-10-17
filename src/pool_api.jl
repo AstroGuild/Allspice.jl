@@ -181,6 +181,27 @@ See also [`bodn2c`](@ref).
 bodc2n(ks::KernelSet, code::Integer) = body_name(ks, code)
 
 """
+    bodc2s([ctx,] code) -> String
+
+Return the name of the body with the NAIF ID `code`, or the decimal text of `code` if
+the code has no name, as `bodc2s_c`.
+
+The name is the one of [`bodc2n`](@ref).
+
+# Examples
+```jldoctest
+julia> bodc2s(399), bodc2s(123456789)
+("EARTH", "123456789")
+```
+
+See also [`bods2c`](@ref).
+"""
+function bodc2s(ks::KernelSet, code::Integer)
+    name = body_name(ks, code)
+    return name === nothing ? string(code) : name
+end
+
+"""
     namfrm([ctx,] name) -> Int
 
 Return the ID of the frame `name`, or 0 if the frame is not known, as `namfrm_c`.
@@ -230,7 +251,7 @@ for f in (:gdpool, :gipool, :gcpool, :bods2c, :bodn2c, :namfrm)
         $f(name::AbstractString) = $f(default_context(), name)
     end
 end
-for f in (:bodc2n, :frmnam)
+for f in (:bodc2n, :bodc2s, :frmnam)
     @eval begin
         $f(ctx::SpiceContext, code::Integer) = $f(kernelset(ctx), code)
         $f(code::Integer) = $f(default_context(), code)

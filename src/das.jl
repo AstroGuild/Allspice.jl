@@ -777,6 +777,29 @@ function dasudi(h::DASHandle, first::Integer, last::Integer, data::AbstractVecto
     return nothing
 end
 
+"""
+    dasudc(handle, first, last, data) -> Nothing
+
+Replace the characters at the DAS addresses `first:last` with the first
+`last - first + 1` code units of the string `data`, as `dasudc_c`. `dasudc_c` takes
+substrings of an array of strings. Nothing happens if `first > last`.
+
+Throws `SpiceError(:invalidaddress)` if `first` or `last` is not an address of the
+character address space, also when `first > last`, and `SpiceError(:badarg)` if `data`
+is too short. A call that throws changes nothing.
+
+See also [`dasadc`](@ref), [`dasrdc`](@ref).
+"""
+function dasudc(h::DASHandle, first::Integer, last::Integer, data::AbstractString)
+    _das_check_write(h, "dasudc")
+    _das_check_update(h, "dasudc", first, last, length(h.chars))
+    first > last && return nothing
+    units = codeunits(data)
+    length(units) >= last - first + 1 || throw(SpiceError(:badarg, "dasudc: data is too short"))
+    copyto!(h.chars, first, units, 1, last - first + 1)
+    return nothing
+end
+
 # ---------------------------------------------------------------------------------------
 # Comment area
 # ---------------------------------------------------------------------------------------

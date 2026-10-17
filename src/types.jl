@@ -284,17 +284,20 @@ Immutable snapshot of the three defaults of `timdef`: `calendar` is `"GREGORIAN"
 `"JULIAN"` or `"MIXED"`; `system` is `"UTC"`, `"TDB"`, `"TDT"`, `"TT"` or `""`; `zone`
 is `""` or an offset such as `"UTC-7"`. At most one of `system` and `zone` is not
 empty. `yearbound` is the first year of the 100 years that a year of two digits
-abbreviates (`tsetyr`; 1969 at start, so 69 is 1969 and 68 is 2068). Declared `mutable`
-with `const` fields only so that it lives behind one pointer, as `KernelSet` does.
+abbreviates (`tsetyr`; 1969 at start, so 69 is 1969 and 68 is 2068). `check` is the
+range check of the components of a time string (`tparch`; off at start). Declared
+`mutable` with `const` fields only so that it lives behind one pointer, as `KernelSet`
+does.
 """
 mutable struct TimeDefaults
     const calendar::String
     const system::String
     const zone::String
     const yearbound::Int
-    function TimeDefaults(calendar, system, zone, yearbound::Integer=1969)
+    const check::Bool
+    function TimeDefaults(calendar, system, zone, yearbound::Integer=1969, check::Bool=false)
         @assert yearbound > 0 "the first year of the interval of abbreviated years is positive"
-        return new(calendar, system, zone, yearbound)
+        return new(calendar, system, zone, yearbound, check)
     end
 end
 
@@ -314,7 +317,7 @@ A context holds:
 
 - the loaded kernels and the kernel pool ([`furnsh`](@ref), [`unload`](@ref),
   [`kclear`](@ref), [`pdpool`](@ref), [`boddef`](@ref));
-- the time defaults of [`timdef`](@ref) and [`tsetyr`](@ref);
+- the time defaults of [`timdef`](@ref), [`tsetyr`](@ref) and [`tparch`](@ref);
 - the pool watchers of [`swpool`](@ref);
 - the DSK tolerances of [`dskstl`](@ref) and the search tolerance of [`gfstol`](@ref).
 

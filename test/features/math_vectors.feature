@@ -90,3 +90,22 @@ Feature: Vector and matrix calls
   Scenario: Static arguments
     When the user calls a vector or matrix call with static arrays
     Then the result type is inferred and the call does not allocate
+
+  Scenario: Orthonormal frame from one vector
+    Given a non-zero vector
+    When the user calls "frame"
+    Then the three unit vectors are those of CSPICE, and the first is parallel to the vector
+    And the zero vector gives the three axes of the identity
+
+  Scenario: Base 16 strings of doubles
+    Given random doubles, zero, subnormal numbers and the largest double
+    When the user calls "dp2hx"
+    Then the string is equal, character for character, to the string of CSPICE
+    And "hx2dp" of that string gives the double back
+    But an infinite double throws a "SpiceError" of kind "valueoutofrange"
+
+  Scenario: Strings that hx2dp rejects
+    Given strings with a missing exponent, an illegal character, more than 31 digits or an exponent that is too large
+    When the user calls "hx2dp"
+    Then a "SpiceError" of kind "badnumber" is thrown with the error message of CSPICE
+    And an empty string throws a "SpiceError" of kind "emptystring"

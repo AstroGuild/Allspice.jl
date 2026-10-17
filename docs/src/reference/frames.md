@@ -22,6 +22,8 @@ pckfrm
 pckfrm!
 pckcov
 pckcov!
+bltfrm
+kplfrm
 ```
 
 ## Orientation from C-kernels

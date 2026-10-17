@@ -1,7 +1,7 @@
 # Kernel-pool write interface (`pdpool`, `pcpool`, `pipool`, `dvpool`, `lmpool`,
 # `ldpool`, `clpool`), the read calls that `pool_api.jl` does not have (`expool`,
-# `dtpool`, `gnpool`, `szpool`, `stpool`), body name definitions (`boddef`), and the
-# watchers (`swpool`, `cvpool`, `poolversion`).
+# `dtpool`, `gnpool`, `szpool`, `stpool`, `badkpv`), body name definitions (`boddef`),
+# and the watchers (`swpool`, `cvpool`, `poolversion`).
 #
 # An edit never changes a snapshot. It goes through the context as `furnsh` does: under
 # the lock of the context a new pool is made from the current one, a new `KernelSet` is
@@ -336,8 +336,9 @@ julia> gdpool(ctx, "A"), gcpool(ctx, "B")
 See also [`ldpool`](@ref), [`furnsh`](@ref).
 """
 function lmpool(ctx::SpiceContext, cvals::AbstractVector{<:AbstractString})
+    defs = timedefaults(ctx)
     tk = parse_text_lines("lmpool", vcat(["\\begindata"], String[String(s) for s in cvals]),
-        timedefaults(ctx).yearbound)
+        defs.yearbound, defs.check)
     return _pool_x_edit!(pool -> _pool_x_apply!(pool, tk), ctx)
 end
 
@@ -357,7 +358,8 @@ if an assignment is malformed.
 """
 function ldpool(ctx::SpiceContext, fname::AbstractString)
     isfile(fname) || throw(SpiceError(:fileopenfailed, "ldpool: could not open $fname"))
-    tk = parse_text_kernel(String(fname), timedefaults(ctx).yearbound)
+    defs = timedefaults(ctx)
+    tk = parse_text_kernel(String(fname), defs.yearbound, defs.check)
     return _pool_x_edit!(pool -> _pool_x_apply!(pool, tk), ctx)
 end
 
@@ -435,6 +437,78 @@ function dtpool(ks::KernelSet, name::AbstractString)
     v = get(ks.pool, String(strip(name)), nothing)
     v === nothing && return 0, :X
     return length(v), v isa Vector{Float64} ? :N : :C
+end
+
+"""
+    badkpv([ctx,] caller, name, comp, size, divby, type) -> Bool
+
+Check the number of values and the type of the kernel-pool variable `name`, as
+`badkpv_c`, and return `false` if they are as expected.
+
+The number of values `n` must satisfy `n comp size`, where `comp` is `"="`, `"<"`,
+`">"`, `"<="` or `"=>"`; trailing blanks of `comp` are ignored. `n` must also be a
+multiple of `divby`; `divby = 0` fails for every variable, as in CSPICE. `type` is
+`'N'` for numbers or `'C'` for strings; letter case is ignored. `caller` is the name
+that starts the error messages. Blanks around `name` are ignored, as in
+[`dtpool`](@ref); CSPICE ignores only the trailing ones.
+
+CSPICE signals an error and returns `true` for a bad variable; this call throws, so
+the result is always `false`.
+
+Throws `SpiceError`:
+- `:emptystring` if `caller`, `name` or `comp` is empty;
+- `:variablenotfound` if the variable is not in the pool;
+- `:unknowncompare` if `comp` is not one of the above;
+- `:badvariablesize` if the number of values fails the comparison or is not a multiple
+  of `divby`;
+- `:badvariabletype` if the variable has the other type;
+- `:invalidtype` if `type` is not `'N'` or `'C'`.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> pdpool(ctx, "BODY399_RADII", [6378.1366, 6378.1366, 6356.7519]);
+
+julia> badkpv(ctx, "MYPROG", "BODY399_RADII", "=", 3, 1, 'N')
+false
+
+julia> try
+           badkpv(ctx, "MYPROG", "BODY399_RADII", "=>", 6, 1, 'N')
+       catch err
+           err.kind
+       end
+:badvariablesize
+```
+"""
+function badkpv(ks::KernelSet, caller::AbstractString, name::AbstractString,
+        comp::AbstractString, size::Integer, divby::Integer, type::AbstractChar)
+    for (arg, s) in (("caller", caller), ("name", name), ("comp", comp))
+        isempty(s) && throw(SpiceError(:emptystring, "badkpv: the argument $arg is empty"))
+    end
+    dim, class = dtpool(ks, name)
+    class === :X && throw(SpiceError(:variablenotfound, "$caller: the kernel pool " *
+        "variable '$name' is not currently present in the kernel pool"))
+    op = rstrip(comp, ' ')
+    ok = op == "=" ? dim == size : op == "<" ? dim < size : op == ">" ? dim > size :
+         op == "<=" ? dim <= size : op == "=>" ? dim >= size :
+         throw(SpiceError(:unknowncompare, "$caller: the comparison operator '$comp' is " *
+            "not a recognized value; the recognized values are '<', '<=', '=', '=>', '>'"))
+    ok || throw(SpiceError(:badvariablesize, "$caller: the kernel pool variable '$name' " *
+        "is expected to have a number of components DIM such that DIM $op $size, but it " *
+        "has $dim"))
+    # The rule of CSPICE: a division by zero is replaced by a ratio of 1.
+    ratio = divby != 0 ? div(dim, divby) : 1
+    divby * ratio == dim || throw(SpiceError(:badvariablesize, "$caller: the number of " *
+        "components of the kernel pool variable '$name' is $dim, which is not divisible by $divby"))
+    t = uppercase(type)
+    (t == 'C' || t == 'N') || throw(SpiceError(:invalidtype, "$caller: the expected type " *
+        "'$type' of the kernel pool variable '$name' is neither 'C' nor 'N'"))
+    want = t == 'C' ? :C : :N
+    class === want || throw(SpiceError(:badvariabletype, "$caller: the kernel pool " *
+        "variable '$name' must be of type " * (t == 'C' ? "\"CHARACTER\"; it is numeric" :
+        "\"NUMERIC\"; it is character")))
+    return false
 end
 
 """
@@ -675,3 +749,9 @@ stpool(ctx::SpiceContext, item::AbstractString, nth::Integer, contin::AbstractSt
     stpool(kernelset(ctx), item, nth, contin)
 stpool(item::AbstractString, nth::Integer, contin::AbstractString) =
     stpool(default_context(), item, nth, contin)
+badkpv(ctx::SpiceContext, caller::AbstractString, name::AbstractString, comp::AbstractString,
+    size::Integer, divby::Integer, type::AbstractChar) =
+    badkpv(kernelset(ctx), caller, name, comp, size, divby, type)
+badkpv(caller::AbstractString, name::AbstractString, comp::AbstractString, size::Integer,
+    divby::Integer, type::AbstractChar) =
+    badkpv(default_context(), caller, name, comp, size, divby, type)

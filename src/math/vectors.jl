@@ -1061,6 +1061,55 @@ end
     return r, d
 end
 
+"""
+    frame(x) -> (x̂, y, z)
+
+Return a right-handed orthonormal frame whose first axis is along `x`, as `frame_c` of
+CSPICE.
+
+`x̂` is the unit vector along `x`, and `y` and `z` complete the frame; the three are
+`SVector{3}` values. The component of `x̂` of the smallest magnitude is zero in `y`. The
+zero vector gives the axes of the input frame. CSPICE overwrites its argument `x` with
+`x̂`; this call does not change `x`.
+
+Throws `SpiceError(:badarg)` if `x` does not have 3 elements.
+
+# Examples
+```jldoctest
+julia> frame([0, 0, 2]) == ([0, 0, 1], [0, -1, 0], [1, 0, 0])
+true
+```
+
+See also [`twovec`](@ref).
+"""
+function frame(x::AbstractVector)
+    u = _m_hat(_m_v3(x))
+    a = u[1] * u[1]
+    b = u[2] * u[2]
+    c = u[3] * u[3]
+    o = zero(a)
+    if primal(a + b + c) == 0.0
+        return SVector(o + 1, o, o), SVector(o, o + 1, o), SVector(o, o, o + 1)
+    end
+    # The smallest component (s0) is zero in y; the other two (s1, s2) are swapped, with
+    # the sign of the first changed: y[s1] = -x[s2]/f, y[s2] = x[s1]/f, z[s0] = f,
+    # z[s1] = -x[s0] y[s2], z[s2] = x[s0] y[s1]. The cyclic order of (s0, s1, s2) makes
+    # the frame right-handed.
+    pa, pb, pc = primal(a), primal(b), primal(c)
+    if pa <= pb && pa <= pc                     # (s0, s1, s2) = (1, 2, 3)
+        f = sqrt(b + c)
+        y = SVector(o, -u[3] / f, u[2] / f)
+        return u, y, SVector(f, -u[1] * y[3], u[1] * y[2])
+    elseif pb <= pa && pb <= pc                 # (2, 3, 1)
+        f = sqrt(a + c)
+        y = SVector(u[3] / f, o, -u[1] / f)
+        return u, y, SVector(u[2] * y[3], f, -u[2] * y[1])
+    end
+    f = sqrt(a + b)                             # (3, 1, 2)
+    y = SVector(-u[2] / f, u[1] / f, o)
+    return u, y, SVector(-u[3] * y[2], u[3] * y[1], f)
+end
+
 # --- derivatives of vector functions of a state -------------------------------------
 
 """

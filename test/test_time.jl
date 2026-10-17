@@ -598,7 +598,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         @test throws_kind(() -> str2et(ctx, "not a time"), :badtime)
     end
 
-    @apart @testset "utc2et, tparse, tpictr" begin
+    @apart @testset "utc2et, tparse, tpictr, tparch" begin
         all_strings = reduce(vcat, [corpus[name] for name in order])
         sample = vcat(all_strings[1:3:end], TS_STR2ET_EXAMPLES, TS_MALFORMED)
         r = compare_outcomes("utc2et", sample, s -> oracle_unchecked(SPICE.utc2et, s), s -> utc2et(ctx, s))
@@ -613,6 +613,35 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         for s in ["1996 Apr 04 12:28:28.250", "Thu Apr 04 07:23:11 1996", "04-APR-1996 23:59", "1996-095 // 01:02:03"]
             @test timout(ctx, str2et(ctx, s), tpictr(s)) == s
         end
+
+        # `tparch`: the range check of one context, against CSPICE with the check on.
+        cctx = neo_context([Kernels.LSK])
+        tparch(cctx, " y e s ")                 # letter case and blanks are ignored
+        c_tparch(t) = ccall((:tparch_c, SPICE.libcspice), Cvoid, (Cstring,), t)
+        ranges = ["1996-02-30", "1997-02-29", "1900-02-29", "2000-02-29", "4 BC 02-29",
+            "1996-13-01", "1996-366//", "1996-367//", "1996-01-01T24:00:00", "1996-01-01T12:60",
+            "1996-12-30T23:59:60.5", "1996-12-31T23:59:60.5", "1996 JAN 1.5 12:00"]
+        try
+            c_tparch("YES")
+            r = compare_outcomes("utc2et, range check on", vcat(sample, ranges), SPICE.utc2et,
+                s -> utc2et(cctx, s))
+            @test r.mixed == 0 && r.unequal == 0 && r.both > nsample(200, 500)
+            r = compare_outcomes("tparse, range check on", ranges, oracle_tparse, s -> tparse(cctx, s))
+            @test r.mixed == 0 && r.unequal == 0 && r.rejected >= 8
+            # The `@` dates of a text kernel that the context loads afterwards.
+            kdate(f) = try f() catch; :rejected end
+            for d in ("1996-02-29", "1996-02-30")
+                line = ["TP_DATE = @$d"]
+                want = kdate(() -> (SPICE.lmpool(line); SPICE.gdpool("TP_DATE")))
+                @test kdate(() -> (lmpool(cctx, line); gdpool(cctx, "TP_DATE"))) == want
+            end
+        finally
+            c_tparch("NO")
+        end
+        @test tparse(ctx, "1996-02-30") == tparse("1996-03-01")   # another context: off
+        tparch(cctx, "Y")                                         # only "YES" turns it on
+        @test tparse(cctx, "1996-02-30") == tparse("1996-03-01")
+        @test throws_kind(() -> tparch(cctx, ""), :emptystring)
     end
 
     # Epochs: several thousand years, and a dense set around every leap second.

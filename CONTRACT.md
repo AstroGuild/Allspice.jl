@@ -164,12 +164,12 @@ evaluator pair `spkrNN`/`spkeNN` of CSPICE, so a plain epoch gives the CSPICE st
 - `kernel_arch(path) -> Symbol`: `:SPK`, `:PCK` or `:CK` for a binary DAF, `:DSK` or
   `:EK` for a DAS file with that ID word, and `:TEXT` for every other file. Throws
   `SpiceError(:filenotfound)` or, for another binary kernel type, `SpiceError(:notsupported)`.
-- `parse_text_kernel(path) -> TextKernel`: full text-kernel grammar (`\begindata`,
+- `parse_text_kernel(path, yearbound=1969, check=false) -> TextKernel`: full text-kernel grammar (`\begindata`,
   `\begintext`, `=`, `+=`, numeric and string vectors, `D` exponents, `@` dates as TDB
   seconds past J2000, quoted strings with doubled quotes). String elements are kept
   raw, so a `//` continuation marker stays in place until `pool_string_joined(values,
-  nth, contin="//")` reads it. `parse_text_lines(path, lines)` does the same on lines in
-  memory; both throw `SpiceError(:badkernel)` for a malformed assignment.
+  nth, contin="//")` reads it. `parse_text_lines(path, lines, yearbound, check)` does the same on
+  lines in memory; `yearbound` and `check` are those of the context for the `@` dates; both throw `SpiceError(:badkernel)` for a malformed assignment.
 - `metakernel_files(tk::TextKernel) -> Vector{String}`: paths from `KERNELS_TO_LOAD`
   with `PATH_SYMBOLS`/`PATH_VALUES` substituted; empty if the kernel is not a
   meta-kernel.
@@ -217,8 +217,9 @@ the call (`:noleapseconds`, `:missingtimeinfo` or `:kernelvarnotfound`).
   representations of `ttrans` of SPICELIB. The inner form `_ttrans(l::LeapSeconds,
   pfrom, pto, tv)` takes the codes `_TT_*`, and `_tvec(x...)` builds the time vector.
 - `str2et(ks, s, defs=TimeDefaults()) -> Float64`: every string form of `tpartv`.
-- `utc2et(ks, s) -> Float64` and `tparse(s) -> Float64`, without the range checks that
-  CSPICE makes only after `tparch("YES")`.
+- `utc2et(ks, s, defs=TimeDefaults()) -> Float64` and `tparse(s, defs) -> Float64`:
+  the range checks of `tcheck` run only when `defs.check` is set, as CSPICE makes them
+  only after `tparch("YES")`; `str2et` always makes them, as in CSPICE.
 - `tpictr(sample) -> String`: the `timout` picture of an example string.
 - `timout(ks, et, pictur, defs=TimeDefaults()) -> String`: every mark of `timout`.
 - `et2utc(ks, et, format, prec) -> String` for `"C"`, `"D"`, `"J"`, `"ISOC"`, `"ISOD"`.
@@ -232,8 +233,12 @@ the call (`:noleapseconds`, `:missingtimeinfo` or `:kernelvarnotfound`).
   start). `str2et`, `utc2et` and the context form of `tparse` use it; the forms on a
   `KernelSet` take the defaults as an argument, and `tparse(s)` uses 1969. The reader
   of text kernels converts an `@` date with `tparse` and the bound that the context
-  has at the load (`furnsh`, `ldpool`, `lmpool`), as `zzrvar_` does; the range check
-  of `tparch` is off there, which is the start state of CSPICE.
+  has at the load (`furnsh`, `ldpool`, `lmpool`), as `zzrvar_` does, and with the range
+  check of `tparch` that the context has at the load.
+- `tparch([ctx], type)` sets the field `check` of the `TimeDefaults` of the context:
+  `"YES"` (letter case and blanks ignored) turns the range check of `utc2et`, `tparse`
+  and the `@` dates on, every other value turns it off, and `""` throws `:emptystring`.
+  It is off at start, as in CSPICE; another context is not changed.
 - `eklef([ctx], path) -> String` is `furnsh` for a file that is an EK
   (`:wrongarchitecture` otherwise) and returns the path as the handle of
   `ekuef([ctx], handle)`, which is `unload`.
@@ -342,7 +347,7 @@ is a pure function of the snapshot and does not allocate.
 
 The write interface of the kernel pool (`pdpool`, `pcpool`, `pipool`, `dvpool`,
 `lmpool`, `ldpool`, `clpool`), the read calls `expool`, `dtpool`, `gnpool`, `szpool`,
-`stpool`, body name definitions (`boddef`) and the watchers (`swpool`, `cvpool`,
+`stpool`, the check `badkpv` (returns `false` or throws the kind of CSPICE), body name definitions (`boddef`) and the watchers (`swpool`, `cvpool`,
 `poolversion`). An edit never changes a snapshot: it goes through the context as
 `furnsh` does.
 
@@ -386,7 +391,7 @@ the default context, plus an inner form on a `KernelSet`.
 - `pxform(from, to, et) -> SMatrix{3,3}`; `sxform(from, to, et) -> SMatrix{6,6}`;
   `pxder(from, to, et, ::Val{N}) -> NTuple{N+1,SMatrix{3,3}}`.
 - `gdpool(name)`, `gcpool(name)`, `gipool(name)`, `bodvrd(body, item)`, `bodn2c`,
-  `bodc2n`, `bods2c`, `namfrm`, `frmnam`. `bodn2c` and `bods2c` return `nothing` for an
+  `bodc2n`, `bodc2s`, `bods2c`, `namfrm`, `frmnam`. `bodn2c` and `bods2c` return `nothing` for an
   unknown name, and `namfrm` returns 0 for an unknown frame.
 - Internal: `spk_jet(ks, targ::Int32, et::T, ref::Int32, obs::Int32, ::Val{N}) ->
   NTuple{N+1,Vec3}` is the geometric position and its derivatives; it does not allocate
@@ -416,8 +421,11 @@ the default context, plus an inner form on a `KernelSet`.
   a SPICE double cell gives. `Window(endpoints)` copies and validates with `wnvald!`;
   `_window_of(d)` takes ownership of a valid endpoint vector without a check.
 - Public: `card`, `wncard`, `wninsd!`, `wnvald!`, `wnunid`, `wnintd`, `wndifd`, `wncomd`,
-  `wnelmd`, `wnincd`, `wnfetd`, `wnsumd`. The set operations return a new window.
-- Errors: `:badendpoints` (left > right), `:unmatchendpts` (odd count), `:nointerval`.
+  `wnelmd`, `wnincd`, `wnfetd`, `wnsumd`, `wnreld`. The set operations return a new
+  window. `wnexpd!`, `wncond!`, `wnextd!`, `wnfild!` and `wnfltd!` change the window in
+  place, as their CSPICE routines do, and return it.
+- Errors: `:badendpoints` (left > right), `:unmatchendpts` (odd count), `:nointerval`,
+  `:invalidendpntspec` (side of `wnextd!`), `:invalidoperation` (operator of `wnreld`).
 - Deviation from CSPICE: a window has no size limit, so SPICE(WINDOWEXCESS) cannot
   occur. The coverage calls and every geometry finder search return a `Window`.
 
@@ -500,7 +508,9 @@ DAS file.
 - `_das_load(path, who, writable) -> DASHandle` reads a file of either byte order and
   throws `SpiceError(:baddasdirectory)` for a directory that is not consistent.
   `_das_check_open` throws `:dasnosuchhandle`, and `_das_check_write` throws that kind
-  or `:dasinvalidaccess`.
+  or `:dasinvalidaccess`. `_das_check_update(h, who, first, last, n)` throws
+  `:invalidaddress` unless both addresses of `dasudc`, `dasudd` or `dasudi` are in
+  1:n, also for an empty range, as CSPICE does.
 - `_dla_segments(ints, path) -> Vector{DLADescr}` gives all descriptors in file order
   and throws `SpiceError(:baddladescriptor)` if the list has a cycle.
 
@@ -575,7 +585,7 @@ Information calls: `spkobj`, `spkobj!`, `spkcov`, `spkcov!`, `ktotal(kind)`, `kd
 - Deviation from CSPICE: the handle that `kdata` and `kinfo` return is always 0,
   because a loaded kernel has no DAF handle in this package.
 
-## `math/vectors.jl`, `rotations.jl`, `ellipsoid.jl`, `coordinates.jl`, `conics.jl`, `polynomials.jl`
+## `math/vectors.jl`, `rotations.jl`, `ellipsoid.jl`, `coordinates.jl`, `conics.jl`, `polynomials.jl`, `hex.jl`
 
 The vector, matrix, rotation, ellipsoid, coordinate, conic, polynomial and
 interpolation calls of CSPICE. Each
@@ -598,12 +608,15 @@ decision is made on `primal`.
   component from left to right, as `mxv_c` and `mxm_c` do, while the `*` of StaticArrays
   lets the compiler fuse a multiplication with an addition, so its result changed with
   the Julia version (Julia 1.10 and 1.13 differed in the last bit).
+- `hex.jl` holds `dp2hx` and `hx2dp`, the base 16 strings of SPICELIB; `hx2dp` throws
+  `:badnumber` with the `errmsg` of `hx2dp_c` as the message.
 
 ## `frame_info.jl`, `lst.jl`
 
 Frame information (`frinfo`, `cidfrm`, `cnmfrm`, `ccifrm`), fixed-offset frame data
 (`tkfram`), body orientation (`tipbod`, `tisbod`), the contents of a binary PCK file
-(`pckfrm`, `pckfrm!`, `pckcov`, `pckcov!`), body constants (`bodfnd`, `bodvcd`), local
+(`pckfrm`, `pckfrm!`, `pckcov`, `pckcov!`), the frame lists of a class (`bltfrm`,
+`kplfrm`, sorted `Vector{Int}`, `:badframeclass`), body constants (`bodfnd`, `bodvcd`), local
 solar time (`et2lst`) and the longitude of the Sun (`lspcn`). These two files have no
 cross-file interface beyond the public API: later files call the forms on a
 `KernelSet`, for example `frinfo(ks, frcode)`, which returns `(center, class, classid)`

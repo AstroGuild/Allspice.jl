@@ -1,7 +1,8 @@
-# Frame information (`frinfo`, `cidfrm`, `cnmfrm`, `ccifrm` of `framex.c`), fixed-offset
-# frame data (`tkfram`), body orientation (`tipbod`, `tisbod`), the contents of a binary
-# PCK file (`pckfrm`, `pckcov`) and body constants (`bodfnd`, `bodvcd`). Every call has
-# a form on a `KernelSet`, on a `SpiceContext` and on the default context.
+# Frame information (`frinfo`, `cidfrm`, `cnmfrm`, `ccifrm` of `framex.c`), the lists of
+# frames (`bltfrm`, `kplfrm`), fixed-offset frame data (`tkfram`), body orientation
+# (`tipbod`, `tisbod`), the contents of a binary PCK file (`pckfrm`, `pckcov`) and body
+# constants (`bodfnd`, `bodvcd`). Every call that reads kernel data has a form on a
+# `KernelSet`, on a `SpiceContext` and on the default context.
 
 """
     frinfo([ctx,] frcode) -> Union{Nothing,Tuple{Int,Int,Int}}
@@ -176,6 +177,92 @@ function ccifrm(ks::KernelSet, frclss::Integer, clssid::Integer)
         (best === nothing || f.id < best.id) && (best = f)
     end
     return best === nothing ? nothing : (Int(best.id), best.name, Int(best.center))
+end
+
+"Throws `SpiceError(:badframeclass)` unless `frmcls` is -1 or a class 1 to 6, as `bltfrm_` and `kplfrm_`."
+function _check_frame_class(who::AbstractString, frmcls::Integer)
+    (frmcls == -1 || 1 <= frmcls <= 6) || throw(SpiceError(:badframeclass,
+        "$who: the frame class $frmcls is not supported; it must be -1 (all) or 1 to 6"))
+    return nothing
+end
+
+"The built-in frames of `zzfdat_` as `(ID, class)`, in the order of the IDs."
+const _BUILTIN_FRAME_CLASSES = sort!(vcat(
+    [(i, 1) for i in eachindex(INERTIAL_FRAME_DEFS)],
+    [(Int(f.id), Int(f.class)) for f in BUILTIN_NONINERTIAL_FRAMES]))
+
+"""
+    bltfrm(frmcls) -> Vector{Int}
+
+Return the IDs of the built-in frames of the class `frmcls`, in increasing order, as
+`bltfrm_c` of CSPICE.
+
+`frmcls` is a frame class of [`frinfo`](@ref) (1 to 6), or -1 for every class. The
+frames that the kernel pool defines are not included; [`kplfrm`](@ref) gives those.
+
+Throws `SpiceError(:badframeclass)` if `frmcls` is not -1 or a class 1 to 6.
+
+# Examples
+```jldoctest
+julia> length(bltfrm(1)), bltfrm(1)[1:3], bltfrm(3)
+(21, [1, 2, 3], Int64[])
+```
+"""
+function bltfrm(frmcls::Integer)
+    _check_frame_class("bltfrm", frmcls)
+    return Int[id for (id, class) in _BUILTIN_FRAME_CLASSES if frmcls == -1 || class == frmcls]
+end
+
+"""
+    kplfrm([ctx,] frmcls) -> Vector{Int}
+
+Return the IDs of the frames of the class `frmcls` that the kernel pool defines, in
+increasing order and without duplicates, as `kplfrm_c` of CSPICE.
+
+`frmcls` is a frame class of [`frinfo`](@ref) (1 to 6), or -1 for every class. A
+frame is listed if the pool has `FRAME_<name> = <id>` for the value of a
+`FRAME_*_NAME` variable, `FRAME_<id>_NAME`, and `FRAME_<id>_CLASS` or
+`FRAME_<name>_CLASS`, as in CSPICE. The other variables of a frame definition are not
+checked, so an ID can be listed that [`frinfo`](@ref) does not know. The built-in
+frames are not included unless the pool defines them; [`bltfrm`](@ref) gives those.
+
+Throws `SpiceError(:badframeclass)` if `frmcls` is not -1 or a class 1 to 6.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> lmpool(ctx, ["FRAME_TOPO = 1500001", "FRAME_1500001_NAME = 'TOPO'",
+                    "FRAME_1500001_CLASS = 4", "FRAME_1500001_CLASS_ID = 1500001",
+                    "FRAME_1500001_CENTER = 399"]);
+
+julia> kplfrm(ctx, 4), kplfrm(ctx, 3)
+([1500001], Int64[])
+```
+"""
+function kplfrm(ks::KernelSet, frmcls::Integer)
+    _check_frame_class("kplfrm", frmcls)
+    pool = ks.pool
+    # `gipool_` gives the first value of a numeric variable, rounded; names are 32
+    # characters long in CSPICE, so a longer name is cut.
+    getint(key) = (v = get(pool, first(key, 32), nothing);
+        v isa Vector{Float64} && !isempty(v) ? _nint(v[1]) : nothing)
+    ids = Int[]
+    for (key, val) in pool
+        _pool_x_match(key, "FRAME_*_NAME") || continue
+        (val isa Vector{String} && !isempty(val)) || continue
+        name = strip(first(val[1], 32), ' ')
+        isempty(name) && (name = " ")
+        idcode = getint("FRAME_" * name)
+        idcode === nothing && continue
+        v = get(pool, "FRAME_$(idcode)_NAME", nothing)
+        (v isa Vector{String} && !isempty(v)) || continue
+        class = getint("FRAME_$(idcode)_CLASS")
+        class === nothing && (class = getint("FRAME_$(name)_CLASS"))
+        class === nothing && continue
+        (frmcls == -1 || class == frmcls) && push!(ids, idcode)
+    end
+    return unique!(sort!(ids))
 end
 
 """
@@ -405,3 +492,5 @@ bodfnd(body::Integer, item::AbstractString) = bodfnd(default_context(), body, it
 bodvcd(ctx::SpiceContext, bodyid::Integer, item::AbstractString) =
     bodvcd(kernelset(ctx), bodyid, item)
 bodvcd(bodyid::Integer, item::AbstractString) = bodvcd(default_context(), bodyid, item)
+kplfrm(ctx::SpiceContext, frmcls::Integer) = kplfrm(kernelset(ctx), frmcls)
+kplfrm(frmcls::Integer) = kplfrm(default_context(), frmcls)

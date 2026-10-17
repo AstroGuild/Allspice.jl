@@ -1,5 +1,5 @@
-# Group 19: frame information, body constants, body-fixed rotations, binary PCK coverage,
-# local solar time and L_s against CSPICE.
+# Group 19: frame information, the lists of frames, body constants, body-fixed rotations,
+# binary PCK coverage, local solar time and L_s against CSPICE.
 #
 # Conventions for an absent item: `frinfo`, `cidfrm`, `cnmfrm`, `ccifrm` and `tkfram`
 # return `nothing` where CSPICE returns `found = false`. `tkfram_` has no wrapper in
@@ -283,6 +283,42 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
         @test s.max <= 2e-12
         @test 0 <= lspcn(ctx, "EARTH", 0.0, "NONE") < 2pi
         @test (@inferred lspcn(ks, 399, 1.0e8, "LT+S")) isa Float64
+    end
+
+    @apart @testset "bltfrm and kplfrm" begin
+        for cls in (-1, 1, 2, 3, 4, 5, 6)
+            @test bltfrm(cls) == Int[i for i in SPICE.bltfrm(cls)]
+            @test kplfrm(ctx, cls) == Int[i for i in SPICE.kplfrm(cls, 1000)]
+        end
+        @test length(kplfrm(ctx, -1)) > 20
+        for cls in (0, 7, -2)
+            @test throws_kind(() -> bltfrm(cls), :badframeclass)
+            @test throws_kind(() -> kplfrm(ctx, cls), :badframeclass)
+            @test_throws SPICE.SpiceError SPICE.kplfrm(cls, 10)
+        end
+        # The rules of `kplfrm_` on a pool of its own. CSPICE reads the variables, not the
+        # frame definitions: KP_A has its class under its name; KP_B has no FRAME_KP_B and
+        # KP_C no class, so both are left out; FRAME_KP_D is rounded to the ID of OTHER,
+        # whose name does not match and which is listed; KP_E has a name variable in
+        # lower case, which the template matches and the lookup of the ID does not.
+        lines = ["FRAME_KP_A = 1700001", "FRAME_1700001_NAME = 'KP_A'", "FRAME_KP_A_CLASS = 3",
+            "FRAME_1700002_NAME = 'KP_B'", "FRAME_1700002_CLASS = 4",
+            "FRAME_KP_C = 1700003", "FRAME_1700003_NAME = 'KP_C'",
+            "FRAME_1700005_NAME = 'KP_D'", "FRAME_KP_D = 1700004.4",
+            "FRAME_1700004_NAME = 'OTHER'", "FRAME_1700004_CLASS = 4",
+            "frame_1700006_name = 'KP_E'", "FRAME_KP_E = 1700006", "FRAME_1700006_CLASS = 4"]
+        try
+            SPICE.kclear()
+            SPICE.lmpool(lines)
+            kc = SpiceContext()
+            lmpool(kc, lines)
+            for cls in (-1, 3, 4)
+                @test kplfrm(kc, cls) == Int[i for i in SPICE.kplfrm(cls, 100)]
+            end
+            @test kplfrm(kc, -1) == [1700001, 1700004]
+        finally
+            SPICE.kclear()
+        end
     end
 end
 

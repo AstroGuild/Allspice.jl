@@ -18,6 +18,17 @@
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
+"`badkpv_c` of CSPICE: its result, or the short error message as a lower-case symbol."
+function pw_oracle_badkpv(caller, name, comp, size, divby, type)
+    r = ccall((:badkpv_c, SPICE.libcspice), Cint, (Cstring, Cstring, Cstring, Cint, Cint, UInt8),
+        caller, name, comp, size, divby, UInt8(type))
+    ccall((:failed_c, SPICE.libcspice), Cint, ()) == 0 && return r != 0
+    buf = zeros(UInt8, 64)
+    ccall((:getmsg_c, SPICE.libcspice), Cvoid, (Cstring, Cint, Ptr{UInt8}), "SHORT", 64, buf)
+    ccall((:reset_c, SPICE.libcspice), Cvoid, ())
+    return Symbol(lowercase(replace(unsafe_string(pointer(buf)), "SPICE(" => "", ")" => "")))
+end
+
 "Pool variable names of CSPICE that match `template`, sorted."
 function pw_oracle_names(template::AbstractString)
     out = String[]
@@ -224,7 +235,7 @@ group("18. kernel-pool edits and watchers against CSPICE", Kernels.LSK, Kernels.
         @test nbad == 0
     end
 
-    @apart @testset "expool, dtpool, gnpool, szpool, stpool" begin
+    @apart @testset "expool, dtpool, gnpool, szpool, stpool, badkpv" begin
         set = [Kernels.LSK, Kernels.PCK11, Kernels.MOON_TF, ka]
         oracle_load(set)
         ctx = neo_context(set)
@@ -285,6 +296,27 @@ group("18. kernel-pool edits and watchers against CSPICE", Kernels.LSK, Kernels.
         @test stpool(ctx, "PW_NUM", 1, "//") === nothing
         @test stpool(ctx, "NOT_THERE", 1, "//") === nothing
         @test stpool(ctx, "PW_LONG", 0, "//") === nothing
+
+        # badkpv: each comparison, the divisor (negative, zero), the type, and each error
+        # kind, against CSPICE. PW_LONG holds 6 strings, BODY399_RADII 3 numbers.
+        for args in (("ME", "PW_LONG", "=", 6, 3, 'C'), ("ME", "PW_LONG", "<", 7, 2, 'c'),
+                ("ME", "PW_LONG", ">", 5, -3, 'C'), ("ME", "PW_LONG", "<=", 6, 6, 'C'),
+                ("ME", "PW_LONG", "=>", 6, 1, 'C'), ("ME", "PW_LONG", "= ", 6, 1, 'C'),
+                ("ME", "PW_LONG", "<", 6, 1, 'C'), ("ME", "PW_LONG", "=", 6, 4, 'C'),
+                ("ME", "PW_LONG", "=", 6, 0, 'C'), ("ME", "PW_LONG", ">=", 6, 1, 'C'),
+                ("ME", "PW_LONG", " =", 6, 1, 'C'), ("ME", "PW_LONG", "=", 6, 1, 'N'),
+                ("ME", "BODY399_RADII", "=", 3, 3, 'C'), ("ME", "BODY399_RADII", "=", 3, 3, 'n'),
+                ("ME", "BODY399_RADII", "=", 3, 3, 'X'), ("ME", "NOT_THERE", "=", 3, 3, 'N'),
+                ("", "BODY399_RADII", "=", 3, 3, 'N'), ("ME", "BODY399_RADII", "", 3, 3, 'N'))
+            got = try
+                badkpv(ctx, args...)
+            catch e
+                e isa SpiceError ? e.kind : rethrow()
+            end
+            want = pw_oracle_badkpv(args...)
+            got === want || @info "badkpv" args got want
+            @test got === want
+        end
     end
 
     @apart @testset "tables that are derived from the pool follow an edit" begin
