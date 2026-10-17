@@ -31,4 +31,18 @@ ckgpav
 ckcov
 ckobj
 ckmeta
+ckfrot
+ckfxfm
+```
+
+## Records of C-kernel segments
+
+These calls read one segment of an open CK file, given by its descriptor from a DAF
+search ([`dafbfs`](@ref), [`daffna`](@ref), [`dafgs`](@ref)).
+
+```@docs
+cknr02
+ckgr02
+cknr03
+ckgr03
 ```

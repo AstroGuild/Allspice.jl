@@ -16,7 +16,7 @@ export jul2gr, gr2jul
 export j1900, j1950, j2000, j2100, jyear, tyear, spd, b1900, b1950, clight
 export halfpi, twopi, rpd, dpr
 export sct2e, sce2c, sce2t, sce2s, scs2e, scencd, scdecd, sctiks, scfmt, scpart, sctype
-export ckgp, ckgpav, ckcov, ckobj, ckmeta
+export ckgp, ckgpav, ckcov, ckobj, ckmeta, ckfrot, ckfxfm, cknr02, ckgr02, cknr03, ckgr03
 export DAFHandle, dafopr, dafopw, dafonw, dafcls, dafhsf, dafrfr, getfat
 export dafbfs, dafbbs, daffna, daffpa, dafgs, dafgn, dafps, dafus, dafgda, dafgsr
 export dafbna, dafada, dafena, dafws, dafrs, dafrn, dafac, dafec, dafdc
@@ -25,6 +25,7 @@ export spkw12, spkw13, spkw15, spkw17, spkw18, spkw19, spkw20, spkw21
 export spk14b, spk14a, spk14e, SPK14Writer
 export getelm, evsgp4, spkw10
 export ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
+export pckopn, pckw02, pckcls
 export spkobj, spkobj!, spkcov, spkcov!, kinfo, kdata, tkvrsn
 export Window, card, wncard, wninsd!, wnvald!, wnunid, wnintd, wndifd, wncomd
 export wnelmd, wnincd, wnfetd, wnsumd
@@ -102,6 +103,8 @@ include("daf_access.jl")    # DAFHandle, dafopr, dafbfs, daffna, dafgs, dafgda, 
 include("daf_write.jl")     # dafonw, dafopw, dafbna, dafada, dafena, dafac, dafdc
 include("spk_write.jl")     # spkopn, spkopa, spkcls, spkw01 ... spkw21
 include("ck_write.jl")      # ckopn, ckcls, ckw01, ckw02, ckw03, ckw05, ckw06
+include("pck_write.jl")     # pckopn, pckw02, pckcls
+include("ck_records.jl")    # cknr02, ckgr02, cknr03, ckgr03
 include("das.jl")           # DASHandle, dasopr, dasonw, dascls, dasrdi, dasadi, dasac, dasec
 include("dla.jl")           # dlaopn, dlabns, dlaens, dlabfs, dlafns, dlabbs, dlafps
 include("dsk.jl")           # type 2 geometry, open_dsk, intercept and segment selection

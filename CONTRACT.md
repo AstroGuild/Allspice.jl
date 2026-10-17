@@ -291,7 +291,12 @@ function of ticks. The evaluators follow the readers `ckrNN` and the evaluators
   every other chain it is `rotation_jet`. `_exact_frame_jet` always gives the exact
   derivatives.
 - Public: `ckgp`, `ckgpav` (`SpiceError(:valueoutofrange)` for `tol < 0`), `ckcov`,
-  `ckobj`, `ckmeta` (`SpiceError(:unknownckmeta)`).
+  `ckobj`, `ckmeta` (`SpiceError(:unknownckmeta)`), and `ckfrot`, `ckfxfm`: one CK link
+  as `_ck_frame_step` evaluates it, `nothing` without CK data, without the SCLK kernel
+  (`ckhave_`, `zzsclk_`) or without a segment.
+- `ck_records.jl` (after `daf_access.jl`, since it takes a `DAFHandle`): `cknr02`,
+  `ckgr02`, `cknr03`, `ckgr03` read the records of one segment through a handle and a
+  packed descriptor; `:ckwrongdatatype`, `:cknonexistrec`.
 - Deviation from CSPICE, type 6: when `ckr06_` moves to the next mini-segment it rounds
   the clock rate of that mini-segment to a whole number; the stored rate is used here.
 
@@ -427,11 +432,12 @@ open files and one hidden "current array" for each search; here the opened file 
   call it after all input checks. `_daf_check_write(h, who)` throws `:dafnosuchhandle` or
   `:dafinvalidaccess`, and `_daf_check_current(h, who)` throws `:nocurrentarray`.
 
-## `spk_write.jl`, `ck_write.jl`
+## `spk_write.jl`, `ck_write.jl`, `pck_write.jl`
 
 The segment writers: `spkopn`, `spkopa`, `spkcls`, `spkpds`, `spkw01` to `spkw21`
-(types 1, 2, 3, 5, 8, 9, 12, 13, 15, 17 to 21), and `ckopn`, `ckcls`, `ckw01`, `ckw02`,
-`ckw03`, `ckw05`, `ckw06`. Each writer makes the input checks of the SPICELIB routine in
+(types 1, 2, 3, 5, 8, 9, 12, 13, 15, 17 to 21), `ckopn`, `ckcls`, `ckw01`, `ckw02`,
+`ckw03`, `ckw05`, `ckw06`, and `pckopn`, `pckw02`, `pckcls` (binary PCK type 2, whose
+records `_seg_cheb_records` lays out as for SPK types 2 and 3). Each writer makes the input checks of the SPICELIB routine in
 the same order, so the data area is equal bit for bit to the one that CSPICE writes
 from the same input.
 
@@ -444,7 +450,14 @@ from the same input.
   throws `SpiceError(:invalidrefframe)`. `_seg_close(h, what)` closes a file as `spkcls`
   does: a file that is open for write must hold a segment (`:nosegmentsfound`).
 - Deviation from SPICE.jl 0.2.5: the record count of `ckw02` and `ckw03` is always the
-  length of the input (that version passes one record less to CSPICE).
+  length of the input (that version passes one record less to CSPICE), and each element
+  of a vector of vectors given to `pckw02` is one record of `3 * (degree + 1)`
+  coefficients (that version passes `length(cdata[1]) - 1` as the degree).
+- The base frame of `pckw02` is a built-in inertial frame only, found by `irfnum_`
+  rules (letter case and blanks do not count) or given by its ID 1 to 21. The padding
+  half-word of a binary PCK summary (5 integers) is zero, as a new CSPICE process
+  writes it; a CSPICE process that handled an SPK or CK summary before writes there
+  the sixth integer of that summary.
 - Type 14 has three calls, as in CSPICE: `spk14b(handle, segid, body, center, frame,
   first, last, chbdeg) -> SPK14Writer`, `spk14a(writer, [ncsets,] coeffs, epochs)` and
   `spk14e(writer)`. CSPICE keeps the segment in work in a table of files; here the

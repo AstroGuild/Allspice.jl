@@ -1,6 +1,6 @@
 # Writing kernels
 
-The package writes SPK, CK, DSK and EK files, and each file is equal to the file that the CSPICE writer produces from the same input. This page writes an SPK and reads it back; the other writers follow the same pattern of open, write, close.
+The package writes SPK, CK, binary PCK, DSK and EK files, and each file is equal to the file that the CSPICE writer produces from the same input. This page writes an SPK and reads it back; the other writers follow the same pattern of open, write, close.
 
 ## Write an SPK
 
@@ -68,6 +68,7 @@ state[1:3]                                   # km
 | SPK, 16 data types | [`spkopn`](@ref), or [`spkopa`](@ref) to add to a file | `spkw01` to `spkw21`, [`spk14b`](@ref) | [`spkcls`](@ref) |
 | SPK from two-line elements | [`spkopn`](@ref) | [`getelm`](@ref), [`spkw10`](@ref) | [`spkcls`](@ref) |
 | CK, 5 data types | [`ckopn`](@ref) | `ckw01`, `ckw02`, `ckw03`, `ckw05`, `ckw06` | [`ckcls`](@ref) |
+| Binary PCK, type 2 | [`pckopn`](@ref) | [`pckw02`](@ref) | [`pckcls`](@ref) |
 | DSK type 2 | [`dskopn`](@ref) | [`dskmi2`](@ref), [`dskw02`](@ref) | [`dskcls`](@ref) |
 | EK | [`ekopn`](@ref), [`ekops`](@ref) | [`ekbseg`](@ref), [`ekappr`](@ref), `ekace*`, or whole columns with [`ekifld`](@ref) | [`ekcls`](@ref) |
 | Any DAF or DAS (the container of DSK and EK files) | [`dafonw`](@ref), [`dasonw`](@ref) | `dafada`, `dasadd` and related calls | [`dafcls`](@ref), [`dascls`](@ref) |

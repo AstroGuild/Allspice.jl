@@ -1,4 +1,4 @@
-Feature: Write SPK and CK files that CSPICE reads as its own
+Feature: Write SPK, CK and binary PCK files that CSPICE reads as its own
   Allspice writes binary kernels (DAF files) through a handle that the caller owns.
   CSPICE is the reference: a file that Allspice writes must hold the same data, the
   same descriptors, the same segment names and the same comments as the file that
@@ -39,6 +39,7 @@ Feature: Write SPK and CK files that CSPICE reads as its own
       | ckw03  |
       | ckw05  |
       | ckw06  |
+      | pckw02 |
 
   Scenario: An invalid input is rejected and the file does not change
     Given an open file and input that breaks one precondition of a writer
@@ -88,6 +89,19 @@ Feature: Write SPK and CK files that CSPICE reads as its own
     When the file is loaded with furnsh
     Then spkgeo gives the states that CSPICE gives from the same file
     And ktotal, kdata and kinfo report the load list as CSPICE does
+
+  Scenario: A written binary PCK is loaded
+    Given a binary PCK with one type 2 segment for each of IAU_MOON, IAU_MARS and ITRF93
+    And each segment has another inertial base frame
+    When Allspice loads the file that it wrote
+    Then pxform and sxform to each body-fixed frame give what CSPICE gives from its own file
+
+  Scenario: The base frame of a binary PCK segment is a built-in inertial frame
+    Given the base frame as a frame ID, or as a name in lower case with blanks
+    When pckw02 writes the segment
+    Then the file is the one that the upper-case name gives
+    When the base frame is a body-fixed frame or an ID outside the inertial frames
+    Then pckw02 throws SpiceError(:invalidrefframe)
 
   Scenario: Bodies and coverage of an SPK file
     Given an SPK file with segments for some bodies

@@ -138,6 +138,88 @@ function ckgpav(ks::KernelSet, inst::Integer, sclkdp::Real, tol::Real, ref::Name
     return cmat, av, clkout, true
 end
 
+# --- one link of a CK frame -----------------------------------------------------------------
+
+"Clock of the CK ID `inst`, or `nothing` if no CK is loaded (`ckhave_`) or no SCLK kernel of the clock is loaded (`zzsclk_`)."
+@inline function _ck_link_clock(ks::KernelSet, inst::Int32)
+    isempty(ks.ck) && return nothing
+    return get(ks.sclk, _ck_sclkid(ks, inst), nothing)
+end
+
+"""
+    ckfrot([ctx,] inst, et) -> Union{Nothing,Tuple{SMatrix{3,3},Int}}
+
+Return the rotation from the CK frame of the instrument or structure `inst` to its base
+frame at `et`, and the frame ID of the base frame, as `ckfrot_c`.
+
+- `inst`: CK ID (frame class ID) of the CK frame.
+- `et`: seconds past J2000 TDB.
+
+For the result `(rot, ref)`, `rot * v` gives in frame `ref` the components of a position
+`v` given in the CK frame. `ref` is the reference frame of the CK segment that gives the
+pointing: the clock of `inst` (see [`ckmeta`](@ref)) converts `et` to ticks, and the
+loaded segments of `inst` are searched in priority order with tolerance zero, with and
+without angular velocity. This is the link of the frame chain that [`pxform`](@ref)
+follows for a CK frame. As in `pxform`, `et` can be a dual number when ForwardDiff is
+loaded; the elements of `rot` then are dual numbers.
+
+`nothing` takes the place of the `found` flag of CSPICE. It is the result if no CK is
+loaded, if the SCLK kernel of the clock is not loaded, or if no segment covers `et`.
+
+Throws `SpiceError(:valueoutofrange)` if `et` is outside the range of the clock, also
+when no segment covers `et`; and `:badarg` if `et` is not finite.
+
+# Examples
+```julia
+furnsh("naif0012.tls"); furnsh("mission.tsc"); furnsh("mission.bc")
+et = str2et("2026-10-16T12:00:00")
+r = ckfrot(-77000, et)
+if r !== nothing
+    rot, ref = r
+    boresight = rot * [0.0, 0.0, 1.0]        # in the frame `ref`
+end
+```
+
+See also [`ckfxfm`](@ref), [`ckgp`](@ref).
+"""
+function ckfrot(ks::KernelSet, inst::Integer, et::Real)
+    i = Int32(inst)
+    t = check_epoch(et)
+    clock = _ck_link_clock(ks, i)
+    clock === nothing && return nothing
+    found, cmat, _, _, ref = _ck_search(ks, i, _sce2c(ks, clock, t), 0.0, false)
+    found || return nothing
+    return Mat3{eltype(cmat)}(transpose(cmat)), Int(ref)
+end
+
+"""
+    ckfxfm([ctx,] inst, et) -> Union{Nothing,Tuple{SMatrix{6,6},Int}}
+
+Return the state transformation from the CK frame of the instrument or structure `inst`
+to its base frame at `et`, and the frame ID of the base frame, as `ckfxfm_c`.
+
+The matrix is `[R 0; dR R]`: `R` is the rotation of [`ckfrot`](@ref), and `dR` (1/s)
+comes from the angular velocity of the CK segment, as [`sxform`](@ref) gives it for a CK
+frame. Only segments with angular velocity are searched, so the result is `nothing` also
+where only a segment without angular velocity covers `et`. The other `nothing` cases,
+the arguments and the errors are those of [`ckfrot`](@ref), except that `et` is a plain
+number.
+"""
+function ckfxfm(ks::KernelSet, inst::Integer, et::Real)
+    i = Int32(inst)
+    t = Float64(check_epoch(et))
+    clock = _ck_link_clock(ks, i)
+    clock === nothing && return nothing
+    found, cmat, av, _, ref = _ck_search(ks, i, _sce2c(ks, clock, t), 0.0, true)
+    found || return nothing
+    # `rav2xf_` gives the transformation from the base frame to the CK frame, and
+    # `invstm_` inverts it by transposing its blocks.
+    x = rav2xf(cmat, av)
+    r = Mat3{Float64}(transpose(cmat))
+    dr = Mat3{Float64}(transpose(x[SVector(4, 5, 6), SVector(1, 2, 3)]))
+    return vcat(hcat(r, zero(r)), hcat(dr, r)), Int(ref)
+end
+
 """
     ckmeta([ctx,] ckid, meta) -> Int
 
@@ -400,3 +482,7 @@ ckcov(ctx::SpiceContext, ck::AbstractString, idcode::Integer, needav::Bool,
     ckcov(kernelset(ctx), ck, idcode, needav, level, tol, timsys)
 ckcov(ck::AbstractString, idcode::Integer, needav::Bool, level::AbstractString, tol::Real,
     timsys::AbstractString) = ckcov(default_context(), ck, idcode, needav, level, tol, timsys)
+ckfrot(ctx::SpiceContext, inst::Integer, et::Real) = ckfrot(kernelset(ctx), inst, et)
+ckfrot(inst::Integer, et::Real) = ckfrot(default_context(), inst, et)
+ckfxfm(ctx::SpiceContext, inst::Integer, et::Real) = ckfxfm(kernelset(ctx), inst, et)
+ckfxfm(inst::Integer, et::Real) = ckfxfm(default_context(), inst, et)

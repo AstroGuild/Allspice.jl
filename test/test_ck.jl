@@ -19,6 +19,7 @@ FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
 isdefined(@__MODULE__, :CKFix) || include("ckfixtures.jl")
+import ForwardDiff
 
 const CK_RATE = 2e-3
 # Measured: 7e-16 (C-matrix), 2e-16 relative (angular velocity), 0 (clock time).
@@ -136,6 +137,54 @@ function oracle_ckmeta(ckid::Integer, meta::AbstractString)
     ccall((:ckmeta_c, SPICE.libcspice), Cvoid, (Cint, Cstring, Ref{Cint}), ckid, meta, out)
     SPICE.handleerror()
     return Int(out[])
+end
+
+"`ckfrot_c` of CSPICE (SPICE.jl has no wrapper): `(rotation, ref)`, or `nothing` if not found."
+function oracle_ckfrot(inst::Integer, et::Float64)
+    r = zeros(3, 3)
+    ref = Ref{Cint}(0)
+    found = Ref{Cint}(0)
+    ccall((:ckfrot_c, SPICE.libcspice), Cvoid, (Cint, Cdouble, Ptr{Cdouble}, Ref{Cint}, Ref{Cint}),
+        inst, et, r, ref, found)
+    SPICE.handleerror()
+    return found[] == 0 ? nothing : (permutedims(r), Int(ref[]))    # row-major in C
+end
+
+"`ckfxfm_c` of CSPICE: `(transformation, ref)`, or `nothing` if not found."
+function oracle_ckfxfm(inst::Integer, et::Float64)
+    x = zeros(6, 6)
+    ref = Ref{Cint}(0)
+    found = Ref{Cint}(0)
+    ccall((:ckfxfm_c, SPICE.libcspice), Cvoid, (Cint, Cdouble, Ptr{Cdouble}, Ref{Cint}, Ref{Cint}),
+        inst, et, x, ref, found)
+    SPICE.handleerror()
+    return found[] == 0 ? nothing : (permutedims(x), Int(ref[]))
+end
+
+"`cknr02_c` (`type == 2`) or `cknr03_c` of CSPICE on the CSPICE handle `h`."
+function oracle_cknr(type::Integer, h::Integer, descr::Vector{Float64})
+    n = Ref{Cint}(0)
+    if type == 2
+        ccall((:cknr02_c, SPICE.libcspice), Cvoid, (Cint, Ptr{Cdouble}, Ref{Cint}), h, descr, n)
+    else
+        ccall((:cknr03_c, SPICE.libcspice), Cvoid, (Cint, Ptr{Cdouble}, Ref{Cint}), h, descr, n)
+    end
+    SPICE.handleerror()
+    return Int(n[])
+end
+
+"`ckgr02_c` (`type == 2`, 10 doubles) or `ckgr03_c` (5 or 8 doubles) of CSPICE."
+function oracle_ckgr(type::Integer, h::Integer, descr::Vector{Float64}, recno::Integer, len::Integer)
+    rec = zeros(10)
+    if type == 2
+        ccall((:ckgr02_c, SPICE.libcspice), Cvoid, (Cint, Ptr{Cdouble}, Cint, Ptr{Cdouble}),
+            h, descr, recno, rec)
+    else
+        ccall((:ckgr03_c, SPICE.libcspice), Cvoid, (Cint, Ptr{Cdouble}, Cint, Ptr{Cdouble}),
+            h, descr, recno, rec)
+    end
+    SPICE.handleerror()
+    return rec[1:len]
 end
 
 alloc_ckgp(ks, inst, t, tol, ref) = @allocated ckgp(ks, inst, t, tol, ref)
@@ -559,6 +608,15 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         nock = neo_context([Kernels.LSK, CKFix.sclk_kernel(), CKFix.frame_kernel()])
         @test throws_kind(() -> pxform(nock, "J2000", "TESTSC_T3", et), :noframeconnect)
         @test throws_kind(() -> sxform(nock, "J2000", "TESTSC_T3", et), :noframeconnect)
+        # The single link: `nothing` without the SCLK kernel, without any CK (checked
+        # first, so the epoch outside the clock is not converted, as in `ckfrot_`), for
+        # the clock ID 0 of a CK ID above -1000, and outside the coverage.
+        @test ckfrot(noclock, -77003, et) === nothing && ckfxfm(noclock, -77003, et) === nothing
+        @test ckfrot(nock, -77003, -1e6) === nothing && ckfxfm(nock, -77003, -1e6) === nothing
+        @test ckfrot(ctx, -5, et) === nothing && oracle_ckfrot(-5, et) === nothing
+        @test ckfrot(ctx, -77003, et + 5e4) === nothing
+        @test throws_kind(() -> ckfrot(ctx, -77003, -1e6), :valueoutofrange)
+        @test_throws SPICE.SpiceError oracle_ckfrot(-77003, -1e6)
         # Unloading the CK file of higher priority gives the first profile back.
         t = tk[150] + 100.0
         e150 = sct2e(ctx, CKFix.SC_TDB, t)
@@ -602,6 +660,103 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
             maximum(abs.(stale[1] .- fresh[1]))))
         oracle_ck_reset(-77003)
         oracle_ck_reset(-77006)
+    end
+
+    @apart @testset "ckfrot and ckfxfm: one link of a CK frame" begin
+        drot = Float64[]; dxf = Float64[]
+        agree = true
+        nrot = 0; nxf = 0; nq = 0
+        for case in CK_CASES
+            tags = ck_tags(case)
+            for _ in 1:nsample(20, 100)
+                et = sct2e(ctx, case.sc, ck_random_tick(rng, case, tags))
+                nq += 1
+                oracle_ck_reset(case.inst)
+                c = oracle_ckfrot(case.inst, et)
+                r = ckfrot(ctx, case.inst, et)
+                agree &= (r === nothing) == (c === nothing)
+                if r !== nothing && c !== nothing
+                    nrot += 1
+                    agree &= r[2] == c[2]
+                    append!(drot, abs.(r[1] .- c[1]))
+                end
+                oracle_ck_reset(case.inst)
+                c = oracle_ckfxfm(case.inst, et)
+                x = ckfxfm(ctx, case.inst, et)
+                agree &= (x === nothing) == (c === nothing)
+                if x !== nothing && c !== nothing
+                    nxf += 1
+                    agree &= x[2] == c[2]
+                    # Rotation blocks absolute, derivative block relative to the rate.
+                    scale = [i > 3 && j <= 3 ? CK_RATE : 1.0 for i in 1:6, j in 1:6]
+                    append!(dxf, abs.(x[1] .- c[1]) ./ scale)
+                end
+            end
+        end
+        @test agree
+        # Type 1 gives pointing at its time tags only, and four of the fourteen cases
+        # have no angular velocity (or no pointing between the tags), so fewer are found.
+        @test nrot > nq ÷ 2 && nxf > nq ÷ 3
+        a = report_quantiles("ckfrot: rotation", drot)
+        b = report_quantiles("ckfxfm: blocks, derivative block / $CK_RATE", dxf)
+        @test a.max <= CK_TOL_CMAT
+        @test b.max <= CK_TOL_CMAT
+        # The rotation is generic over the number type of the epoch: with a dual number
+        # its derivative is the exact derivative of `pxder`.
+        tk = CKFix.ticks_tdb()
+        et = sct2e(ctx, CKFix.SC_TDB, tk[10] + 0.4 * (tk[11] - tk[10]))
+        R = ckfrot(ctx, -77003, ForwardDiff.Dual(et, 1.0))[1]
+        J = pxder(ctx, "TESTSC_T3", "J2000", et, Val(1))
+        @test maximum(abs.(map(e -> ForwardDiff.partials(e, 1), R) .- J[2])) <= 1e-14 * CK_RATE
+    end
+
+    @apart @testset "records of type 2 and type 3 segments" begin
+        h = dafopr(ckpaths[1])
+        hc = SPICE.dafopr(ckpaths[1])
+        d2 = d3 = Float64[]
+        try
+            dafbfs(h)
+            SPICE.dafbfs(hc)
+            same = true
+            nseg = 0
+            while daffna(h)
+                @assert SPICE.daffna()
+                d = dafgs(h)
+                same &= d == collect(SPICE.dafgs(5))
+                _, ic = dafus(d, 2, 6)
+                ic[3] in (2, 3) || continue
+                nseg += 1
+                if ic[3] == 2
+                    d2 = d
+                    n = cknr02(h, d)
+                    same &= n == oracle_cknr(2, hc, d)
+                    same &= all(i -> ckgr02(h, d, i) == oracle_ckgr(2, hc, d, i, 10), 1:n)
+                else
+                    d3 = d
+                    n = cknr03(h, d)
+                    len = ic[4] == 1 ? 8 : 5
+                    same &= n == oracle_cknr(3, hc, d)
+                    same &= all(i -> ckgr03(h, d, i) == oracle_ckgr(3, hc, d, i, len), 1:n)
+                end
+            end
+            @test same
+            @test nseg == 6                    # one type 2 and five type 3 segments
+            @test cknr02(h, d2) == length(CKFix.type2_intervals())
+            # The kinds of CSPICE: a descriptor of the other type, a record number outside.
+            n3 = cknr03(h, d3)
+            @test throws_kind(() -> cknr02(h, d3), :ckwrongdatatype)
+            @test_throws SPICE.SpiceError oracle_cknr(2, hc, d3)
+            @test throws_kind(() -> ckgr03(h, d2, 1), :ckwrongdatatype)
+            @test_throws SPICE.SpiceError oracle_ckgr(3, hc, d2, 1, 5)
+            @test throws_kind(() -> ckgr02(h, d2, 0), :cknonexistrec)
+            @test_throws SPICE.SpiceError oracle_ckgr(2, hc, d2, 0, 10)
+            @test throws_kind(() -> ckgr03(h, d3, n3 + 1), :cknonexistrec)
+            @test_throws SPICE.SpiceError oracle_ckgr(3, hc, d3, n3 + 1, 8)
+        finally
+            dafcls(h)
+            SPICE.dafcls(hc)
+        end
+        @test throws_kind(() -> ckgr02(h, d2, 1), :dafnosuchhandle)
     end
 
     @apart @testset "concurrent readers" begin

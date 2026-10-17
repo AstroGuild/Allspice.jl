@@ -53,10 +53,10 @@ function _seg_idchars(who::AbstractString, segid::AbstractString)
     return nothing
 end
 
-"The checks of `chckid` for a segment identifier: `:idstringtoolong`, then `:nonprintablechars`."
-function _seg_chckid(who::AbstractString, segid::AbstractString)
+"The checks of `chckid` for a segment identifier of the kernel type `what`: `:idstringtoolong`, then `:nonprintablechars`."
+function _seg_chckid(who::AbstractString, segid::AbstractString, what::AbstractString="SPK")
     _daf_lastnb(segid) > 40 && throw(SpiceError(:idstringtoolong,
-        "$who: the SPK segment identifier is invalid; its last non-blank character " *
+        "$who: the $what segment identifier is invalid; its last non-blank character " *
         "is at position $(_daf_lastnb(segid)); the maximum allowed length is 40"))
     _seg_idchars(who, segid)
     return nothing
@@ -318,6 +318,22 @@ function _spk_cheby(who::AbstractString, dtype::Int, per::Int, h::DAFHandle, bod
     ltime = btime + n * intlen
     _seg_coverage_gap(who, first, last, btime, ltime, tol)
     _seg_chckid(who, segid)
+    _spk_add!(h, body, center, refcod, dtype, first, last, segid,
+        _seg_cheb_records(cd, n, ninrec, intlen, btime))
+    return nothing
+end
+
+"""
+    _seg_cheb_records(cd, n, ninrec, intlen, btime) -> Vector{Float64}
+
+Data area of a Chebyshev segment on `n` intervals of length `intlen` from `btime`, as
+SPK types 2 and 3 and binary PCK type 2 store it: each record is the midpoint and the
+radius of its interval followed by its `ninrec` coefficients from `cd`, and the trailer
+is `btime`, `intlen`, the record size `ninrec + 2` and `n`.
+"""
+function _seg_cheb_records(cd::Vector{Float64}, n::Int, ninrec::Int, intlen::Float64,
+        btime::Float64)
+    @assert length(cd) == n * ninrec
     data = Vector{Float64}(undef, n * (ninrec + 2) + 4)
     radius = intlen / 2.0
     for i in 1:n                         # invariant: records 1 .. i-1 are in data
@@ -330,8 +346,7 @@ function _spk_cheby(who::AbstractString, dtype::Int, per::Int, h::DAFHandle, bod
     data[end-2] = intlen
     data[end-1] = Float64(ninrec + 2)
     data[end] = Float64(n)
-    _spk_add!(h, body, center, refcod, dtype, first, last, segid, data)
-    return nothing
+    return data
 end
 
 """

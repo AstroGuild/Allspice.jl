@@ -1,4 +1,4 @@
-# Group 9: DAF access, SPK and CK writers, kernel information.
+# Group 9: DAF access, SPK, CK and binary PCK writers, kernel information.
 #
 # Feature file: features/daf_write.feature
 #
@@ -15,8 +15,9 @@
 #   (f) every input check.
 #
 # C routines that SPICE.jl does not wrap (`spkw01_`, `spkw19_`, `spkw21_`, `ckw06_`) or
-# wraps with a wrong count (`spkw02_c`, `spkw03_c`, `ckw02_c`, `ckw03_c`) are called on
-# `SPICE.libcspice` directly, as SPICE.jl does. CSPICE is called from the main task only.
+# wraps with a wrong count (`spkw02_c`, `spkw03_c`, `ckw02_c`, `ckw03_c`, `pckw02_c`) are
+# called on `SPICE.libcspice` directly, as SPICE.jl does. CSPICE is called from the main
+# task only.
 
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
@@ -138,6 +139,29 @@ function c_ckw03(h, a)
         Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}, Cint, Ptr{Cdouble}), h, a.begtim,
         a.endtim, a.inst, a.ref, avflag, a.segid, length(a.sclkdp), a.sclkdp, a.quats,
         avflag ? a.avvs : zeros(3, 1), length(a.starts), a.starts)
+    SPICE.handleerror()
+end
+
+"""
+    c_pckw02(h, a)
+
+`pckw02_c` with the state of a fresh CSPICE process (SPICE.jl 0.2.5 passes the degree
+`length(cdata[1]) - 1`, three times too large, so the wrapper is not used).
+
+A binary PCK summary has 5 integers, so the last 4 bytes of its third double are
+padding. CSPICE packs the summary in a static buffer of `dafps_`/`dafus_` and leaves
+there the sixth integer of the last summary of 6 or more integers that it packed or
+unpacked, often the end address of an SPK or CK segment of an earlier call; Allspice
+writes zero, the value of a fresh process. A `dafps_c` with 6 zero integers sets the
+buffer to that state.
+"""
+function c_pckw02(h, a)
+    ccall((:dafps_c, LIBCSPICE), Cvoid, (Cint, Cint, Ptr{Cdouble}, Ptr{Cint}, Ptr{Cdouble}),
+        2, 6, zeros(2), zeros(Cint, 6), zeros(5))
+    ninrec, n = size(a.cdata)
+    ccall((:pckw02_c, LIBCSPICE), Cvoid, (Cint, Cint, Cstring, Cdouble, Cdouble, Cstring,
+        Cdouble, Cint, Cint, Ptr{Cdouble}, Cdouble), h, a.clssid, a.frame, a.first, a.last,
+        a.segid, a.intlen, n, ninrec ÷ 3 - 1, a.cdata, a.btime)
     SPICE.handleerror()
 end
 
@@ -882,6 +906,34 @@ function bad_ckw06(a)
     return out
 end
 
+# --- binary PCK type 2 ----------------------------------------------------------------------
+
+"Body-fixed frames of the PCK segments: frame class ID => frame name (built-in class 2 frames)."
+const PCK_FRAMES = Dict(301 => "IAU_MOON", 499 => "IAU_MARS", 3000 => "ITRF93")
+
+function gen_pckw02(rng, k)
+    n = rand(rng, (1, 2, 9, 40))
+    polydg = rand(rng, (0, 1, 5, 12))
+    intlen = 86400.0 * (1 + 9 * rand(rng))
+    btime = 1.0e7 * randn(rng)
+    cdata = randn(rng, 3 * (polydg + 1), n)         # angles in rad
+    first, last = rand(rng) < 0.5 ? (btime, btime + n * intlen) : (btime + 0.1 * intlen, btime + (n - 0.1) * intlen)
+    return (clssid=rand(rng, sort!(collect(keys(PCK_FRAMES)))),
+        frame=rand(rng, ("J2000", "ECLIPJ2000", "B1950", "GALACTIC")), first, last,
+        segid=rand_segid(rng, "P02"), intlen, cdata, btime)
+end
+function bad_pckw02(a)
+    return Any[bad_ids(a; long=:idstringtoolong)...,
+        ("frame that is not inertial", merge(a, (frame="IAU_EARTH",)), :invalidrefframe, true),
+        ("no record", merge(a, (cdata=zeros(size(a.cdata, 1), 0),)), :numcoeffsnotpos, true),
+        ("zero interval length", merge(a, (intlen=0.0,)), :intlennotpos, true),
+        ("first after last", merge(a, (first=a.last + 1.0,)), :baddescrtimes, true),
+        ("first before the data", merge(a, (first=a.btime - 1.0e-3,)), :baddescrtimes, true),
+        ("last after the data", merge(a, (last=a.btime + size(a.cdata, 2) * a.intlen + 1.0e-3,)), :baddescrtimes, true),
+        ("record size not a multiple of 3", merge(a, (cdata=zeros(4, size(a.cdata, 2)),)), :badarg, false),
+    ]
+end
+
 const WRITER_CASES = WriterCase[
     WriterCase("spkw13", :spk, gen_w13,
         (h, a) -> spkw13(h, a.body, a.center, a.frame, a.first, a.last, a.segid, a.degree, a.states, a.epochs),
@@ -952,20 +1004,28 @@ const WRITER_CASES = WriterCase[
     WriterCase("ckw06", :ck, gen_ckw06,
         (h, a) -> ckw06(h, a.inst, a.ref, a.avflag, a.first, a.last, a.segid, a.npkts, a.subtps, a.degres, a.packts, a.rates, a.sclkdp, a.ivlbds, a.sellst),
         c_ckw06, bad_ckw06),
+    WriterCase("pckw02", :pck, gen_pckw02,
+        (h, a) -> pckw02(h, a.clssid, a.frame, a.first, a.last, a.segid, a.intlen, a.cdata, a.btime),
+        c_pckw02, bad_pckw02),
 ]
 
 "The writer case with the name `name`."
 writer_case(name::AbstractString) = WRITER_CASES[findfirst(c -> c.name == name, WRITER_CASES)]
 
-neo_open(kind::Symbol, path, ifname, ncomch=0) = kind === :spk ? spkopn(path, ifname, ncomch) : ckopn(path, ifname, ncomch)
-c_open(kind::Symbol, path, ifname, ncomch=0) = kind === :spk ? SPICE.spkopn(path, ifname, ncomch) : SPICE.ckopn(path, ifname, ncomch)
-neo_close(kind::Symbol, h) = kind === :spk ? spkcls(h) : ckcls(h)
-c_close(kind::Symbol, h) = kind === :spk ? SPICE.spkcls(h) : SPICE.ckcls(h)
+neo_open(kind::Symbol, path, ifname, ncomch=0) = kind === :spk ? spkopn(path, ifname, ncomch) :
+    kind === :ck ? ckopn(path, ifname, ncomch) : pckopn(path, ifname, ncomch)
+c_open(kind::Symbol, path, ifname, ncomch=0) = kind === :spk ? SPICE.spkopn(path, ifname, ncomch) :
+    kind === :ck ? SPICE.ckopn(path, ifname, ncomch) : SPICE.pckopn(path, ifname, ncomch)
+neo_close(kind::Symbol, h) = kind === :spk ? spkcls(h) : kind === :ck ? ckcls(h) : pckcls(h)
+c_close(kind::Symbol, h) = kind === :spk ? SPICE.spkcls(h) : kind === :ck ? SPICE.ckcls(h) : SPICE.pckcls(h)
+"File name extension and file type (as `getfat` gives it) of the kernel kind `kind`."
+kind_ext(kind::Symbol) = kind === :spk ? ".bsp" : kind === :ck ? ".bc" : ".bpc"
+kind_type(kind::Symbol) = kind === :spk ? "SPK" : kind === :ck ? "CK" : "PCK"
 
 "Write the segments `segs` of the case `c` with both engines; returns the paths `(pc, pn)`."
 function write_both(c::WriterCase, dir::AbstractString, tag::AbstractString, segs; ncomch::Integer=0,
         comments=nothing)
-    ext = c.kind === :spk ? ".bsp" : ".bc"
+    ext = kind_ext(c.kind)
     pc = joinpath(dir, "c_" * tag * ext)
     pn = joinpath(dir, "n_" * tag * ext)
     hc = c_open(c.kind, pc, "IFNAME " * tag, ncomch)
@@ -1013,6 +1073,16 @@ function c_read_ck(path::AbstractString, sclk::AbstractString, segs, ticks)
     finally
         SPICE.unload(path)
         SPICE.unload(sclk)
+    end
+end
+
+"Rotations from J2000 to the body-fixed frames that CSPICE computes from the binary PCK `path` for the segments `segs` at the epochs `ets[k]`."
+function c_read_pck(path::AbstractString, segs, ets)
+    SPICE.furnsh(path)
+    try
+        return [c_value(() -> SPICE.pxform("J2000", PCK_FRAMES[a.clssid], et)) for (a, e) in zip(segs, ets) for et in e]
+    finally
+        SPICE.unload(path)
     end
 end
 
@@ -1137,13 +1207,17 @@ group("9. DAF access, SPK and CK writers") do
                     ets = [spk_probe_epochs(rng, a) for a in segs]
                     rc = c_read_spk(pc, segs, ets)
                     rn = c_read_spk(pn, segs, ets)
+                elseif c.kind === :pck
+                    ets = [spk_probe_epochs(rng, a) for a in segs]
+                    rc = c_read_pck(pc, segs, ets)
+                    rn = c_read_pck(pn, segs, ets)
                 else
                     ticks = [ck_probe_ticks(rng, a) for a in segs]
                     rc = c_read_ck(pc, sclk, segs, ticks)
                     rn = c_read_ck(pn, sclk, segs, ticks)
                 end
                 readok &= isequal(rc, rn)
-                nread += count(x -> c.kind === :spk ? x !== :error : (x[2] !== :error && x[2] !== nothing), rc)
+                nread += count(x -> c.kind !== :ck ? x !== :error : (x[2] !== :error && x[2] !== nothing), rc)
             end
             @testset "$(c.name)" begin
                 @test badwords == 0
@@ -1237,7 +1311,7 @@ group("9. DAF access, SPK and CK writers") do
                     (hasproperty(a, :starts) && length(a.starts) < 2)
                     a = c.gen(rng, 1)
                 end
-                ext = c.kind === :spk ? ".bsp" : ".bc"
+                ext = kind_ext(c.kind)
                 pn = joinpath(dir, "bad_n_$(c.name)$ext")
                 pc = joinpath(dir, "bad_c_$(c.name)$ext")
                 pref = joinpath(dir, "bad_ref_$(c.name)$ext")
@@ -1449,11 +1523,12 @@ group("9. DAF access, SPK and CK writers") do
 
     @apart @testset "empty files, open and close" begin
         # The reserved comment records are the layout branch: none, one, two. The CK file
-        # differs from the SPK file in the identification word only.
-        plan = FULL ? [(k, n) for k in (:spk, :ck) for n in (0, 1, 1000, 1001, 5000)] :
-               [(:spk, 0), (:spk, 1000), (:spk, 1001), (:ck, 0)]
+        # differs from the SPK file in the identification word only, the binary PCK file
+        # also in the summary size.
+        plan = FULL ? [(k, n) for k in (:spk, :ck, :pck) for n in (0, 1, 1000, 1001, 5000)] :
+               [(:spk, 0), (:spk, 1000), (:spk, 1001), (:ck, 0), (:pck, 1001)]
         for (kind, ncomch) in plan
-            ext = kind === :spk ? ".bsp" : ".bc"
+            ext = kind_ext(kind)
             pc = joinpath(dir, "empty_c_$(kind)_$ncomch$ext")
             pn = joinpath(dir, "empty_n_$(kind)_$ncomch$ext")
             hc = c_open(kind, pc, "EMPTY FILE", ncomch)
@@ -1466,7 +1541,7 @@ group("9. DAF access, SPK and CK writers") do
             @test !isopen(hn)
             dafcls(hn)                                         # a second close does nothing
             @test read(pc) == read(pn)
-            @test getfat(pn) == SPICE.getfat(pn) == ("DAF", kind === :spk ? "SPK" : "CK")
+            @test getfat(pn) == SPICE.getfat(pn) == ("DAF", kind_type(kind))
             @test throws_kind(() -> neo_open(kind, pn, "EXISTS", 0), :fileopenfailed)
             @test read(pc) == read(pn)                         # the existing file is not touched
             @test_throws SPICE.SpiceError c_open(kind, pc, "EXISTS", 0)
@@ -1474,6 +1549,7 @@ group("9. DAF access, SPK and CK writers") do
         @test throws_kind(() -> spkopn(joinpath(dir, "x.bsp"), ""), :emptystring)
         @test throws_kind(() -> spkopn("", "NAME"), :emptystring)
         @test throws_kind(() -> ckopn("", "NAME"), :emptystring)
+        @test throws_kind(() -> pckopn(joinpath(dir, "x.bpc"), ""), :emptystring)
         @test throws_kind(() -> spkopn(joinpath(dir, "no_such_dir", "x.bsp"), "NAME"), :fileopenfailed)
         @test throws_kind(() -> dafopr(joinpath(dir, "no_such_file.bsp")), :filenotfound)
         @test throws_kind(() -> dafopw(joinpath(dir, "no_such_file.bsp")), :filenotfound)
@@ -1828,6 +1904,51 @@ group("9. DAF access, SPK and CK writers") do
         @test spkobj(spk1) == [-504, -502, -501]
         @test throws_kind(() -> spkgeo(snapshot, -504, seg2.first, "J2000", 399), :spkinsuffdata)
         SPICE.kclear()
+    end
+
+    @apart @testset "binary PCK: Allspice reads the file that it writes" begin
+        c = writer_case("pckw02")
+        # One segment for each body-fixed frame, each with another base frame.
+        segs = [merge(c.gen(rng, k), (clssid=id, frame=base)) for (k, (id, base)) in
+                enumerate(zip(sort!(collect(keys(PCK_FRAMES))), ("ECLIPJ2000", "J2000", "B1950")))]
+        pc, pn = write_both(c, dir, "pck_readback", segs)
+        @test read(pc) == read(pn)
+        ctx = neo_context([pn])
+        oracle_load([pc])
+        drot = 0.0
+        dxf = 0.0
+        try
+            for a in segs, et in random_epochs(rng, 20, a.first, a.last)
+                name = PCK_FRAMES[a.clssid]
+                drot = max(drot, maximum(abs.(pxform(ctx, "J2000", name, et) .- SPICE.pxform("J2000", name, et))))
+                X = sxform(ctx, "J2000", name, et)
+                Xc = SPICE.sxform("J2000", name, et)
+                dxf = max(dxf, maximum(abs.(X .- Xc) ./ max.(abs.(Xc), 1.0)))
+            end
+        finally
+            SPICE.kclear()
+        end
+        measured(@sprintf("  %-58s rot=%.3e xform rel=%.3e", "Allspice reads its binary PCK: pxform, sxform", drot, dxf))
+        # Measured: 1.1e-16 (rotation) and 1.1e-16 relative (state transformation), a
+        # last-bit difference of one element.
+        @test drot <= 1e-15
+        @test dxf <= 1e-15
+        # The base frame by ID, and by a name with blanks and in lower case, as `irfnum_`
+        # compares names; a frame ID outside the inertial frames is rejected.
+        a = segs[1]
+        paths = String[]
+        for (i, frame) in enumerate((17, " eclip J2000 ", "ECLIPJ2000"))
+            p = joinpath(dir, "pck_frame_$i.bpc")
+            h = pckopn(p, "IFNAME pck_readback")
+            c.neo(h, merge(a, (frame=frame,)))
+            pckcls(h)
+            push!(paths, p)
+        end
+        @test allequal(read.(paths))
+        h = pckopn(joinpath(dir, "pck_frame_bad.bpc"), "BAD")
+        @test throws_kind(() -> c.neo(h, merge(a, (frame=22,))), :invalidrefframe)
+        @test throws_kind(() -> c.neo(h, merge(a, (frame=0,))), :invalidrefframe)
+        dafcls(h)
     end
 
     @apart @testset "handles on different tasks" begin

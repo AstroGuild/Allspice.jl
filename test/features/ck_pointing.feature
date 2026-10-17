@@ -56,3 +56,18 @@ Feature: Pointing from C-kernels (CK types 1 to 6)
     Given a negative tolerance
     When ckgp is called
     Then a SpiceError is thrown
+
+  Scenario: One link of a CK frame
+    Given a CK frame and an epoch in seconds past J2000 TDB
+    When ckfrot and ckfxfm are called
+    Then the rotation, the state transformation and the base frame are those of CSPICE
+    And ckfxfm uses only segments with angular velocity
+    And the result is nothing without a CK, without the SCLK kernel, or outside the coverage
+    And an epoch outside the range of the clock throws SpiceError(:valueoutofrange)
+
+  Scenario: Records of a type 2 or type 3 segment
+    Given an open CK file and the descriptor of a type 2 or type 3 segment
+    When cknr02 or cknr03 counts the records and ckgr02 or ckgr03 reads each record
+    Then the count and every record are equal to the CSPICE answers
+    And a descriptor of the other type throws SpiceError(:ckwrongdatatype)
+    And a record number outside the segment throws SpiceError(:cknonexistrec)
