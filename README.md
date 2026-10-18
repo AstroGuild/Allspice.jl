@@ -1,21 +1,25 @@
 # Allspice.jl
 
-NASA's Navigation and Ancillary Information Facility (NAIF) develops
-[SPICE](https://naif.jpl.nasa.gov/naif/), a system for computing spacecraft and
-planetary geometry from data files called kernels; CSPICE is its C implementation.
-Allspice.jl is a native Julia port of CSPICE N0067 that reads these kernels and
-performs the same position, orientation, time, and event calculations without a C
-library.
+Allspice.jl is a native Julia port of CSPICE N0067 for the computation of spacecraft
+and planetary geometry. It reads the data files of
+[SPICE](https://naif.jpl.nasa.gov/naif/), called kernels, which NASA's Navigation and
+Ancillary Information Facility (NAIF) publishes, and performs the position,
+orientation, time and event calculations of CSPICE, the C implementation of SPICE,
+in Julia code with no C library behind it.
 
-Choose Allspice.jl instead of a CSPICE wrapper when a native Julia implementation
-matters: separate kernel contexts permit concurrent queries without a lock, epochs
-can carry ForwardDiff dual numbers, and trajectory or rotation tables can run in
-inner loops and on GPUs. If you need to call NAIF's CSPICE library itself, use a
+Features include:
+
+- The calls of CSPICE with their names and argument order, with Julia return values
+  and exceptions, so that a program written with SPICE.jl usually needs few changes.
+- Separate kernel contexts, so that several threads can query at once without a lock.
+- Epochs that can be dual numbers of ForwardDiff.jl, and time derivatives of any
+  order with `spkder` and `pxder`.
+- Ephemeris and rotation tables for inner loops and GPU functions.
+- Event searches, surface geometry, and the writing of SPK, CK, DSK and EK kernels.
+
+Allspice.jl is meant for programs that need SPICE geometry as native Julia code. A
+program that must call the CSPICE library of NAIF itself is better served by a
 wrapper such as SPICE.jl.
-
-Calls keep CSPICE names and argument order. Results are Julia return values, and
-failures throw exceptions, so programs written with SPICE.jl usually need few
-changes.
 
 ## Installation
 
@@ -53,32 +57,21 @@ stellar-aberration corrections. Allspice.jl returns Julia values instead of fill
 C output arguments, uses indices that start at 1, and throws [`SpiceError`](docs/src/reference/kernels.md)
 when a call cannot produce a result.
 
-## Tasks
-
-| Task | Functions | Guide |
-|---|---|---|
-| Load kernels, keep separate kernel sets | `furnsh`, `unload`, `SpiceContext` | [Contexts and threads](docs/src/howto/contexts.md) |
-| Positions and states of bodies | `spkezr`, `spkpos`, `spkgeo` | [States and aberration](docs/src/reference/states.md) |
-| Orientation of frames | `pxform`, `sxform` | [Frames and orientation](docs/src/reference/frames.md) |
-| Time conversion | `str2et`, `et2utc`, `timout` | [Time](docs/src/reference/time.md) |
-| Derivatives with respect to the epoch | `spkder`, `pxder` | [Time derivatives](docs/src/howto/derivatives.md) |
-| Search for events | `gfdist`, `gfoclt`, `gfposc` | [Event searches](docs/src/howto/events.md) |
-| Surface points and illumination | `subpnt`, `sincpt`, `ilumin` | [Geometry](docs/src/reference/geometry.md) |
-| Fast tables for inner loops and GPUs | `ephemeris_table`, `rotation_table` | [Ephemeris and rotation tables](docs/src/howto/tables.md) |
-| Write kernels | `spkopn`, `spkw02`, `ckw03`, `dskw02`, `ekopn` | [Writing kernels](docs/src/howto/writing.md) |
-
 ## Limits
 
 - Allspice.jl is a prototype. Its interface can still change.
 - It ports the library calls of CSPICE N0067. Utilities that Julia Base covers (cells, sets, strings, error handling) are not ported; see [coverage and validation](docs/src/explanation/coverage.md).
 - A result differs from CSPICE by rounding only. The measured differences are in [coverage and validation](docs/src/explanation/coverage.md#Known-limits-of-accuracy).
 
-## Documentation
+## Tutorials and Documentation
 
-Start with the [first session](docs/src/tutorial.md) for a complete workflow from
-loading kernels to searching for an event. Before porting CSPICE or SPICE.jl code,
-read the [differences from CSPICE](docs/src/explanation/cspice.md); the manual also
-groups the [API reference by subject](docs/src/reference/).
+The manual starts with a [first session](docs/src/tutorial.md) that goes from
+loading kernels to an event search. Its how-to guides then cover kernel contexts and
+threads, time derivatives, ephemeris and rotation tables, event searches and the
+writing of kernels; the concept pages give the
+[differences from CSPICE](docs/src/explanation/cspice.md), which should be read
+before CSPICE or SPICE.jl code is ported, and the coverage and validation of the
+port, and the [API reference](docs/src/reference/) groups the calls by subject.
 
 To build the manual, run from the repository root:
 

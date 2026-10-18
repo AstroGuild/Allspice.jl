@@ -13,18 +13,58 @@ using Pkg
 Pkg.add("Allspice")
 ```
 
-## Where to go
-
-| Need | Page |
-|---|---|
-| A first session from kernels to an event search | [First session](@ref) |
-| Use from several threads, or several kernel sets at once | [Contexts and threads](@ref) |
-| Velocity, acceleration and higher derivatives | [Time derivatives](@ref) |
-| Many positions on a known interval, in an inner loop or on a GPU | [Ephemeris and rotation tables](@ref) |
-| Write an SPK, a CK or another kernel | [Writing kernels](@ref) |
-| Times of closest approach, eclipses, visibility | [Event searches](@ref) |
-| What behaves differently from CSPICE | [Differences from CSPICE](@ref) |
-| Which parts of the toolkit exist, and how they were checked | [Coverage and validation](@ref) |
-| One call in detail | the reference pages in the menu |
-
 The examples of this manual run on three small kernels that the manual writes itself: leap seconds, the constants of the Earth, and two-body orbits of the Earth around the Sun and of a spacecraft named `PROBE` around the Earth. The positions are therefore not those of the real bodies; with kernels from NAIF the same calls give real positions.
+
+## Contents
+
+### Tutorial
+
+The first session loads kernels, computes states and orientations, and ends with an event search.
+
+```@contents
+Pages = ["tutorial.md"]
+Depth = 2
+```
+
+### How-to guides
+
+These guides cover several threads and kernel sets, time derivatives, tables for inner loops and GPUs, event searches, and the writing of kernels.
+
+```@contents
+Pages = [
+    "howto/contexts.md",
+    "howto/derivatives.md",
+    "howto/tables.md",
+    "howto/events.md",
+    "howto/writing.md",
+]
+Depth = 2
+```
+
+### Concepts
+
+These pages say where Allspice.jl differs from CSPICE, which parts of the toolkit exist, and how they were checked.
+
+```@contents
+Pages = ["explanation/cspice.md", "explanation/coverage.md"]
+Depth = 2
+```
+
+### API reference
+
+The reference groups the calls by subject.
+
+```@contents
+Pages = [
+    "reference/kernels.md",
+    "reference/time.md",
+    "reference/states.md",
+    "reference/frames.md",
+    "reference/geometry.md",
+    "reference/events.md",
+    "reference/math.md",
+    "reference/files.md",
+    "reference/ek.md",
+]
+Depth = 1
+```
