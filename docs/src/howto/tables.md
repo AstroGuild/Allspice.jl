@@ -50,6 +50,36 @@ gpu = adapt(CuArray, tab)                   # `cu(tab)` gives Float32 coefficien
 states = map(et -> @inbounds(table_state(gpu, et)), CuArray(epochs))
 ```
 
+## In a CasADi model
+
+CasADiCodegen.jl generates Julia code from a model of CasADi, and its `callback` puts a Julia function into the model with the derivatives that CasADi needs. Because [`table_jet`](@ref) returns static vectors, a table can give the position of a body to a force model in generated code with no memory allocation per call, and the same call gives the time derivatives of the position for the Jacobian of the model. The block below is a sketch and not a complete program: the body is a satellite of the Earth that the Moon perturbs, and the times `t0` and `t1` and the gravitational parameters `GM_EARTH` and `GM_MOON` are values of the application.
+
+```julia
+using Allspice, CasADiCodegen, LinearAlgebra
+
+tab = ephemeris_table("MOON", t0, t1, "J2000", "NONE", "EARTH")
+order(k) = let v = Val(k); t -> table_jet(tab, t[1], v)[k+1]; end       # derivative k of the position
+moon = callback(order(0), "moon", (1,), (3,); jacobian = (order(1), order(2)))
+
+x, t = MX.sym("x", 6), MX.sym("t")
+r, s = x[1:3], moon(t)
+a = -GM_EARTH * r / norm(r)^3 + GM_MOON * ((s - r) / norm(s - r)^3 - s / norm(s)^3)
+z = vertcat(x, t)
+f = CasADiCodegen.Function("f", [x, t], [vertcat(x[4:6], a), jacobian(vertcat(x[4:6], a), z)])
+g, g! = build_function(f; expression = Val{false})
+```
+
+The epoch `t` is in seconds past J2000 TDB, and `order(k)` returns the derivative `k` of the position in km/s^k. CasADi takes the first derivatives of the callback from `order(1)` and the second derivatives from `order(2)`.
+
+The table below gives the time per in-place call of a model that adds the same term for the Sun, from a second table and a second callback, measured once on Julia 1.13. The last row is the same model in plain Julia with ForwardDiff.jl, with which the results agree to rounding.
+
+| Outputs | Time per call | Memory per call |
+|---|---:|---:|
+| Right side | 0.09 µs | 0 B |
+| Right side and Jacobians by state and time | 0.19 µs | 0 B |
+| Right side, Jacobian and second derivatives by state and time | 0.63 µs | 0 B |
+| Right side, plain Julia | 0.12 µs | 0 B |
+
 ## Measured accuracy and speed
 
 The table below gives measured values for 400 days of de440s.bsp, from `bench/table_gpu.jl`: one thread of an Intel CPU, and an NVIDIA RTX 3090 with 4,000,000 epochs. The error is the largest difference from the kernels in km, and the tolerance is the default unless the row names one.
