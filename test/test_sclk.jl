@@ -6,6 +6,8 @@
 #
 # Error measures: seconds for ET, ticks for encoded SCLK; strings must be equal.
 
+import ForwardDiff
+
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
 # compilation of the test code is the larger part of the run time of the group. The
@@ -193,6 +195,11 @@ group("9. spacecraft clocks against CSPICE", Kernels.LSK) do
                 @test isapprox(c1 * e1, 1.0; rtol=1e-12)
             end
         end
+        # A dual number passes as well, with the derivative of the Taylor number.
+        sc, coef = clocks[1][1], clocks[1][4]
+        t = (coef[1, 1] + coef[2, 1]) / 2
+        d = ForwardDiff.derivative(s -> sct2e(ctx, sc, s), t)
+        @test d ≈ Allspice.derivatives(sct2e(ctx, sc, Allspice.taylor_var(t, Val(1))))[2] rtol = 1e-15
     end
 
     @apart @testset "no allocation, inferred types" begin

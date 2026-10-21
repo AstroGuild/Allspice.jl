@@ -210,10 +210,11 @@ ill_alloc_sep(ks, et, c) = @allocated trgsep(ks, et, 301, "SPHERE", 10020, 10, "
     @testset "no allocation and inferred types on ellipsoids" begin
         et = 2.5e8
         sp = srfrec(ks, 301, 0.3, 0.2)
-        for c in ("NONE", "LT", "LT+S", "CN", "CN+S")
+        for c in ("NONE", "LT", "LT+S", "CN", "CN+S", "XLT+S", "XCN")
             @test gwarm(ill_alloc_min, ks, et, c, sp) == 0
             @test gwarm(ill_alloc_g, ks, et, c, sp) == 0
             @test gwarm(ill_alloc_f, ks, et, c, sp) == 0
+            startswith(c, "X") && continue          # phaseq takes reception corrections only
             @test gwarm(ill_alloc_ph, ks, et, c) == 0
             @test gwarm(ill_alloc_sep, ks, et, c) == 0
         end
