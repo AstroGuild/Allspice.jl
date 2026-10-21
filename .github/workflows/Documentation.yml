@@ -10,6 +10,8 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   docs:
+    # No workflow runs in a private repository.
+    if: github.event.repository.private == false
     runs-on: ubuntu-latest
     permissions:
       contents: write
