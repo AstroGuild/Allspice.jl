@@ -17,6 +17,39 @@ isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 import ForwardDiff
 isdefined(@__MODULE__, :CS) || include("mathoracle.jl")
 
+# The limit of `prop2b` against CSPICE.
+const PROP2B_LIMIT = 1e-13
+
+"""
+    prop2b_scale(mu, s, dt) -> Float64
+
+Scale of the limit of `prop2b` for one case where `ORACLE_LIBM_EXACT` is false, from the
+conditioning of the case: the largest relative change of the result when one input moves
+by one unit in the last place. The case may differ from CSPICE by 16 times that change
+or by `PROP2B_LIMIT * ORACLE_LIBM_FACTOR`, whichever is larger.
+
+The errors of the C library of CSPICE on Windows (see `ORACLE_LIBM_EXACT`) enter through
+`sin`, `cos`, `sinh` and `cosh` in the Stumpff functions. A copy of `prop2b` that adds
+errors of that size, with random signs, changed the results of the 202 cases of the
+default seed by at most 2.7e-8 (`dt = -2.8e19` s on an ellipse, where Windows CI measured
+2.2e-8 against CSPICE), and by at most 11.6 times the change from one unit in the last
+place of an input. One unit of that `dt` is 4096 s, so the result is fixed only to a
+relative 3e-2.
+"""
+function prop2b_scale(mu, s, dt)
+    ORACLE_LIBM_EXACT && return 1.0
+    y = outcome(() -> prop2b(mu, s, dt))
+    y isa Symbol && return 1.0
+    change = 0.0
+    for i in 1:7, step in (nextfloat, prevfloat)    # invariant: `change` covers the inputs before i
+        s2 = i <= 6 ? setindex(SVector{6,Float64}(s), step(s[i]), i) : s
+        dt2 = i == 7 ? step(dt) : dt
+        z = outcome(() -> prop2b(mu, s2, dt2))
+        z isa Symbol || (change = max(change, reldiff(z, y)))
+    end
+    return max(1.0, 16 * change / (PROP2B_LIMIT * ORACLE_LIBM_FACTOR))
+end
+
 group("16. math: conics") do
     rng = MersenneTwister(SEED + 16)
     n = nsample(100, 400)
@@ -91,7 +124,8 @@ group("16. math: conics") do
             u = rand(rng)
             dt = u < 0.05 ? 0.0 : u < 0.6 ? period * 2 * randn(rng) : u < 0.9 ? period * 1e-3 * randn(rng) :
                  u < 0.97 ? period * 300 * randn(rng) : rmag(rng)^2 * randn(rng)
-            d = versus!(t, :prop2b, () -> prop2b(mu, s, dt), () -> CS.prop2b(mu, s, dt))
+            d = versus!(t, :prop2b, () -> prop2b(mu, s, dt), () -> CS.prop2b(mu, s, dt);
+                scale=prop2b_scale(mu, s, dt))
             if isfinite(d) && !(outcome(() -> prop2b(mu, s, dt)) isa Symbol)
                 # energy and angular momentum do not change
                 q = prop2b(mu, s, dt)
@@ -256,7 +290,7 @@ group("16. math: conics") do
         # eqncpv: the sine and the cosine of Julia and of the C library differ in the
         # last place for some angles, and the Kepler equation multiplies a difference by
         # up to 1 / (1 - e) = 10; measured 2.4e-16 (state) and 3e-16 (velocity).
-        report!(t, "conics"; tol=4eps(), tols=Dict(:prop2b => 1e-13, :conics => 1e-10,
+        report!(t, "conics"; tol=4eps(), tols=Dict(:prop2b => PROP2B_LIMIT, :conics => 1e-10,
             :conics_nearparabola => 1e-1, :eqncpv => 1e-14, :eqncpv_vel => 1e-14))
     end
 
