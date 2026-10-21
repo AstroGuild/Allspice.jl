@@ -1752,6 +1752,32 @@ group("9. DAF access, SPK and CK writers") do
         write(pd, damaged)
         @test throws_kind(() -> dafopr(pd), :ftpxfererror)
         @test_throws SPICE.SpiceError SPICE.dafopr(pd)
+        # A file from before N0050 has zeros in place of the binary file format (#11):
+        # the byte order follows from NI, as in `zzddhppf`.
+        (lo, hi), (body, center) = dn.sums[1][1], dn.sums[1][2]
+        et = (lo + hi) / 2
+        want = spkgeo(neo_context([pn]), body, et, "J2000", center)
+        for (src, tag) in ((pn, "native"), (po, "other"))
+            bytes = read(src)
+            bytes[89:96] .= 0x00
+            pz = joinpath(dir, "no_bff_$tag.bsp")
+            write(pz, bytes)
+            @test spkgeo(neo_context([pz]), body, et, "J2000", center) == want
+            SPICE.furnsh(pz)
+            try
+                @test SPICE.spkgeo(body, et, "J2000", center)[1] ≈ want[1] rtol = 1e-15
+            finally
+                SPICE.unload(pz)
+            end
+        end
+        # Without the string, a DAF without summaries has no byte order.
+        pe = joinpath(dir, "no_bff_empty.bsp")
+        dafcls(spkopn(pe, "EMPTY", 0))
+        bytes = read(pe)
+        bytes[89:96] .= 0x00
+        write(pe, bytes)
+        @test throws_kind(() -> neo_context([pe]), :unknownbff)
+        @test throws_kind(() -> dafopr(pe), :unknownbff)
     end
 
     @apart @testset "getfat, spkobj, spkcov, tkvrsn" begin

@@ -27,6 +27,47 @@ end
     return reinterpret(Float64, little ? v : bswap(v))
 end
 
+"""
+    _daf_little(io, rec1, path, who) -> Bool
+
+Byte order of the DAF open on `io` whose file record is `rec1`: `true` for `LTL-IEEE`,
+`false` for `BIG-IEEE`. A file from before toolkit N0050 has zeros in place of the
+binary file format; then, as `zzddhppf` of CSPICE, the bytes of NI give the order, and
+for little endian the count of summaries in the first summary record separates IEEE
+from VAX. Moves the position of `io`.
+
+Throws `SpiceError` with kind `:unsupportedbff` for a VAX format, `:filereadfailed` if
+the first summary record cannot be read, and `:unknownbff` for any other format or for
+a file without the format string and without summaries.
+"""
+function _daf_little(io::IO, rec1::AbstractVector{UInt8}, path::AbstractString,
+        who::AbstractString)
+    @assert length(rec1) >= _DAF_RECLEN
+    bff = String(rec1[89:96])
+    bff == "LTL-IEEE" && return true
+    bff == "BIG-IEEE" && return false
+    bff in ("VAX-GFLT", "VAX-DFLT") && throw(SpiceError(:unsupportedbff,
+        "$who: the binary file format $bff of $path is not supported"))
+    unknown(why) = SpiceError(:unknownbff, "$who: the binary file format of $path $why")
+    all(iszero, view(rec1, 89:96)) || throw(unknown("($(repr(rstrip(bff)))) is not known"))
+    # NI is in 2:250, so one of its four bytes is nonzero and the others are zero.
+    ni = view(rec1, 13:16)
+    iszero(ni[1]) && iszero(ni[2]) && iszero(ni[3]) && !iszero(ni[4]) && return false
+    (!iszero(ni[1]) && iszero(ni[2]) && iszero(ni[3]) && iszero(ni[4])) ||
+        throw(unknown("cannot be determined from NI"))
+    # NSUM, the third double of the first summary record, is in 1:125: as a little-endian
+    # IEEE double its first four bytes are zero.
+    fward = Int(_daf_i32(rec1, 76, true))
+    ctl = Vector{UInt8}(undef, 24)
+    (fward >= 2 && (seek(io, (fward - 1) * _DAF_RECLEN); readbytes!(io, ctl, 24) == 24)) ||
+        throw(SpiceError(:filereadfailed,
+            "$who: the first summary record $fward of $path cannot be read"))
+    all(iszero, view(ctl, 17:24)) && throw(unknown("cannot be determined, because the " *
+        "file contains no data"))
+    all(iszero, view(ctl, 17:20)) && return true
+    throw(SpiceError(:unsupportedbff, "$who: $path appears to be a VAX file, which is not supported"))
+end
+
 "Value of `x` as an `Int` if `x` is a finite whole number in `lo:hi`, else throws `SpiceError(:baddaf)` that names `what`."
 function _daf_int(x::Float64, lo::Int, hi::Int, what::AbstractString, path::AbstractString)
     (isfinite(x) && x == trunc(x) && lo <= x <= hi) ||
@@ -125,7 +166,8 @@ and `1 <= baddr <= eaddr <= length(data)`. A CK file has its descriptors in
 encoded SCLK start and stop as `t0`, `t1`) and an empty `segments`. For SPK types 2, 3, 20 and PCK type 2 the
 fields `init`, `intlen`, `rsize`, `nrec` hold the last four doubles of the segment and
 `rsize`, `nrec` agree with the segment length. Throws `SpiceError` with kind
-`:filenotfound` or `:baddaf` if the file does not meet these conditions.
+`:filenotfound` or `:baddaf` if the file does not meet these conditions, and the kinds
+of [`_daf_little`](@ref) if its byte order cannot be read.
 
 The ID words `DAF/SPK`, `DAF/PCK` and `DAF/CK` are accepted, and also the old
 `NAIF/DAF` (as in `de405.bsp`), for which the kind follows from NI (5 is PCK; 6 is SPK
@@ -146,14 +188,7 @@ function open_daf(path::AbstractString)
         idword = rstrip(String(raw[1:8]))
         idword in ("DAF/SPK", "DAF/PCK", "DAF/CK", "NAIF/DAF") || throw(SpiceError(:baddaf,
             "ID word $(repr(idword)) is not DAF/SPK, DAF/PCK, DAF/CK or NAIF/DAF in $path"))
-        bfmt = rstrip(String(raw[89:96]))
-        little = if bfmt == "LTL-IEEE"
-            true
-        elseif bfmt == "BIG-IEEE"
-            false
-        else
-            throw(SpiceError(:baddaf, "unknown byte-order string $(repr(bfmt)) in $path"))
-        end
+        little = _daf_little(io, raw, path, "furnsh")
         swap = little != (ENDIAN_BOM == 0x04030201)
         if raw[700:705] == _DAF_FTPSTR[1:6]      # the string is absent in old files
             raw[700:727] == _DAF_FTPSTR || throw(SpiceError(:baddaf,
@@ -178,7 +213,7 @@ function open_daf(path::AbstractString)
             end
             d
         else
-            Mmap.mmap(io, Vector{Float64}, (nwords,))
+            Mmap.mmap(io, Vector{Float64}, (nwords,), 0)
         end
 
         # --- summary records ------------------------------------------------------
