@@ -214,6 +214,21 @@ end
     return float(et)
 end
 
+"""
+    _plain_epoch(et, who) -> et
+
+Return `et` unchanged if it is a plain real number. A call whose result has no
+derivatives (`limbpt`, `occult`, `et2lst`, ...) takes such an epoch only; throws
+`SpiceError(:badarg)` for a number that carries derivatives (a `ForwardDiff.Dual`, a
+`Taylor`), which would otherwise fail later with a `MethodError`.
+"""
+function _plain_epoch(et::Real, who::AbstractString)
+    (!(et isa Taylor) && float(et) isa AbstractFloat) || throw(SpiceError(:badarg,
+        "$who: the epoch must be a plain real number such as a Float64, not a " *
+        "$(nameof(typeof(et))); this call does not give derivatives"))
+    return et
+end
+
 "A body or a frame given by name or by integer ID."
 const NameOrID = Union{AbstractString,Integer}
 

@@ -1213,6 +1213,19 @@ function dvsep(s1::AbstractVector, s2::AbstractVector)
 end
 
 # --- general-dimension forms ---------------------------------------------------------
+#
+# A "g" call gives a static result when every array argument is static, and a `Vector`
+# or a `Matrix` that counts from 1 otherwise. The two forms do the same arithmetic.
+
+"Elementwise `f` over `v`: a static vector if `v` and every array of `others` are static, a `Vector` otherwise."
+@inline _m_gmap(f::F, v::StaticVector, others::StaticArray...) where {F} = map(f, v)
+_m_gmap(f::F, v::AbstractVector, others::AbstractArray...) where {F} =
+    [f(v[begin+i-1]) for i in 1:length(v)]
+
+"Elementwise `f` over `a` and `b` of equal length, with the result container of `_m_gmap`."
+@inline _m_gmap2(f::F, a::StaticVector, b::StaticVector) where {F} = map(f, a, b)
+_m_gmap2(f::F, a::AbstractVector, b::AbstractVector) where {F} =
+    [f(a[begin+i-1], b[begin+i-1]) for i in 1:length(a)]
 
 @inline function _m_samelen(a::AbstractVector, b::AbstractVector)
     length(a) == length(b) ||
@@ -1229,7 +1242,8 @@ Throws `SpiceError(:badarg)` if the lengths differ.
 
 See also [`vadd`](@ref), [`vsubg`](@ref), [`vlcomg`](@ref).
 """
-vaddg(v1::AbstractVector, v2::AbstractVector) = (_m_samelen(v1, v2); _m_f.(v1) .+ _m_f.(v2))
+vaddg(v1::AbstractVector, v2::AbstractVector) =
+    (_m_samelen(v1, v2); _m_gmap2((x, y) -> _m_f(x) + _m_f(y), v1, v2))
 
 """
     vsubg(v1, v2)
@@ -1241,7 +1255,8 @@ Throws `SpiceError(:badarg)` if the lengths differ.
 
 See also [`vsub`](@ref), [`vaddg`](@ref).
 """
-vsubg(v1::AbstractVector, v2::AbstractVector) = (_m_samelen(v1, v2); _m_f.(v1) .- _m_f.(v2))
+vsubg(v1::AbstractVector, v2::AbstractVector) =
+    (_m_samelen(v1, v2); _m_gmap2((x, y) -> _m_f(x) - _m_f(y), v1, v2))
 
 """
     vsclg(s, v1)
@@ -1251,7 +1266,10 @@ CSPICE.
 
 See also [`vscl`](@ref).
 """
-vsclg(s::Real, v1::AbstractVector) = _m_f(s) .* _m_f.(v1)
+function vsclg(s::Real, v1::AbstractVector)
+    sf = _m_f(s)
+    return _m_gmap(x -> sf * _m_f(x), v1)
+end
 
 """
     vminug(vin)
@@ -1260,7 +1278,7 @@ Return `-vin` for a vector of any length, as `vminug_c` of CSPICE.
 
 See also [`vminus`](@ref).
 """
-vminug(vin::AbstractVector) = .-_m_f.(vin)
+vminug(vin::AbstractVector) = _m_gmap(x -> -_m_f(x), vin)
 
 """
     vequg(vin)
@@ -1269,7 +1287,7 @@ Return a copy of the vector `vin` of any length, as `vequg_c` of CSPICE.
 
 See also [`vequ`](@ref).
 """
-vequg(vin::AbstractVector) = _m_f.(vin)
+vequg(vin::AbstractVector) = _m_gmap(_m_f, vin)
 
 """
     vdotg(v1, v2)
@@ -1337,8 +1355,11 @@ See also [`unorm`](@ref), [`vhatg`](@ref).
 """
 function unormg(v1::AbstractVector)
     vmag = vnormg(v1)
-    primal(vmag) > 0.0 || return _m_f.(v1) .* zero(vmag), vmag
-    return _m_f.(v1) ./ vmag, vmag
+    if primal(vmag) > 0.0
+        return _m_gmap(x -> _m_f(x) / vmag, v1), vmag
+    end
+    z = zero(vmag)
+    return _m_gmap(x -> _m_f(x) * z, v1), vmag
 end
 
 """
@@ -1427,7 +1448,7 @@ function vprojg(a::AbstractVector, b::AbstractVector)
     adotb = vdotg(a, b)
     bdotb = vdotg(b, b)
     scale = primal(bdotb) == 0.0 ? zero(adotb / one(bdotb)) : adotb / bdotb
-    return scale .* _m_f.(b)
+    return _m_gmap(x -> scale * _m_f(x), b, a)
 end
 
 """
@@ -1440,8 +1461,11 @@ Throws `SpiceError(:badarg)` if the lengths differ.
 
 See also [`vlcom`](@ref).
 """
-vlcomg(a::Real, v1::AbstractVector, b::Real, v2::AbstractVector) =
-    (_m_samelen(v1, v2); _m_f(a) .* _m_f.(v1) .+ _m_f(b) .* _m_f.(v2))
+function vlcomg(a::Real, v1::AbstractVector, b::Real, v2::AbstractVector)
+    _m_samelen(v1, v2)
+    af, bf = _m_f(a), _m_f(b)
+    return _m_gmap2((x, y) -> af * _m_f(x) + bf * _m_f(y), v1, v2)
+end
 
 """
     vzerog(v) -> Bool
@@ -1605,5 +1629,6 @@ Return the transpose of a matrix of any size, as `xposeg_c` of CSPICE.
 
 See also [`xpose`](@ref), [`xpose6`](@ref).
 """
-xposeg(matrix::AbstractMatrix) = permutedims(_m_f.(matrix))
+xposeg(matrix::AbstractMatrix) =
+    [_m_f(matrix[begin+j-1, begin+i-1]) for i in 1:size(matrix, 2), j in 1:size(matrix, 1)]
 xposeg(matrix::StaticMatrix) = SMatrix(transpose(_m_f.(matrix)))

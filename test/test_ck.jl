@@ -246,11 +246,13 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
                 t = ck_random_tick(rng, case, tags)
                 for ref in ("J2000", "ECLIPJ2000", "IAU_EARTH")
                     oracle_ck_reset(case.inst)
+                    # `nothing` where CSPICE has found = false
                     r = SPICE.ckgp(case.inst, t, tol, ref)
-                    cmat, clkout, found = ckgp(ctx, case.inst, t, tol, ref)
-                    agree_found &= found == (r !== nothing)
-                    if found && r !== nothing
+                    ours = ckgp(ctx, case.inst, t, tol, ref)
+                    agree_found &= (ours === nothing) == (r === nothing)
+                    if ours !== nothing && r !== nothing
                         nfound += 1
+                        cmat, clkout = ours
                         append!(dcm, abs.(cmat .- r[1]))
                         push!(dclk, abs(clkout - r[2]))
                     else
@@ -258,9 +260,10 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
                     end
                     oracle_ck_reset(case.inst)
                     r = SPICE.ckgpav(case.inst, t, tol, ref)
-                    cmat, av, clkout, found = ckgpav(ctx, case.inst, t, tol, ref)
-                    agree_found &= found == (r !== nothing)
-                    if found && r !== nothing
+                    ours = ckgpav(ctx, case.inst, t, tol, ref)
+                    agree_found &= (ours === nothing) == (r === nothing)
+                    if ours !== nothing && r !== nothing
+                        cmat, av, clkout = ours
                         append!(dcm, abs.(cmat .- r[1]))
                         append!(dav, abs.(av .- r[2]) ./ CK_RATE)
                         push!(dclk, abs(clkout - r[3]))
@@ -288,10 +291,10 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
             for i in eachindex(tags)
                 oracle_ck_reset(case.inst)
                 r = SPICE.ckgp(case.inst, tags[i], 0.0, "J2000")
-                cmat, clkout, found = ckgp(ctx, case.inst, tags[i], 0.0, "J2000")
-                ok &= found == (r !== nothing)
-                found && r !== nothing &&
-                    (ok &= maximum(abs.(cmat .- r[1])) <= CK_TOL_CMAT && clkout == r[2])
+                ours = ckgp(ctx, case.inst, tags[i], 0.0, "J2000")
+                ok &= (ours === nothing) == (r === nothing)
+                ours !== nothing && r !== nothing &&
+                    (ok &= maximum(abs.(ours[1] .- r[1])) <= CK_TOL_CMAT && ours[2] == r[2])
             end
             @test ok
         end
@@ -310,15 +313,16 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
             @test SPICE.ckgp(inst, tb, wide, "J2000") === nothing      # the CSPICE defect
             oracle_ck_reset(inst)
             r = SPICE.ckgp(inst, tb, wide, "J2000")
-            cmat, clkout, found = ckgp(ctx, inst, tb, wide, "J2000")
-            @test r !== nothing && found && clkout == r[2] == tk[ib]
+            cmat, clkout = ckgp(ctx, inst, tb, wide, "J2000")
+            @test r !== nothing && clkout == r[2] == tk[ib]
             @test maximum(abs.(cmat .- r[1])) <= CK_TOL_CMAT
         end
         @test throws_kind(() -> ckgp(ctx, -77003, 1e6, -1.0, "J2000"), :valueoutofrange)
         @test throws_kind(() -> ckgpav(ctx, -77003, 1e6, -1.0, "J2000"), :valueoutofrange)
         @test throws_kind(() -> ckgp(ctx, -77003, 1e6, 0.0, "NO_SUCH_FRAME"), :unknownframe)
-        @test ckgp(ctx, -12345, 1e6, 10.0, "J2000")[3] == false
-        @test ckgp(ctx, -77003, 1e11, 10.0, "J2000") == (zero(SMatrix{3,3,Float64}), 0.0, false)
+        @test ckgp(ctx, -12345, 1e6, 10.0, "J2000") === nothing
+        @test ckgp(ctx, -77003, 1e11, 10.0, "J2000") === nothing
+        @test ckgpav(ctx, -77003, 1e11, 10.0, "J2000") === nothing
     end
 
     @apart @testset "priority, tolerance and the angular-velocity rule" begin
@@ -338,8 +342,8 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         # Just outside a segment of higher priority, with a tolerance that reaches it: its
         # end point is returned, and the clock time of the answer is that end point.
         t = tk[140] - 50.0
-        cmat, av, clkout, found = ckgpav(ctx, inst, t, 100.0, 1)
-        @test found && clkout == tk[140]
+        cmat, av, clkout = ckgpav(ctx, inst, t, 100.0, 1)
+        @test clkout == tk[140]
         @test cmat == Allspice._ck_eval(data(withav), withav, tk[140], 0.0, true)[2]
         oracle_ck_reset(inst)
         r = SPICE.ckgpav(inst, t, 100.0, "J2000")
@@ -519,9 +523,10 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
             @test CKFix.warm(alloc_ckgp, ks, case.inst, t, 0.0, 1) == 0 skip = STACK_BUFFERS_ESCAPE
             @test CKFix.warm(alloc_ckgp, ks, case.inst, t, 5000.0, 17) == 0 skip = STACK_BUFFERS_ESCAPE
             @test CKFix.warm(alloc_ckgpav, ks, case.inst, t, 5000.0, 17) == 0 skip = STACK_BUFFERS_ESCAPE
-            @test (@inferred ckgp(ks, case.inst, t, 0.0, 1)) isa Tuple{SMatrix{3,3,Float64,9},Float64,Bool}
-            @test (@inferred ckgpav(ks, case.inst, t, 0.0, 1)) isa
-                  Tuple{SMatrix{3,3,Float64,9},SVector{3,Float64},Float64,Bool}
+            @test (@inferred Nothing ckgp(ks, case.inst, t, 0.0, 1)) isa
+                  Tuple{SMatrix{3,3,Float64,9},Float64}
+            @test (@inferred Nothing ckgpav(ks, case.inst, t, 0.0, 1)) isa
+                  (case.av ? Tuple{SMatrix{3,3,Float64,9},SVector{3,Float64},Float64} : Nothing)
             case.dtype == 1 && continue
             et = sct2e(ctx, case.sc, t)
             id = Int(namfrm(ctx, case.frame))
@@ -551,14 +556,12 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
     end
 
     @apart @testset "ckcov" begin
-        intervals(cell) = [Tuple(SPICE.wnfetd(cell, i)) for i in 1:SPICE.wncard(cell)]
         nwindows = 0
         for p in ckpaths, id in ckobj(p), needav in (false, true),
             level in ("SEGMENT", "INTERVAL"), tol in (0.0, 700.0), timsys in ("SCLK", "TDB")
-            c = intervals(SPICE.ckcov(p, id, needav, level, tol, timsys))
+            c = Float64[x for x in SPICE.ckcov(p, id, needav, level, tol, timsys)]
             n = ckcov(ctx, p, id, needav, level, tol, timsys)
-            same = length(c) == length(n) &&
-                   all(maximum(abs.(collect(a) .- collect(b))) <= 1e-6 for (a, b) in zip(c, n))
+            same = n isa Window && length(c) == length(n) && all(abs.(c .- n) .<= 1e-6)
             same || @info "ckcov differs" p id needav level tol timsys length(c) length(n)
             @test same
             nwindows += !isempty(n)
@@ -566,9 +569,18 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         @test nwindows > 100
         p = ckpaths[1]
         @test ckcov(ctx, p, -77003, false, "segment", 0.0, "sclk") ==
-              [(CKFix.ticks_tdb()[1], CKFix.ticks_tdb()[end])]
-        @test length(ckcov(ctx, p, -77002, false, "INTERVAL", 0.0, "SCLK")) ==
+              Window([CKFix.ticks_tdb()[1], CKFix.ticks_tdb()[end]])
+        @test wncard(ckcov(ctx, p, -77002, false, "INTERVAL", 0.0, "SCLK")) ==
               length(CKFix.type2_intervals())
+        # `ckcov!` adds the coverage to the intervals already in the window, as
+        # `ckcov_c` does with its cell.
+        pre = Window([-2.0, -1.0, 1e12, 2e12])
+        cell = SPICE.SpiceDoubleCell(2000)
+        SPICE.wninsd!(cell, -2.0, -1.0)
+        SPICE.wninsd!(cell, 1e12, 2e12)
+        SPICE.ckcov!(p, -77003, false, "INTERVAL", 0.0, "SCLK", cell)
+        @test ckcov!(pre, ctx, p, -77003, false, "INTERVAL", 0.0, "SCLK") === pre
+        @test collect(pre) == Float64[x for x in cell] && wncard(pre) > 2
         @test isempty(ckcov(ctx, p, -77011, true, "INTERVAL", 0.0, "SCLK"))
         @test isempty(ckcov(ctx, p, -4242, false, "INTERVAL", 0.0, "SCLK"))
         @test throws_kind(() -> ckcov(ctx, p, -77003, false, "RECORD", 0.0, "SCLK"), :invalidoption)
@@ -603,7 +615,7 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         # Without the SCLK kernel, and without the CK files, the frame has no connection.
         noclock = neo_context([Kernels.LSK, CKFix.frame_kernel(), ckpaths...])
         @test throws_kind(() -> pxform(noclock, "J2000", "TESTSC_T3", et), :noframeconnect)
-        @test ckgp(noclock, -77003, tk[20], 0.0, "J2000")[3]
+        @test ckgp(noclock, -77003, tk[20], 0.0, "J2000") !== nothing
         @test throws_kind(() -> ckgp(noclock, -77003, tk[20], 0.0, "IAU_EARTH"), :kernelvarnotfound)
         nock = neo_context([Kernels.LSK, CKFix.sclk_kernel(), CKFix.frame_kernel()])
         @test throws_kind(() -> pxform(nock, "J2000", "TESTSC_T3", et), :noframeconnect)

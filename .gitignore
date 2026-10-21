@@ -1,5 +1,5 @@
 Manifest*.toml
-/test/data/
+/test/data
 /bench/results/
 *.cov
 test/.group_seconds

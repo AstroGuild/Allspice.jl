@@ -383,6 +383,15 @@ group("12. math: vectors and matrices") do
         # static arguments give static results
         @test vaddg(SVector(1.0, 2.0), SVector(1.0, 2.0)) isa SVector{2,Float64}
         @test mxmg(SMatrix{2,2}(1.0, 2, 3, 4), SMatrix{2,2}(1.0, 2, 3, 4)) isa SMatrix{2,2,Float64}
+        # a static and a plain argument together give a `Vector` equal to the static result
+        sa, sb = SVector(0.3, -2.5, 7.0), SVector(1.1, 4.0, -0.7)
+        sm = SMatrix{3,3}(1.0, 2, 3, 4, 5, 6, 7, 8, 10)
+        for (f, mixed, static) in ((vaddg, (sa, collect(sb)), (sa, sb)),
+            (vlcomg, (0.7, collect(sa), 3.0, sb), (0.7, sa, 3.0, sb)),
+            (vprojg, (collect(sa), sb), (sa, sb)), (mxvg, (sm, collect(sa)), (sm, sa)))
+            r = f(mixed...)
+            @test r isa Vector{Float64} && r == f(static...)
+        end
     end
 
     @apart @testset "differences against CSPICE" begin

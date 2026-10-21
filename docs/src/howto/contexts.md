@@ -1,6 +1,6 @@
 # Contexts and threads
 
-All loaded kernels belong to a [`SpiceContext`](@ref), and this page calls the loaded kernels of one context its kernel set. Every call that reads the loaded kernels, the kernel pool or a setting of a context exists in two forms: with a context as the first argument, and without one, in which case the call uses the context that [`default_context`](@ref) returns, which is one object for the whole process and is as safe to share as any other. The exceptions are the SPK and CK segment writers, [`spk14b`](@ref), [`spkpds`](@ref) and [`table_to_spk`](@ref), which take the context as the keyword `ctx`. A call that depends on its arguments alone, such as `vnorm`, has no context argument. A program that loads one set of kernels never needs to name a context.
+All loaded kernels belong to a [`SpiceContext`](@ref), and this page calls the loaded kernels of one context its kernel set. Every call that reads the loaded kernels, the kernel pool or a setting of a context exists in two forms: with a context as the first argument, and without one, in which case the call uses the context that [`default_context`](@ref) returns, which is one object for the whole process and is as safe to share as any other. A call that depends on its arguments alone, such as `vnorm`, has no context argument. A program that loads one set of kernels never needs to name a context.
 
 ```@setup ctx
 using Allspice

@@ -86,7 +86,8 @@ EphemerisTable{T}(tab::EphemerisTable) where {T<:AbstractFloat} =
 Return the first and the last epoch of the table `tab`, in seconds past J2000 TDB.
 
 `tab` is an [`EphemerisTable`](@ref) or a [`RotationTable`](@ref). A query is valid
-for `first <= et <= last`.
+for `first <= et <= last`. A table that [`ephemeris_table`](@ref) made from the records
+of the kernels covers whole records, so its span can be wider than the requested one.
 """
 @inline table_span(tab::EphemerisTable) = (tab.t0, tab.t0 + tab.nint * tab.dt)
 
@@ -337,8 +338,10 @@ Two methods give the coefficients:
 - **Records of the kernels.** If `abcorr` is `"NONE"`, `ref` is inertial, and every
   segment between the two bodies is SPK type 2 in an inertial frame with record
   boundaries on one common grid, the table takes the record length and the degree of
-  the kernels. It then agrees with `spkpos` to rounding, it can start before `t0` and
-  end after `t1`, and `tol`, `ncoef` and `maxintervals` are not used.
+  the kernels. It then agrees with `spkpos` to rounding, and `tol`, `ncoef` and
+  `maxintervals` are not used. The table covers whole records of the shortest record
+  length, at least `t0` to `t1`: it can start up to one record before `t0` and end up
+  to one record after `t1`, and a query in that margin does not throw.
 - **Interpolation.** In all other cases the call interpolates on `t0` to `t1` with
   `ncoef` coefficients for each interval, and it doubles the number of intervals
   until the measured error is at most `tol` (km). With `tol`, the result has
@@ -406,8 +409,8 @@ ephemeris_table(targ::NameOrID, t0::Real, t1::Real, ref::NameOrID,
 # ---------------------------------------------------------------------------------
 
 """
-    table_to_spk(handle, tab, segid; first=table_span(tab)[1], last=table_span(tab)[2],
-                 ctx=default_context()) -> Nothing
+    table_to_spk([ctx,] handle, tab, segid; first=table_span(tab)[1],
+                 last=table_span(tab)[2]) -> Nothing
 
 Add the ephemeris table `tab` to the SPK file `handle` as one segment of type 2.
 
@@ -416,16 +419,16 @@ file therefore gives the position of the table to rounding, and the velocity is 
 derivative. `handle` comes from [`spkopn`](@ref) or [`spkopa`](@ref); `segid` is the
 segment identifier; `first` and `last` are the bounds of the segment in seconds past
 J2000 TDB. The segment is for `tab.target` relative to `tab.observer` in the frame
-`tab.frame`, which must be a frame known in `ctx` (see [`frinfo`](@ref)). The coefficients
-are written as `Float64`; a table on a GPU is copied to the CPU.
+`tab.frame`, which must be a frame known in `ctx` (default: the default context; see
+[`frinfo`](@ref)). The coefficients are written as `Float64`; a table on a GPU is copied
+to the CPU.
 
 A segment has no aberration correction. Write only a table that was made with
 `abcorr = "NONE"`; the call cannot check this.
 
 Throws `SpiceError(:invalidrefframe)` if `tab.frame` is not a frame of `ctx`, as
 `spkw02_c` for an unknown frame, and the other errors of [`spkw02`](@ref). Among its
-conditions: `tab.ncoef <= 28`, `tab.target != 0`, `tab.target != tab.observer`, and
-`first` and `last` inside the table.
+conditions: `tab.ncoef <= 28`, and `first` and `last` inside the table.
 
 # Examples
 ```julia
@@ -435,16 +438,18 @@ table_to_spk(h, tab, "Moon from table")
 spkcls(h)
 ```
 """
-function table_to_spk(h::DAFHandle, tab::EphemerisTable, segid::AbstractString;
-        first::Real=table_span(tab)[1], last::Real=table_span(tab)[2],
-        ctx::SegContext=default_context())
+function table_to_spk(ctx::SegContext, h::DAFHandle, tab::EphemerisTable,
+        segid::AbstractString; first::Real=table_span(tab)[1], last::Real=table_span(tab)[2])
     frinfo(_seg_ks(ctx), tab.frame) === nothing && throw(SpiceError(:invalidrefframe,
         "table_to_spk: the reference frame $(tab.frame) of the table is not known"))
     cdata = reshape(Vector{Float64}(Array(tab.coef)), 3 * tab.ncoef, tab.nint)
-    spkw02(h, tab.target, tab.observer, Int(tab.frame), first, last, segid, tab.dt, cdata, tab.t0;
-        ctx=ctx)
+    spkw02(ctx, h, tab.target, tab.observer, Int(tab.frame), first, last, segid, tab.dt,
+        cdata, tab.t0)
     return nothing
 end
+table_to_spk(h::DAFHandle, tab::EphemerisTable, segid::AbstractString;
+    first::Real=table_span(tab)[1], last::Real=table_span(tab)[2]) =
+    table_to_spk(default_context(), h, tab, segid; first=first, last=last)
 
 # ---------------------------------------------------------------------------------
 # Rotation tables

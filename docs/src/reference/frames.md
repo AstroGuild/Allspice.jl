@@ -32,6 +32,7 @@ kplfrm
 ckgp
 ckgpav
 ckcov
+ckcov!
 ckobj
 ckmeta
 ckfrot

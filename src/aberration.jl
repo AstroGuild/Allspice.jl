@@ -17,7 +17,7 @@ const _AB_X = 0x08      # transmission (the default is reception)
 
 """
     Aberration(abcorr::AbstractString)
-    Aberration(; lt=false, converged=false, stellar=false, transmit=false)
+    Aberration(; uselt=false, converged=false, stellar=false, transmit=false)
 
 An aberration correction as an `isbits` value. Every call that takes a correction
 string also takes an `Aberration`; the string is then not parsed at each call.
@@ -37,8 +37,9 @@ Reception gives the target as the observer sees it at `et`: the target at
 target at `et + lt`. Letter case and blanks in the string are ignored.
 
 The keyword form builds the value from flags; `converged`, `stellar` and `transmit`
-each imply `lt`. A value `c` has the properties `c.uselt` (the flag `lt`),
-`c.converged`, `c.stellar`, `c.transmit` and `c.geometric` (true for `"NONE"` only).
+each imply `uselt`, the light-time correction. A value `c` has the properties
+`c.uselt`, `c.converged`, `c.stellar`, `c.transmit` and `c.geometric` (true for
+`"NONE"` only).
 `string(c)` gives the CSPICE spelling.
 
 Throws `SpiceError(:invalidoption)` if the string is not one of the nine above. This includes
@@ -65,10 +66,10 @@ end
 
 Aberration(c::Aberration) = c
 
-function Aberration(; lt::Bool=false, converged::Bool=false, stellar::Bool=false,
+function Aberration(; uselt::Bool=false, converged::Bool=false, stellar::Bool=false,
         transmit::Bool=false)
-    uselt = lt | converged | stellar | transmit
-    return _aberration((uselt ? _AB_LT : 0x00) | (converged ? _AB_CN : 0x00) |
+    lt = uselt | converged | stellar | transmit
+    return _aberration((lt ? _AB_LT : 0x00) | (converged ? _AB_CN : 0x00) |
                        (stellar ? _AB_S : 0x00) | (transmit ? _AB_X : 0x00))
 end
 
@@ -81,7 +82,9 @@ end
     s === :geometric && return f == 0x00
     return getfield(c, s)
 end
-Base.propertynames(::Aberration) = (:uselt, :converged, :stellar, :transmit, :geometric, :flags)
+Base.propertynames(::Aberration, private::Bool=false) = private ?
+    (:uselt, :converged, :stellar, :transmit, :geometric, :flags) :
+    (:uselt, :converged, :stellar, :transmit, :geometric)
 
 "The CSPICE spelling of the correction `c`."
 function Base.string(c::Aberration)

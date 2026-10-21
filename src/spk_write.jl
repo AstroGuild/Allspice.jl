@@ -7,9 +7,11 @@
 # Argument lists follow SPICE.jl. A table of states or packets is a vector of vectors
 # (the form of SPICE.jl), a matrix with one state in each column, or a flat vector.
 # The reference frame is a frame name, which is resolved against the kernel set of
-# the keyword `ctx` (default: the default context; built-in frames need no kernel), or
-# a frame ID. Errors have the short message of CSPICE in lower case as kind, for
-# example `SpiceError(:invaliddegree, …)` for SPICE(INVALIDDEGREE).
+# the optional first argument `ctx` (a `SpiceContext` or a `KernelSet`; default: the
+# default context; built-in frames need no kernel), or a frame ID. Each writer has one
+# method that takes `ctx` and one without it that passes `default_context()`. Errors
+# have the short message of CSPICE in lower case as kind, for example
+# `SpiceError(:invaliddegree, …)` for SPICE(INVALIDDEGREE).
 
 "Reference frame of a segment writer: a frame name or a frame ID."
 const SegFrame = Union{AbstractString,Integer}
@@ -122,14 +124,14 @@ function _seg_increasing(who::AbstractString, epochs::Vector{Float64})
 end
 
 """
-    spkpds(body, center, frame, type, first, last; ctx=default_context()) -> Vector{Float64}
+    spkpds([ctx,] body, center, frame, type, first, last) -> Vector{Float64}
 
 Return the packed descriptor of an SPK segment (five doubles), as `spkpds_c`.
 
 `body` and `center` are NAIF IDs, `frame` is a frame name or a frame ID, `type` is the SPK
 data type, and `first`, `last` are the coverage in seconds past J2000 TDB. A frame name is
-resolved in `ctx` (a `SpiceContext` or a `KernelSet`); built-in frames need no kernel. The
-two address components of the descriptor are zero; [`dafena`](@ref) sets them.
+resolved in `ctx` (default: the default context); built-in frames need no kernel. The two
+address components of the descriptor are zero; [`dafena`](@ref) sets them.
 
 Throws `SpiceError`:
 - `:barycenterephem` if `body == 0`;
@@ -138,8 +140,8 @@ Throws `SpiceError`:
 - `:baddescrtimes` unless `first < last`;
 - `:unknownspktype` unless `1 <= type <= 1000`.
 """
-function spkpds(body::Integer, center::Integer, frame::SegFrame, type::Integer, first::Real,
-        last::Real; ctx::SegContext=default_context())
+function spkpds(ctx::SegContext, body::Integer, center::Integer, frame::SegFrame,
+        type::Integer, first::Real, last::Real)
     body == 0 && throw(SpiceError(:barycenterephem, "spkpds: you've attempted to create " *
         "a segment for the solar system barycenter; this is not supported"))
     body == center && throw(SpiceError(:bodyandcentersame, "spkpds: you've attempted to " *
@@ -151,6 +153,8 @@ function spkpds(body::Integer, center::Integer, frame::SegFrame, type::Integer, 
         "spkpds: the type $type is not supported within the SPK system"))
     return dafps(Float64[first, last], Int[body, center, refcod, type, 0, 0])
 end
+spkpds(body::Integer, center::Integer, frame::SegFrame, type::Integer, first::Real,
+    last::Real) = spkpds(default_context(), body, center, frame, type, first, last)
 
 function _spk_add!(h::DAFHandle, body::Integer, center::Integer, refcod::Int, dtype::Int,
         first::Real, last::Real, segid::AbstractString, data::Vector{Float64})
@@ -161,7 +165,7 @@ end
 function _spk_add_pds!(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame,
         dtype::Int, first::Real, last::Real, segid::AbstractString, data::Vector{Float64},
         ctx::SegContext)
-    descr = spkpds(body, center, frame, dtype, first, last; ctx=ctx)
+    descr = spkpds(ctx, body, center, frame, dtype, first, last)
     dafbna(h, descr, segid)
     dafada(h, data)
     dafena(h)
@@ -249,15 +253,14 @@ end
 
 Open the existing SPK file `path` for writing, to append segments, as `spkopa_c`.
 
-The file must have the native byte order. No other handle may write the same file: the
-call does not check this, where CSPICE refuses the second open, and two handles that
-write the file at the same time can damage it (see [`dafopw`](@ref)). A handle that reads
-the file finds a change in a search that begins after the change. Unload the file from
-every context before the call, and load it again after [`spkcls`](@ref).
+The file must have the native byte order, and no other open handle may have it open
+(see [`dafopw`](@ref)). Unload the file from every context before the call, and load it
+again after [`spkcls`](@ref).
 
 Throws `SpiceError(:emptystring)` if `path` is empty, `:blankfilename` if it holds only
 blanks, `:filenotfound` if the file does not exist, `:fileisnotspk` if it is not a DAF
-file of the type SPK, and `:unsupportedbff` if it has the other byte order.
+file of the type SPK, `:unsupportedbff` if it has the other byte order, and
+`:fileopenconflict` if another handle has the file open.
 """
 function spkopa(path::AbstractString)
     _chk_filename("spkopa", path)
@@ -355,19 +358,20 @@ function _seg_cheb_records(cd::Vector{Float64}, n::Int, ninrec::Int, intlen::Flo
 end
 
 """
-    spkw02(handle, body, center, frame, first, last, segid, intlen, cdata, btime;
-           ctx=default_context()) -> Nothing
+    spkw02([ctx,] handle, body, center, frame, first, last, segid, intlen, cdata, btime)
+        -> Nothing
 
 Write an SPK segment of type 2 (Chebyshev polynomials for the position, on intervals of
 equal length) to the file of `handle`, as `spkw02_c`.
 
 # Arguments
-`handle`, `body`, `center`, `frame`, `first`, `last`, `segid` and `ctx` have the same
+`ctx`, `handle`, `body`, `center`, `frame`, `first`, `last` and `segid` have the same
 meaning in every `spkwNN` writer.
+- `ctx`: the context in which a frame name is resolved (default: the default context).
 - `handle`: a [`DAFHandle`](@ref) from [`spkopn`](@ref) or [`spkopa`](@ref).
 - `body`, `center`: NAIF IDs of the body and of its center of motion.
-- `frame`: the reference frame, a name or a frame ID. A name is resolved in `ctx` (a
-  `SpiceContext` or a `KernelSet`); built-in frames need no kernel.
+- `frame`: the reference frame, a name or a frame ID. A name is resolved in `ctx`;
+  built-in frames need no kernel.
 - `first`, `last`: the coverage of the segment, seconds past J2000 TDB.
 - `segid`: the segment identifier, at most 40 printable characters.
 - `intlen`, `btime`: the length of every interval (s) and the start of the first interval
@@ -415,13 +419,16 @@ See also [`spkw01`](@ref), [`spkw03`](@ref), [`spkw05`](@ref), [`spkw08`](@ref),
 [`spkw17`](@ref), [`spkw18`](@ref), [`spkw19`](@ref), [`spkw20`](@ref), [`spkw21`](@ref),
 [`spk14b`](@ref).
 """
-spkw02(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real, last::Real,
-    segid::AbstractString, intlen::Real, cdata, btime::Real; ctx::SegContext=default_context()) =
+spkw02(ctx::SegContext, h::DAFHandle, body::Integer, center::Integer, frame::SegFrame,
+    first::Real, last::Real, segid::AbstractString, intlen::Real, cdata, btime::Real) =
     _spk_cheby("spkw02", 2, 3, h, body, center, frame, first, last, segid, intlen, cdata, btime, ctx)
+spkw02(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real, last::Real,
+    segid::AbstractString, intlen::Real, cdata, btime::Real) =
+    spkw02(default_context(), h, body, center, frame, first, last, segid, intlen, cdata, btime)
 
 """
-    spkw03(handle, body, center, frame, first, last, segid, intlen, cdata, btime;
-           ctx=default_context()) -> Nothing
+    spkw03([ctx,] handle, body, center, frame, first, last, segid, intlen, cdata, btime)
+        -> Nothing
 
 Write an SPK segment of type 3 (Chebyshev polynomials for the position and the velocity,
 on intervals of equal length), as `spkw03_c`.
@@ -430,13 +437,16 @@ on intervals of equal length), as `spkw03_c`.
 those of x, y, z (km) and then of dx, dy, dz (km/s). The other arguments and the errors
 are those of [`spkw02`](@ref).
 """
-spkw03(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real, last::Real,
-    segid::AbstractString, intlen::Real, cdata, btime::Real; ctx::SegContext=default_context()) =
+spkw03(ctx::SegContext, h::DAFHandle, body::Integer, center::Integer, frame::SegFrame,
+    first::Real, last::Real, segid::AbstractString, intlen::Real, cdata, btime::Real) =
     _spk_cheby("spkw03", 3, 6, h, body, center, frame, first, last, segid, intlen, cdata, btime, ctx)
+spkw03(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real, last::Real,
+    segid::AbstractString, intlen::Real, cdata, btime::Real) =
+    spkw03(default_context(), h, body, center, frame, first, last, segid, intlen, cdata, btime)
 
 """
-    spkw20(handle, body, center, frame, first, last, segid, intlen, cdata, dscale, tscale,
-           initjd, initfr; ctx=default_context()) -> Nothing
+    spkw20([ctx,] handle, body, center, frame, first, last, segid, intlen, cdata, dscale,
+           tscale, initjd, initfr) -> Nothing
 
 Write an SPK segment of type 20 (Chebyshev polynomials for the velocity, with the position
 at the midpoint of each interval), as `spkw20_c`.
@@ -461,9 +471,9 @@ Throws `SpiceError`:
   `1e-13 * max(abs(b), abs(e))`;
 - `:idstringtoolong` or `:nonprintablechars` if `segid` is not valid.
 """
-function spkw20(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
-        last::Real, segid::AbstractString, intlen::Real, cdata, dscale::Real, tscale::Real,
-        initjd::Real, initfr::Real; ctx::SegContext=default_context())
+function spkw20(ctx::SegContext, h::DAFHandle, body::Integer, center::Integer,
+        frame::SegFrame, first::Real, last::Real, segid::AbstractString, intlen::Real,
+        cdata, dscale::Real, tscale::Real, initjd::Real, initfr::Real)
     who = "spkw20"
     _daf_check_write(h, who)
     frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
@@ -493,14 +503,19 @@ function spkw20(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
     _spk_add!(h, body, center, refcod, 20, first, last, segid, data)
     return nothing
 end
+spkw20(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
+    last::Real, segid::AbstractString, intlen::Real, cdata, dscale::Real, tscale::Real,
+    initjd::Real, initfr::Real) =
+    spkw20(default_context(), h, body, center, frame, first, last, segid, intlen, cdata,
+        dscale, tscale, initjd, initfr)
 
 # ---------------------------------------------------------------------------------------
 # Types 5, 8, 9, 12, 13, 18: discrete states
 # ---------------------------------------------------------------------------------------
 
 """
-    spkw05(handle, body, center, frame, first, last, segid, gm, states, epochs;
-           ctx=default_context()) -> Nothing
+    spkw05([ctx,] handle, body, center, frame, first, last, segid, gm, states, epochs)
+        -> Nothing
 
 Write an SPK segment of type 5 (two-body propagation between discrete states), as
 `spkw05_c`.
@@ -517,9 +532,9 @@ Throws `SpiceError`:
 - `:baddescrtimes` if `first > last`;
 - `:nonprintablechars` or `:segidtoolong` if `segid` is not valid.
 """
-function spkw05(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
-        last::Real, segid::AbstractString, gm::Real, states, epochs;
-        ctx::SegContext=default_context())
+function spkw05(ctx::SegContext, h::DAFHandle, body::Integer, center::Integer,
+        frame::SegFrame, first::Real, last::Real, segid::AbstractString, gm::Real, states,
+        epochs)
     who = "spkw05"
     _daf_check_write(h, who)
     frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
@@ -543,10 +558,14 @@ function spkw05(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
     _spk_add!(h, body, center, refcod, 5, first, last, segid, data)
     return nothing
 end
+spkw05(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
+    last::Real, segid::AbstractString, gm::Real, states, epochs) =
+    spkw05(default_context(), h, body, center, frame, first, last, segid, gm, states,
+        epochs)
 
 """
-    spkw08(handle, body, center, frame, first, last, segid, degree, states, epoch1, step;
-           ctx=default_context()) -> Nothing
+    spkw08([ctx,] handle, body, center, frame, first, last, segid, degree, states, epoch1,
+           step) -> Nothing
 
 Write an SPK segment of type 8 (Lagrange interpolation of states at equal time steps), as
 `spkw08_c`.
@@ -565,9 +584,9 @@ Throws `SpiceError`:
 - `:coveragegap` unless [`first`, `last`] is inside [`epoch1`, `epoch1 + (n - 1) * step`],
   with the tolerance `1e-13 * max(abs(first), abs(last))`.
 """
-function spkw08(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
-        last::Real, segid::AbstractString, degree::Integer, states, epoch1::Real, step::Real;
-        ctx::SegContext=default_context())
+function spkw08(ctx::SegContext, h::DAFHandle, body::Integer, center::Integer,
+        frame::SegFrame, first::Real, last::Real, segid::AbstractString, degree::Integer,
+        states, epoch1::Real, step::Real)
     who = "spkw08"
     _daf_check_write(h, who)
     frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
@@ -591,10 +610,14 @@ function spkw08(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
     _spk_add!(h, body, center, refcod, 8, first, last, segid, data)
     return nothing
 end
+spkw08(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
+    last::Real, segid::AbstractString, degree::Integer, states, epoch1::Real, step::Real) =
+    spkw08(default_context(), h, body, center, frame, first, last, segid, degree, states,
+        epoch1, step)
 
 """
-    spkw09(handle, body, center, frame, first, last, segid, degree, states, epochs;
-           ctx=default_context()) -> Nothing
+    spkw09([ctx,] handle, body, center, frame, first, last, segid, degree, states, epochs)
+        -> Nothing
 
 Write an SPK segment of type 9 (Lagrange interpolation of states at unequal time steps),
 as `spkw09_c`.
@@ -610,9 +633,9 @@ Throws `SpiceError`:
 - `:toofewstates` unless `n > degree`;
 - `:timesoutoforder` unless the epochs are strictly increasing.
 """
-function spkw09(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
-        last::Real, segid::AbstractString, degree::Integer, states, epochs;
-        ctx::SegContext=default_context())
+function spkw09(ctx::SegContext, h::DAFHandle, body::Integer, center::Integer,
+        frame::SegFrame, first::Real, last::Real, segid::AbstractString, degree::Integer,
+        states, epochs)
     who = "spkw09"
     _daf_check_write(h, who)
     frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
@@ -639,10 +662,14 @@ function spkw09(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
     _spk_add!(h, body, center, refcod, 9, first, last, segid, data)
     return nothing
 end
+spkw09(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
+    last::Real, segid::AbstractString, degree::Integer, states, epochs) =
+    spkw09(default_context(), h, body, center, frame, first, last, segid, degree, states,
+        epochs)
 
 """
-    spkw12(handle, body, center, frame, first, last, segid, degree, states, epoch1, step;
-           ctx=default_context()) -> Nothing
+    spkw12([ctx,] handle, body, center, frame, first, last, segid, degree, states, epoch1,
+           step) -> Nothing
 
 Write an SPK segment of type 12 (Hermite interpolation of states at equal time steps), as
 `spkw12_c`.
@@ -662,9 +689,9 @@ Throws `SpiceError`:
   with the tolerance `1e-13 * max(abs(first), abs(last))`;
 - `:barycenterephem` if `body == 0`, `:bodyandcentersame` if `body == center`.
 """
-function spkw12(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
-        last::Real, segid::AbstractString, degree::Integer, states, epoch1::Real, step::Real;
-        ctx::SegContext=default_context())
+function spkw12(ctx::SegContext, h::DAFHandle, body::Integer, center::Integer,
+        frame::SegFrame, first::Real, last::Real, segid::AbstractString, degree::Integer,
+        states, epoch1::Real, step::Real)
     who = "spkw12"
     _daf_check_write(h, who)
     frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
@@ -691,10 +718,14 @@ function spkw12(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
     _spk_add_pds!(h, body, center, frame, 12, first, last, segid, data, ctx)
     return nothing
 end
+spkw12(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
+    last::Real, segid::AbstractString, degree::Integer, states, epoch1::Real, step::Real) =
+    spkw12(default_context(), h, body, center, frame, first, last, segid, degree, states,
+        epoch1, step)
 
 """
-    spkw13(handle, body, center, frame, first, last, segid, degree, states, epochs;
-           ctx=default_context()) -> Nothing
+    spkw13([ctx,] handle, body, center, frame, first, last, segid, degree, states, epochs)
+        -> Nothing
 
 Write an SPK segment of type 13 (Hermite interpolation of states at unequal time steps),
 as `spkw13_c`.
@@ -711,9 +742,9 @@ Throws `SpiceError`:
 - `:timesoutoforder` unless the epochs are strictly increasing;
 - `:barycenterephem` if `body == 0`, `:bodyandcentersame` if `body == center`.
 """
-function spkw13(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
-        last::Real, segid::AbstractString, degree::Integer, states, epochs;
-        ctx::SegContext=default_context())
+function spkw13(ctx::SegContext, h::DAFHandle, body::Integer, center::Integer,
+        frame::SegFrame, first::Real, last::Real, segid::AbstractString, degree::Integer,
+        states, epochs)
     who = "spkw13"
     _daf_check_write(h, who)
     frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
@@ -743,14 +774,18 @@ function spkw13(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
     _spk_add_pds!(h, body, center, frame, 13, first, last, segid, data, ctx)
     return nothing
 end
+spkw13(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
+    last::Real, segid::AbstractString, degree::Integer, states, epochs) =
+    spkw13(default_context(), h, body, center, frame, first, last, segid, degree, states,
+        epochs)
 
 "Subtype code of an SPK type 18 segment from the code or the SPICE.jl symbol `:S18TP0`, `:S18TP1`."
 _spk18_subtype(s::Integer) = Int(s)
 _spk18_subtype(s::Symbol) = s === :S18TP0 ? 0 : s === :S18TP1 ? 1 : -1
 
 """
-    spkw18(handle, subtyp, body, center, frame, first, last, segid, degree, packts, epochs;
-           ctx=default_context()) -> Nothing
+    spkw18([ctx,] handle, subtyp, body, center, frame, first, last, segid, degree, packts,
+           epochs) -> Nothing
 
 Write an SPK segment of type 18 (Hermite or Lagrange interpolation of packets at unequal
 time steps), as `spkw18_c`.
@@ -778,9 +813,9 @@ Throws `SpiceError`:
 - `:baddescrtimes` unless `first <= last`, `epochs[1] <= first` and `epochs[n] >= last`;
 - `:timesoutoforder` unless the epochs are strictly increasing.
 """
-function spkw18(h::DAFHandle, subtyp::Union{Integer,Symbol}, body::Integer, center::Integer,
-        frame::SegFrame, first::Real, last::Real, segid::AbstractString, degree::Integer,
-        packts, epochs; ctx::SegContext=default_context())
+function spkw18(ctx::SegContext, h::DAFHandle, subtyp::Union{Integer,Symbol}, body::Integer,
+        center::Integer, frame::SegFrame, first::Real, last::Real, segid::AbstractString,
+        degree::Integer, packts, epochs)
     who = "spkw18"
     _daf_check_write(h, who)
     frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
@@ -815,6 +850,11 @@ function spkw18(h::DAFHandle, subtyp::Union{Integer,Symbol}, body::Integer, cent
     _spk_add!(h, body, center, refcod, 18, first, last, segid, data)
     return nothing
 end
+spkw18(h::DAFHandle, subtyp::Union{Integer,Symbol}, body::Integer, center::Integer,
+    frame::SegFrame, first::Real, last::Real, segid::AbstractString, degree::Integer,
+    packts, epochs) =
+    spkw18(default_context(), h, subtyp, body, center, frame, first, last, segid, degree,
+        packts, epochs)
 
 # ---------------------------------------------------------------------------------------
 # Types 15 and 17: precessing conic elements
@@ -837,8 +877,8 @@ function _seg_vhat(v)
 end
 
 """
-    spkw15(handle, body, center, frame, first, last, segid, epoch, tp, pa, p, ecc, j2flg,
-           pv, gm, j2, radius; ctx=default_context()) -> Nothing
+    spkw15([ctx,] handle, body, center, frame, first, last, segid, epoch, tp, pa, p, ecc,
+           j2flg, pv, gm, j2, radius) -> Nothing
 
 Write an SPK segment of type 15 (precessing conic propagation), as `spkw15_c`.
 
@@ -864,9 +904,9 @@ Throws `SpiceError`:
 - `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
 - the error kinds of [`spkpds`](@ref).
 """
-function spkw15(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
-        last::Real, segid::AbstractString, epoch::Real, tp, pa, p::Real, ecc::Real,
-        j2flg::Real, pv, gm::Real, j2::Real, radius::Real; ctx::SegContext=default_context())
+function spkw15(ctx::SegContext, h::DAFHandle, body::Integer, center::Integer,
+        frame::SegFrame, first::Real, last::Real, segid::AbstractString, epoch::Real, tp,
+        pa, p::Real, ecc::Real, j2flg::Real, pv, gm::Real, j2::Real, radius::Real)
     who = "spkw15"
     _daf_check_write(h, who)
     frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
@@ -892,10 +932,15 @@ function spkw15(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
     _spk_add_pds!(h, body, center, frame, 15, first, last, segid, record, ctx)
     return nothing
 end
+spkw15(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
+    last::Real, segid::AbstractString, epoch::Real, tp, pa, p::Real, ecc::Real, j2flg::Real,
+    pv, gm::Real, j2::Real, radius::Real) =
+    spkw15(default_context(), h, body, center, frame, first, last, segid, epoch, tp, pa, p,
+        ecc, j2flg, pv, gm, j2, radius)
 
 """
-    spkw17(handle, body, center, frame, first, last, segid, epoch, eqel, rapol, decpol;
-           ctx=default_context()) -> Nothing
+    spkw17([ctx,] handle, body, center, frame, first, last, segid, epoch, eqel, rapol,
+           decpol) -> Nothing
 
 Write an SPK segment of type 17 (equinoctial elements), as `spkw17_c`.
 
@@ -926,9 +971,9 @@ Throws `SpiceError`:
 - `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
 - the error kinds of [`spkpds`](@ref).
 """
-function spkw17(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
-        last::Real, segid::AbstractString, epoch::Real, eqel, rapol::Real, decpol::Real;
-        ctx::SegContext=default_context())
+function spkw17(ctx::SegContext, h::DAFHandle, body::Integer, center::Integer,
+        frame::SegFrame, first::Real, last::Real, segid::AbstractString, epoch::Real, eqel,
+        rapol::Real, decpol::Real)
     who = "spkw17"
     _daf_check_write(h, who)
     frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
@@ -945,14 +990,18 @@ function spkw17(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
     _spk_add_pds!(h, body, center, frame, 17, first, last, segid, record, ctx)
     return nothing
 end
+spkw17(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
+    last::Real, segid::AbstractString, epoch::Real, eqel, rapol::Real, decpol::Real) =
+    spkw17(default_context(), h, body, center, frame, first, last, segid, epoch, eqel,
+        rapol, decpol)
 
 # ---------------------------------------------------------------------------------------
 # Types 1 and 21: modified difference arrays
 # ---------------------------------------------------------------------------------------
 
 """
-    spkw01(handle, body, center, frame, first, last, segid, dlines, epochs;
-           ctx=default_context()) -> Nothing
+    spkw01([ctx,] handle, body, center, frame, first, last, segid, dlines, epochs)
+        -> Nothing
 
 Write an SPK segment of type 1 (modified difference arrays), as `spkw01` of SPICELIB.
 CSPICE has no C wrapper for it.
@@ -969,8 +1018,8 @@ Throws `SpiceError`:
 - `:timesoutoforder` unless the epochs are strictly increasing;
 - `:barycenterephem` if `body == 0`, `:bodyandcentersame` if `body == center`.
 """
-function spkw01(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
-        last::Real, segid::AbstractString, dlines, epochs; ctx::SegContext=default_context())
+function spkw01(ctx::SegContext, h::DAFHandle, body::Integer, center::Integer,
+        frame::SegFrame, first::Real, last::Real, segid::AbstractString, dlines, epochs)
     who = "spkw01"
     _daf_check_write(h, who)
     frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
@@ -993,10 +1042,13 @@ function spkw01(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
     _spk_add_pds!(h, body, center, frame, 1, first, last, segid, data, ctx)
     return nothing
 end
+spkw01(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
+    last::Real, segid::AbstractString, dlines, epochs) =
+    spkw01(default_context(), h, body, center, frame, first, last, segid, dlines, epochs)
 
 """
-    spkw21(handle, body, center, frame, first, last, segid, dlines, epochs;
-           ctx=default_context()) -> Nothing
+    spkw21([ctx,] handle, body, center, frame, first, last, segid, dlines, epochs)
+        -> Nothing
 
 Write an SPK segment of type 21 (extended modified difference arrays), as `spkw21` of
 SPICELIB. CSPICE has no C wrapper for it.
@@ -1016,8 +1068,8 @@ Throws `SpiceError`:
 - `:zerostep` if a step size inside a line is zero;
 - `:barycenterephem` if `body == 0`, `:bodyandcentersame` if `body == center`.
 """
-function spkw21(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
-        last::Real, segid::AbstractString, dlines, epochs; ctx::SegContext=default_context())
+function spkw21(ctx::SegContext, h::DAFHandle, body::Integer, center::Integer,
+        frame::SegFrame, first::Real, last::Real, segid::AbstractString, dlines, epochs)
     who = "spkw21"
     _daf_check_write(h, who)
     frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
@@ -1054,6 +1106,9 @@ function spkw21(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
     _spk_add_pds!(h, body, center, frame, 21, first, last, segid, data, ctx)
     return nothing
 end
+spkw21(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
+    last::Real, segid::AbstractString, dlines, epochs) =
+    spkw21(default_context(), h, body, center, frame, first, last, segid, dlines, epochs)
 
 # ---------------------------------------------------------------------------------------
 # Type 19: mini-segments (ESOC/DDID, piecewise)
@@ -1062,8 +1117,8 @@ end
 const _SPK19_PKTSZS = (12, 6, 6)
 
 """
-    spkw19(handle, body, center, frame, first, last, segid, npkts, subtps, degres, packts,
-           epochs, ivlbds, sellst; ctx=default_context()) -> Nothing
+    spkw19([ctx,] handle, body, center, frame, first, last, segid, npkts, subtps, degres,
+           packts, epochs, ivlbds, sellst) -> Nothing
 
 Write an SPK segment of type 19 (mini-segments of Hermite or Lagrange interpolation), as
 `spkw19` of SPICELIB. CSPICE has no C wrapper for it.
@@ -1100,10 +1155,10 @@ For a mini-segment it throws:
 - `:timesoutoforder` unless its epochs are strictly increasing;
 - `:boundsdisagree` unless its epochs cover its interval.
 """
-function spkw19(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
-        last::Real, segid::AbstractString, npkts::AbstractVector{<:Integer},
-        subtps::AbstractVector{<:Integer}, degres::AbstractVector{<:Integer}, packts, epochs,
-        ivlbds, sellst::Bool; ctx::SegContext=default_context())
+function spkw19(ctx::SegContext, h::DAFHandle, body::Integer, center::Integer,
+        frame::SegFrame, first::Real, last::Real, segid::AbstractString,
+        npkts::AbstractVector{<:Integer}, subtps::AbstractVector{<:Integer},
+        degres::AbstractVector{<:Integer}, packts, epochs, ivlbds, sellst::Bool)
     who = "spkw19"
     _daf_check_write(h, who)
     frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
@@ -1188,6 +1243,12 @@ function spkw19(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
     _spk_add!(h, body, center, refcod, 19, first, last, segid, data)
     return nothing
 end
+spkw19(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
+    last::Real, segid::AbstractString, npkts::AbstractVector{<:Integer},
+    subtps::AbstractVector{<:Integer}, degres::AbstractVector{<:Integer}, packts, epochs,
+    ivlbds, sellst::Bool) =
+    spkw19(default_context(), h, body, center, frame, first, last, segid, npkts, subtps,
+        degres, packts, epochs, ivlbds, sellst)
 
 """
     SPK14Writer
@@ -1212,8 +1273,7 @@ Base.show(io::IO, w::SPK14Writer) = print(io, "SPK14Writer(\"", w.segid, "\", ",
     length(w.refs), " records", w.open ? "" : ", ended", ")")
 
 """
-    spk14b(handle, segid, body, center, frame, first, last, chbdeg; ctx=default_context())
-        -> SPK14Writer
+    spk14b([ctx,] handle, segid, body, center, frame, first, last, chbdeg) -> SPK14Writer
 
 Begin an SPK segment of type 14 (Chebyshev polynomials for the position and the velocity,
 on intervals of unequal length), as `spk14b_c`, and return its writer.
@@ -1260,20 +1320,22 @@ julia> state == [11.0, 0.0, 0.0, 0.02, 0.0, 0.0]
 true
 ```
 """
-function spk14b(h::DAFHandle, segid::AbstractString, body::Integer, center::Integer,
-        frame::SegFrame, first::Real, last::Real, chbdeg::Integer;
-        ctx::SegContext=default_context())
+function spk14b(ctx::SegContext, h::DAFHandle, segid::AbstractString, body::Integer,
+        center::Integer, frame::SegFrame, first::Real, last::Real, chbdeg::Integer)
     who = "spk14b"
     _daf_check_write(h, who)
     frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
     _seg_chkfstr(who, "segid", segid)
     chbdeg < 0 && throw(SpiceError(:invalidargument, "$who: the degree of the " *
         "Chebyshev polynomial was negative, $chbdeg; the degree must be greater than or equal to zero"))
-    descr = spkpds(body, center, frame, 14, first, last; ctx=ctx)
+    descr = spkpds(ctx, body, center, frame, 14, first, last)
     _seg_idlen(who, segid)
     _seg_idchars(who, segid)
     return SPK14Writer(h, descr, String(segid), Int(chbdeg) + 1, Float64[], Float64[], true)
 end
+spk14b(h::DAFHandle, segid::AbstractString, body::Integer, center::Integer, frame::SegFrame,
+    first::Real, last::Real, chbdeg::Integer) =
+    spk14b(default_context(), h, segid, body, center, frame, first, last, chbdeg)
 
 """
     spk14a(writer, ncsets, coeffs, epochs) -> Nothing

@@ -2,8 +2,8 @@
 
 A file handle is a [`DAFHandle`](@ref) or a [`DASHandle`](@ref) object, not an integer.
 The writers take the arguments of CSPICE in the same order, but leave out most counts and
-flags that follow from the input. Two writers change the order: [`spksub`](@ref) takes
-the new file first, and [`ckw03`](@ref) takes `avvs` last, as an optional argument. The
+flags that follow from the input: in [`ckw01`](@ref) and [`ckw03`](@ref), `avvs` is
+`nothing` for a segment without angular velocity, in the place of the flag `avflag`. The
 calls that continue a DAF array search or an array that is being added
 ([`daffna`](@ref), [`daffpa`](@ref), [`dafgs`](@ref), [`dafgn`](@ref), [`dafws`](@ref),
 [`dafrs`](@ref), [`dafrn`](@ref), [`dafada`](@ref), [`dafena`](@ref)) take the handle,
@@ -12,15 +12,11 @@ which the C calls do not, because the handle holds that state.
 A call that needs a context takes it as the optional first argument `[ctx,]`, a
 [`SpiceContext`](@ref), and uses [`default_context`](@ref) without it. `[ctx | ks,]`
 means that the call also accepts a `KernelSet`, the immutable snapshot of the kernels of
-a context that `Allspice.kernelset(ctx)` returns. The SPK and CK segment writers,
-[`spk14b`](@ref), [`spkpds`](@ref) and [`table_to_spk`](@ref) take the context or the
-kernel set as the keyword
-`ctx` instead, and [`dskxv!`](@ref) takes it after its two output arguments.
+a context that `Allspice.kernelset(ctx)` returns. [`dskxv!`](@ref) takes the context
+after its two output arguments.
 
 The identifier of an SPK or CK segment (`segid`, `ident`) is the name of its DAF array,
-which [`dafgn`](@ref) returns. An input of the wrong shape throws `SpiceError(:badarg)`,
-except `avvs` of [`ckw01`](@ref) and [`ckw03`](@ref): one vector for several records
-counts as `nothing`.
+which [`dafgn`](@ref) returns. An input of the wrong shape throws `SpiceError(:badarg)`.
 
 ## DAF files
 

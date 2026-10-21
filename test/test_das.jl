@@ -236,7 +236,17 @@ group("11. DAS files and DLA segment lists") do
         c_dascls(ch)
         h = dasopr(path)
         @test dasec(h) == many
+        # (fault fixed: dasopw of a file that a handle had open gave a second handle, and
+        # the close of one handle lost the changes of the other; CSPICE signals
+        # FILEOPENCONFLICT, for a file open for read and for one open for write)
+        @test neo_kind(() -> dasopw(path)) === :fileopenconflict
         dascls(h)
+        h = dasopw(path)
+        @test neo_kind(() -> dasopw(path)) === :fileopenconflict
+        dascls(h)
+        ch = c_dasopw(path)
+        @test c_kind(() -> c_dasopw(path)) === :fileopenconflict
+        c_dascls(ch)
     end
 
     unseg = joinpath(dir, "unseg.das")

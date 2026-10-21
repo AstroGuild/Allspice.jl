@@ -484,6 +484,7 @@ checks are made in the order of CSPICE.
 """
 function _geo_fovvis(ks::KernelSet, inst::NameOrID, tshape::Int, raydir::Vec3{Float64},
         target::NameOrID, tframe::NameOrID, abcorr::AbcorrArg, obsrvr::NameOrID, et0::Real)
+    _plain_epoch(et0, tshape == _GEO_FOV_RAY ? "fovray" : "fovtrg")
     obs = _geo_body(ks, obsrvr, "observer")
     uray = tshape == _GEO_FOV_RAY
     etrg = tshape == _GEO_FOV_ELLIPSOID
@@ -630,6 +631,7 @@ if that frame is a CK frame. `abcorr` is a correction string of [`spkezr`](@ref)
 discrete.
 
 Throws `SpiceError` with the kind
+- `:badarg` if `et` is a `ForwardDiff.Dual`;
 - `:invalidoption` if `tshape` is `"RAY"` (use [`fovray`](@ref)) or if `abcorr` is not a
   valid correction;
 - `:idcodenotfound` if a body or instrument name is not known;
@@ -697,7 +699,8 @@ An [`Aberration`](@ref) without light time is also valid. `et` cannot be a
 `ForwardDiff.Dual`. The notes of [`fovtrg`](@ref) on the instrument apply.
 
 Throws `SpiceError` with the kind
-- `:zerovector` if `raydir` is zero, `:badarg` if it does not have 3 elements;
+- `:zerovector` if `raydir` is zero, `:badarg` if it does not have 3 elements or if
+  `et` is a `ForwardDiff.Dual`;
 - `:idcodenotfound` if the observer or the instrument name is not known;
 - `:invalidframe` if `rframe` is blank or not known, `:frameinfonotfound` if it has no
   definition loaded;

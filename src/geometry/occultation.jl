@@ -345,6 +345,7 @@ end
 function _geo_occult(ks::KernelSet, tols::DSKTolerances, targ1::NameOrID,
         shape1::AbstractString, frame1::NameOrID, targ2::NameOrID, shape2::AbstractString,
         frame2::NameOrID, abcorr::AbcorrArg, obsrvr::NameOrID, et::Real)
+    _plain_epoch(et, "occult")
     b1 = _geo_occ_parse(ks, targ1, shape1, "first target")
     b2 = _geo_occ_parse(ks, targ2, shape2, "second target")
     b1 = _GeoOccBody(_geo_body(ks, targ1, "first target"), b1.kind, b1.m, Int32(0))
@@ -379,7 +380,7 @@ function _geo_occ_roles(ks::KernelSet, tols::DSKTolerances, front::_GeoOccBody, 
      (back.kind == _GEO_OCC_DSK && front.kind != _GEO_OCC_POINT)) && throw(SpiceError(
         :invalidshapecombo, "a target with DSK data needs a point as the other target"))
     full = _geo_abcorr(abcorr)
-    corr = full.uselt ? Aberration(; lt=true, converged=full.converged, transmit=full.transmit) :
+    corr = full.uselt ? Aberration(; uselt=true, converged=full.converged, transmit=full.transmit) :
            full
     return _geo_occ_eval(ks, tols, front, fframe, back, bframe, bsrf, obs, corr, et)
 end
@@ -415,6 +416,7 @@ the bodies and the frames are integer IDs and the shapes are ellipsoids or point
 A DSK shape uses the tolerances that [`dskstl`](@ref) set on the context.
 
 Throws `SpiceError` with the kind
+- `:badarg` if `et` is a `ForwardDiff.Dual`;
 - `:idcodenotfound` if a body name is not known;
 - `:bodiesnotdistinct` if two of the three bodies are the same;
 - `:invalidshape` if a shape is not one of the three values, `:badmethodsyntax` if a

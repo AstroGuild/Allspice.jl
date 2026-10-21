@@ -126,11 +126,13 @@ group("9. aberration corrections", Kernels.FULL_SET_FILES...) do
             @test Aberration(spaced) == c
             @test Aberration(SubString(s * "!", 1, length(s))) == c
             @test Aberration(c) === c
-            @test Aberration(; lt=uselt, converged=conv, stellar=stel, transmit=xmit) == c
+            @test Aberration(; uselt, converged=conv, stellar=stel, transmit=xmit) == c
             @test ab_warm(ab_alloc_parse, s) == 0
             @test ab_warm(ab_alloc_parse, spaced) == 0
         end
         @test (@inferred Aberration("cn + s")) == Aberration("CN+S")
+        # `propertynames` lists the documented properties only
+        @test propertynames(Aberration("LT")) == (:uselt, :converged, :stellar, :transmit, :geometric)
         # Values that CSPICE recognizes and rejects, and values that it does not know.
         for bad in ("RL", "RL+S", "XRL", "XRL+S", "S", "XS", "", "   ", "LT+", "LTS", "L",
                 "NONE+S", "XNONE", "LT+S+S", "CN+SS", "λT", "LT\t")

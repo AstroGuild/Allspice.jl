@@ -31,7 +31,7 @@ See also [`ekopw`](@ref), [`ekopn`](@ref).
 function ekopr(path::AbstractString)
     h = _das_load(path, "ekopr", false)
     _ek_check(h, h.path, "ekopr")
-    return h
+    return _open_register!(h, path, false, "ekopr")
 end
 
 """
@@ -40,7 +40,8 @@ end
 Close the EK file of `handle`, as `ekcls_c`.
 
 For a write handle all data are on disk when the call returns. Closing a closed handle
-does nothing.
+does nothing. A fast load that [`ekffld`](@ref) did not end leaves a segment that
+cannot be read, without an error, as in CSPICE (see [`ekifld`](@ref)).
 
 See also [`ekopr`](@ref), [`ekopw`](@ref), [`ekopn`](@ref).
 """
@@ -126,7 +127,8 @@ segment `segno`, without trailing blanks, as `ekrcec_c`.
 
 `segno` and `recno` count from 1; `ekrcec_c` counts from 0. The column name is matched
 without regard to case. The entry of a scalar column gives a vector of one string. A
-null entry gives an empty vector and `isnull == true`.
+null entry gives an empty vector and `isnull == true`; for a null entry CSPICE gives a
+count of 1, or the size of a fixed-size array column, and values without meaning.
 
 Throws `SpiceError` with the kind
 - `:invalidindex` if `segno` is not a segment of the file;
@@ -232,16 +234,16 @@ end
 eklef(path::AbstractString) = eklef(default_context(), path)
 
 """
-    ekuef([ctx,] handle) -> Nothing
+    ekuef([ctx,] path) -> Nothing
 
-Unload the EK file that [`eklef`](@ref) loaded, as `ekuef_c`. `handle` is the path
-that `eklef` returned.
+Unload the EK file that [`eklef`](@ref) loaded, as `ekuef_c`. `path` is the value that
+`eklef` returned; `ekuef_c` takes an integer handle.
 
 A path that is not loaded changes nothing, as in CSPICE. An [`EKResult`](@ref) of an
 earlier [`ekfind`](@ref) stays readable after the call.
 """
-ekuef(ctx::SpiceContext, handle::AbstractString) = unload(ctx, handle)
-ekuef(handle::AbstractString) = ekuef(default_context(), handle)
+ekuef(ctx::SpiceContext, path::AbstractString) = unload(ctx, path)
+ekuef(path::AbstractString) = ekuef(default_context(), path)
 
 """
     ektnam([ctx,] n) -> String
@@ -317,7 +319,7 @@ ekcii(table::AbstractString, cindex::Integer) = ekcii(default_context(), table, 
     ekpsel([ctx,] query) -> NamedTuple
 
 Return the description of the SELECT clause of `query`, as `ekpsel_c`, in the named
-tuple `(n, xbegs, xends, xtypes, xclass, tabs, cols, error, errmsg)`.
+tuple `(n, xbegs, xends, xtypes, xclass, tabs, cols, failed, errmsg)`.
 
 - `n`: the number of SELECT items. The vectors have one element for each item.
 - `xbegs`, `xends`: first and last byte of the item in `query`, from 1 (`ekpsel_c`
@@ -325,9 +327,9 @@ tuple `(n, xbegs, xends, xtypes, xclass, tabs, cols, error, errmsg)`.
 - `xtypes`: the data type, `:CHR`, `:DP`, `:INT` or `:TIME`.
 - `xclass`: the class of the item, always `:COL` (a column).
 - `tabs`, `cols`: the table name (never the alias) and the column name, in upper case.
-- `error`, `errmsg`: the error flag and the message of CSPICE for the query.
+- `failed`, `errmsg`: the error flag and the message of CSPICE for the query.
 
-A query that is not valid gives `error == true`, `n == 0` and empty vectors; the call
+A query that is not valid gives `failed == true`, `n == 0` and empty vectors; the call
 does not throw for it. The query is checked against the loaded tables, as in
 [`ekfind`](@ref).
 """
@@ -429,8 +431,8 @@ julia> ekfind(ctx, "SELECT NAME FROM MOONS WHERE")[2:3]
 See also [`eklef`](@ref), [`ekpsel`](@ref), [`ekrcec`](@ref).
 """
 function ekfind(ks::KernelSet, td::TimeDefaults, query::AbstractString)
-    q, error, errmsg = _ek_encode_query(ks.ektables, ks, td, query)
-    error && return _ek_empty_result(), true, errmsg
+    q, failed, errmsg = _ek_encode_query(ks.ektables, ks, td, query)
+    failed && return _ek_empty_result(), true, errmsg
     return _ek_search(ks, q), false, ""
 end
 ekfind(ctx::SpiceContext, query::AbstractString) =
