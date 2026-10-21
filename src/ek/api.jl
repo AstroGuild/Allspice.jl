@@ -127,7 +127,8 @@ segment `segno`, without trailing blanks, as `ekrcec_c`.
 
 `segno` and `recno` count from 1; `ekrcec_c` counts from 0. The column name is matched
 without regard to case. The entry of a scalar column gives a vector of one string. A
-null entry gives an empty vector and `isnull == true`.
+null entry gives an empty vector and `isnull == true`; for a null entry CSPICE gives a
+count of 1, or the size of a fixed-size array column, and values without meaning.
 
 Throws `SpiceError` with the kind
 - `:invalidindex` if `segno` is not a segment of the file;
