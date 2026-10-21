@@ -1585,9 +1585,14 @@ allows it, and every segment lies inside them. Throws `SpiceError` with the kind
 """
 function open_dsk(path::AbstractString)
     h = _das_load(path, "furnsh", false)
-    rstrip(h.idword) == "DAS/DSK" || throw(SpiceError(:invalidfiletype,
-        "the DAS file $path has the ID word $(repr(h.idword)), not DAS/DSK"))
-    segs = DSKSegment[_dsk_segment(h.ints, h.dps, d, 0, path) for d in _dla_segments(h.ints, path)]
+    segs = try
+        rstrip(h.idword) == "DAS/DSK" || throw(SpiceError(:invalidfiletype,
+            "the DAS file $path has the ID word $(repr(h.idword)), not DAS/DSK"))
+        DSKSegment[_dsk_segment(h.ints, h.dps, d, 0, path) for d in _dla_segments(h.ints, path)]
+    catch
+        _das_release!(h)                 # see `_unmap!`
+        rethrow()
+    end
     return DSKFile(String(path), :DSK, h.ints, h.dps, segs)
 end
 

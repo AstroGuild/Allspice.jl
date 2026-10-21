@@ -256,13 +256,23 @@ end
 
 # --- contents of a CK file ----------------------------------------------------------------
 
-"Open `path` as a CK file, with the checks of `_require_binary_kernel`; throws `SpiceError(:invalidfiletype)` for another DAF kernel."
-function _ck_open(path::AbstractString, who::AbstractString="ckobj")
+"""
+    _ck_open(f, path, who) -> f(daf)
+
+Open `path` as a CK file, with the checks of `_require_binary_kernel`, and return
+`f(daf)`. The map of the file is removed when `f` returns, so the result of `f` must not
+refer to `daf.data`. Throws `SpiceError(:invalidfiletype)` for another DAF kernel.
+"""
+function _ck_open(f, path::AbstractString, who::AbstractString)
     _require_binary_kernel(who, path, "CK")
     daf = open_daf(path)
-    daf.kind === :CK || throw(SpiceError(:invalidfiletype,
-        "the file $path is a binary $(daf.kind) kernel; a CK file is needed"))
-    return daf
+    try
+        daf.kind === :CK || throw(SpiceError(:invalidfiletype,
+            "the file $path is a binary $(daf.kind) kernel; a CK file is needed"))
+        return f(daf)
+    finally
+        _unmap!(daf.data)
+    end
 end
 
 """
@@ -282,7 +292,8 @@ Throws `SpiceError`:
 
 See also [`ckcov`](@ref).
 """
-ckobj(ck::AbstractString) = sort!(unique!(Int[s.inst for s in _ck_open(ck).cksegments]))
+ckobj(ck::AbstractString) =
+    _ck_open(daf -> sort!(unique!(Int[s.inst for s in daf.cksegments])), ck, "ckobj")
 
 """
     _ck_intervals!(out, data, seg) -> out
@@ -403,14 +414,15 @@ function ckcov!(cover::Window, ks::KernelSet, ck::AbstractString, idcode::Intege
     sys = uppercase(strip(timsys))
     sys in ("SCLK", "TDB") || throw(SpiceError(:notsupported,
         "the time system was '$timsys'; allowed values are SCLK and TDB"))
-    daf = _ck_open(ck, "ckcov")
     raw = NTuple{2,Float64}[]
-    for seg in daf.cksegments
-        (seg.inst == idcode && (seg.avflag || !needav)) || continue
-        if lev == "SEGMENT"
-            push!(raw, (seg.t0, seg.t1))
-        else
-            _ck_intervals!(raw, daf.data, seg)
+    _ck_open(ck, "ckcov") do daf
+        for seg in daf.cksegments
+            (seg.inst == idcode && (seg.avflag || !needav)) || continue
+            if lev == "SEGMENT"
+                push!(raw, (seg.t0, seg.t1))
+            else
+                _ck_intervals!(raw, daf.data, seg)
+            end
         end
     end
     clkid = _ck_sclkid(ks, Int32(idcode))

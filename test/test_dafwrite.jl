@@ -2196,6 +2196,44 @@ group("9. DAF access, SPK and CK writers") do
             dafcls(src)
         end
     end
+
+    @apart @testset "a closed or unloaded file can be deleted" begin
+        # Regression (Windows CI, `rm` of a CK file in group roundtrip: EBUSY): Windows
+        # cannot delete a file that the process has open or memory-mapped. The check reads
+        # the open files and maps of the process (`file_held`, Linux only) because the
+        # failure is specific to Windows; `rm` is the check there. No garbage collection
+        # until the last part, which is about `unload`.
+        bsp = joinpath(dir, "released.bsp")
+        h = spkopn(bsp, "released", 0)
+        spkw02(h, 499, 4, "J2000", 0.0, 100.0, "released", 100.0, [[1.0, 0.5, 2.0, 0.0, 3.0, 0.0]], 0.0)
+        spkcls(h)
+        @test !file_held(bsp)
+        h = dafopr(bsp)
+        dafbfs(h)
+        @test daffna(h)
+        dafcls(h)
+        @test !file_held(bsp)
+        rm(bsp)
+        ck = joinpath(dir, "released.bc")
+        h = ckopn(ck, "released", 0)
+        ckw01(h, 0.0, 10.0, -9000, "J2000", "released", [0.0, 10.0],
+            [[1.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]], nothing)
+        ckcls(h)
+        # `ckobj` and `ckcov` read the file through a memory map, which they release.
+        @test ckobj(ck) == [-9000]
+        @test !file_held(ck)
+        ctx = SpiceContext()
+        @test wncard(ckcov(ctx, ck, -9000, false, "SEGMENT", 0.0, "SCLK")) == 1
+        @test !file_held(ck)
+        # A loaded kernel keeps its map until the garbage collector frees the snapshot.
+        furnsh(ctx, ck)
+        @test file_held(ck) == Sys.islinux()
+        unload(ctx, ck)
+        GC.gc()
+        @test !file_held(ck)
+        rm(ck)
+        @test !ispath(ck)
+    end
 end
 
 FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

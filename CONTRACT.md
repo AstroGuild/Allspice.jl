@@ -93,6 +93,15 @@ order because `Loaded`, `KernelSet` and `SpiceContext` have fields of their type
   directory values for SPK types 2, 3, 20 and PCK type 2), `CKSegment` for `:CK`.
   Postcondition: every segment has finite epochs and
   `1 <= baddr <= eaddr <= length(data)`. Throws `SpiceError(:filenotfound)` or `(:baddaf)`.
+  `data` is the only memory map of the file that stays after the call.
+- `_unmap!(a::Array)` removes the memory map of `a` at once (nothing for an array that
+  is not mapped); `a` must not be read afterwards. Windows cannot delete or replace a
+  file while a map of it exists, so a map that a call needs only for a while is removed
+  with `_unmap!` and not left to the garbage collector: the byte map of `open_daf` and
+  `_das_load`, `data` in `_ck_open(f, path, who)` (`ckobj`, `ckcov`) and in
+  `kernel_arch`, and the address spaces of a DAS handle at `dascls`
+  (`_das_release!(h)`). The maps of a `KernelSet` stay until the collector frees it,
+  because a query can still hold the snapshot.
 - `_daf_sizeok(size, psize, dsize, offset) -> (ok, n)` mirrors `zzsizeok_`, and
   `_daf_i32(raw, off, little)` reads one 32-bit integer; `daf_access.jl` uses both.
 
@@ -530,7 +539,10 @@ DAS file.
   are never modified; a write handle works on owned copies in memory.
 - `dascls` of a write handle writes the complete, segregated file and moves it into
   place in one step, so a reader that has the old file mapped keeps a consistent
-  image. One handle is not safe for concurrent use.
+  image. Windows does not replace a mapped file, so there the move fails
+  (`:daswritefail`) while a read handle or a loaded kernel maps the file. `dascls`
+  removes the maps of the handle that it closes (`_das_release!`). One handle is not
+  safe for concurrent use.
 - `dasops()` gives a scratch handle: a write handle with an empty path, which `dascls`
   discards without a file. `ekops()` is the scratch EK on it (CSPICE makes a temporary
   file for both).

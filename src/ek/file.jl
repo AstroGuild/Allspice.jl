@@ -363,14 +363,20 @@ segment with two columns of the same name.
 """
 function open_ek(path::AbstractString)
     h = _das_load(path, "furnsh", false)
-    _ek_check(h, path, "furnsh")
-    nseg = _ek_nseg(h)
-    nseg < 1 && throw(SpiceError(:eknosegments, "The EK file $path contains no segments."))
-    segs = _EKSegment[_ek_segment(h, i) for i in 1:nseg]
-    for seg in segs
-        allunique(c.name for c in seg.columns) || throw(SpiceError(:ekcolnummismatch,
-            "The EK file $path could not be loaded; the segment $(seg.segno) contains " *
-            "duplicate column names in table $(seg.table)."))
+    segs = try
+        _ek_check(h, path, "furnsh")
+        nseg = _ek_nseg(h)
+        nseg < 1 && throw(SpiceError(:eknosegments, "The EK file $path contains no segments."))
+        segs = _EKSegment[_ek_segment(h, i) for i in 1:nseg]
+        for seg in segs
+            allunique(c.name for c in seg.columns) || throw(SpiceError(:ekcolnummismatch,
+                "The EK file $path could not be loaded; the segment $(seg.segno) contains " *
+                "duplicate column names in table $(seg.table)."))
+        end
+        segs
+    catch
+        _das_release!(h)                 # see `_unmap!`
+        rethrow()
     end
     return EKFile(String(path), :EK, h.chars, h.dps, h.ints, segs)
 end

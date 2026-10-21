@@ -205,74 +205,80 @@ function _das_load(path::AbstractString, who::AbstractString, writable::Bool)
     return open(path, "r") do io
         nrecords = Int(filesize(io) ÷ _DAS_RECLEN)
         raw = Mmap.mmap(io, Vector{UInt8}, (nrecords * _DAS_RECLEN,))
-        (nresvr >= 0 && ncomr >= 0) ||
-            bad("the file record gives $nresvr reserved and $ncomr comment records")
-        nresvr + ncomr + 2 <= nrecords || throw(SpiceError(:dasfilereadfailed,
-            "$who: the first directory record $(nresvr + ncomr + 2) of $path is past " *
-            "the end of the file ($nrecords records)"))
-        (0 <= ncomc <= ncomr * _DAS_RECLEN) ||
-            bad("the comment area of $ncomr records cannot hold $ncomc characters")
-        clusters = (NTuple{2,Int}[], NTuple{2,Int}[], NTuple{2,Int}[])
-        lastla = [0, 0, 0]
-        lastrc = [0, 0, 0]
-        lastwd = [0, 0, 0]
-        lastrec = 0                      # the last directory or data record that is in use
-        rec = nresvr + ncomr + 2
-        visited = 0
-        while rec > 0
-            # invariant: `visited` directory records were read, none twice while
-            # `visited <= nrecords`; `clusters` holds their data records in address order
-            visited += 1
-            visited <= nrecords || bad("the chain of directory records has a cycle")
-            rec <= nrecords || throw(SpiceError(:dasfilereadfailed,
-                "$who: directory record $rec of $path is past the end of the file"))
-            base = (rec - 1) * _DAS_RECLEN
-            word(k) = _das_i32(raw, base + 4 * (k - 1), swap)
-            lastrec = max(lastrec, rec)
-            for t in 1:3
-                hi = word(2t + 2)
-                hi > 0 && (lastla[t] = hi)
-            end
-            typ = word(9)
-            if 1 <= typ <= 3
-                prvtyp = _DAS_PREV[typ]
-                datarec = rec + 1
-                pos = 10
-                while pos <= 256 && word(pos) != 0
-                    # invariant: descriptors 10 .. pos-1 are in `clusters`
-                    count = word(pos)
-                    curtyp = count > 0 ? _DAS_NEXT[prvtyp] : _DAS_PREV[prvtyp]
-                    count = abs(count)
-                    datarec + count - 1 <= nrecords ||
-                        bad("directory record $rec describes records past the end of the file")
-                    push!(clusters[curtyp], (datarec, count))
-                    lastrc[curtyp] = rec
-                    lastwd[curtyp] = pos
-                    datarec += count
-                    lastrec = max(lastrec, datarec - 1)
-                    prvtyp = curtyp
-                    pos += 1
+        try
+            (nresvr >= 0 && ncomr >= 0) ||
+                bad("the file record gives $nresvr reserved and $ncomr comment records")
+            nresvr + ncomr + 2 <= nrecords || throw(SpiceError(:dasfilereadfailed,
+                "$who: the first directory record $(nresvr + ncomr + 2) of $path is past " *
+                "the end of the file ($nrecords records)"))
+            (0 <= ncomc <= ncomr * _DAS_RECLEN) ||
+                bad("the comment area of $ncomr records cannot hold $ncomc characters")
+            clusters = (NTuple{2,Int}[], NTuple{2,Int}[], NTuple{2,Int}[])
+            lastla = [0, 0, 0]
+            lastrc = [0, 0, 0]
+            lastwd = [0, 0, 0]
+            lastrec = 0                  # the last directory or data record in use
+            rec = nresvr + ncomr + 2
+            visited = 0
+            while rec > 0
+                # invariant: `visited` directory records were read, none twice while
+                # `visited <= nrecords`; `clusters` holds their data records in address
+                # order
+                visited += 1
+                visited <= nrecords || bad("the chain of directory records has a cycle")
+                rec <= nrecords || throw(SpiceError(:dasfilereadfailed,
+                    "$who: directory record $rec of $path is past the end of the file"))
+                base = (rec - 1) * _DAS_RECLEN
+                word(k) = _das_i32(raw, base + 4 * (k - 1), swap)
+                lastrec = max(lastrec, rec)
+                for t in 1:3
+                    hi = word(2t + 2)
+                    hi > 0 && (lastla[t] = hi)
                 end
-            elseif typ != 0
-                bad("directory record $rec has the data type $typ")
+                typ = word(9)
+                if 1 <= typ <= 3
+                    prvtyp = _DAS_PREV[typ]
+                    datarec = rec + 1
+                    pos = 10
+                    while pos <= 256 && word(pos) != 0
+                        # invariant: descriptors 10 .. pos-1 are in `clusters`
+                        count = word(pos)
+                        curtyp = count > 0 ? _DAS_NEXT[prvtyp] : _DAS_PREV[prvtyp]
+                        count = abs(count)
+                        datarec + count - 1 <= nrecords ||
+                            bad("directory record $rec describes records past the end " *
+                                "of the file")
+                        push!(clusters[curtyp], (datarec, count))
+                        lastrc[curtyp] = rec
+                        lastwd[curtyp] = pos
+                        datarec += count
+                        lastrec = max(lastrec, datarec - 1)
+                        prvtyp = curtyp
+                        pos += 1
+                    end
+                elseif typ != 0
+                    bad("directory record $rec has the data type $typ")
+                end
+                rec = word(2)
             end
-            rec = word(2)
+            for t in 1:3
+                room = sum(c -> c[2], clusters[t]; init=0) * _DAS_NW[t]
+                lastla[t] <= room || bad("the last address $(lastla[t]) of type $t is " *
+                    "not inside the $room words of its data records")
+            end
+            chars = _das_extent(io, raw, UInt8, clusters[1], lastla[1], swap, writable)
+            dps = _das_extent(io, raw, Float64, clusters[2], lastla[2], swap, writable)
+            ints = _das_extent(io, raw, Int32, clusters[3], lastla[3], swap, writable)
+            resv = raw[_DAS_RECLEN+1:_DAS_RECLEN*(1+nresvr)]
+            comments = raw[_DAS_RECLEN*(1+nresvr)+1:_DAS_RECLEN*(1+nresvr+ncomr)]
+            h = DASHandle(String(path), writable, true, idword, ifname, nresvr, nresvc,
+                ncomr, ncomc, resv, comments, chars, dps, ints, lastrec + 1, Tuple(lastrc),
+                Tuple(lastwd))
+            writable && _das_layout!(h)
+            h
+        finally
+            _unmap!(raw)                 # `h` has copies or maps of its own; see `_unmap!`
         end
-        for t in 1:3
-            room = sum(c -> c[2], clusters[t]; init=0) * _DAS_NW[t]
-            lastla[t] <= room || bad("the last address $(lastla[t]) of type $t is not " *
-                "inside the $room words of its data records")
-        end
-        chars = _das_extent(io, raw, UInt8, clusters[1], lastla[1], swap, writable)
-        dps = _das_extent(io, raw, Float64, clusters[2], lastla[2], swap, writable)
-        ints = _das_extent(io, raw, Int32, clusters[3], lastla[3], swap, writable)
-        resv = raw[_DAS_RECLEN+1:_DAS_RECLEN*(1+nresvr)]
-        comments = raw[_DAS_RECLEN*(1+nresvr)+1:_DAS_RECLEN*(1+nresvr+ncomr)]
-        h = DASHandle(String(path), writable, true, idword, ifname, nresvr, nresvc, ncomr,
-            ncomc, resv, comments, chars, dps, ints, lastrec + 1, Tuple(lastrc),
-            Tuple(lastwd))
-        writable && _das_layout!(h)
-        h
     end
 end
 
@@ -536,9 +542,12 @@ A handle that is open for writing writes the complete file, in segregated form (
 [`DASHandle`](@ref)). The file goes to a temporary file beside it and is moved into place
 in one step. All data are on disk when the call returns. A scratch file
 ([`dasops`](@ref)) is not written. The call does nothing if the handle is closed already.
+After the call the handle keeps no memory map of the file, so that Windows can delete or
+replace it.
 
 Throws `SpiceError(:daswritefail)` if the file cannot be written; the handle then stays
-open.
+open. On Windows the file cannot be replaced, and the call throws, while another handle
+has it open for reading or a context has it loaded.
 """
 function dascls(h::DASHandle)
     h.isopen || return nothing
@@ -548,7 +557,25 @@ function dascls(h::DASHandle)
     end
     h.isopen = false
     _open_unregister!(h)
+    _das_release!(h)
     return nothing
+end
+
+"""
+    _das_release!(h) -> h
+
+Remove the memory maps of the address spaces of `h` and put empty arrays in their place,
+so that a closed handle does not keep its file mapped (see `_unmap!`). No result of a
+call on `h` refers to these arrays, because the read calls copy.
+"""
+function _das_release!(h::DASHandle)
+    _unmap!(h.chars)
+    _unmap!(h.dps)
+    _unmap!(h.ints)
+    h.chars = UInt8[]
+    h.dps = Float64[]
+    h.ints = Int32[]
+    return h
 end
 
 """

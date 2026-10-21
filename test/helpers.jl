@@ -60,6 +60,46 @@ whole number outside the 32-bit integers and the machine is not x86-64.
 cast_dependent(s::AbstractString) = !ORACLE_CAST_X86 &&
     any(m -> parse(BigInt, m.match) > typemax(Int32), eachmatch(r"\d+", s))
 
+"""
+    file_held(path) -> Bool
+
+True if this process has the file `path` open or memory-mapped; Windows cannot delete or
+replace such a file. The answer comes from `/proc/self/fd` and `/proc/self/maps`, so it is
+`false` on a system other than Linux, where only `rm` itself tests a deletion.
+"""
+function file_held(path::AbstractString)
+    Sys.islinux() || return false
+    target = realpath(path)
+    for fd in readdir("/proc/self/fd")   # invariant: no descriptor before `fd` is `target`
+        link = try
+            readlink(joinpath("/proc/self/fd", fd))
+        catch
+            ""                           # the descriptor of `readdir` itself is gone
+        end
+        link == target && return true
+    end
+    return any(l -> endswith(l, " " * target), eachline("/proc/self/maps"))
+end
+
+"""
+    remove_temp(path)
+
+Remove the temporary file or directory `path` and everything in it. A kernel that a
+context loaded keeps its memory map until the garbage collector frees the snapshot, and
+Windows cannot delete a mapped file; there a failed removal runs `GC.gc()` and tries once
+more. Unload the files from CSPICE first: CSPICE keeps a loaded binary kernel open.
+"""
+function remove_temp(path::AbstractString)
+    try
+        rm(path; recursive=true, force=true)
+    catch e
+        (Sys.iswindows() && e isa Base.IOError) || rethrow()
+        GC.gc()
+        rm(path; recursive=true, force=true)
+    end
+    return nothing
+end
+
 "Names of the groups that were skipped, with the reason, for the summary of `runtests.jl`."
 const SKIPPED = Tuple{String,String}[]
 

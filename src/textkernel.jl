@@ -37,7 +37,11 @@ function kernel_arch(path::AbstractString)::Symbol
         nd = reinterpret(Int32, head[9:12])[1]
         ni = reinterpret(Int32, head[13:16])[1]
         for (d, i) in ((nd, ni), (bswap(nd), bswap(ni)))
-            d == 2 && i == 6 && return open_daf(path).kind
+            if d == 2 && i == 6
+                daf = open_daf(path)
+                _unmap!(daf.data)            # only the kind is needed; see `_unmap!`
+                return daf.kind
+            end
             d == 2 && i == 5 && return :PCK
         end
         throw(SpiceError(:notsupported,

@@ -108,7 +108,11 @@ group("roundtrip", Kernels.LSK, Kernels.DE440S) do
         sc = SPICE.spkezr("301", ets[5], "RT_BUS", "LT+S", "-901")[1]
         @test isapprox(s, sc; rtol=1e-10)
     end
-    rm(dir; recursive=true, force=true)
+    # CSPICE keeps a loaded binary kernel open, and a context keeps it mapped until the
+    # garbage collector frees the snapshot; Windows deletes neither kind of file.
+    SPICE.kclear()
+    kclear(ctx)
+    remove_temp(dir)
 end
 
 FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again
