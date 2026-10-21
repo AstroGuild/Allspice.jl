@@ -491,7 +491,7 @@ function _dsk_latsrf(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
         found || throw(SpiceError(:pointnotfound, "no surface point was found on body " *
             "$trgcde at planetocentric longitude $(rad2deg(lon)) deg, latitude $(rad2deg(lat)) deg"))
         _dsk_vdot(x, xpt) < 0.0 && throw(SpiceError(:shapenotsupported, "the intercept is " *
-            "on the far side of the centre of body $trgcde; such a shape is not supported"))
+            "on the far side of the center of body $trgcde; such a shape is not supported"))
         out[i] = xpt
     end
     return out

@@ -127,8 +127,8 @@ end
 `:SPK` or `:CK` for an old `NAIF/DAF` file with summary format ND = 2, NI = 6, decided
 from the integer part `ic` of its first summary as `zzckspk_` of CSPICE does: the
 fourth integer is the data type of an SPK segment (never 0) and the angular-velocity
-flag of a CK segment (0 or 1), the second is the centre of an SPK segment (0 is a valid
-centre, but not a valid frame of a CK segment), and for the case that stays open the
+flag of a CK segment (0 or 1), the second is the center of an SPK segment (0 is a valid
+center, but not a valid frame of a CK segment), and for the case that stays open the
 size of the segment decides between SPK type 1 and CK. Requires `length(ic) == 6`.
 """
 function _daf_ckspk(data::Vector{Float64}, ic::NTuple{6,Int32}, nwords::Int)

@@ -639,7 +639,7 @@ Throws `SpiceError` with the kind
 - `:unknownframe` if the instrument frame is not known;
 - `:fovtoowide` if the angular radius of the field of view about its axis is not below
   90 degrees minus 1e-6 rad;
-- for a rectangle or a polygon: `:degeneratecase` if two neighbour boundary vectors are
+- for a rectangle or a polygon: `:degeneratecase` if two neighbor boundary vectors are
   parallel, `:facenotfound` if the boundary vectors are not in one half space,
   `:notsupported` if a boundary vector is within 2e-12 rad of the plane of a side of
   the convex hull, `:invalidfov` if a vector is 90 degrees or more from the axis;

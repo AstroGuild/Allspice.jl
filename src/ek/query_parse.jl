@@ -15,7 +15,7 @@
 #    ORDER BY clause and at last the SELECT clause, and it finds each clause by the
 #    first occurrence of its keyword;
 # 3. `zzeknrml`: the WHERE clause becomes a disjunction of conjunctions of relations
-#    ("normalisation"): BETWEEN and NOT BETWEEN expand to two conjunctions, NOT is
+#    ("normalization"): BETWEEN and NOT BETWEEN expand to two conjunctions, NOT is
 #    pushed down to the relations by the rules of De Morgan, and AND is distributed
 #    over OR;
 # 4. `zzeknres`: name resolution gives each table and each column its position;
@@ -41,13 +41,13 @@ const _EKQ_MAXNUM = 100     # Largest number of numeric tokens of a query (`MAXN
 const _EKQ_MAXTAB = 10      # Largest number of tables in a FROM clause (`MAXTAB`)
 const _EKQ_MAXORD = 10      # Largest number of order-by columns (`MAXORD`)
 const _EKQ_MAXSEL = 50      # Largest number of SELECT columns (`MAXSEL`)
-const _EKQ_MAXCON = 1000    # Largest number of constraints of a normalised WHERE clause (`MAXCON`)
+const _EKQ_MAXCON = 1000    # Largest number of constraints of a normalized WHERE clause (`MAXCON`)
 const _EKQ_ISIZE = 27869    # Size of the integer cell of an encoded query (`EQIMIN`)
 const _EKQ_CSIZE = 2000     # Size of the character buffer of an encoded query (`MAXCLN`)
 const _EKQ_TNAMSZ = 64      # Length of a table name or an alias in name resolution (`TNAMSZ`)
 const _EKQ_TIMLEN = 32      # Length of the time string that time resolution converts (`TIMLEN` of `zzektres`)
-const _EKQ_NPOOL = 5000     # Size of the relation, conjunction and disjunction tables of the normaliser
-const _EKQ_MAXCNJ = 1000    # Largest number of conjunctions that the normaliser can count (`MAXCNJ`)
+const _EKQ_NPOOL = 5000     # Size of the relation, conjunction and disjunction tables of the normalizer
+const _EKQ_MAXCNJ = 1000    # Largest number of conjunctions that the normalizer can count (`MAXCNJ`)
 
 # Token codes of `ektokn.inc`.
 const _EKQ_TKKEY = 1        # keyword, or a comparison operator written with special characters
@@ -114,7 +114,7 @@ const _EKQ_DESCEND = 1      # Order sense: descending (`EQDSND`)
 "Names of the data types in the messages of the semantic check."
 const _EKQ_TYPSTR = ("CHARACTER", "DOUBLE PRECISION", "INTEGER", "TIME")
 
-# Meta-token codes of the normaliser.
+# Meta-token codes of the normalizer.
 const _EKQ_MRPAR = -1       # right parenthesis
 const _EKQ_MLPAR = -2       # left parenthesis
 const _EKQ_MBETW = -3       # BETWEEN
@@ -155,7 +155,7 @@ end
 """
     _EKQConstraint
 
-One relation of the normalised WHERE clause. `cnstyp` is `_EKQ_EQCOL` (1, column
+One relation of the normalized WHERE clause. `cnstyp` is `_EKQ_EQCOL` (1, column
 operator column) or `_EKQ_EQVAL` (2, column operator value); `opcode` is one of the
 codes 1 to 10 (EQ, GE, GT, LE, LT, NE, LIKE, UNLIKE, ISNULL, NOTNUL). For a value,
 `dtype` is its type code after time resolution (1 CHR, 2 DP, 3 INT, 4 TIME; 0 for
@@ -187,7 +187,7 @@ _EKQConstraint(cnstyp, lhs, opcode, rhs, dtype, cval, dval, ival) =
 
 A parsed, resolved and checked query. `tables` and `aliases` are those of the FROM
 clause (upper case, cut to 64 characters, alias `""` if none) and `tabcat[i]` is the
-index of table `i` in the catalogue of loaded tables. The WHERE clause is the
+index of table `i` in the catalog of loaded tables. The WHERE clause is the
 disjunction of `length(conjsizes)` conjunctions; conjunction `k` holds `conjsizes[k]`
 constraints, and `constraints` lists them conjunction after conjunction. Invariant:
 `sum(conjsizes) == length(constraints)`. A query without a WHERE clause has no
@@ -243,7 +243,7 @@ end
 The encoded query of CSPICE. `i[k]` is element `k` of the integer cell `EQRYI` (the
 vector grows with the cardinality of the cell, at most `_EKQ_ISIZE`), `c` the character
 buffer `EQRYC` and `d` the double buffer `EQRYD`. The first 19 integers are the header:
-element 2 architecture, 3 initialised, 4 parsed, 5 names resolved, 6 times resolved,
+element 2 architecture, 3 initialized, 4 parsed, 5 names resolved, 6 times resolved,
 7 semantically checked, 8 number of tables, 9 of constraints, 10 of conjunctions, 11 of
 order-by columns, 12 of SELECT columns, 13 size of `d`, 14 first free element of `d`,
 15 size of `c`, 16 first free character of `c`. After the header come 12 integers for
@@ -846,7 +846,7 @@ function _ek_qlnkilb!(list::Int, next::Int, p::_EKQPool)
     return nothing
 end
 
-"Contract: `tail` follows `head` in one list; frees the nodes from `head` to `tail` and joins their neighbours (`lnkfsl_`)."
+"Contract: `tail` follows `head` in one list; frees the nodes from `head` to `tail` and joins their neighbors (`lnkfsl_`)."
 function _ek_qlnkfsl!(head::Int, tail::Int, p::_EKQPool)
     _ek_qlnkchk(head, p)
     _ek_qlnkchk(tail, p)
@@ -889,7 +889,7 @@ end
 Contract: `tk` holds the tokens of the query `qb` and has a WHERE keyword, and `q`
 holds the FROM clause. Appends the constraints of the WHERE clause in normal form (a
 disjunction of conjunctions) and the sizes of the conjunctions to `q`, as
-`zzeknrml_`, and returns `nothing`; or returns the error message of the normaliser.
+`zzeknrml_`, and returns `nothing`; or returns the error message of the normalizer.
 
 The WHERE clause runs from the token after the first WHERE to the token before the
 first FROM, ORDER or SELECT that follows it. Its tokens become "meta-tokens" in a
@@ -1398,7 +1398,7 @@ function _ek_qnrml!(q::_EKQEnc, qb::AbstractVector{UInt8}, tk::_EKQTokens)
         djnode = _ek_qlnknxt(djnode, djpool)
     end
     nconj > _EKQ_MAXCNJ && _ek_qsignal(:toomanyconjunctions,
-        "The normalised WHERE clause has $nconj conjunctions; the maximum is $_EKQ_MAXCNJ.")
+        "The normalized WHERE clause has $nconj conjunctions; the maximum is $_EKQ_MAXCNJ.")
     sizes = Int[]
     nrels = 0
     djnode = mtexpr[first]
@@ -1459,7 +1459,7 @@ end
     _ek_qpars!(q, qb, tk) -> Union{Nothing,String}
 
 Contract: `tk` holds the tokens of the query `qb` and `q` is a new encoded query.
-Fills `q` with the FROM clause, the normalised WHERE clause, the ORDER BY clause and
+Fills `q` with the FROM clause, the normalized WHERE clause, the ORDER BY clause and
 the SELECT clause, in this order, and marks it as parsed (`zzekpars_`); returns
 `nothing`, or the error message of the parser.
 
@@ -1739,7 +1739,7 @@ end
     _ek_qcchk!(q, tables, tabcat, table, alias, base) -> Union{Nothing,String}
 
 Contract: `base` is the C base of a pair of descriptors (qualifier, column) in `q`;
-`table`, `alias` are the names of the FROM clause and `tabcat` their catalogue
+`table`, `alias` are the names of the FROM clause and `tabcat` their catalog
 indices. Writes the table index and the column index into the pair and returns
 `nothing`, or returns the error message of `zzekcchk_`. A qualifier is looked up in
 the table names first and then in the aliases; a column without a qualifier must be
@@ -1783,9 +1783,9 @@ end
 """
     _ek_qnres!(q, qb, tables) -> (tabcat, error)
 
-Contract: `q` is a parsed query of the string `qb` and `tables` the catalogue of
+Contract: `q` is a parsed query of the string `qb` and `tables` the catalog of
 loaded tables. Resolves the table and column names of `q` (`zzeknres_`): returns the
-catalogue index of each table of the FROM clause and `nothing`, or an empty vector and
+catalog index of each table of the FROM clause and `nothing`, or an empty vector and
 the error message. Rules, in the order of CSPICE: aliases are distinct; an alias is not
 the name of another table of the FROM clause; each table is loaded; then the columns
 of the constraints, of the SELECT clause and of the ORDER BY clause are resolved.
@@ -1986,7 +1986,7 @@ spacecraft clock string if it contains `SCLK` (`<clock name> SCLK <clock string>
 and a time string of `str2et` with the defaults `td` in the other case. An error of
 the time or clock system (no leap-second kernel, no SCLK kernel, a time that
 `str2et` rejects after `tpartv` accepted it) gives the message "Unexpected SPICELIB
-error ..."; CSPICE leaves its SPICE error signalled in this case as well.
+error ..."; CSPICE leaves its SPICE error signaled in this case as well.
 """
 function _ek_qtcnv(ks::KernelSet, td::TimeDefaults, timstr::AbstractVector{UInt8})
     # CMPRSS (runs of blanks become one blank), LJUST and UCASE.
@@ -2153,7 +2153,7 @@ end
     _ek_qencode(tables, ks, td, query) -> (q, tabcat, error, errmsg)
 
 Contract: as `_ek_encode_query`, but returns the encoded query in the layout of CSPICE
-(`zzekencd_`) with the catalogue indices of its tables; `q` is `nothing` on error.
+(`zzekencd_`) with the catalog indices of its tables; `q` is `nothing` on error.
 """
 function _ek_qencode(tables::Vector{EKTable}, ks::KernelSet, td::TimeDefaults,
     query::AbstractString)
@@ -2198,7 +2198,7 @@ const _EKQ_NOCOL = _EKQCol("", 0, "", 0, 0, 0)
     _ek_qdecode(q, tabcat) -> _EKQuery
 
 Contract: `q` is an encoded query that passed all steps and `tabcat` holds the
-catalogue indices of its tables. Returns the query as plain data, with the values that
+catalog indices of its tables. Returns the query as plain data, with the values that
 `zzekqtab_`, `zzekqcnj_`, `zzekqcon_`, `zzekqord_` and `zzekqsel_` return.
 """
 function _ek_qdecode(q::_EKQEnc, tabcat::Vector{Int})
@@ -2240,7 +2240,7 @@ end
 """
     _ek_encode_query(tables, ks, td, query) -> (query, error, errmsg)
 
-Contract: `tables` is the catalogue of loaded tables in load order, with names in
+Contract: `tables` is the catalog of loaded tables in load order, with names in
 upper case. Runs the steps of `ekfind_` that come before the search (`zzekqini_`,
 `zzekscan_`, `zzekpars_`, `zzeknres_`, `zzektres_`, `zzeksemc_`) on the string `query`
 and returns `(q::_EKQuery, false, "")`, or `(nothing, true, errmsg)` with the error
@@ -2250,7 +2250,7 @@ the leap-second and clock data of `ks` and the time defaults `td`. Pure function
 its arguments; does not modify them.
 
 Throws `SpiceError` where CSPICE signals a SPICE error: `:celltoosmall` if the
-normalised WHERE clause has more constraints than the encoded query can hold (1000
+normalized WHERE clause has more constraints than the encoded query can hold (1000
 without other clauses), `:toomanyconjunctions` for more than 1000 conjunctions (CSPICE
 stops the program there), `:buffertoosmall` if the converted times do not fit in the
 buffer of 100 numbers, and `:bug` for a query in which a qualified order-by column
@@ -2304,7 +2304,7 @@ end
 """
     _ek_qpcol(tables, q, qcol) -> (tabidx, table, alias, colidx, column, error, errmsg)
 
-Contract: `q` is a query that `_ek_encode_query` returned for the catalogue `tables`.
+Contract: `q` is a query that `_ek_encode_query` returned for the catalog `tables`.
 Parses the column name `qcol` (`<column>` or `<table>.<column>`, where the table is a
 name or an alias of the FROM clause of `q`) as `zzekpcol_` and returns the position
 and the name of its table in the FROM clause, the alias, and the position and the name

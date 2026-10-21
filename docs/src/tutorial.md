@@ -37,7 +37,7 @@ The input string and the output string differ by 69.185 seconds, which is the di
 
 ## State of a body
 
-[`spkezr`](@ref) returns the state of a target relative to an observer, as a position in kilometres and a velocity in kilometres per second, together with the one-way light time in seconds. The frame and the aberration correction are arguments: `"NONE"` gives the geometric state, and `"LT+S"` gives the state that the observer sees, corrected for light time and stellar aberration.
+[`spkezr`](@ref) returns the state of a target relative to an observer, as a position in kilometers and a velocity in kilometers per second, together with the one-way light time in seconds. The frame and the aberration correction are arguments: `"NONE"` gives the geometric state, and `"LT+S"` gives the state that the observer sees, corrected for light time and stellar aberration.
 
 ```@example first
 state, lt = spkezr("PROBE", et, "J2000", "NONE", "EARTH")

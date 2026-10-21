@@ -57,7 +57,7 @@ order because `Loaded`, `KernelSet` and `SpiceContext` have fields of their type
 | `SpiceError`, `SpiceKindError`, `SpkInsufficientDataError`, `ERROR_KINDS` | `errors.jl` | the abstract error type, its two concrete types and the registry of the kinds |
 | `DynVector`, `DynFrame`, `DynLevel{K}`, `SwitchFrame`, `PoolWatch` | `dyntypes.jl` | parsed dynamic and switch frames, the recursion link, the watcher state |
 | `DLADescr`, `DSKDescr`, `DSK02Header`, `DSKSegment`, `DSKFile`, `DSKTolerances` | `dsk_types.jl` | shape-kernel descriptors, one loaded file, the six tolerances |
-| `EKColumnAttr`, `EKSegmentSummary`, `_EKColumn`, `_EKSegment`, `EKFile`, `EKTable` | `ek/types.jl` | table-kernel segments, one loaded file, one catalogue entry |
+| `EKColumnAttr`, `EKSegmentSummary`, `_EKColumn`, `_EKSegment`, `EKFile`, `EKTable` | `ek/types.jl` | table-kernel segments, one loaded file, one catalog entry |
 
 - Every type is immutable after construction, with one exception: the fields `agents`
   and `notify` of `PoolWatch`, which a caller reads and writes only under the lock of

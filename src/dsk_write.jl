@@ -448,7 +448,7 @@ Write a type 2 segment (triangular plates) to the DSK file of `handle`, as `dskw
 # Arguments
 - `handle`: a [`DASHandle`](@ref) from [`dskopn`](@ref).
 - `center`, `surfid`: the body ID and the surface ID.
-- `dclass`: the data class, 1 for a surface that each ray from the centre meets one time,
+- `dclass`: the data class, 1 for a surface that each ray from the center meets one time,
   2 for a general surface.
 - `frame`: the name or the ID of the frame of the vertices. A name that is not built in is
   looked up in the kernel pool of `ctx` (default: the default context).

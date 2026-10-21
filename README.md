@@ -101,7 +101,7 @@ Publications that use SPICE should cite the references requested by NAIF:
   the handling of space science mission geometry", *Planetary and Space Science*
   150, 9–12, 2018.
 
-## Licence
+## License
 
-Allspice.jl is available under the [MIT licence](LICENSE). This licence covers only
+Allspice.jl is available under the [MIT license](LICENSE). This license covers only
 the work in this repository and grants no rights over CSPICE.

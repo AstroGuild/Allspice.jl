@@ -171,7 +171,7 @@ end
 State of a type 5 segment, as `spkr05` and `spke05`. The segment holds `n` states,
 their epochs, an epoch directory, the gravitational parameter and `n`. Between two
 epochs the state is the weighted mean of the two-body propagations of the two
-neighbour states, with the weight `(1 + cos(pi (t - t1)/(t2 - t1)))/2` for the
+neighbor states, with the weight `(1 + cos(pi (t - t1)/(t2 - t1)))/2` for the
 earlier one, and the velocity has the term of the weight rate. Before the first
 epoch and after the last one the state is the propagation of the end state alone.
 """

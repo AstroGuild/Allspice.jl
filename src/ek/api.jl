@@ -182,7 +182,7 @@ function ekrcei(h::DASHandle, segno::Integer, recno::Integer, column::AbstractSt
 end
 
 # ---------------------------------------------------------------------------------------
-# The catalogue of loaded tables
+# The catalog of loaded tables
 # ---------------------------------------------------------------------------------------
 
 """

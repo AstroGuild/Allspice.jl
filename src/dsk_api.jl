@@ -458,7 +458,7 @@ Return `(plid, xpt)`, the plate number and the point where the ray from `vertex`
 `raydir` first meets the plates of one type 2 segment, as `dskx02_c`, or `nothing` if
 the ray meets no plate.
 
-`vertex` (km) and `raydir` are in the frame of the segment, relative to the centre of that
+`vertex` (km) and `raydir` are in the frame of the segment, relative to the center of that
 frame, and so is `xpt`. `nothing` replaces the `found` flag of CSPICE. The form with a
 context uses the tolerances of the context ([`dskstl`](@ref)). The forms with a handle or
 with a `KernelSet` use the column "Value at start" of [`dskgtl`](@ref).
@@ -557,7 +557,7 @@ function _dsk_target(ks::KernelSet, target::AbstractString)
     return Int32(code)
 end
 
-"Centre of the frame `id`, or `nothing` if the frame is unknown. Does not allocate."
+"Center of the frame `id`, or `nothing` if the frame is unknown. Does not allocate."
 @inline function _dsk_frame_center(ks::KernelSet, id::Int32)
     f = get(BUILTIN_FRAMES, id, nothing)
     f === nothing || return f.center
@@ -577,7 +577,7 @@ end
 
 The ID of the body-fixed frame `fixref` (a name or an ID) after the checks of
 `dskxsi`: the frame is known (`SpiceError(:idcodenotfound)`, `:noframeinfo`) and its
-centre is the target (`:invalidframe`).
+center is the target (`:invalidframe`).
 """
 @inline function _dsk_fixfid(ks::KernelSet, fixref, trgcde::Int32, target)
     fixfid = _dsk_frame_code(ks, fixref)
@@ -609,9 +609,9 @@ Return `(xpt, segment, plid)` for the first point where the ray from `vertex` al
   body.
 - `et`: epoch, seconds past J2000 TDB. It selects the segments by coverage, and the frames
   are evaluated at it.
-- `fixref`: name or ID of a body-fixed frame that is centred on the target.
+- `fixref`: name or ID of a body-fixed frame that is centered on the target.
 - `vertex`, `raydir`: the ray in the frame `fixref`; `vertex` is in km, relative to the
-  centre of the target.
+  center of the target.
 
 `xpt` is in the frame `fixref` (km). `segment` is a [`DSKSegment`](@ref) and `plid` is the
 plate number, from 1. They replace the handle, the DLA descriptor, the DSK descriptor and
@@ -631,8 +631,8 @@ allocate.
 
 Throws `SpiceError`:
 - `:badpriorityspec` if `pri` is `true`, as CSPICE;
-- `:idcodenotfound` if the target or the frame is not known, `:noframeinfo` if the centre
-  of the frame is not known, `:invalidframe` if the frame is not centred on the target;
+- `:idcodenotfound` if the target or the frame is not known, `:noframeinfo` if the center
+  of the frame is not known, `:invalidframe` if the frame is not centered on the target;
 - `:nodsksegments` if no DSK segment of the target is loaded, `:dskdatanotfound` if no
   loaded segment has a surface of `srflst`;
 - `:rayiszerovector` if `raydir` is zero.

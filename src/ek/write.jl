@@ -831,7 +831,7 @@ ekuced(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
 Replace the entry of the integer column `column` in row `recno` of segment `segno`, as
 `ekucei_c` of CSPICE.
 
-The arguments are those of [`ekacei`](@ref); the behaviour and the errors are those
+The arguments are those of [`ekacei`](@ref); the behavior and the errors are those
 of [`ekuced`](@ref).
 """
 ekucei(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
