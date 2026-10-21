@@ -23,16 +23,15 @@ long search spans and large files for the exhaustive run.
 const FULL = get(ENV, "ALLSPICE_TEST_FULL", "0") == "1"
 
 """
-True with `--check-bounds=yes` (the default of `Pkg.test`) on Julia 1.10, or on a later
-Julia together with code coverage. The bounds check of a `StaticArrays.MVector` work
-buffer then lets the buffer escape to the heap, so the routines with such a buffer
-(Lagrange and Hermite interpolation, the SPK types that use them, CK interpolation)
-allocate. Their allocation checks are skipped; the other allocation checks run.
+True with `--check-bounds=yes` (the default of `julia-actions/julia-runtest`, and of
+`Pkg.test` on Julia 1.10). The bounds check of a `StaticArrays.MVector` work buffer then
+lets the buffer escape to the heap, so the routines with such a buffer (Lagrange and
+Hermite interpolation, the SPK types that use them, CK interpolation) allocate. Their
+allocation checks are skipped; the other allocation checks run.
 """
-const STACK_BUFFERS_ESCAPE = Base.JLOptions().check_bounds == 1 &&
-    (VERSION < v"1.11" || Base.JLOptions().code_coverage != 0)
-STACK_BUFFERS_ESCAPE && @info "Julia $VERSION with --check-bounds=yes: the allocation " *
-    "checks of routines with MVector work buffers are skipped."
+const STACK_BUFFERS_ESCAPE = Base.JLOptions().check_bounds == 1
+STACK_BUFFERS_ESCAPE && @info "--check-bounds=yes: the allocation checks of routines " *
+    "with MVector work buffers are skipped."
 
 """
     nsample(fast, full)
