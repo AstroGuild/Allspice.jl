@@ -315,10 +315,11 @@ function of ticks. The evaluators follow the readers `ckrNN` and the evaluators
   `spkgeo`, is `_ck_state_rotation` (the two blocks of `sxform_c`, as `frmchg_`); for
   every other chain it is `rotation_jet`. `_exact_frame_jet` always gives the exact
   derivatives.
-- Public: `ckgp`, `ckgpav` (`SpiceError(:valueoutofrange)` for `tol < 0`), `ckcov`,
-  `ckobj`, `ckmeta` (`SpiceError(:unknownckmeta)`), and `ckfrot`, `ckfxfm`: one CK link
-  as `_ck_frame_step` evaluates it, `nothing` without CK data, without the SCLK kernel
-  (`ckhave_`, `zzsclk_`) or without a segment.
+- Public: `ckgp`, `ckgpav` (`nothing` without a pointing; `SpiceError(:valueoutofrange)`
+  for `tol < 0`), `ckcov`, `ckcov!` (a `Window`, filled with `wninsd!` interval by
+  interval as `ckcov_`), `ckobj`, `ckmeta` (`SpiceError(:unknownckmeta)`), and `ckfrot`,
+  `ckfxfm`: one CK link as `_ck_frame_step` evaluates it, `nothing` without CK data,
+  without the SCLK kernel (`ckhave_`, `zzsclk_`) or without a segment.
 - `ck_records.jl` (after `daf_access.jl`, since it takes a `DAFHandle`): `cknr02`,
   `ckgr02`, `cknr03`, `ckgr03` read the records of one segment through a handle and a
   packed descriptor; `:ckwrongdatatype`, `:cknonexistrec`.
@@ -424,6 +425,9 @@ the default context, plus an inner form on a `KernelSet`.
   equal bit for bit.
 
 ## `windows.jl`
+
+`windows.jl` comes before `ck_api.jl` in the include order, because `ckcov!` takes a
+`Window`.
 
 - `struct Window <: AbstractVector{Float64}`: `data` holds the endpoints of disjoint
   closed intervals in increasing order, so `w[k]`, `length(w)` and iteration give what

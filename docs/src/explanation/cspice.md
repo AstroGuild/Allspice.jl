@@ -11,13 +11,13 @@ The package keeps the names, the argument order, the units and the numerical res
 | Results come back through output arguments | A call returns its results, several of them as a tuple: `state, lt = spkezr(...)` |
 | Vectors and matrices are C arrays | Results are static arrays (`SVector`, `SMatrix`) of StaticArrays.jl; inputs can be any `AbstractVector` or `AbstractMatrix` |
 | An error sets a flag that the program must test | An error throws a [`SpiceError`](@ref), whose field `kind` is the short message of CSPICE as a symbol and whose field `msg` is the text; missing SPK data throw a subtype with the bodies and the epoch |
-| A "found" flag tells that a lookup failed | A lookup returns `nothing` ([`bodn2c`](@ref) for an unknown name); a call that must return a value throws ([`gdpool`](@ref) for a variable that is not loaded) |
+| A "found" flag tells that a lookup failed | A lookup returns `nothing` ([`bodn2c`](@ref) for an unknown name, [`ckgp`](@ref) where no CK segment gives a pointing); a call that must return a value throws ([`gdpool`](@ref) for a variable that is not loaded) |
 | Indices count from 0 | Indices count from 1: the first interval of a window, the first plate of a DSK, the first row of an EK |
 | A file handle is an integer, and several calls work on a hidden "current" file | A handle is an object ([`DAFHandle`](@ref), [`DASHandle`](@ref)) that the caller passes to each call |
 | Loaded kernels are one table for the whole process | Loaded kernels belong to a [`SpiceContext`](@ref); see [Contexts and threads](@ref) |
 | Output strings need a length argument | A call returns a `String` |
 | Some arguments serve only the C memory: counts, sizes, `room`, workspaces | These arguments are absent: [`gdpool`](@ref) takes only the name, and [`gfdist`](@ref) has no `nintvls` |
-| `spkobj_c`, `spkcov_c`, `pckfrm_c` and `pckcov_c` take the output cell last | [`spkobj!`](@ref), [`spkcov!`](@ref), [`pckfrm!`](@ref) and [`pckcov!`](@ref) take it first, as SPICE.jl does |
+| `spkobj_c`, `spkcov_c`, `ckcov_c`, `pckfrm_c` and `pckcov_c` take the output cell last | [`spkobj!`](@ref), [`spkcov!`](@ref), [`ckcov!`](@ref), [`pckfrm!`](@ref) and [`pckcov!`](@ref) take it first, as SPICE.jl does for all of them except `ckcov!` |
 | `spksub_c` takes the handle of the new file last | [`spksub`](@ref) takes it first |
 | A cell or a window has a size that the caller declares | A [`Window`](@ref) grows as needed |
 

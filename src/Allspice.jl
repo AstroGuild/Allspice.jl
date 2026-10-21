@@ -16,7 +16,7 @@ export tparch, jul2gr, gr2jul
 export j1900, j1950, j2000, j2100, jyear, tyear, spd, b1900, b1950, clight
 export halfpi, twopi, rpd, dpr
 export sct2e, sce2c, sce2t, sce2s, scs2e, scencd, scdecd, sctiks, scfmt, scpart, sctype
-export ckgp, ckgpav, ckcov, ckobj, ckmeta, ckfrot, ckfxfm, cknr02, ckgr02, cknr03, ckgr03
+export ckgp, ckgpav, ckcov, ckcov!, ckobj, ckmeta, ckfrot, ckfxfm, cknr02, ckgr02, cknr03, ckgr03
 export DAFHandle, dafopr, dafopw, dafonw, dafcls, dafhsf, dafrfr, getfat
 export dafbfs, dafbbs, daffna, daffpa, dafgs, dafgn, dafps, dafus, dafgda, dafgsr
 export dafbna, dafada, dafena, dafws, dafrs, dafrn, dafac, dafec, dafdc
@@ -102,8 +102,8 @@ include("aberration.jl")    # Aberration, light time, stellar aberration, spkltc
 include("frame_api.jl")     # pxform, pxfrm2, sxform, pxder
 include("pool_api.jl")      # gdpool, gcpool, gipool, bodvrd, bodn2c, ...
 include("time_api.jl")      # context forms of the time calls, timdef
-include("ck_api.jl")        # ckgp, ckgpav, ckcov, ckobj, ckmeta; CSPICE state rotation
 include("windows.jl")       # Window, wninsd!, wnunid, wnintd, wndifd, wncomd, wnexpd!, wnreld, ...
+include("ck_api.jl")        # ckgp, ckgpav, ckcov, ckcov!, ckobj, ckmeta; CSPICE state rotation
 include("daf_access.jl")    # DAFHandle, dafopr, dafbfs, daffna, dafgs, dafgda, dafec, getfat
 include("daf_write.jl")     # dafonw, dafopw, dafbna, dafada, dafena, dafac, dafdc
 include("spk_write.jl")     # spkopn, spkopa, spkcls, spkw01 ... spkw21
