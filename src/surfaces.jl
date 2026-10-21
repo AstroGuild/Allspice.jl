@@ -445,7 +445,8 @@ Throws `SpiceError`:
   have `UNPRIORITIZED`, `:invalidmethod` if `method` has a sub-observer point type;
 - `:kernelvarnotfound` if the radii are not loaded, `:badaxislength` if they are not three
   positive values (ellipsoid);
-- `:dskdatanotfound` if no DSK segment of the target with a listed surface is loaded,
+- `:noloadeddskfiles` if no DSK file is loaded, `:dskdatanotfound` if no DSK segment of
+  the target with a listed surface is loaded,
   `:pointnotfound` if a ray meets no surface, `:shapenotsupported` if an intercept is on
   the far side of the center (DSK).
 
@@ -480,6 +481,7 @@ function _dsk_latsrf(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
         end
         return out
     end
+    _dsk_check_files(ks)
     segs = get(ks.dsk, trgcde, nothing)
     segs === nothing && _dsk_no_segments(trgcde, srflst)
     r = _dsk_sph(ks, segs, trgcde, srflst)[2] * 2
@@ -513,8 +515,9 @@ Throws `SpiceError`:
 - `:kernelvarnotfound` if the radii are not loaded, `:badaxislength` if they are not three
   positive values, `:pointnotonsurface` if a point is not on the ellipsoid within the
   point-membership margin `PTMEMM` of [`dskgtl`](@ref) (ellipsoid);
-- `:nodsksegments` if no DSK segment of the target is loaded, `:pointnotinsegment` if no
-  segment holds a point, `:pointoffsurface` if a point is not on a plate (DSK).
+- `:noloadeddskfiles` if no DSK file is loaded, `:nodsksegments` if no DSK segment of
+  the target is loaded, `:pointnotinsegment` if no segment holds a point,
+  `:pointoffsurface` if a point is not on a plate (DSK).
 """
 function srfnrm(ks::KernelSet, method::AbstractString, target::NameOrID, et::Real,
         fixref::NameOrID, srfpts)

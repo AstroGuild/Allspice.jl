@@ -633,8 +633,8 @@ Throws `SpiceError`:
 - `:badpriorityspec` if `pri` is `true`, as CSPICE;
 - `:idcodenotfound` if the target or the frame is not known, `:noframeinfo` if the center
   of the frame is not known, `:invalidframe` if the frame is not centered on the target;
-- `:nodsksegments` if no DSK segment of the target is loaded, `:dskdatanotfound` if no
-  loaded segment has a surface of `srflst`;
+- `:noloadeddskfiles` if no DSK file is loaded, `:nodsksegments` if no DSK segment of
+  the target is loaded, `:dskdatanotfound` if no loaded segment has a surface of `srflst`;
 - `:rayiszerovector` if `raydir` is zero.
 
 See also [`dskxv`](@ref), [`dskx02`](@ref), [`latsrf`](@ref), and [`dskw02`](@ref) for an

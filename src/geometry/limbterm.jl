@@ -666,7 +666,8 @@ Throws `SpiceError` with the kind
 - `:noseparation` if the observer is at the target center;
 - `:kernelvarnotfound` if the radii of `target` are not loaded, `:badradiuscount` if
   there are not 3 of them, `:degeneratecase` if one is not positive;
-- `:dskdatanotfound` if no DSK data are loaded for `target`.
+- `:noloadeddskfiles` if no DSK file is loaded, `:dskdatanotfound` if no DSK data are
+  loaded for `target` (DSK method).
 
 Also throws the errors of [`spkpos`](@ref).
 
@@ -749,7 +750,8 @@ Throws the kinds of [`limbpt`](@ref) for the bodies, the frame, `refvec`, `rolst
 - `:kernelvarnotfound` if the radii of `target` or `ilusrc` are not loaded,
   `:badradiuscount` if there are not 3 of them, `:invalidaxislength` if one is not
   positive;
-- `:dskdatanotfound` if no DSK data are loaded for `target`.
+- `:noloadeddskfiles` if no DSK file is loaded, `:dskdatanotfound` if no DSK data are
+  loaded for `target` (DSK method).
 
 # Examples
 ```julia

@@ -426,7 +426,8 @@ Throws `SpiceError` with the kind
   centered on the target;
 - `:notdisjoint` if the observer is inside a target, or if the targets overlap;
 - the kinds of [`srfrec`](@ref) if the radii of an ellipsoid target are missing or not
-  valid, `:dskdatanotfound` if a DSK target has no data loaded.
+  valid, `:noloadeddskfiles` if a target is a DSK shape and no DSK file is loaded,
+  `:dskdatanotfound` if a DSK target has no data loaded.
 
 Also throws the errors of [`spkpos`](@ref).
 
