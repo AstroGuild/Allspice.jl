@@ -28,11 +28,11 @@ Create the binary PCK file `path` and open it for writing, as `pckopn_c`.
 `ifname` is the internal file name and `ncomch` is the number of comment characters to
 make room for. The file is on disk when the call returns, byte for byte the file that
 `pckopn_c` creates. An existing file is never replaced. Add segments with
-[`pckw02`](@ref) and close the handle with [`pckcls`](@ref). Load the file with `furnsh`
-only after the close.
+[`pckw02`](@ref) and close the handle with [`pckcls`](@ref). Load the file with
+[`furnsh`](@ref) only after the close.
 
-Throws `SpiceError(:emptystring)` if `path` or `ifname` is empty, and `:fileopenfailed` if
-the file exists or cannot be created.
+Throws `SpiceError(:emptystring)` if `path` or `ifname` is empty and `:blankfilename` if
+`path` is blank, as CSPICE, and `:fileopenfailed` if the file exists or cannot be created.
 
 # Examples
 Write a segment for the frame IAU_MOON (frame class ID 301) whose angles are constant,
@@ -72,9 +72,10 @@ Write a binary PCK segment of type 2 (Chebyshev polynomials for three Euler angl
 intervals of equal length) to the file of `handle`, as `pckw02_c`.
 
 - `handle`: a [`DAFHandle`](@ref) from [`pckopn`](@ref).
-- `clssid`: the frame class ID of the body-fixed frame, for example 301 for IAU_MOON.
+- `clssid`: the frame class ID of the body-fixed frame, the `classid` of
+  [`frinfo`](@ref), for example 301 for IAU_MOON.
 - `frame`: the base frame, a built-in inertial frame given by name or by frame ID (1 to
-  21). Letter case and blanks in the name do not count.
+  21, which [`bltfrm`](@ref) lists). Letter case and blanks in the name do not count.
 - `first`, `last`: the coverage of the segment, seconds past J2000 TDB.
 - `segid`: the segment identifier, at most 40 printable characters.
 - `intlen`, `btime`: the length of every interval (s) and the start of the first interval
@@ -140,8 +141,8 @@ end
     pckcls(handle) -> Nothing
 
 Close the binary PCK file of `handle`, as `pckcls_c`. The call does nothing if the handle
-is closed already. Each [`pckw02`](@ref) call puts its segment on disk, so the close
-writes no data. Load the file with `furnsh` after the close.
+is closed already. The close writes no data: every write call puts its bytes on disk
+before it returns. Load the file with [`furnsh`](@ref) after the close.
 
 Throws `SpiceError(:nosegmentsfound)` if the file is open for writing and holds no
 segment. The handle then stays open; close it with [`dafcls`](@ref).

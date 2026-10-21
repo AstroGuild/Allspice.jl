@@ -71,8 +71,8 @@ end
 Return the number of loaded kernels of the types in `kind`, as `ktotal_c`.
 
 `kind` is `"ALL"` or a blank-separated list of `SPK`, `CK`, `PCK`, `DSK`, `EK`, `TEXT`
-and `META`, in any letter case. A meta-kernel counts as one `META` entry plus one
-entry for each file that it lists. A path that is loaded twice counts twice. A word
+and `META`, in any letter case. A meta-kernel counts once as `META`, and each file
+that it lists counts once. A path that is loaded twice counts twice. A word
 that is not a kernel type selects nothing.
 
 # Examples
@@ -94,10 +94,12 @@ Return `(file, filtyp, source, handle)` of loaded kernel number `which` among th
 kernels of the types in `kind`, as `kdata_c`, or `nothing` if there is no such kernel.
 
 `which` counts from 1 in load order, as in SPICE.jl; CSPICE counts from 0. `kind` is
-as for [`ktotal`](@ref). `file` is the path given to [`furnsh`](@ref), `filtyp` is
-one of the type words of `ktotal`, and `source` is the meta-kernel that loaded the
-file, or `""`. `handle` is always 0: a loaded kernel has no file handle in this
-package. `nothing` takes the place of the `found` flag of CSPICE.
+as for [`ktotal`](@ref). `file` is the path given to [`furnsh`](@ref), or for a file
+of a meta-kernel its `KERNELS_TO_LOAD` entry after the `PATH_SYMBOLS` substitution.
+`filtyp` is one of the type words of `ktotal`, and `source` is the meta-kernel that
+loaded the file, or `""`. `handle` is always 0, because a loaded kernel has no file
+handle in this package; it is kept for the tuple of CSPICE. `nothing` takes the place
+of the `found` flag of CSPICE.
 
 # Examples
 ```julia
@@ -128,8 +130,11 @@ Return `(filtyp, source, handle)` of the loaded kernel with the path `file`, as
 `file` is compared as a string with the path given to [`furnsh`](@ref), as in CSPICE.
 If the path is loaded more than once, the first entry is reported. The elements have
 the meaning that they have in [`kdata`](@ref); `handle` is always 0.
+
+Throws `SpiceError(:emptystring)` if `file` is empty.
 """
 function kinfo(ks::KernelSet, file::AbstractString)
+    isempty(file) && throw(SpiceError(:emptystring, "kinfo: the file name is empty"))
     i = findfirst(e -> e.path == file, ks.loaded)
     i === nothing && return nothing
     e = ks.loaded[i]
@@ -190,8 +195,9 @@ end
 Insert the ID codes of the bodies that have data in the SPK file `path` into the
 vector `ids`, as `spkobj_c` does with a SPICE cell.
 
-`ids` is used as a set: on return it is sorted and without duplicates. The argument
-order is the one of SPICE.jl. The file is read from disk and need not be loaded.
+`ids` is used as a set: on return it is sorted and without duplicates. The vector
+comes first, as in SPICE.jl; CSPICE has the cell last. The file is read from disk and
+need not be loaded.
 
 Throws the errors of [`spkobj`](@ref).
 """
@@ -213,10 +219,9 @@ without duplicates, as `spkobj_c`.
 
 The file is read from disk and need not be loaded.
 
-Throws `SpiceError(:filenotfound)` if the file does not exist,
-`SpiceError(:invalidformat)` if it is a transfer file, `SpiceError(:invalidarchtype)`
-if it is not a DAF, and `SpiceError(:invalidfiletype)` if it is a DAF of another
-kernel type.
+Throws `SpiceError(:filenotfound)` if the file does not exist, `SpiceError(:invalidformat)`
+if it is a transfer file (a binary kernel in text form), `SpiceError(:invalidarchtype)` if
+it is not a DAF, and `SpiceError(:invalidfiletype)` if it is a DAF of another kernel type.
 
 # Examples
 ```julia
@@ -237,8 +242,8 @@ Insert the coverage of the body `idcode` in the SPK file `path` into the window
 `cover`, as `spkcov_c`.
 
 The result is the union of the old content of `cover` with the new intervals. The
-argument order is the one of SPICE.jl. See [`spkcov`](@ref) for the intervals and the
-errors.
+window comes first, as in SPICE.jl; CSPICE has the cell last. See [`spkcov`](@ref) for
+the intervals and the errors.
 """
 function spkcov!(cover::Window, path::AbstractString, idcode::Integer)
     _require_binary_kernel("spkcov", path, "SPK")
@@ -251,7 +256,8 @@ end
 """
     spkcov(path, idcode) -> Window
 
-Return the coverage window of the body `idcode` in the SPK file `path`, as `spkcov_c`.
+Return the coverage [`Window`](@ref) of the body `idcode` in the SPK file `path`, as
+`spkcov_c`.
 
 The window is the union of the intervals `[start, stop]` of the segments of that
 body, in seconds past J2000 TDB, as sorted disjoint intervals. `collect(w)` gives the

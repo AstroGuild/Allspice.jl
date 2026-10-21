@@ -1081,16 +1081,18 @@ A leap-second kernel must be loaded. The string forms of CSPICE are accepted:
 | day of year                      | `"2025-060 // 12:00"`                                |
 | Julian date                      | `"JD 2460736.0"`                                     |
 
-A string can also hold an era (`B.C.`, `A.D.`), `A.M.` or `P.M.`, a weekday, and a
-time zone (`PDT`, `UTC-7:30`) or a time system (`UTC`, `TDB`, `TDT`), but not a zone
-and a system together. A year can be abbreviated as `'97` or given with two digits.
+A string can also hold an era (`B.C.`, `A.D.`), `A.M.` or `P.M.`, a weekday, and a time zone
+(`PDT`, `UTC-7:30`) or a time system (`UTC`, `TDB`, `TDT`; not `TT`, as in CSPICE), but not
+a zone and a system together. A year can be abbreviated as `'97` or given with two digits.
 
 - Without a zone and a system the string is UTC, or what [`timdef`](@ref) set for the
-  context.
+  context; a default system `"TT"` leaves it UTC, as in CSPICE.
 - The date is Gregorian, or of the calendar that `timdef` set for the context.
 - A year of two digits is in 1969 to 2068, or in the 100 years that
   [`tsetyr`](@ref) set for the context.
 - A UTC leap second `23:59:60` is accepted on a day that has one.
+- The components are checked against their ranges whatever [`tparch`](@ref) set, so
+  `"1996-02-30"` throws.
 
 Throws `SpiceError(:badtime)`, with the reason in the message, if `s` is not a time
 string of these forms, and `SpiceError(:noleapseconds)` if no leap-second kernel is loaded.
@@ -1101,7 +1103,7 @@ furnsh("naif0012.tls")
 et = str2et("2025-03-01T12:00:00")              # UTC
 et = str2et("2025 MAR 01 12:00:00 TDB")         # the string names the time system
 et = str2et("March 1, 2025 4:00 AM PST")        # the string names a time zone
-timout(et, "YYYY-MM-DDTHR:MN:SC.### ::UTC")     # back to a string
+timout(et, "YYYY-MM-DDTHR:MN:SC.### ::UTC ::RND")    # back to a string, rounded
 ```
 
 See also [`timout`](@ref), [`et2utc`](@ref), [`utc2et`](@ref), [`tparse`](@ref).
@@ -1290,9 +1292,10 @@ Return the seconds past J2000 of the time string `s` on a formal calendar, as
 `tparse_c`.
 
 On the formal calendar every day has 86400 seconds: there are no leap seconds, and
-the call needs no kernel. The result is not an epoch of a time scale; it is the count
-that [`etcal`](@ref) writes back. `s` has a form that [`str2et`](@ref) accepts,
-without a time zone, a time system, or `A.M.` and `P.M.`.
+the call needs no kernel. The result is the count that [`etcal`](@ref) writes back,
+not an epoch of a uniform time scale; for a UTC string it is the `"UTC"` epoch of
+[`deltet`](@ref). `s` has a form that [`str2et`](@ref) accepts, without a time zone,
+a time system, or `A.M.` and `P.M.`.
 
 A year of two digits follows [`tsetyr`](@ref) of the context: at start the year 69 is
 1969 and the year 68 is 2068. The components are not checked against their ranges, so

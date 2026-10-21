@@ -353,10 +353,11 @@ Different from [`furnsh`](@ref), the file does not enter the list of loaded kern
 variables are direct edits of the pool, with the rules of [`pdpool`](@ref). A
 `KERNELS_TO_LOAD` list in the file is not followed.
 
-Throws `SpiceError(:fileopenfailed)` if the file does not exist and `SpiceError(:badkernel)`
-if an assignment is malformed.
+Throws `SpiceError(:emptystring)` if `fname` is empty, `SpiceError(:fileopenfailed)` if the
+file does not exist and `SpiceError(:badkernel)` if an assignment is malformed.
 """
 function ldpool(ctx::SpiceContext, fname::AbstractString)
+    isempty(fname) && throw(SpiceError(:emptystring, "ldpool: the file name is empty"))
     isfile(fname) || throw(SpiceError(:fileopenfailed, "ldpool: could not open $fname"))
     defs = timedefaults(ctx)
     tk = parse_text_kernel(String(fname), defs.yearbound, defs.check)
@@ -445,8 +446,9 @@ end
 Check the number of values and the type of the kernel-pool variable `name`, as
 `badkpv_c`, and return `false` if they are as expected.
 
-The number of values `n` must satisfy `n comp size`, where `comp` is `"="`, `"<"`,
-`">"`, `"<="` or `"=>"`; trailing blanks of `comp` are ignored. `n` must also be a
+The number of values `n` must satisfy `n comp size`, where `comp` is one of the
+operators of CSPICE, `"="`, `"<"`, `">"`, `"<="` and `"=>"` (not `">="` or `"=<"`);
+trailing blanks of `comp` are ignored. `n` must also be a
 multiple of `divby`; `divby = 0` fails for every variable, as in CSPICE. `type` is
 `'N'` for numbers or `'C'` for strings; letter case is ignored. `caller` is the name
 that starts the error messages. Blanks around `name` are ignored, as in
@@ -486,7 +488,15 @@ function badkpv(ks::KernelSet, caller::AbstractString, name::AbstractString,
     for (arg, s) in (("caller", caller), ("name", name), ("comp", comp))
         isempty(s) && throw(SpiceError(:emptystring, "badkpv: the argument $arg is empty"))
     end
-    dim, class = dtpool(ks, name)
+    return _badkpv(ks.pool, caller, name, comp, size, divby, type)
+end
+
+# `badkpv` on the pool dictionary, for the checks of a pool that is not yet in a
+# `KernelSet` (`build_tk`); the arguments are not empty.
+function _badkpv(pool::AbstractDict, caller::AbstractString, name::AbstractString,
+        comp::AbstractString, size::Integer, divby::Integer, type::AbstractChar)
+    v = get(pool, String(strip(name)), nothing)
+    dim, class = v === nothing ? (0, :X) : (length(v), v isa Vector{Float64} ? :N : :C)
     class === :X && throw(SpiceError(:variablenotfound, "$caller: the kernel pool " *
         "variable '$name' is not currently present in the kernel pool"))
     op = rstrip(comp, ' ')
@@ -634,7 +644,8 @@ end
 """
     swpool([ctx,] agent, names) -> Nothing
 
-Watch the kernel-pool variables `names` for the agent `agent`, as `swpool_c`.
+Watch the kernel-pool variables `names` for the agent `agent`, as `swpool_c`. An
+agent is a name that the caller chooses for one watcher.
 
 After this call, and after every later change of one of the variables,
 [`cvpool`](@ref) returns `true` once for `agent`. The names are added to the ones
@@ -699,8 +710,9 @@ Return the number of changes of the kernel pool of `ctx` since the context was m
 This call has no CSPICE counterpart.
 
 Keep the value and compare it later to find out whether the pool changed. The call
-takes no lock, where [`cvpool`](@ref) takes the lock of the context. A change of the load list that assigns no variable (a binary kernel) does not
-count.
+takes no lock; [`cvpool`](@ref) takes the lock of the context, because it clears the
+pending update. A change of the load list that assigns no variable (a binary kernel)
+does not count.
 
 # Examples
 ```jldoctest

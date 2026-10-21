@@ -377,16 +377,18 @@ end
 
 """
     gfsubc([ctx,] target, fixref, method, abcorr, obsrvr, crdsys, coord, relate, refval,
-           adjust, step, cnfine; tol, bail=nothing, report=nothing, threads=false) -> Window
+           adjust, step, cnfine; tol=gfstol(ctx), bail=nothing, report=nothing,
+           threads=false) -> Window
 
 Return the window of epochs, in seconds past J2000 TDB, on which the coordinate `coord`
 of the sub-observer point on `target`, as seen from `obsrvr`, satisfies the relation
 `relate` with `refval`, as `gfsubc_c`.
 
 The point is the one of [`subpnt`](@ref), in the body-fixed frame `fixref`, which must
-be centered on `target`. `method` is `"Near point: ellipsoid"` or
-`"Intercept: ellipsoid"`; case and blanks are ignored. As in CSPICE, no other spelling
-is accepted: `"NEAR POINT/ELLIPSOID"` and a DSK method throw.
+be centered on `target`. `method` is one of the older forms of `subpnt`,
+`"Near point: ellipsoid"` or `"Intercept: ellipsoid"`; case and blanks are ignored. As
+in CSPICE, no other spelling is accepted: `"NEAR POINT/ELLIPSOID"` and a DSK method
+throw.
 
 The coordinate systems, the coordinates, their units and ranges, and the convergence of
 a longitude search are those of [`gfposc`](@ref). The other arguments, the keywords and
@@ -414,7 +416,7 @@ The errors of `subpnt`, such as missing ephemeris data, come from the epochs tha
 search samples.
 
 # Examples
-The example needs a leapseconds kernel, an SPK, and a PCK with the radii and the
+The example needs a leap seconds kernel, an SPK, and a PCK with the radii and the
 orientation of Mars, loaded with [`furnsh`](@ref).
 ```julia
 cnfine = Window([str2et("2025 JAN 01"), str2et("2025 JAN 03")])
@@ -450,8 +452,8 @@ gfsubc(target::NameOrID, fixref::NameOrID, method::AbstractString, abcorr::Abcor
 
 """
     gfsntc([ctx,] target, fixref, method, abcorr, obsrvr, dref, dvec, crdsys, coord,
-           relate, refval, adjust, step, cnfine; tol, bail=nothing, report=nothing,
-           threads=false) -> Window
+           relate, refval, adjust, step, cnfine; tol=gfstol(ctx), bail=nothing,
+           report=nothing, threads=false) -> Window
 
 Return the window of epochs, in seconds past J2000 TDB, on which the coordinate `coord`
 of a surface intercept point on `target` satisfies the relation `relate` with `refval`,

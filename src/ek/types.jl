@@ -23,9 +23,10 @@ const _EK_TYPE_SYMBOLS = (:CHR, :DP, :INT, :TIME)
 Attributes of one EK column, as the attribute descriptor of `ekcii_c` and `ekssum_c`.
 [`ekcii`](@ref) and [`ekssum`](@ref) return it.
 
-- `cclass`: the column class of CSPICE, 1 to 9. It is the code of the storage layout
-  in the file; a caller needs it only to compare with CSPICE. Classes 7 to 9 are the
-  columns with `FIXED_COUNT = TRUE` (see [`ekbseg`](@ref));
+- `cclass`: the column class of CSPICE, the code of the storage layout in the file:
+  1, 2 and 3 for scalar integer, double precision or time, and character columns; 4,
+  5 and 6 for array columns of these types; 7, 8 and 9 for scalar columns with
+  `FIXED_COUNT = TRUE` (see [`ekbseg`](@ref));
 - `dtype`: `:CHR`, `:DP`, `:INT` or `:TIME`;
 - `strlen`: the string length of a character column, -1 for strings of variable
   length, and 0 for a column of another type (CSPICE gives 1 there);
@@ -122,13 +123,8 @@ end
 """
     EKTable
 
-One loaded EK table: all loaded segments that have the same table name. This is the
-type of the entries of the table catalog of a context. No call returns it and a
-caller does not build it: read the catalog with [`ekntab`](@ref), [`ektnam`](@ref),
-[`ekccnt`](@ref) and [`ekcii`](@ref).
-
-All segments of a table have columns with the same names and attributes; a file whose
-segment does not fit is rejected at load time, as in CSPICE (see [`eklef`](@ref)).
+One loaded EK table, an entry of the table catalog of a context, which
+[`ekntab`](@ref), [`ektnam`](@ref), [`ekccnt`](@ref) and [`ekcii`](@ref) read.
 """
 struct EKTable
     name::String

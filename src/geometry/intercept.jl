@@ -175,8 +175,8 @@ center. With a `+S` correction the direction is corrected for stellar aberration
 `"/SURFACES = <list>"`. Case is not significant. `abcorr` is a correction string of
 [`spkezr`](@ref) or an [`Aberration`](@ref). `et` is in seconds past J2000 TDB. With
 `"ELLIPSOID"`, `et` can be a `ForwardDiff.Dual`, and the call does not allocate when
-the bodies and the frames are integer IDs. With a DSK method, a `ctx` gives the
-tolerances set by [`dskstl`](@ref).
+the bodies and the frames are integer IDs. A DSK method uses the tolerances that
+[`dskstl`](@ref) set on the context.
 
 Throws `SpiceError` with the kind
 - `:invalidoption` if `abcorr` is not a valid correction;
@@ -190,7 +190,8 @@ Throws `SpiceError` with the kind
   `NEAR POINT`;
 - `:noseparation` if the observer is at the target center;
 - the kinds of [`srfrec`](@ref) if the radii of `target` are missing or not valid,
-  `:dskdatanotfound` if no DSK data are loaded for it.
+  `:noloadeddskfiles` if no DSK file is loaded and `:dskdatanotfound` if no DSK data are
+  loaded for it (DSK method).
 
 Also throws the errors of [`spkpos`](@ref).
 
@@ -227,8 +228,7 @@ Return the point of the reference ellipsoid of `body` at the planetocentric long
 CSPICE.
 
 `body` is a name or an integer ID. The radii come from the pool variable
-`BODY<id>_RADII`. The call does not allocate when `body` is an integer ID from 1 to
-999.
+`BODY<id>_RADII`. The call does not allocate when `body` is an integer ID in `1:999`.
 
 Throws `SpiceError(:idcodenotfound)` if the body name is not known. Throws
 `SpiceError(:kernelvarnotfound)` if the radii are not loaded, `SpiceError(:invalidcount)`

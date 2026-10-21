@@ -525,7 +525,7 @@ without repetition, as `dskobj_c`.
 The result is a new vector, where `dskobj_c` adds the codes to a set of the caller.
 
 Throws `SpiceError(:invalidformat)` if the file is a transfer file, `:invalidarchtype` if
-it is not a DAS file, `:invalidfiletype` if it is not a DSK file, and the kinds of
+it is not a DAS file, `:invalidfiletype` if it is not a DSK file, and the error kinds of
 [`getfat`](@ref) and [`dasopr`](@ref).
 
 See also [`dsksrf`](@ref).
@@ -633,8 +633,8 @@ Throws `SpiceError`:
 - `:badpriorityspec` if `pri` is `true`, as CSPICE;
 - `:idcodenotfound` if the target or the frame is not known, `:noframeinfo` if the center
   of the frame is not known, `:invalidframe` if the frame is not centered on the target;
-- `:nodsksegments` if no DSK segment of the target is loaded, `:dskdatanotfound` if no
-  loaded segment has a surface of `srflst`;
+- `:noloadeddskfiles` if no DSK file is loaded, `:nodsksegments` if no DSK segment of
+  the target is loaded, `:dskdatanotfound` if no loaded segment has a surface of `srflst`;
 - `:rayiszerovector` if `raydir` is zero.
 
 See also [`dskxv`](@ref), [`dskx02`](@ref), [`latsrf`](@ref), and [`dskw02`](@ref) for an
@@ -674,7 +674,7 @@ With an integer `target`, an integer `fixref` and vectors of `SVector{3,Float64}
 does not allocate.
 
 Throws `SpiceError(:badarg)` unless `dirarr`, `xptarr` and `fndarr` have one element for
-each ray of `vtxarr`, and the kinds of [`dskxv`](@ref).
+each ray of `vtxarr`, and the error kinds of [`dskxv`](@ref).
 """
 function dskxv!(xptarr::AbstractVector{Vec3{Float64}}, fndarr::AbstractVector{Bool},
         ks::KernelSet, pri::Bool, target::NameOrID, srflst, et::Real, fixref::NameOrID, vtxarr,
@@ -723,7 +723,8 @@ matrices, or vectors of n 3-vectors. `xptarr[i]` is the intercept of ray `i` (an
 `SVector{3,Float64}`, km; zero if there is none) and `fndarr[i]` tells whether it exists.
 The other arguments are those of [`dskxsi`](@ref).
 
-Throws `SpiceError(:invalidcount)` if there is no ray, and the kinds of [`dskxsi`](@ref).
+Throws `SpiceError(:invalidcount)` if there is no ray, and the error kinds of
+[`dskxsi`](@ref).
 
 See also [`dskxv!`](@ref).
 """
@@ -767,7 +768,8 @@ Return the normal `(v2 - v1) x (v3 - v2)` of the plate with the vertices `v1`, `
 
 The normal follows the right-hand rule: it points to the side from which the vertices
 are in counterclockwise order. The result does not have unit length. It is zero for a
-degenerate plate. Its direction is that of [`dskn02`](@ref), whose formula is equal.
+degenerate plate. Up to rounding it is equal to `(v2 - v1) x (v3 - v1)`, whose unit
+vector [`dskn02`](@ref) returns.
 """
 pltnrm(v1, v2, v3) = _dsk_pltnrm(_dsk_vec3(v1), _dsk_vec3(v2), _dsk_vec3(v3))
 

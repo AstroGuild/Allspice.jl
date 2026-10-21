@@ -1867,6 +1867,13 @@ end
     return nothing
 end
 
+# `zzdskbss`, which begins every search for DSK segments, signals SPICE(NOLOADEDDSKFILES)
+# when no DSK file is loaded; with a DSK file loaded for another body the search finds
+# no segment, and the caller gives its own error.
+@noinline _dsk_no_files() = throw(SpiceError(:noloadeddskfiles, "at least one DSK file " *
+    "must be loaded before a search for DSK segments can start"))
+@inline _dsk_check_files(ks::KernelSet) = (isempty(ks.dskfiles) && _dsk_no_files(); nothing)
+
 @noinline function _dsk_no_segments(bodyid::Integer, srflst)
     isempty(srflst) && throw(SpiceError(:dskdatanotfound,
         "no segments were found matching the body ID $bodyid"))
@@ -1988,6 +1995,7 @@ of `srflst`.
 function _dsk_bux(ks::KernelSet, tols::DSKTolerances, bodyid::Int32, srflst, et::Float64,
         fixfid::Int32, vertex::Vec3{Float64}, raydir::Vec3{Float64})
     nohit = (_DSK_ORIGIN, 0, 0, false)
+    _dsk_check_files(ks)
     segs = get(ks.dsk, bodyid, nothing)
     (segs === nothing || isempty(segs)) && _dsk_throw(:nodsksegments, "the input segment " *
         "list was empty. This may be due to no DSKs containing data for body $bodyid " *
@@ -2127,6 +2135,7 @@ Throws `SpiceError` (`:nodsksegments`, `:pointnotinsegment`, `:pointoffsurface`)
 """
 function _dsk_bun(ks::KernelSet, tols::DSKTolerances, bodyid::Int32, srflst, et::Float64,
         fixfid::Int32, point::Vec3{Float64})
+    _dsk_check_files(ks)
     segs = get(ks.dsk, bodyid, nothing)
     (segs === nothing || isempty(segs)) && _dsk_throw(:nodsksegments, "the input segment " *
         "list was empty. This may be due to no DSKs containing data for body $bodyid " *

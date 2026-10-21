@@ -25,9 +25,10 @@ const _DAF_EOL = 0x00                     # end of a comment line
 
 An open DAF file. It replaces the integer handle of CSPICE.
 
-[`dafopr`](@ref), [`dafopw`](@ref), [`dafonw`](@ref), [`spkopn`](@ref), [`spkopa`](@ref)
-and [`ckopn`](@ref) return a handle. Close it with [`dafcls`](@ref), [`spkcls`](@ref),
-[`ckcls`](@ref) or `close`; `isopen(handle)` tells whether it is open.
+[`dafopr`](@ref), [`dafopw`](@ref), [`dafonw`](@ref), [`spkopn`](@ref), [`spkopa`](@ref),
+[`ckopn`](@ref) and [`pckopn`](@ref) return a handle. Close it with [`dafcls`](@ref),
+[`spkcls`](@ref), [`ckcls`](@ref), [`pckcls`](@ref) or `close`; `isopen(handle)` tells
+whether it is open.
 
 The handle holds the state that CSPICE keeps in global tables: the array search
 (`dafbfs`, `daffna`, `dafbbs`, `daffpa`) and the array that is being added (`dafbna`,
@@ -38,6 +39,10 @@ hold a lock around every call.
 A call on a closed handle throws `SpiceError(:dafnosuchhandle)`; the close calls do
 nothing instead. A write call on a handle that is open for reading throws
 `SpiceError(:dafinvalidaccess)`.
+
+A write call puts its bytes on disk before it returns, except [`spk14b`](@ref) and
+[`spk14a`](@ref), whose data [`spk14e`](@ref) writes. A write call that throws for an
+invalid input does not change the file.
 """
 mutable struct DAFHandle
     const path::String
@@ -206,12 +211,12 @@ end
 
 Check that `path` is an existing DAF file that this machine can read, and return its
 summary format and whether its byte order is the other one. Throws `SpiceError` with
-kind `:blankfilename`, `:filenotfound`, `:filereadfailed`, `:unknownfilarc`,
-`:filarchmismatch`, `:ftpxfererror`, `:unknownbff`, `:unsupportedbff` or
+kind `:emptystring`, `:blankfilename`, `:filenotfound`, `:filereadfailed`,
+`:unknownfilarc`, `:filarchmismatch`, `:ftpxfererror`, `:unknownbff`, `:unsupportedbff` or
 `:dafinvalidparams`.
 """
 function _daf_probe(path::AbstractString, who::AbstractString)
-    isempty(strip(path)) && throw(SpiceError(:blankfilename, "$who: the file name is blank"))
+    _chk_filename(who, path)
     isfile(path) || throw(SpiceError(:filenotfound, "$who: the file $path does not exist"))
     raw, little = open(path, "r") do io
         raw = read(io, _DAF_RECLEN)
@@ -252,13 +257,14 @@ The file can have either byte order. No array search is begun. Close the handle 
 [`dafcls`](@ref).
 
 Throws `SpiceError`:
-- `:blankfilename` if `path` is blank, `:filenotfound` if the file does not exist;
+- `:emptystring` if `path` is empty, `:blankfilename` if it holds only blanks;
+- `:filenotfound` if the file does not exist;
 - `:filereadfailed` if the file is shorter than one record (1024 bytes);
 - `:filarchmismatch` if the file is a DAS file, `:unknownfilarc` if it is neither
   a DAF nor a DAS file (a text kernel, for example);
 - `:ftpxfererror` if the file was damaged by a transfer in text mode;
-- `:unknownbff` if the binary file format of the file is not known, `:unsupportedbff`
-  if it is a VAX format;
+- `:unknownbff` if the binary file format (the number format that the file record
+  names) is not known, `:unsupportedbff` if it is `VAX-GFLT` or `VAX-DFLT`;
 - `:dafinvalidparams` if the summary format in the file record is not valid;
 - `:fileopenfailed` if the system cannot open the file.
 
@@ -317,9 +323,10 @@ end
 
 Close the DAF file of `handle`, as `dafcls_c`.
 
-All data are on disk when the call returns. An array that `dafbna` began and `dafena` did
-not end has no summary in the file, so a search does not find it. The call does nothing if
-the handle is closed already.
+The close writes no data: every write call puts its bytes on disk before it returns,
+except [`spk14b`](@ref) and [`spk14a`](@ref) (see [`DAFHandle`](@ref)). An array that
+`dafbna` began and `dafena` did not end has no summary in the file, so a search does not
+find it. The call does nothing if the handle is closed already.
 """
 function dafcls(h::DAFHandle)
     h.isopen || return nothing
@@ -354,7 +361,7 @@ end
 
 Return the contents of the file record, as `dafrfr_c`: the summary format `nd`, `ni`, the
 internal file name without trailing blanks, the record numbers of the first and of the
-last summary record, and the first free address.
+last summary record, and the first free address, at which the next array begins.
 
 Throws `SpiceError(:daffrnotfound)` if the file record cannot be read.
 """
@@ -374,11 +381,12 @@ Results are, for example, `("DAF", "SPK")`, `("DAF", "CK")`, `("DAF", "PCK")`,
 `("DAS", "DSK")` and `("KPL", "LSK")`. The result is `("?", "?")` for a file that is not
 recognized; a text kernel without the `KPL/<type>` first line is one.
 
-Throws `SpiceError(:blankfilename)` if `path` is blank, `:filenotfound` if the file does
-not exist, and `:filereadfailed` if the file has fewer than 12 bytes and no complete line.
+Throws `SpiceError(:emptystring)` if `path` is empty, `:blankfilename` if it holds only
+blanks, `:filenotfound` if the file does not exist, and `:filereadfailed` if the file has
+fewer than 12 bytes and no complete line.
 """
 function getfat(path::AbstractString)
-    isempty(strip(path)) && throw(SpiceError(:blankfilename, "getfat: the file name is blank"))
+    _chk_filename("getfat", path)
     isfile(path) || throw(SpiceError(:filenotfound, "getfat: the kernel file $path does not exist"))
     head = open(io -> read(io, 12), path, "r")
     # A file of fewer than 12 bytes that has no complete line cannot be read by CSPICE.
@@ -650,7 +658,7 @@ and a CK file have `nd = 2` and `ni = 6`:
 
 | File | `dc`                                        | `ic`                                                   |
 |:-----|:--------------------------------------------|:-------------------------------------------------------|
-| SPK  | first and last epoch, seconds past J2000 TDB | target, center, frame ID, data type, first and last address |
+| SPK  | first and last epoch, seconds past J2000 TDB | body, center, frame ID, data type, first and last address |
 | CK   | first and last time, encoded SCLK ticks      | instrument, frame ID, data type, angular velocity flag, first and last address |
 
 The addresses are those of the data of the array, for [`dafgda`](@ref).

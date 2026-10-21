@@ -140,8 +140,9 @@ returns the number of boundary vectors; here it is `length(bounds)`.
 
 The data come from the pool variables `INS<instid>_FOV_FRAME`, `INS<instid>_FOV_SHAPE`,
 `INS<instid>_BORESIGHT` and the other `INS<instid>_FOV_*` variables of an instrument
-kernel. Both forms of the specification are read: `CORNERS` (the default) and `ANGLES`.
-`room` is the largest number of boundary vectors accepted.
+kernel. `INS<instid>_FOV_CLASS_SPEC` selects the form: `CORNERS` (the default) gives
+the boundary vectors, `ANGLES` gives angles from the boresight. `room` is the largest
+number of boundary vectors accepted.
 
 Throws `SpiceError` with the kind
 - `:framemissing`, `:shapemissing`, `:boresightmissing` or `:boundarymissing` if the
@@ -634,15 +635,15 @@ Throws `SpiceError` with the kind
 - `:idcodenotfound` if a body or instrument name is not known;
 - `:invalidshape` if `tshape` is not `"ELLIPSOID"` or `"POINT"`;
 - `:bodiesnotdistinct` if `target` and `obsrvr` are the same body;
-- `:invalidframe` if `tframe` is blank, not known, or not centered on an ellipsoid
-  target; `:frameinfonotfound` if the frame has no definition loaded;
+- for an ellipsoid target, `:invalidframe` if `tframe` is blank, not known, or not
+  centered on `target`, and `:frameinfonotfound` if it has no definition loaded;
 - `:unknownframe` if the instrument frame is not known;
 - `:fovtoowide` if the angular radius of the field of view about its axis is not below
   90 degrees minus 1e-6 rad;
 - for a rectangle or a polygon: `:degeneratecase` if two neighbor boundary vectors are
   parallel, `:facenotfound` if the boundary vectors are not in one half space,
   `:notsupported` if a boundary vector is within 2e-12 rad of the plane of a side of
-  the convex hull, `:invalidfov` if a vector is 90 degrees or more from the axis;
+  the field of view, `:invalidfov` if a vector is 90 degrees or more from the axis;
 - for a circle or an ellipse: `:degeneratecase` if a semi-axis is zero;
 - `:notdisjoint` if the observer is inside the target ellipsoid.
 

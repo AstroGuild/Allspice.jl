@@ -97,7 +97,7 @@ lines = ["1 18123U 87 53  A 87324.61041692 -.00000023  00000-0 -75103-5 0 00675"
          "2 18123  98.8296 152.0074 0014950 168.7820 191.3688 14.12912554 21686"]
 epoch, elems = getelm(1950, lines)
 geophs = [1.082616e-3, -2.53881e-6, -1.65597e-6, 7.43669161e-2, 120.0, 78.0, 6378.135, 1.0]
-state = evsgp4(epoch + 3600.0, geophs, elems)      # km and km/s, TEME frame
+state = evsgp4(epoch + 3600.0, geophs, elems)      # km and km/s, frame TEME (see evsgp4)
 ```
 
 See also [`evsgp4`](@ref), [`spkw10`](@ref).
@@ -169,8 +169,8 @@ end
 """
     evsgp4([ctx | ks,] et, geophs, elems) -> SVector{6}
 
-Return the state (km, km/s) in the TEME frame, at the epoch `et` (seconds past J2000 TDB),
-of the two-line element set `elems`, as `evsgp4_c`.
+Return the state (km, km/s) in the TEME frame (true equator, mean equinox), at the epoch
+`et` (seconds past J2000 TDB), of the two-line element set `elems`, as `evsgp4_c`.
 
 `elems` holds the ten elements that [`getelm`](@ref) returns. `geophs` holds eight
 geophysical constants of the Earth:
@@ -188,7 +188,7 @@ As in CSPICE, QO, SO and AE are not used. The propagator is SGP4, or SDP4 for an
 period of 225 minutes or more.
 
 The context `ctx` (default: the default context) or the kernel set `ks` must hold a
-leap-second kernel. `et` can have any real number type; an `Allspice.Taylor` epoch gives
+leap-second kernel. `et` can have any real number type; a `ForwardDiff.Dual` epoch gives
 the time derivatives of the state. The call does not allocate for arguments that are
 tuples, static vectors or vectors.
 
@@ -219,17 +219,15 @@ Write an SPK segment of type 10 (two-line element sets), as `spkw10_c`.
 `consts` holds the eight geophysical constants of [`evsgp4`](@ref). `elems`
 holds `n` element sets of ten numbers each, in the form that [`getelm`](@ref) returns, and
 `epochs` holds their `n` epochs (seconds past J2000 TDB). Each epoch must be equal to the
-tenth number of its set; as in CSPICE, the call does not check this. A count of epochs
-that differs from the count of sets throws `:badarg`. See [`spkw02`](@ref) for the other
-arguments and for the errors of every writer.
+tenth number of its set; as in CSPICE, the call does not check this. See [`spkw02`](@ref)
+for the other arguments and for the errors of every writer.
 
 The call adds to each element set the nutation angles of the IAU 1980 series at its epoch
 and their rates, as `spkw10_c` does, so a packet of the segment has 14 doubles.
 
 Throws `SpiceError`:
-- the kinds of [`spkpds`](@ref);
-- `:segidtoolong` or `:nonprintingchars` if `segid` is not valid (the other writers have
-  `:nonprintablechars`; the kinds follow CSPICE);
+- the error kinds of [`spkpds`](@ref);
+- `:segidtoolong` or `:nonprintingchars` if `segid` is not valid;
 - `:numpacketsnotpos` if there is no element set;
 - `:unorderedrefs` unless the epochs are strictly increasing.
 """

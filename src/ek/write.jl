@@ -107,7 +107,7 @@ that exists only in memory while its handle is open.
 
 All calls that take an EK handle accept it. [`ekcls`](@ref) discards it; no file is
 made (see [`dasops`](@ref)). A scratch EK has
-no name, so `furnsh` cannot load it for queries, as in CSPICE.
+no name, so [`furnsh`](@ref) cannot load it for queries, as in CSPICE.
 
 See also [`ekopn`](@ref), [`ekifld`](@ref).
 """
@@ -432,7 +432,7 @@ Segment numbers start at 1; the C interface of CSPICE counts from 0. `cnames` ho
 the column names and `decls` one declaration for each column. A table name has at
 most 64 and a column name at most 32 characters: a letter, then letters, digits, `\$`
 and `_`. The file stores the names in upper case. Two columns with the same name are
-not refused.
+not refused; a call that names the column then reaches the first of them.
 
 A declaration is a list of `KEYWORD = value` items that commas separate, in any case:
 
@@ -443,9 +443,9 @@ A declaration is a list of `KEYWORD = value` items that commas separate, in any 
 - `INDEXED`: `TRUE` or `FALSE`. Default `FALSE`. Scalar columns only.
 - `NULLS_OK`: `TRUE` or `FALSE`. Default `FALSE`.
 - `FIXED_COUNT`: `TRUE` or `FALSE`. Default `FALSE`. Scalar columns only, and for all
-  columns of the segment or for none. Such a segment has a fixed number of rows: only
-  [`ekifld`](@ref) and the column writers can fill it, and no row can be added or
-  deleted later.
+  columns of the segment or for none. No row of a segment of such fixed-count columns
+  can be added or deleted, so `ekbseg` makes a segment that stays empty, as in CSPICE:
+  declare them with [`ekifld`](@ref).
 
 Add rows with [`ekappr`](@ref) or [`ekinsr`](@ref).
 
@@ -726,8 +726,8 @@ as `ekacec_c` of CSPICE.
 `cvals` is a vector with the strings of the entry. A scalar column takes the first string (a
 blank string if `cvals` is empty); an array column takes all of them. Trailing blanks
 do not count, and a string longer than the string length of the column is cut. With
-`isnull = true` the entry is null and `cvals` is not used. The column name can be in
-any case.
+`isnull = true` the entry is null and no string is stored, but an array column still
+checks the number of strings, as in CSPICE. The column name can be in any case.
 
 Use the call for an entry that is not written yet, and [`ekucec`](@ref) to replace an
 entry. A second call for one entry throws. CSPICE makes this check only for a scalar
@@ -737,12 +737,12 @@ the first one in use.
 Throws `SpiceError` with the kind:
 - `:dasnosuchhandle` or `:dasinvalidaccess` if the handle is closed or open for read;
 - `:invalidindex` if there is no segment `segno`;
-- `:bug` (as CSPICE) if the segment has no column `column`, and `:wrongdatatype` if
+- `:bug` if the segment has no column `column`, and `:wrongdatatype` if
   the column does not have character type;
 - `:indexoutofrange` if there is no row `recno`;
 - `:badattribute` if `isnull` is true and the column does not allow nulls;
-- `:invalidcount` if an array column gets no string, or not as many as its declared
-  entry size;
+- `:invalidcount` if an array column gets no string, or a number of strings other than
+  its declared size (`SIZE = VARIABLE` accepts any number from 1);
 - `:nonemptyentry` if the entry is written already.
 
 See the example of [`ekopn`](@ref). See also [`ekaced`](@ref), [`ekacei`](@ref),
@@ -793,8 +793,8 @@ ekacei(h::DASHandle, segno::Integer, recno::Integer, column::AbstractString,
 Replace the entry of the character column `column` in row `recno` of segment `segno`,
 as `ekucec_c` of CSPICE.
 
-The new entry can have another size than the old one, and it can be null. The
-arguments are those of [`ekacec`](@ref).
+The new entry can have another size than the old one, and it can be null. An entry
+that was never written is written. The arguments are those of [`ekacec`](@ref).
 
 Throws the errors of [`ekacec`](@ref), without `:nonemptyentry`. A call that throws
 leaves the entry as it was. CSPICE deletes the old entry before it checks the new one,
@@ -813,11 +813,12 @@ Replace the entry of the double precision or time column `column` in row `recno`
 segment `segno`, as `ekuced_c` of CSPICE.
 
 The arguments are those of [`ekaced`](@ref). An entry that was never written is
-written. In a scalar column, a value can be replaced by null also if the column does
-not allow nulls: that case has no check, as in CSPICE.
+written.
 
 Throws the errors of [`ekucec`](@ref), with `:wrongdatatype` for a column of another
-type. A call that throws leaves the entry as it was.
+type, but `:badattribute` only for an array column or an entry that was never written:
+the written value of a scalar column becomes null also if the column does not allow
+nulls, as in CSPICE. A call that throws leaves the entry as it was.
 
 See also [`ekucei`](@ref), [`ekrced`](@ref).
 """
@@ -851,7 +852,7 @@ The state of one fast load: the second result of [`ekifld`](@ref), which
 A fast load writes a segment column by column, where [`ekappr`](@ref) and
 [`ekacec`](@ref) write it row by row. The value takes the place of the `rcptrs` array
 of CSPICE: pass it on unchanged. CSPICE can do one fast load at a time; here every
-load has its own state, so several can run at once. Each column is stored once.
+load has its own state, so several can run at once, on one handle or on several.
 """
 struct EKFastLoad <: AbstractVector{Int32}
     handle::DASHandle
@@ -872,8 +873,10 @@ of CSPICE. Return the segment number (from 1) and the state of the load.
 
 `tabnam`, `cnames` and `decls` are those of [`ekbseg`](@ref). Store every column
 exactly once with [`ekaclc`](@ref), [`ekacld`](@ref) or [`ekacli`](@ref), then call
-[`ekffld`](@ref); pass `rcptrs` to each of these calls. Between `ekifld` and `ekffld`
-make no other change to the file and do not read the segment.
+[`ekffld`](@ref); pass `rcptrs` to each of these calls. Until `ekffld` the segment
+cannot be read or extended, and a file closed before it holds a segment that
+[`eklef`](@ref) refuses. Other segments of the file can be changed meanwhile, which
+CSPICE does not allow.
 
 If the columns are declared with `FIXED_COUNT = TRUE`, the number of rows is fixed:
 [`ekappr`](@ref), [`ekinsr`](@ref) and [`ekdelr`](@ref) refuse the segment.
@@ -1018,8 +1021,8 @@ started, as `ekaclc_c` of CSPICE.
 
 - `cvals`: the strings of all rows in row order (for an array column the strings of
   row 1, then those of row 2, and so on). A null row also takes the room of its entry.
-- `entszs[r]`: the number of strings of row `r`. Used only for a column with
-  `SIZE = VARIABLE`.
+- `entszs[r]`: the number of strings of row `r`, at least 1 unless the row is null.
+  Used only for a column with `SIZE = VARIABLE`.
 - `nlflgs[r]`: true if row `r` is null. Used only for a column that allows nulls.
 - `rcptrs`: the second result of `ekifld`.
 
@@ -1030,10 +1033,11 @@ Throws `SpiceError` with the kind:
 - `:dasnosuchhandle` or `:dasinvalidaccess` if the handle is closed or open for read;
 - `:invalidindex` if there is no segment `segno`;
 - `:wrongsegment` if `rcptrs` belongs to another fast load;
-- `:bug` (as CSPICE) if the segment has no column `column`, and `:wrongdatatype` if
+- `:bug` if the segment has no column `column`, and `:wrongdatatype` if
   the column does not have character type;
-- `:invalidcount` if `cvals`, `entszs` or `nlflgs` do not hold all rows (CSPICE
-  cannot make this check);
+- `:invalidcount` if `cvals` has fewer strings than the rows need, or if `entszs` or
+  `nlflgs`, where the column uses it, has fewer elements than rows (CSPICE cannot make
+  this check);
 - `:columnstoredtwice` if this fast load stored the column already (CSPICE has no
   check and writes a segment that cannot be read);
 - `:invalidsize` if a fixed-count column has a string length outside 1 to 1014.

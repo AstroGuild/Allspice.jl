@@ -219,12 +219,16 @@ end
 Return the IDs of the frames of the class `frmcls` that the kernel pool defines, in
 increasing order and without duplicates, as `kplfrm_c` of CSPICE.
 
-`frmcls` is a frame class of [`frinfo`](@ref) (1 to 6), or -1 for every class. A
-frame is listed if the pool has `FRAME_<name> = <id>` for the value of a
-`FRAME_*_NAME` variable, `FRAME_<id>_NAME`, and `FRAME_<id>_CLASS` or
-`FRAME_<name>_CLASS`, as in CSPICE. The other variables of a frame definition are not
-checked, so an ID can be listed that [`frinfo`](@ref) does not know. The built-in
-frames are not included unless the pool defines them; [`bltfrm`](@ref) gives those.
+`frmcls` is a frame class of [`frinfo`](@ref) (1 to 6), or -1 for every class. As in
+CSPICE, a frame is listed if the pool has
+
+- `FRAME_<name> = <id>`, for the value `<name>` of a `FRAME_*_NAME` variable;
+- `FRAME_<id>_NAME`;
+- `FRAME_<id>_CLASS` or `FRAME_<name>_CLASS`.
+
+The other variables of a frame definition are not checked, so an ID can be listed that
+[`frinfo`](@ref) does not know. The built-in frames are not included unless the pool
+defines them; [`bltfrm`](@ref) gives those.
 
 Throws `SpiceError(:badframeclass)` if `frmcls` is not -1 or a class 1 to 6.
 
@@ -266,22 +270,62 @@ function kplfrm(ks::KernelSet, frmcls::Integer)
 end
 
 """
-    tkfram([ctx,] frcode) -> Union{Nothing,Tuple{SMatrix{3,3,Float64,9},Int}}
+    tkfram([ctx,] frcode) -> Tuple{SMatrix{3,3,Float64,9},Int}
 
 Return `(rot, relative)` of the fixed-offset (class 4) frame with the class ID
-`frcode`, as `tkfram_c`, or `nothing` if no valid definition is loaded. `frcode` is the
-value of `FRAME_<id>_CLASS_ID`, not the frame ID.
+`frcode`, as `tkfram_c`. `frcode` is the value of `FRAME_<id>_CLASS_ID`.
 
 `rot` rotates a vector from the frame to its relative frame, the frame with ID
 `relative`; this is the meaning of `TKFRAME_<frcode>_MATRIX`. The definition comes
-from the `TKFRAME_<frcode>_*` variables of the kernel pool. For an incomplete
-definition CSPICE signals an error, and this call returns `nothing`.
+from the `TKFRAME_<frcode>_*` variables of the kernel pool, or from the
+`TKFRAME_<name>_*` variables, where `<name>` is the name of the frame with the ID
+`frcode`, as in CSPICE. A TK frame whose class ID is not its frame ID therefore needs
+another frame with that ID, in CSPICE as here.
+
+Throws `SpiceError`:
+- `:zeroframeid` if `frcode == 0`;
+- `:incompleteframe` if no frame has the ID `frcode`;
+- `:competingframespec` if a variable is present in both forms;
+- `:variablenotfound`, `:badvariablesize` or `:badvariabletype` if a variable that the
+  definition needs is missing, has the wrong number of values or the wrong type;
+- `:badframespec` if the relative frame is not known, `:badframespec2` if it is the
+  frame itself;
+- `:unknownframespec` if `TKFRAME_<frcode>_SPEC` is not `MATRIX`, `ANGLES` or
+  `QUATERNION`;
+- `:unitsnotrec` or `:incompatibleunits` if `TKFRAME_<frcode>_UNITS` is not an angle
+  unit, and `:badaxisnumbers` if an axis is not 1, 2 or 3.
+
+[`pxform`](@ref) and the other calls that pass through such a frame throw the same.
+
+# Examples
+```jldoctest
+julia> ctx = SpiceContext();
+
+julia> lmpool(ctx, ["FRAME_TOPO = -1000", "FRAME_-1000_NAME = 'TOPO'",
+                    "FRAME_-1000_CLASS = 4", "FRAME_-1000_CLASS_ID = -1000",
+                    "FRAME_-1000_CENTER = 399", "TKFRAME_-1000_RELATIVE = 'J2000'",
+                    "TKFRAME_-1000_SPEC = 'ANGLES'", "TKFRAME_-1000_ANGLES = (0, 0, 90)",
+                    "TKFRAME_-1000_AXES = (1, 2, 3)", "TKFRAME_-1000_UNITS = 'DEGREES'"])
+
+julia> rot, relative = tkfram(ctx, -1000);
+
+julia> relative, round.(rot; digits=12) == [0 1 0; -1 0 0; 0 0 1]
+(1, true)
+
+julia> pdpool(ctx, "TKFRAME_-1000_AXES", [1.0, 2.0]);
+
+julia> try tkfram(ctx, -1000) catch err; err.kind end
+:badvariablesize
+```
 """
 function tkfram(ks::KernelSet, frcode::Integer)
-    r = ccifrm(ks, 4, frcode)
-    r === nothing && return nothing
-    tk = get(ks.tk, Int32(r[1]), nothing)
-    return tk === nothing ? nothing : (tk.rot, Int(tk.relative))
+    r = frcode == 0 ? nothing : ccifrm(ks, 4, frcode)
+    if r !== nothing
+        tk = get(ks.tk, Int32(r[1]), nothing)
+        tk === nothing || return tk.rot, Int(tk.relative)
+    end
+    tk = _tk_parse(ks.pool, ks.frames, frcode)    # throws the error of `tkfram_`
+    return tk.rot, Int(tk.relative)
 end
 
 "ID of the built-in inertial frame `ref` (name or ID); throws `SpiceError(:irfnotrec)` otherwise, as `irfrot_`."
@@ -321,8 +365,9 @@ Return the matrix that rotates a position vector from the inertial frame `ref` t
 body-fixed frame of `body` at `et`, as `tipbod_c`.
 
 `ref` is the name or the ID of a built-in inertial frame. `body` is a NAIF body ID, or
-the frame class ID of a binary PCK frame. `et` is in seconds past J2000 TDB. A binary
-PCK has priority over the constants of a text PCK.
+the frame class ID of a binary PCK frame, the ID that its segments carry (31008 for
+`MOON_PA_DE440`). `et` is in seconds past J2000 TDB. A binary PCK has priority over the
+constants of a text PCK.
 
 Throws `SpiceError(:irfnotrec)` if `ref` is not a built-in inertial frame,
 `SpiceError(:badarg)` if `et` is not finite, and `SpiceError(:framedatanotfound)` if
@@ -354,8 +399,9 @@ end
 Insert the frame class IDs of the frames that have data in the binary PCK file `pck`
 into the vector `ids`, as `pckfrm_c` does with a SPICE cell.
 
-`ids` is used as a set: on return it is sorted and without duplicates. The argument
-order is the one of SPICE.jl. The file is read from disk and need not be loaded.
+`ids` is used as a set: on return it is sorted and without duplicates. The vector
+comes first, as in SPICE.jl; CSPICE has the cell last. The file is read from disk and
+need not be loaded.
 
 Throws the errors of [`pckfrm`](@ref).
 """
@@ -377,10 +423,9 @@ sorted and without duplicates, as `pckfrm_c`.
 
 The file is read from disk and need not be loaded.
 
-Throws `SpiceError(:filenotfound)` if the file does not exist,
-`SpiceError(:invalidformat)` if it is a transfer file, `SpiceError(:invalidarchtype)`
-if it is not a DAF, and `SpiceError(:invalidfiletype)` if it is a DAF of another
-kernel type.
+Throws `SpiceError(:filenotfound)` if the file does not exist, `SpiceError(:invalidformat)`
+if it is a transfer file (a binary kernel in text form), `SpiceError(:invalidarchtype)` if
+it is not a DAF, and `SpiceError(:invalidfiletype)` if it is a DAF of another kernel type.
 
 See also [`pckcov`](@ref).
 """
@@ -393,8 +438,8 @@ Insert the coverage of the frame with the class ID `idcode` in the binary PCK fi
 `pck` into the window `cover`, as `pckcov_c`.
 
 The result is the union of the old content of `cover` with the new intervals. The
-argument order is the one of SPICE.jl. See [`pckcov`](@ref) for the intervals and the
-errors.
+window comes first, as in SPICE.jl; CSPICE has the cell last. See [`pckcov`](@ref) for
+the intervals and the errors.
 """
 function pckcov!(cover::Window, pck::AbstractString, idcode::Integer)
     _require_binary_kernel("pckcov", pck, "PCK")
@@ -407,8 +452,8 @@ end
 """
     pckcov(pck, idcode) -> Window
 
-Return the coverage window of the frame with the class ID `idcode` in the binary PCK
-file `pck`, as `pckcov_c`.
+Return the coverage [`Window`](@ref) of the frame with the class ID `idcode` in the
+binary PCK file `pck`, as `pckcov_c`.
 
 The window is the union of the intervals of the segments of that frame, in seconds
 past J2000 TDB. It is empty if the frame has no data. The file is read from disk and

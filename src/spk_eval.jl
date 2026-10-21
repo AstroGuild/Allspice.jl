@@ -147,23 +147,6 @@ and unknown types throw `SpiceError(:spktypenotsupp, ...)`. No allocation.
 end
 
 """
-    spk_eval_position(data::Vector{Float64}, seg::Segment, et::T, ::Val{N}) -> NTuple{N+1,Vec3{T}}
-
-As `spk_eval`, but every order is a derivative of the position function (the result
-differs from `spk_eval` for the types whose velocity is not the derivative of the
-position in CSPICE, such as 3, 8, 9 and 14). Same contract as `spk_eval`.
-"""
-@inline function spk_eval_position(data::Vector{Float64}, seg::Segment, et::T, v::Val{N}) where {T<:Real,N}
-    if seg.dtype == 2
-        return _cheb_eval(data, seg, et, 3, 0, v)
-    elseif seg.dtype == 3
-        return _cheb_eval(data, seg, et, 6, 0, v)
-    else
-        return _spk_more_position(data, seg, et, v)
-    end
-end
-
-"""
     pck_eval(data::Vector{Float64}, seg::Segment, et::T, ::Val{N}) -> NTuple{N+1,Vec3{T}}
 
 Euler angles (radians) of a binary PCK type 2 segment at `et` and their time

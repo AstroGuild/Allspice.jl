@@ -42,12 +42,13 @@ end
 """
     _eul2m(a3, a2, a1, axis3, axis2, axis1) -> Mat3{Float64}
 
-`[a3]_axis3 * [a2]_axis2 * [a1]_axis1`, as `eul2m_` of CSPICE. Requires every axis in 1:3.
+`[a3]_axis3 * [a2]_axis2 * [a1]_axis1`, as `eul2m_` of CSPICE. Throws
+`SpiceError(:badaxisnumbers)` unless every axis is in 1:3.
 """
 function _eul2m(a3::Float64, a2::Float64, a1::Float64, axis3::Integer, axis2::Integer,
     axis1::Integer)
-    all(a -> 1 <= a <= 3, (axis3, axis2, axis1)) ||
-        throw(SpiceError(:badaxis, "Euler axis numbers are $axis3, $axis2, $axis1; each must be 1, 2 or 3"))
+    all(a -> 1 <= a <= 3, (axis3, axis2, axis1)) || throw(SpiceError(:badaxisnumbers,
+        "Euler axis numbers are $axis3, $axis2, $axis1; each must be 1, 2 or 3"))
     return _m_mxm(_m_mxm(_rotate(a3, axis3), _rotate(a2, axis2)), _rotate(a1, axis1))
 end
 
@@ -338,19 +339,20 @@ function _angle_factor(units::AbstractString)
 end
 
 """
-    _tk_item(pool, idkey, namekey, suffix)
+    _tk_key(pool, idkey, namekey, suffix) -> String
 
-Value of the TK frame variable `suffix`, from the form keyed by frame name if it
-exists and otherwise from the form keyed by ID; `nothing` if neither exists. Throws
-`SpiceError(:competingframespec)` if both exist, as `tkfram_` does.
+Name of the TK frame variable `suffix` that `tkfram_` reads: the form keyed by frame
+name if it is in `pool`, the form keyed by ID otherwise (present or not). Throws
+`SpiceError(:competingframespec)` if both forms are present.
 """
-function _tk_item(pool::AbstractDict, idkey::AbstractString, namekey::AbstractString,
+function _tk_key(pool::AbstractDict, idkey::AbstractString, namekey::AbstractString,
     suffix::AbstractString)
-    a = get(pool, idkey * suffix, nothing)
-    b = namekey == idkey ? nothing : get(pool, namekey * suffix, nothing)
-    a !== nothing && b !== nothing && throw(SpiceError(:competingframespec,
-        "frame definition keywords '$idkey$suffix' and '$namekey$suffix' are both present in the pool"))
-    return b !== nothing ? b : a
+    a = idkey * suffix
+    b = namekey * suffix
+    namekey == idkey && return a
+    haskey(pool, a) && haskey(pool, b) && throw(SpiceError(:competingframespec,
+        "frame definition keywords '$a' and '$b' are both present in the pool"))
+    return haskey(pool, b) ? b : a
 end
 
 """
@@ -370,70 +372,121 @@ function _tk_relative_id(pool::AbstractDict, frames::AbstractDict, name::Abstrac
 end
 
 """
-    _tk_matrix(pool, idkey, namekey) -> Mat3{Float64}
+    _tk_matrix(pool, idkey, namekey, spec) -> Mat3{Float64}
 
 Constant matrix of one TK frame (from the frame to its relative frame) for the
-specification `MATRIX`, `ANGLES` or `QUATERNION`, as `tkfram_` of CSPICE builds it.
-Throws `SpiceError` on a missing or malformed variable.
+specification `spec` (`MATRIX`, `ANGLES` or `QUATERNION`), as `tkfram_` of CSPICE builds
+it. Throws the `SpiceError` of `tkfram_` for a missing or malformed variable.
 """
-function _tk_matrix(pool::AbstractDict, idkey::AbstractString, namekey::AbstractString)
-    bad(what) = throw(SpiceError(:badtkframe, "TK frame $idkey: $what"))
-    spec = _tk_item(pool, idkey, namekey, "_SPEC")
-    (spec isa Vector{String} && length(spec) == 1) || bad("_SPEC must be one string")
-    kind = uppercase(strip(spec[1]))
+function _tk_matrix(pool::AbstractDict, idkey::AbstractString, namekey::AbstractString,
+    spec::AbstractString)
+    kind = uppercase(strip(spec))
     if kind == "MATRIX"
-        v = _tk_item(pool, idkey, namekey, "_MATRIX")
-        (v isa Vector{Float64} && length(v) == 9) || bad("_MATRIX must have 9 numbers")
-        m = Mat3{Float64}(v)                    # stored column by column
+        key = _tk_key(pool, idkey, namekey, "_MATRIX")
+        _badkpv(pool, "TKFRAM", key, "=", 9, 1, 'N')
+        m = Mat3{Float64}(pool[key])            # stored column by column
         r = _sharpr(m)
         c2 = dot(r[:, 2], m[:, 2]) < 0 ? -r[:, 2] : r[:, 2]
         c3 = dot(r[:, 3], m[:, 3]) < 0 ? -r[:, 3] : r[:, 3]
         return hcat(r[:, 1], c2, c3)
     elseif kind == "ANGLES"
-        ang = _tk_item(pool, idkey, namekey, "_ANGLES")
-        axes = _tk_item(pool, idkey, namekey, "_AXES")
-        units = _tk_item(pool, idkey, namekey, "_UNITS")
-        (ang isa Vector{Float64} && length(ang) == 3) || bad("_ANGLES must have 3 numbers")
-        (axes isa Vector{Float64} && length(axes) == 3) || bad("_AXES must have 3 numbers")
-        f = units isa Vector{String} && !isempty(units) ? _angle_factor(units[1]) : 1.0
+        kang = _tk_key(pool, idkey, namekey, "_ANGLES")
+        kaxes = _tk_key(pool, idkey, namekey, "_AXES")
+        units = get(pool, _tk_key(pool, idkey, namekey, "_UNITS"), nothing)
+        _badkpv(pool, "TKFRAM", kang, "=", 3, 1, 'N')
+        _badkpv(pool, "TKFRAM", kaxes, "=", 3, 1, 'N')
+        ang, axes = pool[kang], pool[kaxes]
+        f = 1.0
+        if units isa Vector{String} && !isempty(units)
+            convrt(1.0, units[1], "RADIANS")    # the errors of `convrt_` for the unit
+            f = _angle_factor(units[1])
+        end
         ax = round.(Int, axes)
         return _eul2m(ang[1] * f, ang[2] * f, ang[3] * f, ax[1], ax[2], ax[3])
     elseif kind == "QUATERNION"
-        q = _tk_item(pool, idkey, namekey, "_Q")
-        (q isa Vector{Float64} && length(q) == 4) || bad("_Q must have 4 numbers")
-        return _q2m(q)
+        key = _tk_key(pool, idkey, namekey, "_Q")
+        _badkpv(pool, "TKFRAM", key, "=", 4, 1, 'N')
+        return _q2m(pool[key])
     end
-    bad("specification '$(spec[1])' is not MATRIX, ANGLES or QUATERNION")
+    throw(SpiceError(:unknownframespec, "the frame specification \"$(idkey)_SPEC = '$spec'\" " *
+        "is not MATRIX, ANGLES or QUATERNION"))
+end
+
+"Name of the frame with ID `id`, the built-in table first, as `frmnam_`; `nothing` if none."
+function _tk_frame_name(frames::AbstractDict, id::Integer)
+    typemin(Int32) <= id <= typemax(Int32) || return nothing
+    f = get(BUILTIN_FRAMES, Int32(id), nothing)
+    f === nothing && (f = get(frames, Int32(id), nothing))
+    return f === nothing ? nothing : f.name
+end
+
+"""
+    _tk_parse(pool, frames, frcode) -> TKFrame
+
+Relative frame and constant matrix of the TK frame with the class ID `frcode`, from the
+`TKFRAME_*` variables of `pool`, as `tkfram_` of CSPICE. The variables keyed by name use
+the name of the frame with the ID `frcode`, as in CSPICE. Throws the `SpiceError` of
+`tkfram_`, in its order: `:zeroframeid`, `:incompleteframe` (no frame has the ID
+`frcode`), `:competingframespec`, the kinds of `badkpv` for `_SPEC` and `_RELATIVE`,
+`:badframespec` (unknown relative frame), `:badframespec2` (relative to itself), and
+the kinds of `_tk_matrix`.
+"""
+function _tk_parse(pool::AbstractDict, frames::AbstractDict, frcode::Integer)
+    frcode == 0 && throw(SpiceError(:zeroframeid,
+        "frame identification codes are required to be non-zero"))
+    name = _tk_frame_name(frames, frcode)
+    name === nothing && throw(SpiceError(:incompleteframe,
+        "the Text Kernel (TK) frame with ID code $frcode does not have a recognized name"))
+    idkey = "TKFRAME_$(frcode)"
+    namekey = "TKFRAME_" * name
+    kspec = _tk_key(pool, idkey, namekey, "_SPEC")
+    krel = _tk_key(pool, idkey, namekey, "_RELATIVE")
+    _badkpv(pool, "TKFRAM", kspec, "=", 1, 1, 'C')
+    _badkpv(pool, "TKFRAM", krel, "=", 1, 1, 'C')
+    rel = pool[krel][1]
+    relid = _tk_relative_id(pool, frames, rel)
+    (relid === nothing || relid == 0) && throw(SpiceError(:badframespec, "the frame to " *
+        "which frame $frcode is relatively defined is not recognized; the kernel pool " *
+        "specification of the relative frame is '$rel'"))
+    relid == frcode && throw(SpiceError(:badframespec2, "bad fixed offset frame " *
+        "specification: the frame '$rel' (frame ID $frcode) is defined relative to itself"))
+    return TKFrame(relid, _tk_matrix(pool, idkey, namekey, pool[kspec][1]))
 end
 
 """
     build_tk(pool, frames) -> Dict{Int32,TKFrame}
 
 Fixed-offset data of every class 4 frame of `frames` and of the built-in table, keyed
-by frame ID: the relative
-frame (`TKFRAME_<classid>_RELATIVE`, or the same variable keyed by frame name) and the
-constant matrix from the frame to its relative frame, as `tkfram_` of CSPICE. A frame
-whose definition is missing or malformed is left out, so that loading a kernel never
-fails; `frame_rotation` then reports that the frame has no data.
+by frame ID, from `_tk_parse` of its class ID. A frame whose definition is missing or
+malformed is left out, so that loading a kernel never fails; a query of the frame
+(`tkfram`, `frame_rotation`) then parses it again and throws the error of CSPICE.
 """
 function build_tk(pool::AbstractDict, frames::AbstractDict)
     out = Dict{Int32,TKFrame}()
     builtin = (fd for fd in values(BUILTIN_FRAMES) if !haskey(frames, fd.id))
     for fd in Iterators.flatten((values(frames), builtin))
         fd.class == 4 || continue
-        idkey = "TKFRAME_$(fd.classid)"
-        namekey = "TKFRAME_" * fd.name
         try
-            rel = _tk_item(pool, idkey, namekey, "_RELATIVE")
-            (rel isa Vector{String} && length(rel) == 1) || continue
-            relid = _tk_relative_id(pool, frames, rel[1])
-            (relid === nothing || relid == fd.id) && continue
-            out[fd.id] = TKFrame(relid, _tk_matrix(pool, idkey, namekey))
+            tk = _tk_parse(pool, frames, fd.classid)
+            tk.relative == fd.id && continue      # relative to itself by frame ID
+            out[fd.id] = tk
         catch err
             err isa SpiceError || rethrow()
         end
     end
     return out
+end
+
+"""
+    _tk_missing(ks, fd)
+
+Throw the error of the class 4 frame `fd` that `build_tk` left out: the error of
+`_tk_parse`, or `SpiceError(:framedatanotfound)` if the frame is relative to itself.
+"""
+@noinline function _tk_missing(ks::KernelSet, fd::FrameDef)
+    _tk_parse(ks.pool, ks.frames, fd.classid)
+    throw(SpiceError(:framedatanotfound,
+        "no valid TKFRAME_* definition is loaded for the fixed-offset frame $(fd.id)"))
 end
 
 # --- frame chains -----------------------------------------------------------------------
@@ -445,7 +498,7 @@ One link of the frame chain: the frame that `id` is defined relative to and the 
 from frame `id` to that parent at `et`. Requires `id != 1`. A class 3 (CK) frame is
 linked to J2000 directly and throws `SpiceError(:noframeconnect)` without a CK segment
 for `et`. A class 5 (dynamic) frame is linked to its base frame and a class 6 (switch)
-frame to J2000. A class 4 frame without data throws `SpiceError(:framedatanotfound)`.
+frame to J2000. A class 4 frame without data throws the error of `_tk_missing`.
 """
 function _frame_step(ks::KernelSet, id::Int32, et::T) where {T<:Real}
     fd = frame_def(ks, id)
@@ -456,8 +509,7 @@ function _frame_step(ks::KernelSet, id::Int32, et::T) where {T<:Real}
         return _J2000_FRAME, Mat3{T}(transpose(_body_rotation(ks, fd.classid, et)))
     elseif class == 4
         tk = get(ks.tk, id, nothing)
-        tk === nothing && throw(SpiceError(:framedatanotfound,
-            "no valid TKFRAME_* definition is loaded for the fixed-offset frame $id"))
+        tk === nothing && _tk_missing(ks, fd)
         return tk.relative, Mat3{T}(tk.rot)
     elseif class == 3 || class == 6
         # A CK frame is linked to J2000 in one step, through the reference frame of
@@ -480,12 +532,12 @@ frame of a class 4 frame, the base frame of a class 5 frame, J2000 for classes 1
 and 6. Throws as `_frame_step` does.
 """
 function _frame_parent(ks::KernelSet, id::Int32)
-    class = frame_def(ks, id).class
+    fd = frame_def(ks, id)
+    class = fd.class
     (class == 1 || class == 2) && return _J2000_FRAME
     if class == 4
         tk = get(ks.tk, id, nothing)
-        tk === nothing && throw(SpiceError(:framedatanotfound,
-            "no valid TKFRAME_* definition is loaded for the fixed-offset frame $id"))
+        tk === nothing && _tk_missing(ks, fd)
         return tk.relative
     end
     (class == 3 || class == 6) && return _J2000_FRAME
