@@ -60,10 +60,10 @@ ident
 
 ## Vectors and matrices of any dimension
 
-The `g` calls take no dimension argument: the arguments give the dimension. Static
-arguments give a static result. Other arguments, or static and other arguments together,
-give a `Vector` or a `Matrix`; the exception is a mix in [`vaddg`](@ref), [`vsubg`](@ref)
-or [`vlcomg`](@ref), which gives a `SizedVector`. Two vectors must have equal length.
+The `g` calls take no dimension argument: the arguments give the dimension. A call
+whose array arguments are all static gives a static result, and does not allocate; a
+call with any other array argument gives a `Vector` or a `Matrix` that counts from 1,
+with the same elements. Two vectors must have equal length.
 
 ```@docs
 vaddg
