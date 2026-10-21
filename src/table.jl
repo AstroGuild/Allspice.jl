@@ -425,8 +425,7 @@ A segment has no aberration correction. Write only a table that was made with
 
 Throws `SpiceError(:invalidrefframe)` if `tab.frame` is not a frame of `ctx`, as
 `spkw02_c` for an unknown frame, and the other errors of [`spkw02`](@ref). Among its
-conditions: `tab.ncoef <= 28`, `tab.target != 0`, `tab.target != tab.observer`, and
-`first` and `last` inside the table.
+conditions: `tab.ncoef <= 28`, and `first` and `last` inside the table.
 
 # Examples
 ```julia
