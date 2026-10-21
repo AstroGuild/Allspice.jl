@@ -44,6 +44,9 @@ jobs:
         with:
           path: test/data
           key: kernels-${{ hashFiles('test/kernels.jl') }}
+          # A cache of an older kernel list restores the files it has; the
+          # download script fetches only the missing ones.
+          restore-keys: kernels-
           # One archive serves every runner, so Windows does not download.
           enableCrossOsArchive: true
       - uses: julia-actions/julia-buildpkg@v1
