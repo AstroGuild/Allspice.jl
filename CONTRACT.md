@@ -412,8 +412,9 @@ the default context, plus an inner form on a `KernelSet`.
 ## `aberration.jl`
 
 - `struct Aberration` (plain bits; properties `uselt`, `converged`, `stellar`,
-  `transmit`, `geometric`); `Aberration(s::AbstractString)` parses as `zzvalcor` and
-  throws `SpiceError(:badarg, ...)`. `AbcorrArg` is the union of the two argument forms.
+  `transmit`, `geometric`; the first four are the keywords of `Aberration(; ...)`, and
+  the field `flags` is private); `Aberration(s::AbstractString)` parses as `zzvalcor` and
+  throws `SpiceError(:invalidoption, ...)`. `AbcorrArg` is the union of the two argument forms.
 - `abcorr_state(ks, targ::Int32, et, ref::Int32, corr, obs::Int32) -> (SVector{6}, lt)`
   (`spkez`), `abcorr_position(...) -> (SVector{3}, lt)` (`spkezp`),
   `abcorr_jet(..., ::Val{N}) -> NTuple{N+1,Vec3}`.
