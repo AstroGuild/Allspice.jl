@@ -26,7 +26,7 @@ wrapper such as SPICE.jl.
 Allspice.jl requires Julia 1.10 or later. Install it directly from GitHub:
 
 ```julia-repl
-pkg> add https://github.com/EllissoideRotondo/Allspice.jl
+pkg> add https://github.com/AstroGuild/Allspice.jl
 ```
 
 ## Quick start
