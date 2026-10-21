@@ -242,8 +242,8 @@ the call (`:noleapseconds`, `:missingtimeinfo` or `:kernelvarnotfound`).
   and the `@` dates on, every other value turns it off, and `""` throws `:emptystring`.
   It is off at start, as in CSPICE; another context is not changed.
 - `eklef([ctx], path) -> String` is `furnsh` for a file that is an EK
-  (`:wrongarchitecture` otherwise) and returns the path as the handle of
-  `ekuef([ctx], handle)`, which is `unload`.
+  (`:wrongarchitecture` otherwise) and returns the path, which `ekuef([ctx], path)`,
+  that is `unload`, takes.
 - `jul2gr(y, m, d)`, `gr2jul(y, m, d) -> (year, month, day, doy)`.
 - Constants: `j1900 j1950 j2000 j2100 jyear tyear spd b1900 b1950 clight halfpi twopi
   rpd dpr`, each a function without arguments.
@@ -798,7 +798,7 @@ pages; a segment holds rows of one table, and a row has one entry for each colum
   `ints` (a `DASHandle` or an `EKFile`). They hold no state, so many tasks can read one
   store at the same time. `open_ek(path) -> EKFile` throws the kinds of `dasopr`,
   `:wrongarchitecture`, `:invalidformat`, `:eknosegments` or `:ekcolnummismatch`.
-- `_ek_encode_query(tables, ks, td::TimeDefaults, query) -> (q, error, errmsg)` is a
+- `_ek_encode_query(tables, ks, td::TimeDefaults, query) -> (q, failed, errmsg)` is a
   pure function that returns the message of `ekfind_c` for a query that is not valid,
   and throws `SpiceError` only where CSPICE signals a SPICE error. Its docstring lists
   the known differences from CSPICE.

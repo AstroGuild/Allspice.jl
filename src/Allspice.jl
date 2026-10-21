@@ -69,7 +69,7 @@ export gfdist, gfsep, gfposc, gfrr, gfpa, gfuds, gfudb, gfevnt, gfstol, gfrefn, 
 export gfsubc, gfsntc, gfilum, gfoclt, gftfov, gfrfov, gfocce, gffove
 export EphemerisTable, ephemeris_table, table_position, table_state, table_jet, table_span
 export RotationTable, rotation_table, table_rotation, table_rotation_jet, table_to_spk
-export EKColumnAttr, EKSegmentSummary, EKTable
+export EKColumnAttr, EKSegmentSummary
 export ekopr, ekcls, eknseg, ekssum, ekrcec, ekrced, ekrcei
 export EKFastLoad, ekopn, ekopw, ekops, ekbseg, ekappr, ekinsr, ekdelr, ekacec, ekaced, ekacei, ekucec, ekuced, ekucei
 export ekifld, ekaclc, ekacld, ekacli, ekffld
