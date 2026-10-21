@@ -11,3 +11,5 @@ Allspice = {path = ".."}
 
 [compat]
 Documenter = "1"
+ForwardDiff = "0.10, 1"
+StaticArrays = "1.9"

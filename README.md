@@ -1,5 +1,8 @@
 # Allspice.jl
 
+[![CI](https://github.com/AstroGuild/Allspice.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/AstroGuild/Allspice.jl/actions/workflows/CI.yml)
+[![Manual](https://img.shields.io/badge/docs-dev-blue.svg)](https://astroguild.github.io/Allspice.jl/dev/)
+
 Allspice.jl is a native Julia port of CSPICE N0067 for the computation of spacecraft
 and planetary geometry. It reads the data files of
 [SPICE](https://naif.jpl.nasa.gov/naif/), called kernels, which NASA's Navigation and

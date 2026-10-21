@@ -36,3 +36,5 @@ makedocs(;
     ],
     checkdocs=:exports,
 )
+
+deploydocs(; repo="github.com/AstroGuild/Allspice.jl.git", devbranch="main")
