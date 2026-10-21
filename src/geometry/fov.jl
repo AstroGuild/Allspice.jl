@@ -140,8 +140,9 @@ returns the number of boundary vectors; here it is `length(bounds)`.
 
 The data come from the pool variables `INS<instid>_FOV_FRAME`, `INS<instid>_FOV_SHAPE`,
 `INS<instid>_BORESIGHT` and the other `INS<instid>_FOV_*` variables of an instrument
-kernel. Both forms of the specification are read: `CORNERS` (the default) and `ANGLES`.
-`room` is the largest number of boundary vectors accepted.
+kernel. `INS<instid>_FOV_CLASS_SPEC` selects the form: `CORNERS` (the default) gives
+the boundary vectors, `ANGLES` gives angles from the boresight. `room` is the largest
+number of boundary vectors accepted.
 
 Throws `SpiceError` with the kind
 - `:framemissing`, `:shapemissing`, `:boresightmissing` or `:boundarymissing` if the
@@ -642,7 +643,7 @@ Throws `SpiceError` with the kind
 - for a rectangle or a polygon: `:degeneratecase` if two neighbor boundary vectors are
   parallel, `:facenotfound` if the boundary vectors are not in one half space,
   `:notsupported` if a boundary vector is within 2e-12 rad of the plane of a side of
-  the convex hull, `:invalidfov` if a vector is 90 degrees or more from the axis;
+  the field of view, `:invalidfov` if a vector is 90 degrees or more from the axis;
 - for a circle or an ellipse: `:degeneratecase` if a semi-axis is zero;
 - `:notdisjoint` if the observer is inside the target ellipsoid.
 

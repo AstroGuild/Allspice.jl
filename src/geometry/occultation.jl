@@ -412,7 +412,7 @@ on its target. The frame of a point target is not used; pass `" "`.
 Stellar aberration is not applied: `"LT+S"` acts as `"LT"`, as in CSPICE. `et` cannot
 be a `ForwardDiff.Dual`, because the result is discrete. The call does not allocate when
 the bodies and the frames are integer IDs and the shapes are ellipsoids or points.
-With a DSK shape, a `ctx` gives the tolerances set by [`dskstl`](@ref).
+A DSK shape uses the tolerances that [`dskstl`](@ref) set on the context.
 
 Throws `SpiceError` with the kind
 - `:idcodenotfound` if a body name is not known;

@@ -2,7 +2,7 @@
 
 Allspice.jl reads SPICE kernels and answers the questions that the CSPICE toolkit answers (where a body is, how a frame is oriented, when an event occurs), in Julia code with no C library behind it. The calls keep the names and the argument order of CSPICE, so that a program written for CSPICE or SPICE.jl needs few changes.
 
-Queries are safe from many threads at once, because all loaded data belong to a context object and no call keeps hidden state. The epoch can be a dual number of ForwardDiff.jl, and `spkder` and `pxder` return time derivatives of any order, so that a state can go into an optimizer or an integrator without finite differences. A trajectory or a rotation can be extracted into a flat array of coefficients that a GPU evaluates.
+Queries are safe from many threads at once, because each query reads an immutable snapshot of the loaded kernels, which a later load does not change, and no call keeps hidden state. A context object holds one set of loaded kernels, and a program that needs two independent sets makes two contexts. The epoch can be a dual number of ForwardDiff.jl, and `spkder` and `pxder` return time derivatives of any order, so that a state can go into an optimizer or an integrator without finite differences. A trajectory or a rotation can be extracted into a flat array of coefficients that a GPU evaluates.
 
 A program that must call the CSPICE library of NAIF itself, for example to obtain results that are identical to those of another CSPICE program on every platform, is better served by the wrapper SPICE.jl. The toolkit programs of NAIF, such as `brief` and `mkspk`, are not part of this package.
 
@@ -52,8 +52,6 @@ Depth = 2
 ```
 
 ### API reference
-
-The reference groups the calls by subject.
 
 ```@contents
 Pages = [

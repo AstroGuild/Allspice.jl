@@ -288,7 +288,7 @@ light time, as `spkezr_c`.
 
 `state` is an `SVector{6}`: position in km, then velocity in km/s. `lt` is in seconds.
 
-- `targ`, `obs`: body name or NAIF ID code.
+- `targ`, `obs`: body name, NAIF ID code, or a string that holds a code (`"-77"`).
 - `et`: epoch of the observer in seconds past J2000 TDB (see [`str2et`](@ref)).
 - `ref`: frame name or frame ID. For a frame that is not inertial and a correction
   other than `"NONE"`, the frame is evaluated at `et` corrected for the light time
@@ -309,10 +309,12 @@ Throws `SpiceError`:
 - `:invalidoption` if `abcorr` is not valid, `:badarg` if `et` is not finite;
 - `:noloadedfiles` if no SPK file is loaded;
 - `:spkinsuffdata` if the loaded SPK files hold no chain between `targ` and `obs` at
-  the epoch needed: a body is in no file, or the epoch is outside its segments. These
-  two are a [`SpkInsufficientDataError`](@ref), which holds the body and the epoch;
+  the epoch needed: a body is in no file, or the epoch is outside its segments;
 - the kinds of [`pxform`](@ref) if `ref` is not inertial and its orientation data are
   not loaded.
+
+`:noloadedfiles` and `:spkinsuffdata` are a [`SpkInsufficientDataError`](@ref), which
+holds the body and the epoch.
 
 # Examples
 ```julia
@@ -343,9 +345,9 @@ one-way light time, as `spkpos_c`.
 are those of [`spkezr`](@ref), except that an `abcorr` that is not valid throws
 `SpiceError(:spkinvalidoption)`, as in CSPICE.
 
-As in CSPICE, the `CN` corrections make exactly three light-time iterations here, and
-[`spkezr`](@ref) iterates to convergence. The position can therefore differ from the
-position part of `spkezr` at rounding level.
+As in CSPICE, the `CN` corrections make exactly three light-time iterations here;
+[`spkezr`](@ref) makes up to five, with the convergence test of [`spkltc`](@ref). The
+position can therefore differ from the position part of `spkezr` at rounding level.
 
 # Examples
 ```julia

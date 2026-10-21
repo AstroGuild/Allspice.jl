@@ -21,8 +21,8 @@ make room for. The file is on disk when the call returns. An existing file is ne
 replaced. Add segments with the `ckwNN` writers and close the handle with
 [`ckcls`](@ref). Load the file with `furnsh` only after the close.
 
-Throws `SpiceError(:emptystring)` if `path` or `ifname` is empty, and `:fileopenfailed` if
-the file exists or cannot be created.
+Throws `SpiceError(:emptystring)` if `path` or `ifname` is empty and `:blankfilename` if
+`path` is blank, as CSPICE, and `:fileopenfailed` if the file exists or cannot be created.
 
 # Examples
 Write a type 3 segment with two pointing records and one interpolation interval:
@@ -54,8 +54,9 @@ end
 """
     ckcls(handle) -> Nothing
 
-Close the CK file of `handle`, as `ckcls_c`. The file is then complete on disk and can be
-loaded with `furnsh`. The call does nothing if the handle is closed already.
+Close the CK file of `handle`, as `ckcls_c`. The call does nothing if the handle is closed
+already. The close writes no data: every write call puts its bytes on disk before it
+returns. Load the file with `furnsh` after the close.
 
 Throws `SpiceError(:nosegmentsfound)` if the file is open for writing and holds no
 segment. The handle then stays open; close it with [`dafcls`](@ref).
@@ -139,17 +140,16 @@ The number of records is `length(sclkdp)`. A table such as `quats` is a vector o
 (the form of SPICE.jl), a matrix with one record in each column, or a flat vector.
 
 The segment has angular velocity if `avvs` holds one vector for each record. It has none
-if `avvs` is `nothing`, which is the default. One vector for more than one record also
-gives none: that is the default argument `[zeros(3)]` of SPICE.jl.
+if `avvs` is `nothing`, which is the default. `avvs` with one vector and more than one
+record is treated as `nothing`.
 
-The segment is on disk when the call returns. It holds the same data as the segment that
-`ckw01_c` writes. A call that throws writes nothing.
+Every `ckwNN` writer puts its segment on disk when the call returns, with the data that
+CSPICE writes from the same input. A call that throws writes nothing.
 
 Throws `SpiceError`. Every `ckwNN` writer throws:
 - `:dafnosuchhandle` if the handle is closed, `:dafinvalidaccess` if it is open for
   reading;
 - `:emptystring` if `ref` or `segid` is empty;
-- `:badarg` if the shape of an input does not fit;
 - `:invalidrefframe` if the frame is not known;
 - `:nonprintablechars` or `:segidtoolong` if `segid` is not valid.
 
@@ -205,9 +205,8 @@ Write a CK segment of type 2 (pointing with a constant angular velocity on inter
 
 Record `i` is valid from `start[i]` to `stop[i]` (encoded spacecraft clock ticks).
 `quats[i]` is its quaternion, `avvs[i]` its angular velocity (rad/s) and `rates[i]` its
-number of seconds per tick. The number of records is `length(start)`. SPICE.jl 0.2.5
-writes one record less. See [`ckw01`](@ref) for the other arguments and for
-the errors of every writer.
+number of seconds per tick. The number of records is `length(start)`. See
+[`ckw01`](@ref) for the other arguments and for the errors of every writer.
 
 Throws `SpiceError`:
 - `:invalidnumrec` if there is no record;
@@ -277,7 +276,7 @@ Write a CK segment of type 3 (pointing with linear interpolation inside interval
 `sclkdp` holds the times of the `nrec` records (encoded spacecraft clock ticks), `quats`
 their quaternions and `starts` the start times of the interpolation intervals. `avvs`
 is as for [`ckw01`](@ref), which also gives the other arguments and the errors of every
-writer. All `nrec` records are written. SPICE.jl 0.2.5 writes one record less.
+writer.
 
 Throws `SpiceError`:
 - `:invalidnumrec` if there is no record, `:invalidnumint` if there is no interval;
@@ -347,8 +346,8 @@ end
     ckw05(handle, subtyp, degree, begtim, endtim, inst, ref, avflag, segid, sclkdp, packts,
           rate, nints, starts; ctx=default_context()) -> Nothing
 
-Write a CK segment of type 5, as `ckw05_c`. The type holds the interpolation methods of
-the attitude files of ESOC, the operations center of ESA (format DDID).
+Write a CK segment of type 5 (Hermite or Lagrange interpolation of attitude packets), as
+`ckw05_c`.
 
 `subtyp` selects the interpolation and the content of a packet. `q` is a SPICE
 quaternion (scalar first), `dq` its derivative, `av` the angular velocity in `ref`
@@ -448,8 +447,8 @@ const _CK06_PKTSZS = (8, 4, 14, 7)
     ckw06(handle, inst, ref, avflag, first, last, segid, npkts, subtps, degres, packts,
           rates, sclkdp, ivlbds, sellst; ctx=default_context()) -> Nothing
 
-Write a CK segment of type 6 (mini-segments of the ESOC/DDID types), as `ckw06` of
-SPICELIB. CSPICE has no C wrapper for it.
+Write a CK segment of type 6 (mini-segments of Hermite or Lagrange interpolation), as
+`ckw06` of SPICELIB. CSPICE has no C wrapper for it.
 
 A mini-segment is a set of packets with its own subtype, degree and clock rate, valid on
 its own interval. The number of mini-segments is `length(npkts)`. The subtypes, their

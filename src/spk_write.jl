@@ -208,8 +208,8 @@ make room for. The file is on disk when the call returns, byte for byte the file
 writers and close the handle with [`spkcls`](@ref). Load the file with `furnsh` only after
 the close.
 
-Throws `SpiceError(:emptystring)` if `path` or `ifname` is empty, and `:fileopenfailed` if
-the file exists or cannot be created.
+Throws `SpiceError(:emptystring)` if `path` or `ifname` is empty and `:blankfilename` if
+`path` is blank, as CSPICE, and `:fileopenfailed` if the file exists or cannot be created.
 
 # Examples
 Write a type 2 segment that has one record of degree 1, then load the file:
@@ -249,8 +249,9 @@ end
 
 Open the existing SPK file `path` for writing, to append segments, as `spkopa_c`.
 
-The file must have the native byte order. Unload the file from every context before the
-call, and load it again after [`spkcls`](@ref).
+The file must have the native byte order. No other handle may write the same file; a
+handle that reads it finds a change in a search that begins after the change. Unload the
+file from every context before the call, and load it again after [`spkcls`](@ref).
 
 Throws `SpiceError(:emptystring)` if `path` is empty, `:filenotfound` if the file does not
 exist, `:fileisnotspk` if it is not a DAF file of the type SPK, and `:unsupportedbff` if
@@ -283,8 +284,9 @@ end
     spkcls(handle) -> Nothing
 
 Close the SPK file of `handle`, as `spkcls_c`. The call does nothing if the handle is
-closed already. Each writer puts its segment on disk at its own call, so the close writes
-no data. Load the file with `furnsh` after the close.
+closed already. The close writes no data: every write call puts its bytes on disk before it
+returns. A type 14 segment that [`spk14e`](@ref) did not end is not in the file. Load the
+file with `furnsh` after the close.
 
 Throws `SpiceError(:nosegmentsfound)` if the file is open for writing and holds no
 segment. The handle then stays open; close it with [`dafcls`](@ref).
@@ -376,20 +378,21 @@ record in each column. A table of states or of packets, whose record length the 
 fixes, can also be a flat vector; `cdata` cannot. The record count that CSPICE takes as an
 argument is not an argument here: it follows from the input.
 
-The segment is on disk when the call returns. It holds the same data as the segment that
-`spkw02_c` writes. A call that throws writes nothing.
+Every `spkwNN` writer puts its segment on disk when the call returns, with the data that
+CSPICE writes from the same input. A call that throws writes nothing.
 
 Throws `SpiceError`. Every `spkwNN` writer throws:
 - `:dafnosuchhandle` if the handle is closed, `:dafinvalidaccess` if it is open for
   reading;
 - `:emptystring` if `frame` or `segid` is empty;
-- `:badarg` if the shape of an input does not fit;
 - `:invalidrefframe` if the frame is not known.
 
-The other checks follow CSPICE writer by writer, so they differ between writers:
-- Only a writer that lists `:barycenterephem` and `:bodyandcentersame`, or the kinds of
-  [`spkpds`](@ref), rejects `body == 0` and `body == center`.
-- `first == last` is accepted where the list says "if `first > last`".
+The other checks and their error kinds follow CSPICE writer by writer, so they differ
+between writers:
+- `spkw02`, `spkw03`, `spkw05`, `spkw08`, `spkw09`, `spkw18`, `spkw19` and `spkw20`
+  accept `body == 0` and `body == center`; the others throw `:barycenterephem` and
+  `:bodyandcentersame`.
+- `spkw02`, `spkw03`, `spkw05`, `spkw18`, `spkw19` and `spkw20` accept `first == last`.
 - A `segid` that is too long is `:idstringtoolong` in `spkw02`, `spkw03` and `spkw20`,
   and `:segidtoolong` in the others.
 
@@ -437,11 +440,13 @@ at the midpoint of each interval), as `spkw20_c`.
 
 `cdata` holds one record for each interval, each with `3 * (polydg + 2)` values: the
 `polydg + 1` coefficients of the x velocity, then the x position at the midpoint of the
-interval, then the same for y and for z. `intlen` is the length of every interval in
-days, not in seconds as in [`spkw02`](@ref). `dscale` and `tscale` are the distance scale
-(km) and the time scale (s) of the data. `initjd + initfr` is the TDB Julian date of the
-start of the first interval. See [`spkw02`](@ref) for the other arguments and for
-the errors of every writer.
+interval, then the same for y and for z. The positions are in units of `dscale` km and the
+velocities in units of `dscale` km per `tscale` s; for data in AU and AU/day, `dscale` is
+the km of one AU and `tscale` is 86400. `intlen` is the length of every interval in days,
+not in seconds as in [`spkw02`](@ref). `initjd + initfr` is the TDB Julian date of the
+start of the first interval, so the data cover [`b`, `e`] in seconds past J2000 TDB, with
+`b = 86400 * (initjd + initfr - 2451545)` and `e = b + 86400 * n * intlen`. See
+[`spkw02`](@ref) for the other arguments and for the errors of every writer.
 
 Throws `SpiceError`:
 - `:invalidcount` if `cdata` has no record;
@@ -449,8 +454,8 @@ Throws `SpiceError`:
 - `:intlennotpos` unless `intlen > 0`;
 - `:baddescrtimes` if `first > last`;
 - `:nonpositivescale` unless `dscale > 0` and `tscale > 0`;
-- `:coveragegap` unless [`first`, `last`] is inside the interval of the data, with a
-  relative tolerance of 1e-13;
+- `:coveragegap` unless [`first`, `last`] is inside [`b`, `e`], with the tolerance
+  `1e-13 * max(abs(b), abs(e))`;
 - `:idstringtoolong` or `:nonprintablechars` if `segid` is not valid.
 """
 function spkw20(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
@@ -744,8 +749,9 @@ _spk18_subtype(s::Symbol) = s === :S18TP0 ? 0 : s === :S18TP1 ? 1 : -1
     spkw18(handle, subtyp, body, center, frame, first, last, segid, degree, packts, epochs;
            ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 18, as `spkw18_c`. The type holds the interpolation methods
-of the orbit files of ESOC, the operations center of ESA (format DDID).
+Write an SPK segment of type 18 (Hermite or Lagrange interpolation of packets at unequal
+time steps), as `spkw18_c`. NAIF calls the type ESOC/DDID, after the orbit files of the
+European Space Operations Centre.
 
 `subtyp` selects the interpolation and the content of a packet (km, km/s, km/s²):
 
@@ -854,7 +860,7 @@ Throws `SpiceError`:
 - `:badvector` if `tp`, `pa` or `pv` is zero;
 - `:badinitstate` unless the unit vectors of `tp` and `pa` are orthogonal within 1e-5;
 - `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
-- the kinds of [`spkpds`](@ref).
+- the error kinds of [`spkpds`](@ref).
 """
 function spkw15(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, epoch::Real, tp, pa, p::Real, ecc::Real,
@@ -916,7 +922,7 @@ Throws `SpiceError`:
 - `:badeccentricity` if the eccentricity `sqrt(eqel[2]^2 + eqel[3]^2)` is greater than
   0.9;
 - `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
-- the kinds of [`spkpds`](@ref).
+- the error kinds of [`spkpds`](@ref).
 """
 function spkw17(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
         last::Real, segid::AbstractString, epoch::Real, eqel, rapol::Real, decpol::Real;
@@ -949,9 +955,10 @@ end
 Write an SPK segment of type 1 (modified difference arrays), as `spkw01` of SPICELIB.
 CSPICE has no C wrapper for it.
 
-`dlines` holds `n` difference lines of 71 doubles each, and `epochs` holds the final
-epoch of each line (seconds past J2000 TDB). The count `n` follows from the input. See
-[`spkw02`](@ref) for the other arguments and for the errors of every writer.
+`dlines` holds `n` difference lines of 71 doubles each: a vector of vectors, a matrix with
+one line in each column, or a flat vector of `71n` doubles. `epochs` holds the final epoch
+of each line (seconds past J2000 TDB). See [`spkw02`](@ref) for the other arguments and
+for the errors of every writer.
 
 Throws `SpiceError`:
 - `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
@@ -1056,8 +1063,8 @@ const _SPK19_PKTSZS = (12, 6, 6)
     spkw19(handle, body, center, frame, first, last, segid, npkts, subtps, degres, packts,
            epochs, ivlbds, sellst; ctx=default_context()) -> Nothing
 
-Write an SPK segment of type 19 (mini-segments of the ESOC/DDID types), as `spkw19` of
-SPICELIB. CSPICE has no C wrapper for it.
+Write an SPK segment of type 19 (mini-segments of Hermite or Lagrange interpolation), as
+`spkw19` of SPICELIB. CSPICE has no C wrapper for it.
 
 A mini-segment is a set of packets with its own subtype and degree, valid on its own
 interval. The number of mini-segments is `length(npkts)`.
@@ -1218,7 +1225,7 @@ Throws `SpiceError`:
 - `:emptystring` if `frame` or `segid` is empty;
 - `:invalidargument` if `chbdeg < 0`;
 - `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
-- the kinds of [`spkpds`](@ref).
+- the error kinds of [`spkpds`](@ref).
 
 # Examples
 Two records of degree 1, each on an interval of 100 s:
@@ -1321,9 +1328,9 @@ spk14a(w::SPK14Writer, coeffs, epochs) = spk14a(w, length(epochs), coeffs, epoch
 
 End the type 14 segment `writer` and write it to its file, as `spk14e_c`.
 
-The file does not change before this call, so a segment that is never ended leaves the
-file unchanged. The segment holds the same data as the one that CSPICE writes. The
-writer cannot be used again.
+[`spk14b`](@ref) and [`spk14a`](@ref) do not change the file, so a segment that is never
+ended is not in the file. The segment is on disk when the call returns, with the data that
+CSPICE writes. The writer cannot be used again.
 
 Throws `SpiceError(:segmentnotopen)` if the writer was ended before.
 """

@@ -1,5 +1,9 @@
 # Geometry
 
+Sibling calls can throw different kinds for one condition, such as an unknown frame or
+radii that are not valid, because each kind is the one of the CSPICE routine that the
+call ports; see [`SpiceError`](@ref).
+
 ## Points on a body
 
 ```@docs

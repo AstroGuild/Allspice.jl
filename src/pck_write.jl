@@ -31,8 +31,8 @@ make room for. The file is on disk when the call returns, byte for byte the file
 [`pckw02`](@ref) and close the handle with [`pckcls`](@ref). Load the file with `furnsh`
 only after the close.
 
-Throws `SpiceError(:emptystring)` if `path` or `ifname` is empty, and `:fileopenfailed` if
-the file exists or cannot be created.
+Throws `SpiceError(:emptystring)` if `path` or `ifname` is empty and `:blankfilename` if
+`path` is blank, as CSPICE, and `:fileopenfailed` if the file exists or cannot be created.
 
 # Examples
 Write a segment for the frame IAU_MOON (frame class ID 301) whose angles are constant,
@@ -140,8 +140,8 @@ end
     pckcls(handle) -> Nothing
 
 Close the binary PCK file of `handle`, as `pckcls_c`. The call does nothing if the handle
-is closed already. Each [`pckw02`](@ref) call puts its segment on disk, so the close
-writes no data. Load the file with `furnsh` after the close.
+is closed already. The close writes no data: every write call puts its bytes on disk
+before it returns. Load the file with `furnsh` after the close.
 
 Throws `SpiceError(:nosegmentsfound)` if the file is open for writing and holds no
 segment. The handle then stays open; close it with [`dafcls`](@ref).

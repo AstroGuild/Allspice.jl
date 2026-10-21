@@ -137,10 +137,9 @@ m2eul(r::AbstractMatrix, axis3::Integer, axis2::Integer, axis1::Integer) =
 Return the 6 by 6 state transformation of three Euler angles and their rates, as
 `eul2xf_c` of CSPICE.
 
-`eulang[1:3]` are the angles in radians of the product
-`[eulang[1]]_axisa * [eulang[2]]_axisb * [eulang[3]]_axisc`, and `eulang[4:6]` are
-their rates in radians per time unit. `axisb` can be equal to `axisa` or to `axisc`,
-as in CSPICE: the two angles add.
+`eulang[1:3]` and `axisa`, `axisb`, `axisc` are `angle3`, `angle2`, `angle1` and
+`axis3`, `axis2`, `axis1` of [`eul2m`](@ref). `eulang[4:6]` are their rates in rad/s.
+`axisb` can be equal to `axisa` or to `axisc`, as in CSPICE: the two angles add.
 
 The upper left and lower right 3 by 3 blocks of the result are the matrix
 `eul2m(eulang[1], eulang[2], eulang[3], axisa, axisb, axisc)`. The lower left block is
@@ -429,13 +428,13 @@ qxq(q1::AbstractVector, q2::AbstractVector) = _m_qxq(_m_v4(q1), _m_v4(q2))
 """
     qdq2av(q, dq) -> SVector{3}
 
-Return the angular velocity of the frame that the quaternion `q` defines, from `q` and
-its time derivative `dq`, as `qdq2av_c` of CSPICE.
+Return the angular velocity of a frame from its quaternion `q` and the time derivative
+`dq`, as `qdq2av_c` of CSPICE.
 
 `q` has the SPICE convention (scalar part first) and is scaled to unit length.
-`q2m(q)` rotates vectors from a base frame to the frame of `q`. The result is the
-angular velocity of that frame relative to the base frame, in the base frame, as
-[`xf2rav`](@ref) gives it. The unit is radians per time unit of `dq`.
+`q2m(q)` transforms the components of a vector from a base frame to the frame. The
+result is the angular velocity of the frame relative to the base frame, in the base
+frame, as [`xf2rav`](@ref) gives it. The unit is radians per time unit of `dq`.
 
 Throws `SpiceError(:badarg)` if an argument does not have 4 elements.
 
@@ -455,10 +454,10 @@ end
 Return the 6 by 6 state transformation of the rotation matrix `rot` and the angular
 velocity `av`, as `rav2xf_c` of CSPICE.
 
-`rot` rotates vectors from frame 1 to frame 2. `av` is the angular velocity of frame 2
-relative to frame 1, in frame 1, in radians per time unit. The upper left and lower right 3 by 3 blocks of the
-result are `rot`. The lower left block is the time derivative of `rot`. The upper right
-block is zero.
+`rot` transforms the components of a vector from frame 1 to frame 2. `av` is the
+angular velocity of frame 2 relative to frame 1, in frame 1, in rad/s. The upper left
+and lower right 3 by 3 blocks of the result are `rot`. The lower left block is the time
+derivative of `rot`. The upper right block is zero.
 
 Throws `SpiceError(:badarg)` if `rot` is not 3 by 3 or `av` does not have 3 elements.
 
@@ -488,9 +487,9 @@ end
 Return the rotation matrix and the angular velocity of the 6 by 6 state transformation
 `xform`, as `xf2rav_c` of CSPICE.
 
-`rot` is the upper left 3 by 3 block. `av` has the meaning that [`rav2xf`](@ref)
-states, in radians per time unit. `rav2xf(xf2rav(xform)...)` is `xform` to rounding if
-that block is a rotation.
+`rot` is the upper left 3 by 3 block. `av` has the meaning and the unit that
+[`rav2xf`](@ref) states. `rav2xf(xf2rav(xform)...)` is `xform` to rounding if that block
+is a rotation.
 
 Throws `SpiceError(:badarg)` if `xform` is not 6 by 6.
 
@@ -531,7 +530,7 @@ end
     sharpr(rot) -> SMatrix{3,3}
 
 Return the 3 by 3 matrix `rot` with its columns made orthonormal, as `sharpr` of
-SPICELIB (CSPICE has no `_c` wrapper).
+SPICELIB.
 
 Column 1 is scaled to unit length. Column 3 is the unit cross product of columns 1 and
 2, and column 2 is the unit cross product of columns 3 and 1.

@@ -74,8 +74,7 @@ end
 Return the outward unit normal of an ellipsoid at the surface point `point`, as
 `surfnm_c` of CSPICE.
 
-The ellipsoid has its center at the origin and the semi-axes `a`, `b`, `c` along x, y,
-z, as in every ellipsoid call. `point` is not checked to be on the surface.
+`point` is not checked to be on the surface.
 
 Throws `SpiceError(:badaxislength)` if a semi-axis is not positive, and
 `SpiceError(:badarg)` if `point` does not have 3 elements.
@@ -535,9 +534,10 @@ altitude of `positn` above the ellipsoid, as `nearpt_c` of CSPICE.
 The ellipsoid has the semi-axes `a`, `b`, `c`. `alt` is negative for a point inside.
 The results have the unit of the arguments.
 
-The arguments can be `ForwardDiff.Dual` or `Allspice.Taylor` numbers. The value is
-then equal to the `Float64` result. The derivatives are zero at the center and at an
-interior point whose nearest point is not unique.
+The arguments can be `ForwardDiff.Dual` or `Allspice.Taylor` numbers (the truncated
+Taylor series of [`spkder`](@ref)). The value is then equal to the `Float64` result.
+The derivatives are zero at the center and at an interior point whose nearest point is
+not unique.
 
 Throws `SpiceError(:badaxislength)` if a semi-axis is not positive or if the ratio of
 the longest to the shortest one is above about 1.3e153. Throws
@@ -1442,11 +1442,11 @@ lit body. `et` is the epoch at the observer `obsrvr`, in seconds past J2000 TDB.
 of [`spkezr`](@ref), for example `"NONE"` or `"LT+S"`.
 Bodies and frames are names or IDs.
 
-- `trgepc`: the epoch at the target, `et` corrected for light time if `abcorr` asks
-  for it.
-- `obspos`: the position of the observer relative to the target center, in `fixref`,
-  km.
-- `trmpts`: the terminator points relative to the target center, in `fixref`, km.
+- `trgepc`: the epoch at the target, in seconds past J2000 TDB: `et` corrected for
+  light time if `abcorr` asks for it.
+- `obspos`: the position of the observer relative to the target center, in km, in
+  `fixref` at `trgepc`.
+- `trmpts`: the terminator points relative to the target center, in km, in `fixref`.
 
 The call needs SPK data for the three bodies, the orientation of `fixref`, and the
 `BODY<id>_RADII` of the source and the target.
@@ -1458,10 +1458,14 @@ Throws:
 - `SpiceError(:notsupported)` for another terminator type.
 - `SpiceError(:invalidsize)` if `npts < 1`.
 - `SpiceError(:objectstooclose)` if the source touches the target.
+- the kinds of [`srfrec`](@ref) if the radii of the source or the target are missing or
+  not valid.
 
 # Examples
-This call needs kernels:
 ```julia
+# Needs an SPK, a PCK with the radii of the Sun and the Moon and the rotation of the
+# Moon, and a leap seconds kernel.
+et = str2et("2025 MAR 01 12:00:00 UTC")
 trgepc, obspos, trmpts = edterm("UMBRAL", "SUN", "MOON", et, "IAU_MOON", "LT+S", "EARTH", 3)
 ```
 

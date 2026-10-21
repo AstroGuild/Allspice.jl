@@ -1,13 +1,19 @@
 # Files and writers
 
 A file handle is a [`DAFHandle`](@ref) or a [`DASHandle`](@ref) object, not an integer.
-The writers keep the positional arguments of CSPICE and take the context as the keyword
-`ctx`; other calls take it as the optional first argument `[ctx,]`. Without it a call
-uses [`default_context`](@ref). `[ctx | ks,]` means that the call also accepts a
-`KernelSet`, the immutable snapshot of the kernels of a context that
-`Allspice.kernelset(ctx)` returns.
+The writers take the arguments of CSPICE in the same order, but leave out most counts and
+flags that follow from the input; [`spksub`](@ref) is the exception to the order, with
+the new file first.
 
-An input of the wrong shape throws `SpiceError(:badarg)`.
+A call that needs a context takes it as the optional first argument `[ctx,]`, a
+[`SpiceContext`](@ref), and uses [`default_context`](@ref) without it. `[ctx | ks,]`
+means that the call also accepts a `KernelSet`, the immutable snapshot of the kernels of
+a context that `Allspice.kernelset(ctx)` returns. The SPK and CK segment writers,
+[`spk14b`](@ref) and [`spkpds`](@ref) take the context or the kernel set as the keyword
+`ctx` instead; [`dskw02`](@ref) takes it as the first argument.
+
+The identifier of an SPK or CK segment (`segid`, `ident`) is the name of its DAF array,
+which [`dafgn`](@ref) returns. An input of the wrong shape throws `SpiceError(:badarg)`.
 
 ## DAF files
 

@@ -23,7 +23,7 @@ array type; the table is then an `isbits` value on a GPU.
 | `t0`, `dt`, `nint` | the table covers `t0 <= et <= t0 + nint * dt`, seconds past J2000 TDB |
 | `ncoef`            | Chebyshev coefficients for each component and interval               |
 | `coef`             | the coefficients, km                                                 |
-| `maxerr`           | largest difference from the source that `ephemeris_table` measured, km |
+| `maxerr`           | largest difference from `spkpos` that `ephemeris_table` measured, km   |
 
 Interval `i` (from 0) covers `t0 + i dt` to `t0 + (i + 1) dt`. It holds `ncoef`
 coefficients for each of x, y and z, in this order, from index `3 ncoef i + 1` of
@@ -343,8 +343,8 @@ Two methods give the coefficients:
   until the measured error is at most `tol` (km). With `tol`, the result has
   `maxerr <= tol` or the call throws. Without `tol` the goal is `1e-12` times the
   largest distance in the table, and the call also stops when the error is below
-  `1e-6` times that distance and one more doubling does not divide it by four. The
-  source then limits the accuracy: rounding of a rotation angle of many turns, or the
+  `1e-6` times that distance and one more doubling does not divide it by four.
+  `spkpos` then limits the accuracy: rounding of a rotation angle of many turns, or the
   small steps of an aberration-corrected position at the record boundaries.
 
 Throws `SpiceError(:badarg)` if the epochs are not finite with `t0 < t1`, if
@@ -416,14 +416,15 @@ derivative. `handle` comes from [`spkopn`](@ref) or [`spkopa`](@ref); `segid` is
 segment identifier; `first` and `last` are the bounds of the segment in seconds past
 J2000 TDB. The segment is for `tab.target` relative to `tab.observer` in the frame
 `tab.frame`. The coefficients are written as `Float64`; a table on a GPU is copied to
-the CPU. `ctx` is passed to [`spkw02`](@ref).
+the CPU. `ctx` is a keyword, as in [`spkw02`](@ref); it has no effect here, because
+`tab.frame` is a frame ID.
 
 A segment has no aberration correction. Write only a table that was made with
 `abcorr = "NONE"`; the call cannot check this.
 
 Throws the errors of [`spkw02`](@ref). Among its conditions: `tab.ncoef <= 28`,
-`tab.target != 0`, `tab.target != tab.observer`, a known frame, and `first` and `last`
-inside the table.
+`tab.target != 0`, `tab.target != tab.observer`, `tab.frame != 0`, and `first` and
+`last` inside the table.
 
 # Examples
 ```julia
@@ -460,11 +461,12 @@ Chebyshev polynomials that need no kernel to evaluate: the counterpart of
 | `t0`, `dt`, `nint` | the table covers `t0 <= et <= t0 + nint * dt`, seconds past J2000 TDB |
 | `ncoef`            | Chebyshev coefficients for each matrix element and interval          |
 | `coef`             | the coefficients                                                     |
-| `maxerr`           | largest Frobenius norm of the difference from the source that `rotation_table` measured |
+| `maxerr`           | largest Frobenius norm of the difference from `pxform` that `rotation_table` measured   |
 
 Interval `i` (from 0) holds `ncoef` coefficients for each of the nine elements of the
 matrix, column after column, from index `9 ncoef i + 1` of `coef`. A matrix of the
-table is orthogonal to the accuracy `maxerr`; it is not made orthogonal again.
+table is orthogonal to the accuracy `maxerr`; it is not made orthogonal again. A query
+outside the table throws `SpiceError(:spkinsuffdata)`, as for an `EphemerisTable`.
 
 `RotationTable{T}(tab)` returns a copy with coefficients of type `T` on the CPU;
 `maxerr` is not measured again.
@@ -562,7 +564,7 @@ each interval, and it doubles the number of intervals until the measured error
 (Frobenius norm, no unit) is at most `tol`. With `tol`, the result has
 `maxerr <= tol` or the call throws. Without `tol` the goal is `1.7e-12`, and the call
 also stops when the error is below `1.7e-6` and one more doubling does not divide it
-by four. The source then limits the accuracy: the rotation angle of many turns has a
+by four. `pxform` then limits the accuracy: the rotation angle of many turns has a
 rounding error above the goal. Read `maxerr` for the error that was reached.
 
 Throws `SpiceError(:badarg)` if the epochs are not finite with `t0 < t1`, if

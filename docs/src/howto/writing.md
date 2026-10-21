@@ -1,6 +1,6 @@
 # Writing kernels
 
-The package writes SPK, CK, binary PCK, DSK and EK files, and each file is equal to the file that the CSPICE writer produces from the same input. This page writes an SPK and reads it back; the other writers follow the same pattern of open, write, close.
+The package writes SPK, CK, binary PCK, DSK and EK files, and each file is equal to the file that the CSPICE writer produces from the same input in a new process. This page writes an SPK and reads it back; the other writers follow the same pattern of open, write, close.
 
 ## Write an SPK
 
@@ -21,7 +21,7 @@ epochs = collect(range(t0, t1; length=97))   # one state each 15 minutes
 states = [conics(elements, t) for t in epochs]
 
 path = joinpath(mktempdir(), "example.bsp")
-handle = spkopn(path, "example", 0)          # path, internal file name, comment characters
+handle = spkopn(path, "example", 0)          # path, internal file name, characters reserved for comments
 # handle, body, center, frame, coverage, segment name, mu, states, epochs
 spkw05(handle, -77, 399, "J2000", t0, t1, "low orbit", mu, states, epochs)
 spkcls(handle)

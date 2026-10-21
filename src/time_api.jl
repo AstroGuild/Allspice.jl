@@ -141,8 +141,8 @@ Letter case and blanks of `type` are ignored. At start the check is off: then
 a day outside its month or year, an hour, minute or second outside its range, or a
 fraction in a component that is not the last one. The setting applies to these two
 calls on the context and to the `@` dates of the text kernels that the context loads
-afterwards ([`furnsh`](@ref), [`ldpool`](@ref), [`lmpool`](@ref)). [`str2et`](@ref)
-always checks. The setting belongs to the context; CSPICE keeps one for the process.
+afterwards ([`furnsh`](@ref), [`ldpool`](@ref), [`lmpool`](@ref)). The setting
+belongs to the context; CSPICE keeps one for the process.
 
 Throws `SpiceError(:emptystring)` if `type` is empty.
 

@@ -57,8 +57,9 @@ _eqci(a::AbstractString, b::AbstractString) =
 
 Return the difference ET - UTC in seconds at `epoch`, as `deltet_c`.
 
-`eptype` says how `epoch` is measured: `"UTC"` for UTC seconds past J2000 or `"ET"`
-for seconds past J2000 TDB; letter case is ignored. A leap-second kernel must be
+`eptype` says how `epoch` is measured: `"UTC"` for UTC seconds past J2000, counted from 2000
+JAN 01 12:00:00 UTC with 86400 seconds in every day (the result of [`tparse`](@ref)), or
+`"ET"` for seconds past J2000 TDB; letter case is ignored. A leap-second kernel must be
 loaded.
 
 Throws `SpiceError(:kernelvarnotfound)` if no leap-second kernel is loaded and
@@ -543,6 +544,7 @@ Throws `SpiceError(:badtimetype)` if a scale is not one of the above and
 # Examples
 ```julia
 furnsh("naif0012.tls")
+et = str2et("2025-03-01T12:00:00")
 jd = unitim(et, "TDB", "JDTDB")     # Julian date, TDB
 tt = unitim(et, "TDB", "TT")        # seconds past J2000, TT
 ```

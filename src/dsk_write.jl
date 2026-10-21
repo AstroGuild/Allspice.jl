@@ -21,7 +21,7 @@ memory, and the file on disk is not a complete DSK file, until [`dskcls`](@ref) 
 existing file is never replaced.
 
 Throws `SpiceError(:badrecordcount)` if `ncomch < 0`, `:fileopenfailed` if `fname` exists
-or cannot be created, and the other kinds of [`dasonw`](@ref).
+or cannot be created, and the other error kinds of [`dasonw`](@ref).
 
 See also [`dskw02`](@ref) for an example, [`dasac`](@ref) to add comments.
 """
@@ -37,7 +37,8 @@ to disk by this call.
 `optmiz` has no effect. The file is always written segregated (see
 [`DASHandle`](@ref)), which is what `optmiz = true` gives in CSPICE.
 
-Throws `SpiceError(:daswritefail)` if the file cannot be written.
+Throws `SpiceError(:daswritefail)` if the file cannot be written; the handle then stays
+open.
 """
 dskcls(h::DASHandle, optmiz::Bool=true) = dascls(h)
 

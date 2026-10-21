@@ -322,7 +322,8 @@ A context holds:
 - the DSK tolerances of [`dskstl`](@ref) and the search tolerance of [`gfstol`](@ref).
 
 A context can be shared between threads. A query takes no lock. A call that changes
-the context (a load, an unload, an edit of the pool or of a setting) is atomic: a query
+the context (a load, an unload, an edit of the pool or of a setting, a [`cvpool`](@ref)
+that clears an update) is atomic: a query
 that runs at the same time sees the context before the change or after it, never a part
 of it. Two changes on two threads are applied one after the other.
 

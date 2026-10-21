@@ -511,8 +511,8 @@ vproj(a::AbstractVector, b::AbstractVector) = _m_proj(_m_v3(a), _m_v3(b), true)
 Return the component of the vector `a` that is perpendicular to the vector `b`, as
 `vperp_c` of CSPICE.
 
-A zero `b` gives `a`, as the header of `vperp_c` says. The code of `vperp_c` in CSPICE
-N0067 gives the zero vector there.
+For a zero `b` this call returns `a`, as the header of `vperp_c` says; the code of
+`vperp_c` in CSPICE N0067 returns the zero vector.
 
 Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
 
@@ -655,10 +655,6 @@ end
 Return the product `m * vin` of a 3 by 3 matrix and a vector of 3 elements, as `mxv_c`
 of CSPICE.
 
-Each component is the sum of its three products from left to right, as in CSPICE.
-The product `m * vin` of StaticArrays can round in another way. This rule holds for
-every matrix product of the package.
-
 Throws `SpiceError(:badarg)` if `m` is not 3 by 3 or `vin` does not have 3 elements.
 
 # Examples
@@ -753,7 +749,8 @@ end
 
 Return the inverse of a state transformation matrix, as `invstm_c` of CSPICE.
 
-A state transformation `[R 0; dR R]`, as [`sxform`](@ref) returns it, has the inverse
+A state transformation `[R 0; dR R]`, with a rotation `R` and its time derivative `dR`,
+as [`sxform`](@ref) returns it, has the inverse
 `[R' 0; dR' R']`. The call transposes each of the four 3 by 3 blocks of `mat` in its
 place. It does not check that `mat` is a state transformation.
 
@@ -1068,7 +1065,7 @@ Return a right-handed orthonormal frame whose first axis is along `x`, as `frame
 CSPICE.
 
 `x̂` is the unit vector along `x`, and `y` and `z` complete the frame; the three are
-`SVector{3}` values. The component of `x̂` of the smallest magnitude is zero in `y`. The
+`SVector{3}` values. `y[i] == 0` for the index `i` of the smallest `abs(x̂[i])`. The
 zero vector gives the axes of the input frame. CSPICE overwrites its argument `x` with
 `x̂`; this call does not change `x`.
 
@@ -1197,8 +1194,8 @@ end
 """
     dvsep(s1, s2)
 
-Return the time derivative of the angle between the positions of two states, in
-radians per time unit, as `dvsep_c` of CSPICE. Parallel positions, or a zero position,
+Return the time derivative of the angle between the positions of two states, in rad/s
+for velocities per second, as `dvsep_c` of CSPICE. Parallel positions, or a zero position,
 give 0.
 
 Throws `SpiceError(:numericoverflow)` if the size of the result is above 1e308, and
@@ -1227,9 +1224,6 @@ end
     vaddg(v1, v2)
 
 Return the sum `v1 + v2` of two vectors of equal length, as `vaddg_c` of CSPICE.
-
-The `g` calls take no dimension argument: the arguments give the dimension. Static
-arguments give a static result. Other arguments give a `Vector` or a `Matrix`.
 
 Throws `SpiceError(:badarg)` if the lengths differ.
 
@@ -1374,12 +1368,12 @@ end
 """
     vsepg(v1, v2)
 
-Return the angle between two vectors of equal length, in radians in [0, pi].
-The result is 0 if a vector is zero.
+Return the angle between two vectors of equal length, in radians in [0, pi], with the
+method of [`vsep`](@ref). The result is 0 if a vector is zero.
 
-The method is the one of [`vsep`](@ref) and of the Fortran routine `VSEPG` of SPICELIB.
-`vsepg_c` of CSPICE N0067 has the acute and the obtuse case exchanged. It loses up to
-half of the digits near 0 and pi, and the result here differs from it by that error.
+`vsepg_c` of CSPICE N0067 has the acute and the obtuse case exchanged. `vsepg_c` thus
+loses up to half of the digits near 0 and pi, and the result of this call differs from
+that of `vsepg_c` by that error.
 
 Throws `SpiceError(:badarg)` if the lengths differ.
 """

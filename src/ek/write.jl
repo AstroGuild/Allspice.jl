@@ -432,7 +432,7 @@ Segment numbers start at 1; the C interface of CSPICE counts from 0. `cnames` ho
 the column names and `decls` one declaration for each column. A table name has at
 most 64 and a column name at most 32 characters: a letter, then letters, digits, `\$`
 and `_`. The file stores the names in upper case. Two columns with the same name are
-not refused.
+not refused; a call that names the column then reaches the first of them.
 
 A declaration is a list of `KEYWORD = value` items that commas separate, in any case:
 
@@ -737,7 +737,7 @@ the first one in use.
 Throws `SpiceError` with the kind:
 - `:dasnosuchhandle` or `:dasinvalidaccess` if the handle is closed or open for read;
 - `:invalidindex` if there is no segment `segno`;
-- `:bug` (as CSPICE) if the segment has no column `column`, and `:wrongdatatype` if
+- `:bug` if the segment has no column `column`, and `:wrongdatatype` if
   the column does not have character type;
 - `:indexoutofrange` if there is no row `recno`;
 - `:badattribute` if `isnull` is true and the column does not allow nulls;
@@ -851,7 +851,7 @@ The state of one fast load: the second result of [`ekifld`](@ref), which
 A fast load writes a segment column by column, where [`ekappr`](@ref) and
 [`ekacec`](@ref) write it row by row. The value takes the place of the `rcptrs` array
 of CSPICE: pass it on unchanged. CSPICE can do one fast load at a time; here every
-load has its own state, so several can run at once. Each column is stored once.
+load has its own state, so several can run at once.
 """
 struct EKFastLoad <: AbstractVector{Int32}
     handle::DASHandle
@@ -1030,7 +1030,7 @@ Throws `SpiceError` with the kind:
 - `:dasnosuchhandle` or `:dasinvalidaccess` if the handle is closed or open for read;
 - `:invalidindex` if there is no segment `segno`;
 - `:wrongsegment` if `rcptrs` belongs to another fast load;
-- `:bug` (as CSPICE) if the segment has no column `column`, and `:wrongdatatype` if
+- `:bug` if the segment has no column `column`, and `:wrongdatatype` if
   the column does not have character type;
 - `:invalidcount` if `cvals`, `entszs` or `nlflgs` do not hold all rows (CSPICE
   cannot make this check);

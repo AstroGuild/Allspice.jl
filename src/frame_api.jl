@@ -36,6 +36,8 @@ With a planetary constants kernel loaded:
 
 ```julia
 furnsh("pck00011.tpc")
+et = 0.0                                # seconds past J2000 TDB
+r_inertial = [7000.0, 0.0, 0.0]         # km, in J2000
 R = pxform("J2000", "IAU_EARTH", et)
 r_fixed = R * r_inertial
 ```
@@ -94,12 +96,14 @@ arguments `from`, `to` and `et` are those of [`pxform`](@ref). Order 0 is the ma
 of `et`.
 
 Order 1 is the derivative block of [`sxform`](@ref) for inertial, PCK and fixed-offset
-frames. It can differ for these frames, where `sxform` follows the rates of CSPICE:
+frames. It can differ for the following classes, where `sxform` follows the rates of
+CSPICE:
 
 - CK frames (class 3);
-- dynamic frames (class 5), also a frozen frame and one with
+- dynamic frames (class 5), also those defined with `FREEZE_EPOCH` or
   `ROTATION_STATE = 'INERTIAL'`;
-- switch frames (class 6) whose base is one of the above.
+- switch frames (class 6), which take a base frame by epoch, where the base is one of
+  the above.
 
 [Exact derivatives and the rates of CSPICE](@ref) says what is differentiated for each
 class.
@@ -149,6 +153,7 @@ furnsh("naif0012.tls")
 furnsh("pck00011.tpc")
 et = str2et("2025-03-01T12:00:00")
 X = sxform("J2000", "IAU_MARS", et)
+state_inertial = [3500.0, 0.0, 0.0, 0.0, 2.0, 0.0]     # km, km/s, in J2000
 state_fixed = X * state_inertial       # km, km/s
 ```
 

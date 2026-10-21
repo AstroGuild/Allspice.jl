@@ -13,7 +13,7 @@
     stmp03(x) -> (c0, c1, c2, c3)
 
 Return the Stumpff functions `c0`, `c1`, `c2`, `c3` of `x`, as `stmp03` of
-SPICELIB (CSPICE has no `_c` wrapper).
+SPICELIB.
 
 `c0 = 1 - x * c2` and `c1 = 1 - x * c3` hold to rounding. For `x > 0`, `c0` is
 `cos(sqrt(x))` and `c1` is `sin(sqrt(x)) / sqrt(x)`.
@@ -43,8 +43,9 @@ Return the state of a body at the time `dt` after the state `pvinit`, for two-bo
 motion about a mass with the gravitational parameter `gm`, as `prop2b_c` of CSPICE.
 
 The units must be consistent, for example km, km/s, seconds and km³/s². `gm` and
-`pvinit` are converted to `Float64`. `dt` can be a `ForwardDiff.Dual` or
-`Allspice.Taylor` number; the result then holds the derivatives with respect to `dt`.
+`pvinit` are converted to `Float64`. `dt` can be a `ForwardDiff.Dual` or an
+`Allspice.Taylor` number (the truncated Taylor series of [`spkder`](@ref)); the result
+then holds the derivatives with respect to `dt`.
 
 Throws:
 - `SpiceError(:nonpositivemass)` if `gm <= 0`.
@@ -106,8 +107,9 @@ Return the state at the epoch `et` of a body on the conic orbit with the element
 | 7     | `t0`    | epoch of the elements                      |
 | 8     | `mu`    | gravitational parameter of the central mass |
 
-The units must be consistent, for example km, seconds and km³/s². The elements are
-converted to `Float64`. `et` can be a `ForwardDiff.Dual` or `Allspice.Taylor` number.
+The units must be consistent, for example km, seconds past J2000 TDB for `et` and `t0`,
+and km³/s². The elements are converted to `Float64`. `et` can be a `ForwardDiff.Dual`
+or an `Allspice.Taylor` number (the truncated Taylor series of [`spkder`](@ref)).
 
 Throws:
 - `SpiceError(:badeccentricity)` if `ecc < 0`.
@@ -330,8 +332,9 @@ end
 """
     eqncpv(et, epoch, eqel, rapol, decpol) -> SVector{6}
 
-Return the state at `et` of a body whose orbit is given by equinoctial elements with
-the rates of the node and of the periapsis, as `eqncpv_c` of CSPICE.
+Return the state at the epoch `et` (seconds past J2000 TDB) of a body whose orbit is
+given by equinoctial elements with the rates of the node and of the periapsis, as
+`eqncpv_c` of CSPICE.
 
 `eqel` holds the elements at `epoch` (seconds past J2000 TDB):
 
@@ -346,16 +349,17 @@ the rates of the node and of the periapsis, as `eqncpv_c` of CSPICE.
 | 9     | rate of the longitude of the ascending node, rad/s       |
 
 The elements are relative to the equator of a pole with the right ascension `rapol`
-and the declination `decpol` (rad), given in the frame of the result. This is the
-model of SPK type 17. The result is in km and km/s. The arguments other than `et` are
-converted to `Float64`; `et` can be a `ForwardDiff.Dual` or `Allspice.Taylor` number.
+and the declination `decpol` (rad), given in the frame of the result. The x axis of
+that equator, from which the longitudes count, is at the right ascension
+`rapol + pi/2`. This is the model of SPK type 17. The result is in km and km/s. The
+arguments other than `et` are converted to `Float64`; `et` can be a `ForwardDiff.Dual`
+or an `Allspice.Taylor` number (the truncated Taylor series of [`spkder`](@ref)).
 A zero mean longitude rate gives a velocity of NaN, as in CSPICE.
 
 Throws `SpiceError`:
 - `:badsemiaxis` if `a <= 0`;
 - `:eccoutofrange` if `sqrt(h² + k²) > 0.9`;
-- `:eccoutofbounds` if `h² + k² >= 0.81` at `et` (an eccentricity of 0.9 that the
-  first check passes);
+- `:eccoutofbounds` if the eccentricity is 0.9 to rounding (`h² + k² >= 0.81`);
 - `:badarg` if `eqel` does not have 9 elements.
 
 # Examples

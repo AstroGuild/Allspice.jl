@@ -1,8 +1,8 @@
 # Mathematics
 
 The calls of this page take numbers and arrays only, and need no kernel, except
-[`recpgr`](@ref) and its relatives and [`xfmsta`](@ref). These rules hold for all of
-them:
+[`recpgr`](@ref), [`pgrrec`](@ref), [`drdpgr`](@ref), [`dpgrdr`](@ref) and
+[`xfmsta`](@ref). These rules hold for all of them:
 
 - Integer components are converted to `Float64`.
 - A sum of products is evaluated term by term in index order, as in CSPICE, so that a

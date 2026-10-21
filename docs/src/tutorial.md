@@ -19,7 +19,7 @@ foreach(furnsh, kernels)      # leap seconds, constants of the Earth, an SPK
 ktotal("ALL")
 ```
 
-A meta-kernel, which is a text kernel that lists other kernels, works as in CSPICE, so that one `furnsh` call can load a whole set.
+A meta-kernel is a text kernel that lists other kernels in its variable `KERNELS_TO_LOAD`. `furnsh(meta)` loads each listed file into the default context, and `furnsh(ctx, meta)` loads them into the context `ctx` (see [Contexts and threads](@ref)). As in CSPICE, a relative path in the list is relative to the working directory of Julia, not to the directory of the meta-kernel. The variables `PATH_SYMBOLS` and `PATH_VALUES` give a name to a directory, and an entry that begins with `$NAME` starts with that directory.
 
 The kernels of real bodies come from NAIF. The package SPICEKernels.jl downloads the generic kernels of NAIF on first use and returns their paths, which `furnsh` takes as they are:
 
@@ -28,6 +28,7 @@ using SPICEKernels
 
 furnsh(naif0012_tls())   # leap seconds
 furnsh(de440s())         # planets, Moon and Sun, 1849 to 2150
+furnsh(pck00011())       # orientation and radii of the bodies
 ```
 
 ## Convert a time
@@ -118,6 +119,6 @@ catch err
 end
 ```
 
-A query that the loaded SPK files cannot answer throws the subtype [`SpkInsufficientDataError`](@ref), which also holds the two bodies, the epoch and the body without data, so that a program can load another kernel or skip the epoch without reading the text.
+A query that the loaded SPK files cannot answer throws the subtype [`SpkInsufficientDataError`](@ref). Its fields `target` and `observer` hold the two bodies, `et` the epoch, `body` the body without data, and `loaded` whether that body has data at other epochs, so that a program can load another kernel or skip the epoch without reading the text.
 
 The task pages in the menu continue from here, and [Differences from CSPICE](@ref) lists what a CSPICE user must know before a port.

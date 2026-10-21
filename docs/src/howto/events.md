@@ -23,7 +23,7 @@ wncard(search)
 
 ## The step
 
-Every search samples its quantity at the step that the caller gives and then refines each change that it finds, to a tolerance of one microsecond unless the keyword `tol` changes it. A long step is fast, and a step that is too long loses events:
+Every search samples its quantity at the step that the caller gives and then refines each change that it finds, to the tolerance in seconds of the keyword `tol`; without `tol`, the tolerance is the one that [`gfstol`](@ref) sets for the context, by default one microsecond. A long step is fast, and a step that is too long loses events:
 
 | Search | The step must be shorter than |
 |---|---|
@@ -68,4 +68,4 @@ wncard(fast)                                # intervals with a speed above 8 km/
 
 ## Several threads
 
-Every search accepts the keyword `threads=true`, which makes one search use several threads when the confinement window has several intervals. A function given to `gfuds` is then called from several threads.
+Every search accepts the keyword `threads=true`, which searches the intervals of a window on separate threads when Julia runs with several threads. The window is the confinement window, and for a condition on a value (`"="`, `"<"`, `">"`) also the intervals on which the quantity only increases or only decreases, which the search finds first. A search for a local extremum (`"LOCMIN"`, `"LOCMAX"`), an occultation or a field of view on a window of one interval therefore gains nothing. A function given to `gfuds` or `gfudb` is then called from several threads at once and must be safe for that.

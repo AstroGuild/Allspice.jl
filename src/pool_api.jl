@@ -15,7 +15,7 @@ Return the numeric values of the kernel-pool variable `name`, as `gdpool_c`.
 The result is a new vector with every value of the variable. Different from CSPICE,
 the call has no `start` and `room` arguments and no `found` flag: an absent variable
 is an error. Use [`expool`](@ref) or [`dtpool`](@ref) to test first. Blanks around
-`name` are ignored; letter case is not.
+`name` are ignored; letter case is significant.
 
 Throws `SpiceError(:kernelvarnotfound)` if the variable is not in the pool and
 `SpiceError(:typemismatch)` if it holds character values.

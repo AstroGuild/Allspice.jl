@@ -615,7 +615,7 @@ the observer. Half plane `i` contains `refvec` rotated about that line by
 
 - `npts`: `npts[i]` is the number of points found in half plane `i` (`ncuts` elements).
 - `points`: the limb points, in km in `fixref`, half plane after half plane.
-- `epochs`: the epoch at each point (see `corloc`).
+- `epochs`: the epoch at each point, in seconds past J2000 TDB (see `corloc`).
 - `tangts`: the vector from the observer to each point, in km in `fixref` at that epoch.
 
 The three lists have `sum(npts)` elements, not `maxn` as the arrays of CSPICE. The
@@ -641,8 +641,8 @@ leaves the surface within one step. Each tangent ray is then located to within t
 angle `soltol`. With an ellipsoid method both values are ignored.
 
 `maxn` is the largest total number of points. `abcorr` is a correction string of
-[`spkezr`](@ref) or an [`Aberration`](@ref). `et` cannot be a `ForwardDiff.Dual`. With
-a DSK method, a `ctx` gives the tolerances set by [`dskstl`](@ref).
+[`spkezr`](@ref) or an [`Aberration`](@ref). `et` cannot be a `ForwardDiff.Dual`. A
+DSK method uses the tolerances that [`dskstl`](@ref) set on the context.
 
 Throws `SpiceError` with the kind
 - `:invalidoption` if `abcorr` is not a valid correction;
@@ -665,8 +665,8 @@ Throws `SpiceError` with the kind
   plane has more than 2000;
 - `:noseparation` if the observer is at the target center;
 - `:kernelvarnotfound` if the radii of `target` are not loaded, `:badradiuscount` if
-  there are not 3 of them, `:degeneratecase` if one is not positive. These two kinds
-  differ from those of [`srfrec`](@ref), as in CSPICE.
+  there are not 3 of them, `:degeneratecase` if one is not positive;
+- `:dskdatanotfound` if no DSK data are loaded for `target`.
 
 Also throws the errors of [`spkpos`](@ref).
 
@@ -739,16 +739,17 @@ Throws the kinds of [`limbpt`](@ref) for the bodies, the frame, `refvec`, `rolst
   sub-point type;
 - `:invalidlocus` if `corloc` is not one of the two values, `:badtermlocusmix` for
   `GUIDED` with `"ELLIPSOID TERMINATOR"`;
-- `:invalidcount` unless `0 <= ncuts <= maxn` (`limbpt` needs `1 <= ncuts`; the
-  difference is that of CSPICE);
-- `:objectstooclose` if the source touches the bounding sphere of the target;
-- in a `TANGENT/DSK` search, `:invalidconststep` if `schstp` is not positive (`limbpt`
-  gives `:invalidsearchstep`) and `:invalidtolerance` if `soltol` is not positive;
+- `:invalidcount` unless `0 <= ncuts <= maxn`;
+- `:objectstooclose` if the source touches the bounding sphere of the target, the sphere
+  about its center that contains it;
+- in a `TANGENT/DSK` search, `:invalidconststep` if `schstp` is not positive and
+  `:invalidtolerance` if `soltol` is not positive;
 - `:noconvergence` if the search for one terminator point of the ellipsoid takes more
   than 20 iterations;
 - `:kernelvarnotfound` if the radii of `target` or `ilusrc` are not loaded,
   `:badradiuscount` if there are not 3 of them, `:invalidaxislength` if one is not
-  positive.
+  positive;
+- `:dskdatanotfound` if no DSK data are loaded for `target`.
 
 # Examples
 ```julia
@@ -795,7 +796,7 @@ ellipsoid of `target`, as `tangpt_c` of CSPICE.
 - `srfpt`: the point of the ellipsoid nearest to `tanpt`, in km in `fixref`.
 - `trgepc`: the epoch at the point named by `corloc` (seconds past J2000 TDB). Without
   a correction it is `et`.
-- `srfvec`: the vector from the observer to `srfpt`, in km in `fixref`.
+- `srfvec`: the vector from the observer to `srfpt`, in km in `fixref` at `trgepc`.
 
 If the ray meets the ellipsoid, `alt` is 0 and `tanpt` equals `srfpt`. If
 the ray points away from the target, `tanpt` is the observer position and `range` is 0.

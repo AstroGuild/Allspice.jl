@@ -445,8 +445,9 @@ end
 Check the number of values and the type of the kernel-pool variable `name`, as
 `badkpv_c`, and return `false` if they are as expected.
 
-The number of values `n` must satisfy `n comp size`, where `comp` is `"="`, `"<"`,
-`">"`, `"<="` or `"=>"`; trailing blanks of `comp` are ignored. `n` must also be a
+The number of values `n` must satisfy `n comp size`, where `comp` is one of the
+operators of CSPICE, `"="`, `"<"`, `">"`, `"<="` and `"=>"` (not `">="` or `"=<"`);
+trailing blanks of `comp` are ignored. `n` must also be a
 multiple of `divby`; `divby = 0` fails for every variable, as in CSPICE. `type` is
 `'N'` for numbers or `'C'` for strings; letter case is ignored. `caller` is the name
 that starts the error messages. Blanks around `name` are ignored, as in
@@ -634,7 +635,8 @@ end
 """
     swpool([ctx,] agent, names) -> Nothing
 
-Watch the kernel-pool variables `names` for the agent `agent`, as `swpool_c`.
+Watch the kernel-pool variables `names` for the agent `agent`, as `swpool_c`. An
+agent is a name that the caller chooses for one watcher.
 
 After this call, and after every later change of one of the variables,
 [`cvpool`](@ref) returns `true` once for `agent`. The names are added to the ones
@@ -699,8 +701,9 @@ Return the number of changes of the kernel pool of `ctx` since the context was m
 This call has no CSPICE counterpart.
 
 Keep the value and compare it later to find out whether the pool changed. The call
-takes no lock, where [`cvpool`](@ref) takes the lock of the context. A change of the load list that assigns no variable (a binary kernel) does not
-count.
+takes no lock; [`cvpool`](@ref) takes the lock of the context, because it clears the
+pending update. A change of the load list that assigns no variable (a binary kernel)
+does not count.
 
 # Examples
 ```jldoctest

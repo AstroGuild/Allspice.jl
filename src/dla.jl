@@ -57,7 +57,8 @@ A DLA file is a DAS file that holds a doubly linked list of segments; a DSK file
 comment characters to make room for. The new file has no segment. The file on disk is not
 a complete DLA file until [`dascls`](@ref) runs.
 
-Throws `SpiceError(:badrecordcount)` if `ncomch < 0`, and the kinds of [`dasonw`](@ref).
+Throws `SpiceError(:badrecordcount)` if `ncomch < 0`, and the error kinds of
+[`dasonw`](@ref).
 
 See also [`dskopn`](@ref), [`dlabns`](@ref).
 """

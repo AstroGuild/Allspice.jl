@@ -404,7 +404,8 @@ Return a summary of `window`, as `wnsumd_c` of CSPICE.
 - `meas`: the sum of the lengths of the intervals.
 - `avg`, `stddev`: the mean and the standard deviation of the lengths.
 - `idxsml`, `idxlon`: the index in `window` of the left endpoint of the shortest and of
-  the longest interval; the first one if several are equal.
+  the longest interval; the first one if several are equal. The interval number is
+  `(idx + 1) ÷ 2`.
 
 The indexes start at 1; in CSPICE they start at 0. An empty window gives 0 for all five
 values.

@@ -525,7 +525,7 @@ without repetition, as `dskobj_c`.
 The result is a new vector, where `dskobj_c` adds the codes to a set of the caller.
 
 Throws `SpiceError(:invalidformat)` if the file is a transfer file, `:invalidarchtype` if
-it is not a DAS file, `:invalidfiletype` if it is not a DSK file, and the kinds of
+it is not a DAS file, `:invalidfiletype` if it is not a DSK file, and the error kinds of
 [`getfat`](@ref) and [`dasopr`](@ref).
 
 See also [`dsksrf`](@ref).
@@ -674,7 +674,7 @@ With an integer `target`, an integer `fixref` and vectors of `SVector{3,Float64}
 does not allocate.
 
 Throws `SpiceError(:badarg)` unless `dirarr`, `xptarr` and `fndarr` have one element for
-each ray of `vtxarr`, and the kinds of [`dskxv`](@ref).
+each ray of `vtxarr`, and the error kinds of [`dskxv`](@ref).
 """
 function dskxv!(xptarr::AbstractVector{Vec3{Float64}}, fndarr::AbstractVector{Bool},
         ks::KernelSet, pri::Bool, target::NameOrID, srflst, et::Real, fixref::NameOrID, vtxarr,
@@ -723,7 +723,8 @@ matrices, or vectors of n 3-vectors. `xptarr[i]` is the intercept of ray `i` (an
 `SVector{3,Float64}`, km; zero if there is none) and `fndarr[i]` tells whether it exists.
 The other arguments are those of [`dskxsi`](@ref).
 
-Throws `SpiceError(:invalidcount)` if there is no ray, and the kinds of [`dskxsi`](@ref).
+Throws `SpiceError(:invalidcount)` if there is no ray, and the error kinds of
+[`dskxsi`](@ref).
 
 See also [`dskxv!`](@ref).
 """

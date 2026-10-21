@@ -123,16 +123,16 @@ the DSK form can end with `"/SURFACES = <list>"`. `abcorr` is a correction strin
 where it appears from the point at `trgepc`.
 
 With `"ELLIPSOID"`, `et` can be a `ForwardDiff.Dual`, and the call does not allocate
-when the bodies and the frame are integer IDs. With a DSK method, a `ctx` gives the
-tolerances set by [`dskstl`](@ref).
+when the bodies and the frame are integer IDs. A DSK method uses the tolerances that
+[`dskstl`](@ref) set on the context.
 
 Throws `SpiceError` with the kind
 - `:invalidoption` if `abcorr` is not a valid correction;
 - `:idcodenotfound` if a body name is not known;
 - `:badmethodsyntax` if `method` is malformed, `:badpriorityspec` if a DSK method does
   not have `UNPRIORITIZED`, `:invalidmethod` if it holds a sub-point type;
-- `:bodiesnotdistinct` if `target` and `obsrvr` are the same body (`ilusrc` is not
-  compared with the other two);
+- `:bodiesnotdistinct` if `target` and `obsrvr` are the same body; `ilusrc` can be
+  either of them;
 - `:noframe` if `fixref` is not known, `:invalidframe` if it is not centered on `target`;
 - `:badarg` if `spoint` does not have 3 elements;
 - the kinds of [`srfrec`](@ref) if the radii of `target` are missing or not valid
@@ -156,11 +156,11 @@ DSK method, a flag is also false if the surface blocks the ray from the point to
 the observer or toward the source.
 
 With a DSK method, the angles and the flags use all loaded surfaces of the target: the
-`SURFACES` list of `method` is ignored. The surface normal is taken at `trgepc`, where
-[`illumg`](@ref) takes it at `et`. Both are as in CSPICE.
+`SURFACES` list of `method` is ignored. The DSK segments are those that cover
+`trgepc`; [`illumg`](@ref) takes those that cover `et`. Both are as in CSPICE.
 
 The arguments, the notes on `et`, allocation and `ctx`, and the errors are those of
-[`illumg`](@ref).
+[`illumg`](@ref), except `:dskdatanotfound` if no DSK data are loaded for `target`.
 
 See also [`ilumin`](@ref), [`illumg`](@ref).
 """

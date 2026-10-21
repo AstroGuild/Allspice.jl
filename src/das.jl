@@ -46,7 +46,8 @@ handle must hold a lock around every call.
 
 A call on a closed handle throws `SpiceError(:dasnosuchhandle)`; the close calls do
 nothing instead. A write call on a handle that is open for reading throws
-`SpiceError(:dasinvalidaccess)`.
+`SpiceError(:dasinvalidaccess)`. A call that throws changes neither the data of the handle
+nor the file.
 """
 mutable struct DASHandle
     const path::String
@@ -400,8 +401,8 @@ Throws `SpiceError`:
 - `:filarchmismatch` if the file is a DAF, `:unknownfilarc` if it is neither a DAF
   nor a DAS file (a text kernel, for example);
 - `:ftpxfererror` if the file was damaged by a transfer in text mode;
-- `:unknownbff` if the binary file format of the file is not known, `:unsupportedbff`
-  if it is a VAX format;
+- `:unknownbff` if the binary file format (the number format that the file record
+  names) is not known, `:unsupportedbff` if it is `VAX-GFLT` or `VAX-DFLT`;
 - `:dasfilereadfailed` if a directory record is past the end of the file;
 - `:baddasdirectory` if the directory records do not agree with the file.
 
@@ -433,7 +434,8 @@ end
 Create the DAS file `path` and open it for writing, as `dasonw` of SPICELIB.
 
 `ftype` is the file type (for example `"DSK"`; four characters are stored), `ifname` is
-the internal file name and `ncomr` is the number of comment records.
+the internal file name and `ncomr` is the number of comment records, 1024 characters in
+each.
 
 The file is on disk when the call returns, with the file record, `ncomr` comment records
 and an empty directory record. Data that are added afterwards are in memory until
@@ -714,8 +716,7 @@ end
 Append the integers `data` to the integer address space, as `dasadi` of SPICELIB. The file
 on disk changes when [`dascls`](@ref) runs.
 
-Throws `SpiceError(:valueoutofrange)` if a value does not fit in 32 bits; nothing is
-appended then.
+Throws `SpiceError(:valueoutofrange)` if a value does not fit in 32 bits.
 """
 function dasadi(h::DASHandle, data::AbstractVector{<:Integer})
     _das_check_write(h, "dasadi")
@@ -764,8 +765,7 @@ elements of `data`, as `dasudi` of SPICELIB. Nothing happens if `first > last`.
 
 Throws `SpiceError(:invalidaddress)` if `first` or `last` is not an address of the
 integer address space, also when `first > last`, `SpiceError(:badarg)` if `data` is too
-short, and `SpiceError(:valueoutofrange)` if a value does not fit in 32 bits. A call
-that throws changes nothing.
+short, and `SpiceError(:valueoutofrange)` if a value does not fit in 32 bits.
 """
 function dasudi(h::DASHandle, first::Integer, last::Integer, data::AbstractVector{<:Integer})
     _das_check_write(h, "dasudi")
@@ -786,7 +786,7 @@ substrings of an array of strings. Nothing happens if `first > last`.
 
 Throws `SpiceError(:invalidaddress)` if `first` or `last` is not an address of the
 character address space, also when `first > last`, and `SpiceError(:badarg)` if `data`
-is too short. A call that throws changes nothing.
+is too short.
 
 See also [`dasadc`](@ref), [`dasrdc`](@ref).
 """

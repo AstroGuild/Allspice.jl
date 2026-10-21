@@ -354,8 +354,9 @@ end
 Insert the frame class IDs of the frames that have data in the binary PCK file `pck`
 into the vector `ids`, as `pckfrm_c` does with a SPICE cell.
 
-`ids` is used as a set: on return it is sorted and without duplicates. The argument
-order is the one of SPICE.jl. The file is read from disk and need not be loaded.
+`ids` is used as a set: on return it is sorted and without duplicates. The vector
+comes first, as in SPICE.jl; CSPICE has the cell last. The file is read from disk and
+need not be loaded.
 
 Throws the errors of [`pckfrm`](@ref).
 """
@@ -377,10 +378,9 @@ sorted and without duplicates, as `pckfrm_c`.
 
 The file is read from disk and need not be loaded.
 
-Throws `SpiceError(:filenotfound)` if the file does not exist,
-`SpiceError(:invalidformat)` if it is a transfer file, `SpiceError(:invalidarchtype)`
-if it is not a DAF, and `SpiceError(:invalidfiletype)` if it is a DAF of another
-kernel type.
+Throws `SpiceError(:filenotfound)` if the file does not exist, `SpiceError(:invalidformat)`
+if it is a transfer file (a binary kernel in text form), `SpiceError(:invalidarchtype)` if
+it is not a DAF, and `SpiceError(:invalidfiletype)` if it is a DAF of another kernel type.
 
 See also [`pckcov`](@ref).
 """
@@ -393,8 +393,8 @@ Insert the coverage of the frame with the class ID `idcode` in the binary PCK fi
 `pck` into the window `cover`, as `pckcov_c`.
 
 The result is the union of the old content of `cover` with the new intervals. The
-argument order is the one of SPICE.jl. See [`pckcov`](@ref) for the intervals and the
-errors.
+window comes first, as in SPICE.jl; CSPICE has the cell last. See [`pckcov`](@ref) for
+the intervals and the errors.
 """
 function pckcov!(cover::Window, pck::AbstractString, idcode::Integer)
     _require_binary_kernel("pckcov", pck, "PCK")
@@ -407,8 +407,8 @@ end
 """
     pckcov(pck, idcode) -> Window
 
-Return the coverage window of the frame with the class ID `idcode` in the binary PCK
-file `pck`, as `pckcov_c`.
+Return the coverage [`Window`](@ref) of the frame with the class ID `idcode` in the
+binary PCK file `pck`, as `pckcov_c`.
 
 The window is the union of the intervals of the segments of that frame, in seconds
 past J2000 TDB. It is empty if the frame has no data. The file is read from disk and

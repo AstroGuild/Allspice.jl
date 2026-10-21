@@ -210,7 +210,7 @@ Throws `SpiceError`:
 - `:timeoutofbounds` if `et` is outside the coverage of `descr`, for every type. CSPICE
   signals this for the types 8, 9, 12, 13, 14, 18 and 19 only; for the other types it
   extrapolates, reads data outside the segment, or stops the process (type 1);
-- `:spktypenotsupp` if the data type is not one of CSPICE N0067;
+- `:spktypenotsupp` if the data type is not one of CSPICE version N0067;
 - `:nosuchhandle` if no SPK file with the path `file` is loaded in the context, and
   `:dafnosuchhandle` if `handle` is closed;
 - `:dafnegaddr`, `:dafbeggtend` or `:filereadfailed` if the addresses of `descr` are not
@@ -732,13 +732,14 @@ segment of another SPK file, as `spksub_c`.
 - `start`, `stop`: the coverage of the new segment, seconds past J2000 TDB.
 
 The new segment holds the records of the source that the evaluation in `[start, stop]`
-needs. Its data are those that `spksub_c` writes from the same source, double for double,
-and it is on disk when the call returns. Compared with the source segment, it gives in
-`[start, stop]` the same states for most types, states within rounding for the types 8
-and 12 (2e-13 relative, measured), and for type 20 states that differ by up to about
-3e-8 relative: the new segment stores its first epoch as a Julian date, in CSPICE as
-here. The argument order is that of
-SPICE.jl (`spksub!`); CSPICE has `newh` last.
+needs: the data that `spksub_c` writes from the same source, double for double. It is on
+disk when the call returns. `newh` comes first, as in `spksub!` of SPICE.jl; CSPICE has it
+last.
+
+In `[start, stop]` the new segment gives the states of the source segment, within
+rounding for the types 8 and 12. For type 20 the states differ from those of the source
+by up to about 3e-8 relative, in CSPICE as here, because the new segment stores its first
+epoch as a Julian date.
 
 For the types other than 14, an `ident` of more than 40 characters is cut to 40, as in
 CSPICE. A segment of type 14 is written with [`spk14b`](@ref), so `ident` must be a
@@ -752,15 +753,15 @@ Throws `SpiceError`:
 - `:spktypenotsupp` if the data type is not one of CSPICE N0067;
 - for type 14: `:spkrectoolarge` if the degree of the polynomials is above 20,
   `:invalidrefframe` if the frame is not inertial, `:baddescrtimes` if `start == stop`,
-  and the identifier kinds of [`spk14b`](@ref);
+  and the error kinds of [`spk14b`](@ref) for the identifier;
 - `:invalidvalue` (type 18), `:notsupported` (type 19) for an unknown subtype, and
   `:spkstructureerror` for a type 19 segment whose structure is damaged, or where the
   block of 100 epochs in which the search for `stop` ends begins after `stop`, a case
   in which CSPICE stops the process;
-- the kinds of [`dafbna`](@ref) and [`dafgda`](@ref) if a handle is closed, `newh` is not
-  open for writing, or the addresses of `descr` are not in the file.
+- the error kinds of [`dafbna`](@ref) and [`dafgda`](@ref) if a handle is closed, `newh`
+  is not open for writing, or the addresses of `descr` are not in the file.
 
-A call that throws adds no segment to the new file.
+A call that throws writes nothing.
 
 # Examples
 ```jldoctest

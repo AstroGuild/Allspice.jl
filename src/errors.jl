@@ -106,20 +106,25 @@ end
     SpiceError <: Exception
     SpiceError(kind::Symbol, msg) -> SpiceKindError
 
-The abstract type of the exceptions that the package throws for a call that fails.
+The abstract type of the exceptions that the package throws for a call that fails. Its
+subtypes are [`SpiceKindError`](@ref), which most failures throw, and
+[`SpkInsufficientDataError`](@ref), which a state query throws for missing SPK data.
 
 Every subtype has the fields `kind` and `msg`. `kind` is a short symbol that names the
 failure, such as `:spkinsuffdata`, `:kernelvarnotfound` or `:badarg`; test it to handle
 one failure. `msg` is the text for a person. The constructor returns a
-[`SpiceKindError`](@ref), which has these two fields only.
+`SpiceKindError`. In the docstrings, `SpiceError(:x)` means a `SpiceError` of either
+subtype whose `kind` is `:x`.
 
-A kind is the short error message that CSPICE signals in the same call, in lower case
-(`:kernelvarnotfound` for `SPICE(KERNELVARNOTFOUND)`). Two calls can therefore report
-the same failure with different kinds, as in CSPICE: a file that does not exist is
-`:nosuchfile` in `furnsh` and `:filenotfound` in `spkobj`. Test the kinds that the
-docstring of the call lists. Where CSPICE has no message, because the failure cannot
-occur in C or the call has no counterpart, the kind is a name of this package; the
-main one is `:badarg`, for an argument of the wrong size or type.
+A kind is the short error message of the CSPICE routine that the call ports, in lower
+case (`:kernelvarnotfound` for `SPICE(KERNELVARNOTFOUND)`). Sibling calls can therefore
+report one failure with different kinds, as in CSPICE: a file that does not exist is
+`:nosuchfile` in `furnsh` and `:filenotfound` in `spkobj`, a bad correction is
+`:invalidoption` in `spkezr` and `:spkinvalidoption` in `spkpos`, and an unknown body
+name is `:idcodenotfound` in `spkezr` and `:notranslation` in `bodvrd`. Test the kinds
+that the docstring of the call lists. Where CSPICE has no message, because the failure
+cannot occur in C or the call has no counterpart, the kind is a name of this package;
+the main one is `:badarg`, for an argument of the wrong size or type.
 
 A call of CSPICE that has a `found` flag returns `nothing` here when nothing is found,
 unless its docstring names another result (an error, `0`, an empty string or vector, or

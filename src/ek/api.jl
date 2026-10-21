@@ -130,7 +130,7 @@ null entry gives an empty vector and `isnull == true`.
 
 Throws `SpiceError` with the kind
 - `:invalidindex` if `segno` is not a segment of the file;
-- `:bug` (as CSPICE) if the segment has no column `column`;
+- `:bug` if the segment has no column `column`;
 - `:wrongdatatype` if the column does not have character type;
 - `:indexoutofrange` unless `1 <= recno <= nrows`;
 - `:uninitialized` if the entry was never written.
@@ -230,9 +230,10 @@ eklef(path::AbstractString) = eklef(default_context(), path)
 """
     ekuef([ctx,] handle) -> Nothing
 
-Unload the EK file that [`eklef`](@ref) loaded with the result `handle`, as `ekuef_c`.
+Unload the EK file that [`eklef`](@ref) loaded, as `ekuef_c`. `handle` is the path
+that `eklef` returned.
 
-A handle that is not loaded changes nothing, as in CSPICE. An [`EKResult`](@ref) of an
+A path that is not loaded changes nothing, as in CSPICE. An [`EKResult`](@ref) of an
 earlier [`ekfind`](@ref) stays readable after the call.
 """
 ekuef(ctx::SpiceContext, handle::AbstractString) = unload(ctx, handle)
@@ -478,7 +479,8 @@ of `result`, without trailing blanks, as `ekgc_c`.
 `selidx`, `row` and `elment` count from 1; `ekgc_c` counts from 0. `null` is true if
 the entry is null; `cdata` is then empty and `found` is true. `found` is false if an
 array entry has fewer than `elment` elements. For a scalar column `elment` is not
-used, and `found` is true.
+used, and `found` is true. The three results keep the form of CSPICE because a null
+entry and a missing element are two different cases.
 
 Throws `SpiceError(:invalidindex)` unless `1 <= row <= result.nmrows`, `selidx` is the
 position of a SELECT column and `elment >= 1`, `SpiceError(:invalidtype)` if the

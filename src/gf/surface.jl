@@ -377,7 +377,8 @@ end
 
 """
     gfsubc([ctx,] target, fixref, method, abcorr, obsrvr, crdsys, coord, relate, refval,
-           adjust, step, cnfine; tol, bail=nothing, report=nothing, threads=false) -> Window
+           adjust, step, cnfine; tol=gfstol(ctx), bail=nothing, report=nothing,
+           threads=false) -> Window
 
 Return the window of epochs, in seconds past J2000 TDB, on which the coordinate `coord`
 of the sub-observer point on `target`, as seen from `obsrvr`, satisfies the relation
@@ -414,7 +415,7 @@ The errors of `subpnt`, such as missing ephemeris data, come from the epochs tha
 search samples.
 
 # Examples
-The example needs a leapseconds kernel, an SPK, and a PCK with the radii and the
+The example needs a leap seconds kernel, an SPK, and a PCK with the radii and the
 orientation of Mars, loaded with [`furnsh`](@ref).
 ```julia
 cnfine = Window([str2et("2025 JAN 01"), str2et("2025 JAN 03")])
@@ -450,8 +451,8 @@ gfsubc(target::NameOrID, fixref::NameOrID, method::AbstractString, abcorr::Abcor
 
 """
     gfsntc([ctx,] target, fixref, method, abcorr, obsrvr, dref, dvec, crdsys, coord,
-           relate, refval, adjust, step, cnfine; tol, bail=nothing, report=nothing,
-           threads=false) -> Window
+           relate, refval, adjust, step, cnfine; tol=gfstol(ctx), bail=nothing,
+           report=nothing, threads=false) -> Window
 
 Return the window of epochs, in seconds past J2000 TDB, on which the coordinate `coord`
 of a surface intercept point on `target` satisfies the relation `relate` with `refval`,

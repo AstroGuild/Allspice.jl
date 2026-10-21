@@ -431,20 +431,23 @@ spheroid of `body`, as `recpgr_c` of CSPICE.
 `body` is a name or an ID. `re` is the equatorial radius and `f` the flattening of the
 spheroid. `lat` (radians) and `alt` are the geodetic values of [`recgeo`](@ref). `lon`
 is in radians in [0, 2 pi]; a longitude just below zero can round to 2 pi. Its sense
-comes from the kernel pool of the context, by the first rule that applies:
+comes from the kernel pool of `ctx`, or of [`default_context`](@ref) without `ctx`, by
+the first rule that applies:
 
 1. The variable `BODY<id>_PGR_POSITIVE_LON` (`EAST` or `WEST`) gives the sense, for
    every body.
-2. For the Earth, the Moon and the Sun the longitude is positive east.
-3. The longitude is positive west for prograde rotation (the rate `BODY<id>_PM[2]` is
-   positive) and positive east for retrograde rotation.
+2. For the Earth the longitude is positive east.
+3. For another body the prime meridian `BODY<id>_PM` must be in the pool. For the Moon
+   and the Sun the longitude is then positive east. For the other bodies it is positive
+   west for prograde rotation (the rate `BODY<id>_PM[2]` is positive) and positive east
+   for retrograde rotation.
 
 Throws:
 - `SpiceError(:idcodenotfound)` if `body` is a name without an ID.
 - `SpiceError(:valueoutofrange)` if `re <= 0` or `f >= 1`.
 - `SpiceError(:invalidoption)` if the sense variable is not `EAST` or `WEST`.
-- `SpiceError(:missingdata)` if the sense variable and `BODY<id>_PM` are both absent.
-  The Earth needs neither; the Moon and the Sun need one of them.
+- `SpiceError(:missingdata)` if `body` is not the Earth and the sense variable and
+  `BODY<id>_PM` are both absent.
 
 # Examples
 ```jldoctest
@@ -482,8 +485,8 @@ Return the rectangular coordinates of the point with the planetographic coordina
 `lon`, `lat` and `alt` of `body`, as `pgrrec_c` of CSPICE.
 
 `re` is the equatorial radius and `f` the flattening of the spheroid. Angles are in
-radians. The kernel pool of the context gives the sense of the longitude, by the rules in
-[`recpgr`](@ref).
+radians. The kernel pool of `ctx` (without `ctx`, of [`default_context`](@ref)) gives
+the sense of the longitude, by the rules in [`recpgr`](@ref).
 
 Throws the errors of [`recpgr`](@ref).
 
@@ -516,10 +519,6 @@ end
 Return the Jacobian of rectangular coordinates with respect to the latitudinal
 coordinates `(r, lon, lat)`, as `drdlat_c` of CSPICE.
 
-Element `[i, j]` is the derivative of rectangular coordinate `i` with respect to
-latitudinal coordinate `j`. Every Jacobian call has this layout: row `i` for the
-output coordinate, column `j` for the input coordinate. Angles are in radians.
-
 See also [`dlatdr`](@ref), [`latrec`](@ref).
 """
 drdlat(r::Real, lon::Real, lat::Real) = _m_drdlat(promote(_m_f(r), _m_f(lon), _m_f(lat))...)
@@ -542,9 +541,6 @@ end
 
 Return the Jacobian of the latitudinal coordinates `(radius, lon, lat)` with respect to
 rectangular coordinates, at the point `(x, y, z)`, as `dlatdr_c` of CSPICE.
-
-Element `[i, j]` is the derivative of latitudinal coordinate `i` with respect to
-rectangular coordinate `j`. Angles are in radians.
 
 Throws `SpiceError(:pointonzaxis)` if the point is on the z axis.
 
@@ -667,7 +663,7 @@ The spheroid has the equatorial radius `re` and the flattening `f`. Angles are i
 radians.
 
 Throws `SpiceError(:valueoutofrange)` if `f >= 1`, and `SpiceError(:badradius)` if
-`re <= 0`. [`georec`](@ref) throws `SpiceError(:valueoutofrange)` in both cases.
+`re <= 0`.
 
 See also [`dgeodr`](@ref), [`georec`](@ref), [`drdlat`](@ref).
 """
@@ -705,11 +701,10 @@ dgeodr(x::Real, y::Real, z::Real, re::Real, f::Real) =
 
 Return the Jacobian of rectangular coordinates with respect to the planetographic
 coordinates `(lon, lat, alt)` of `body`, as `drdpgr_c` of CSPICE. Angles are in
-radians. The kernel pool of the context gives the sense of the longitude, by the rules
-in [`recpgr`](@ref).
+radians. The kernel pool of `ctx` (without `ctx`, of [`default_context`](@ref)) gives
+the sense of the longitude, by the rules in [`recpgr`](@ref).
 
-Throws the errors of [`recpgr`](@ref). `re <= 0` is `:valueoutofrange` here and
-`:badradius` in [`drdgeo`](@ref).
+Throws the errors of [`recpgr`](@ref).
 
 See also [`dpgrdr`](@ref), [`pgrrec`](@ref), [`drdgeo`](@ref).
 """
@@ -727,11 +722,12 @@ end
 
 Return the Jacobian of the planetographic coordinates `(lon, lat, alt)` of `body` with
 respect to rectangular coordinates, at the point `(x, y, z)`, as `dpgrdr_c` of CSPICE.
-Angles are in radians. The kernel pool of the context gives the sense of the longitude,
-by the rules in [`recpgr`](@ref).
+Angles are in radians. The kernel pool of `ctx` (without `ctx`, of
+[`default_context`](@ref)) gives the sense of the longitude, by the rules in
+[`recpgr`](@ref).
 
-Throws the errors of [`recpgr`](@ref), with `:valueoutofrange` for `re <= 0`, and
-`SpiceError(:pointonzaxis)` if the point is on the z axis.
+Throws the errors of [`recpgr`](@ref), and `SpiceError(:pointonzaxis)` if the point is
+on the z axis.
 
 See also [`drdpgr`](@ref), [`recpgr`](@ref), [`dgeodr`](@ref).
 """
@@ -789,18 +785,19 @@ A state is three coordinates followed by their time derivatives. The names of th
 systems ignore case and blanks. Angles are in radians. A length has the unit of the
 input; with `"GEODETIC"` or `"PLANETOGRAPHIC"` it is in km, the unit of the radii.
 
-| System             | Coordinates          |
-|:-------------------|:---------------------|
-| `"RECTANGULAR"`    | x, y, z              |
-| `"CYLINDRICAL"`    | radius, lon, z       |
-| `"LATITUDINAL"`    | radius, lon, lat     |
-| `"SPHERICAL"`      | radius, colat, lon   |
-| `"GEODETIC"`       | lon, lat, alt        |
-| `"PLANETOGRAPHIC"` | lon, lat, alt        |
+| System             | Coordinates                          |
+|:-------------------|:-------------------------------------|
+| `"RECTANGULAR"`    | x, y, z                              |
+| `"CYLINDRICAL"`    | distance from the z axis, lon, z     |
+| `"LATITUDINAL"`    | distance from the origin, lon, lat   |
+| `"SPHERICAL"`      | distance from the origin, colat, lon |
+| `"GEODETIC"`       | lon, lat, alt                        |
+| `"PLANETOGRAPHIC"` | lon, lat, alt                        |
 
 `body` (name or ID) gives the spheroid of the last two systems, from `BODY<id>_RADII`
-in the kernel pool of the context. It is not read for the other systems, so `""` is
-enough there.
+in the kernel pool of `ctx`, or of [`default_context`](@ref) without `ctx`. It is not
+read for the other systems, so `""` is enough there. The planetographic longitude
+follows the rules and throws the errors of [`recpgr`](@ref).
 
 Throws:
 - `SpiceError(:coordsysnotrec)` if a system name is not known.

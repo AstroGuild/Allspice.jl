@@ -200,9 +200,12 @@ end
 
 Remove the kernel that was loaded from `path` out of `ctx`, as `unload_c`.
 
-`path` is compared as a string with the path given to [`furnsh`](@ref). If the path
-was loaded more than once, the last entry is removed. A meta-kernel takes the files
-that it loaded with it. A path that is not loaded changes nothing, as in CSPICE.
+`path` is compared as a string with the `file` of [`kdata`](@ref): the path given to
+[`furnsh`](@ref), or for a file of a meta-kernel its `KERNELS_TO_LOAD` entry after the
+`PATH_SYMBOLS` substitution. Such a file can be unloaded alone; the meta-kernel stays
+loaded. If the path was loaded more than once, the last entry is removed, as in CSPICE;
+[`kinfo`](@ref) reports the first. A meta-kernel takes the files that it loaded with
+it. A path that is not loaded changes nothing, as in CSPICE.
 
 If a text kernel is removed, the kernel pool is built again from the text kernels
 that stay, so direct edits of the pool ([`pdpool`](@ref), ...) are lost, as in CSPICE.
