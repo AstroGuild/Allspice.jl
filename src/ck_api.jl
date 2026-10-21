@@ -63,7 +63,7 @@ end
 end
 
 """
-    ckgp([ctx,] inst, sclkdp, tol, ref) -> (cmat, clkout, found)
+    ckgp([ctx,] inst, sclkdp, tol, ref) -> Union{Nothing,Tuple{SMatrix{3,3},Float64}}
 
 Return the pointing of the instrument or structure `inst` at the encoded spacecraft
 clock value `sclkdp`, as `ckgp_c`.
@@ -74,11 +74,11 @@ clock value `sclkdp`, as `ckgp_c`.
   accepted.
 - `ref`: name or ID of the reference frame of the result.
 
-`cmat` is an `SMatrix{3,3}` that rotates a vector from `ref` to the instrument frame.
-`clkout` is the clock value, in ticks, of the pointing that was used. If no loaded CK
-segment gives a pointing, `found` is `false`, `cmat` is zero and `clkout` is 0. The
-result keeps the `found` flag of CSPICE, where SPICE.jl returns `nothing`. Segments with
-and without angular velocity are searched in priority order.
+The result is `(cmat, clkout)`: `cmat` is an `SMatrix{3,3}` that rotates a vector from
+`ref` to the instrument frame, and `clkout` is the clock value, in ticks, of the
+pointing that was used. The result is `nothing` if no loaded CK segment gives a
+pointing; `nothing` takes the place of the `found` flag of CSPICE. Segments with and
+without angular velocity are searched in priority order.
 
 If `ref` is not the frame of the segment, the matrix is changed with the rotation
 between the two frames at the epoch of `clkout`. This needs the SCLK kernel of the
@@ -95,8 +95,11 @@ returns `nothing` in this case, and `ckgp` throws, both as in CSPICE.
 furnsh("naif0012.tls"); furnsh("mission.tsc"); furnsh("mission.bc")
 et = str2et("2026-10-16T12:00:00")
 sclkdp = sce2c(-77, et)
-cmat, clkout, found = ckgp(-77000, sclkdp, 0.0, "J2000")
-found && (boresight_j2000 = cmat' * [0.0, 0.0, 1.0])
+r = ckgp(-77000, sclkdp, 0.0, "J2000")
+if r !== nothing
+    cmat, clkout = r
+    boresight_j2000 = cmat' * [0.0, 0.0, 1.0]
+end
 ```
 
 See also [`ckgpav`](@ref), [`ckcov`](@ref), [`pxform`](@ref).
@@ -104,30 +107,30 @@ See also [`ckgpav`](@ref), [`ckcov`](@ref), [`pxform`](@ref).
 function ckgp(ks::KernelSet, inst::Integer, sclkdp::Real, tol::Real, ref::NameOrID)
     i = Int32(inst)
     found, cmat, _, clkout, refseg = _ck_search(ks, i, Float64(sclkdp), _ck_check_tol(tol), false)
-    found || return zero(Mat3{Float64}), 0.0, false
+    found || return nothing
     refreq = frame_id(ks, ref)
     if refreq != refseg
         et = _ck_change_epoch(ks, i, refreq, refseg, clkout)
         cmat = _m_mxm(cmat, frame_rotation(ks, refreq, refseg, et))
     end
-    return cmat, clkout, true
+    return cmat, clkout
 end
 
 """
-    ckgpav([ctx,] inst, sclkdp, tol, ref) -> (cmat, av, clkout, found)
+    ckgpav([ctx,] inst, sclkdp, tol, ref) -> Union{Nothing,Tuple{SMatrix,SVector,Float64}}
 
 Return the pointing and the angular velocity of the instrument or structure `inst` at
 the encoded spacecraft clock value `sclkdp`, as `ckgpav_c`.
 
-`av` is an `SVector{3}`: the angular velocity of the instrument frame relative to
-`ref`, in rad/s, with components in `ref`. Only segments with angular velocity are
-used. If none gives a pointing, `found` is `false` and `cmat`, `av` and `clkout` are
-zero. The other arguments, results and errors are those of [`ckgp`](@ref).
+The result is `(cmat, av, clkout)`, where `av` is an `SVector{3}`: the angular velocity
+of the instrument frame relative to `ref`, in rad/s, with components in `ref`. Only
+segments with angular velocity are used, and the result is `nothing` if none gives a
+pointing. The other arguments, results and errors are those of [`ckgp`](@ref).
 """
 function ckgpav(ks::KernelSet, inst::Integer, sclkdp::Real, tol::Real, ref::NameOrID)
     i = Int32(inst)
     found, cmat, av, clkout, refseg = _ck_search(ks, i, Float64(sclkdp), _ck_check_tol(tol), true)
-    found || return zero(Mat3{Float64}), zero(Vec3{Float64}), 0.0, false
+    found || return nothing
     refreq = frame_id(ks, ref)
     if refreq != refseg
         et = _ck_change_epoch(ks, i, refreq, refseg, clkout)
@@ -138,7 +141,7 @@ function ckgpav(ks::KernelSet, inst::Integer, sclkdp::Real, tol::Real, ref::Name
         cmat = _m_mxm(cmat, rot)
         av = Vec3{Float64}(omega[3, 2], omega[1, 3], omega[2, 1]) + _m_mtxv(rot, av)
     end
-    return cmat, av, clkout, true
+    return cmat, av, clkout
 end
 
 # --- one link of a CK frame -----------------------------------------------------------------
@@ -381,32 +384,60 @@ function _ck_intervals!(out::Vector{NTuple{2,Float64}}, data::Vector{Float64}, s
 end
 
 """
-    _wnmerge(v) -> Vector{NTuple{2,Float64}}
+    ckcov!(cover, [ctx,] ck, idcode, needav, level, tol, timsys) -> cover
 
-The window (ascending disjoint intervals) that is the union of the intervals `v`, as
-repeated `wninsd_`: intervals that overlap or touch are joined.
+Insert the coverage of the instrument or structure `idcode` in the CK file `ck` into the
+window `cover`, as `ckcov_c`.
+
+The result is the union of the old content of `cover` with the new intervals. The
+window comes first, as in [`spkcov!`](@ref) and [`pckcov!`](@ref); CSPICE and SPICE.jl
+have it last. See [`ckcov`](@ref) for the arguments, the intervals and the errors. A
+call that throws for an argument or for the file leaves `cover` unchanged.
 """
-function _wnmerge(v::Vector{NTuple{2,Float64}})
-    out = NTuple{2,Float64}[]
-    for (a, b) in sort(v)       # invariant: `out` is the window of the intervals before (a, b)
-        if !isempty(out) && a <= out[end][2]
-            out[end] = (out[end][1], max(out[end][2], b))
+function ckcov!(cover::Window, ks::KernelSet, ck::AbstractString, idcode::Integer,
+        needav::Bool, level::AbstractString, tol::Real, timsys::AbstractString)
+    tolf = _ck_check_tol(tol)
+    lev = uppercase(strip(level))
+    lev in ("SEGMENT", "INTERVAL") || throw(SpiceError(:invalidoption,
+        "allowed values of the level are SEGMENT and INTERVAL; the value was '$level'"))
+    sys = uppercase(strip(timsys))
+    sys in ("SCLK", "TDB") || throw(SpiceError(:notsupported,
+        "the time system was '$timsys'; allowed values are SCLK and TDB"))
+    daf = _ck_open(ck, "ckcov")
+    raw = NTuple{2,Float64}[]
+    for seg in daf.cksegments
+        (seg.inst == idcode && (seg.avflag || !needav)) || continue
+        if lev == "SEGMENT"
+            push!(raw, (seg.t0, seg.t1))
         else
-            push!(out, (a, b))
+            _ck_intervals!(raw, daf.data, seg)
         end
     end
-    return out
+    clkid = _ck_sclkid(ks, Int32(idcode))
+    # invariant: `cover` is the union of its old content and the intervals before (a, b)
+    for (a, b) in raw
+        if tolf > 0 || lev == "SEGMENT"
+            a = max(a - tolf, 0.0)
+            b += tolf
+        end
+        if sys == "TDB"
+            a = sct2e(ks, clkid, a)
+            b = sct2e(ks, clkid, b)
+        end
+        a <= b && wninsd!(cover, a, b)
+    end
+    return cover
 end
 
 """
-    ckcov([ctx,] ck, idcode, needav, level, tol, timsys) -> Vector{NTuple{2,Float64}}
+    ckcov([ctx,] ck, idcode, needav, level, tol, timsys) -> Window
 
-Return the coverage of the instrument or structure `idcode` in the CK file `ck`, as
-`ckcov_c`.
+Return the coverage [`Window`](@ref) of the instrument or structure `idcode` in the CK
+file `ck`, as `ckcov_c`.
 
-The result is the list of the intervals `(start, stop)` on which the file gives a
-pointing, ascending and disjoint. Different from [`spkcov`](@ref), the result is a
-vector of tuples and not a `Window`, and there is no form that adds to a window.
+The window holds the intervals on which the file gives a pointing, as sorted disjoint
+intervals; it is empty if the file has no data for `idcode`. `wnfetd(w, i)` gives
+interval `i` as `(start, stop)`.
 
 - `needav`: `true` restricts the answer to segments with angular velocity.
 - `level`: `"SEGMENT"` gives the bounds in the segment descriptors; `"INTERVAL"` gives
@@ -427,46 +458,19 @@ the two, the file errors of [`ckobj`](@ref), and for `"TDB"` the errors of
 ```julia
 furnsh("naif0012.tls"); furnsh("mission.tsc")
 for id in ckobj("mission.bc")
-    for (start, stop) in ckcov("mission.bc", id, false, "INTERVAL", 0.0, "TDB")
+    w = ckcov("mission.bc", id, false, "INTERVAL", 0.0, "TDB")
+    for i in 1:wncard(w)
+        start, stop = wnfetd(w, i)
         println(id, ": ", et2utc(start, "ISOC", 0), " to ", et2utc(stop, "ISOC", 0))
     end
 end
 ```
+
+See also [`ckcov!`](@ref), [`spkcov`](@ref), [`pckcov`](@ref).
 """
-function ckcov(ks::KernelSet, ck::AbstractString, idcode::Integer, needav::Bool,
-        level::AbstractString, tol::Real, timsys::AbstractString)
-    tolf = _ck_check_tol(tol)
-    lev = uppercase(strip(level))
-    lev in ("SEGMENT", "INTERVAL") || throw(SpiceError(:invalidoption,
-        "allowed values of the level are SEGMENT and INTERVAL; the value was '$level'"))
-    sys = uppercase(strip(timsys))
-    sys in ("SCLK", "TDB") || throw(SpiceError(:notsupported,
-        "the time system was '$timsys'; allowed values are SCLK and TDB"))
-    daf = _ck_open(ck, "ckcov")
-    raw = NTuple{2,Float64}[]
-    for seg in daf.cksegments
-        (seg.inst == idcode && (seg.avflag || !needav)) || continue
-        if lev == "SEGMENT"
-            push!(raw, (seg.t0, seg.t1))
-        else
-            _ck_intervals!(raw, daf.data, seg)
-        end
-    end
-    clkid = _ck_sclkid(ks, Int32(idcode))
-    out = NTuple{2,Float64}[]
-    for (a, b) in raw
-        if tolf > 0 || lev == "SEGMENT"
-            a = max(a - tolf, 0.0)
-            b += tolf
-        end
-        if sys == "TDB"
-            a = sct2e(ks, clkid, a)
-            b = sct2e(ks, clkid, b)
-        end
-        a <= b && push!(out, (a, b))
-    end
-    return _wnmerge(out)
-end
+ckcov(ks::KernelSet, ck::AbstractString, idcode::Integer, needav::Bool,
+    level::AbstractString, tol::Real, timsys::AbstractString) =
+    ckcov!(Window(), ks, ck, idcode, needav, level, tol, timsys)
 
 # --- forms on a context and on the default context ---------------------------------------
 
@@ -486,6 +490,12 @@ ckcov(ctx::SpiceContext, ck::AbstractString, idcode::Integer, needav::Bool,
     ckcov(kernelset(ctx), ck, idcode, needav, level, tol, timsys)
 ckcov(ck::AbstractString, idcode::Integer, needav::Bool, level::AbstractString, tol::Real,
     timsys::AbstractString) = ckcov(default_context(), ck, idcode, needav, level, tol, timsys)
+ckcov!(cover::Window, ctx::SpiceContext, ck::AbstractString, idcode::Integer, needav::Bool,
+    level::AbstractString, tol::Real, timsys::AbstractString) =
+    ckcov!(cover, kernelset(ctx), ck, idcode, needav, level, tol, timsys)
+ckcov!(cover::Window, ck::AbstractString, idcode::Integer, needav::Bool,
+    level::AbstractString, tol::Real, timsys::AbstractString) =
+    ckcov!(cover, default_context(), ck, idcode, needav, level, tol, timsys)
 ckfrot(ctx::SpiceContext, inst::Integer, et::Real) = ckfrot(kernelset(ctx), inst, et)
 ckfrot(inst::Integer, et::Real) = ckfrot(default_context(), inst, et)
 ckfxfm(ctx::SpiceContext, inst::Integer, et::Real) = ckfxfm(kernelset(ctx), inst, et)

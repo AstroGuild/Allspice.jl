@@ -496,7 +496,7 @@ function c_ekpsel(query)
         xtypes=Symbol[(:CHR, :DP, :INT, :TIME)[xt[i]+1] for i in 1:k],
         xclass=Symbol[(:COL, :FUNC, :EXPR)[xc[i]+1] for i in 1:k],
         tabs=String[c_string(view(tabs, (i-1)*65+1:i*65)) for i in 1:k],
-        cols=String[c_string(view(cols, (i-1)*33+1:i*33)) for i in 1:k], error=err[] != 0, errmsg=c_string(buf))
+        cols=String[c_string(view(cols, (i-1)*33+1:i*33)) for i in 1:k], failed=err[] != 0, errmsg=c_string(buf))
 end
 
 c_eknelt(selidx, row) = (n = ccall((:eknelt_c, EKLIB), Cint, (Cint, Cint), selidx - 1, row - 1); c_check(); Int(n))

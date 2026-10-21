@@ -232,16 +232,16 @@ end
 eklef(path::AbstractString) = eklef(default_context(), path)
 
 """
-    ekuef([ctx,] handle) -> Nothing
+    ekuef([ctx,] path) -> Nothing
 
-Unload the EK file that [`eklef`](@ref) loaded, as `ekuef_c`. `handle` is the path
-that `eklef` returned.
+Unload the EK file that [`eklef`](@ref) loaded, as `ekuef_c`. `path` is the value that
+`eklef` returned; `ekuef_c` takes an integer handle.
 
 A path that is not loaded changes nothing, as in CSPICE. An [`EKResult`](@ref) of an
 earlier [`ekfind`](@ref) stays readable after the call.
 """
-ekuef(ctx::SpiceContext, handle::AbstractString) = unload(ctx, handle)
-ekuef(handle::AbstractString) = ekuef(default_context(), handle)
+ekuef(ctx::SpiceContext, path::AbstractString) = unload(ctx, path)
+ekuef(path::AbstractString) = ekuef(default_context(), path)
 
 """
     ektnam([ctx,] n) -> String
@@ -317,7 +317,7 @@ ekcii(table::AbstractString, cindex::Integer) = ekcii(default_context(), table, 
     ekpsel([ctx,] query) -> NamedTuple
 
 Return the description of the SELECT clause of `query`, as `ekpsel_c`, in the named
-tuple `(n, xbegs, xends, xtypes, xclass, tabs, cols, error, errmsg)`.
+tuple `(n, xbegs, xends, xtypes, xclass, tabs, cols, failed, errmsg)`.
 
 - `n`: the number of SELECT items. The vectors have one element for each item.
 - `xbegs`, `xends`: first and last byte of the item in `query`, from 1 (`ekpsel_c`
@@ -325,9 +325,9 @@ tuple `(n, xbegs, xends, xtypes, xclass, tabs, cols, error, errmsg)`.
 - `xtypes`: the data type, `:CHR`, `:DP`, `:INT` or `:TIME`.
 - `xclass`: the class of the item, always `:COL` (a column).
 - `tabs`, `cols`: the table name (never the alias) and the column name, in upper case.
-- `error`, `errmsg`: the error flag and the message of CSPICE for the query.
+- `failed`, `errmsg`: the error flag and the message of CSPICE for the query.
 
-A query that is not valid gives `error == true`, `n == 0` and empty vectors; the call
+A query that is not valid gives `failed == true`, `n == 0` and empty vectors; the call
 does not throw for it. The query is checked against the loaded tables, as in
 [`ekfind`](@ref).
 """
@@ -429,8 +429,8 @@ julia> ekfind(ctx, "SELECT NAME FROM MOONS WHERE")[2:3]
 See also [`eklef`](@ref), [`ekpsel`](@ref), [`ekrcec`](@ref).
 """
 function ekfind(ks::KernelSet, td::TimeDefaults, query::AbstractString)
-    q, error, errmsg = _ek_encode_query(ks.ektables, ks, td, query)
-    error && return _ek_empty_result(), true, errmsg
+    q, failed, errmsg = _ek_encode_query(ks.ektables, ks, td, query)
+    failed && return _ek_empty_result(), true, errmsg
     return _ek_search(ks, q), false, ""
 end
 ekfind(ctx::SpiceContext, query::AbstractString) =

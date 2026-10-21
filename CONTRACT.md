@@ -242,8 +242,8 @@ the call (`:noleapseconds`, `:missingtimeinfo` or `:kernelvarnotfound`).
   and the `@` dates on, every other value turns it off, and `""` throws `:emptystring`.
   It is off at start, as in CSPICE; another context is not changed.
 - `eklef([ctx], path) -> String` is `furnsh` for a file that is an EK
-  (`:wrongarchitecture` otherwise) and returns the path as the handle of
-  `ekuef([ctx], handle)`, which is `unload`.
+  (`:wrongarchitecture` otherwise) and returns the path, which `ekuef([ctx], path)`,
+  that is `unload`, takes.
 - `jul2gr(y, m, d)`, `gr2jul(y, m, d) -> (year, month, day, doy)`.
 - Constants: `j1900 j1950 j2000 j2100 jyear tyear spd b1900 b1950 clight halfpi twopi
   rpd dpr`, each a function without arguments.
@@ -315,10 +315,11 @@ function of ticks. The evaluators follow the readers `ckrNN` and the evaluators
   `spkgeo`, is `_ck_state_rotation` (the two blocks of `sxform_c`, as `frmchg_`); for
   every other chain it is `rotation_jet`. `_exact_frame_jet` always gives the exact
   derivatives.
-- Public: `ckgp`, `ckgpav` (`SpiceError(:valueoutofrange)` for `tol < 0`), `ckcov`,
-  `ckobj`, `ckmeta` (`SpiceError(:unknownckmeta)`), and `ckfrot`, `ckfxfm`: one CK link
-  as `_ck_frame_step` evaluates it, `nothing` without CK data, without the SCLK kernel
-  (`ckhave_`, `zzsclk_`) or without a segment.
+- Public: `ckgp`, `ckgpav` (`nothing` without a pointing; `SpiceError(:valueoutofrange)`
+  for `tol < 0`), `ckcov`, `ckcov!` (a `Window`, filled with `wninsd!` interval by
+  interval as `ckcov_`), `ckobj`, `ckmeta` (`SpiceError(:unknownckmeta)`), and `ckfrot`,
+  `ckfxfm`: one CK link as `_ck_frame_step` evaluates it, `nothing` without CK data,
+  without the SCLK kernel (`ckhave_`, `zzsclk_`) or without a segment.
 - `ck_records.jl` (after `daf_access.jl`, since it takes a `DAFHandle`): `cknr02`,
   `ckgr02`, `cknr03`, `ckgr03` read the records of one segment through a handle and a
   packed descriptor; `:ckwrongdatatype`, `:cknonexistrec`.
@@ -411,8 +412,9 @@ the default context, plus an inner form on a `KernelSet`.
 ## `aberration.jl`
 
 - `struct Aberration` (plain bits; properties `uselt`, `converged`, `stellar`,
-  `transmit`, `geometric`); `Aberration(s::AbstractString)` parses as `zzvalcor` and
-  throws `SpiceError(:badarg, ...)`. `AbcorrArg` is the union of the two argument forms.
+  `transmit`, `geometric`; the first four are the keywords of `Aberration(; ...)`, and
+  the field `flags` is private); `Aberration(s::AbstractString)` parses as `zzvalcor` and
+  throws `SpiceError(:invalidoption, ...)`. `AbcorrArg` is the union of the two argument forms.
 - `abcorr_state(ks, targ::Int32, et, ref::Int32, corr, obs::Int32) -> (SVector{6}, lt)`
   (`spkez`), `abcorr_position(...) -> (SVector{3}, lt)` (`spkezp`),
   `abcorr_jet(..., ::Val{N}) -> NTuple{N+1,Vec3}`.
@@ -424,6 +426,9 @@ the default context, plus an inner form on a `KernelSet`.
   equal bit for bit.
 
 ## `windows.jl`
+
+`windows.jl` comes before `ck_api.jl` in the include order, because `ckcov!` takes a
+`Window`.
 
 - `struct Window <: AbstractVector{Float64}`: `data` holds the endpoints of disjoint
   closed intervals in increasing order, so `w[k]`, `length(w)` and iteration give what
@@ -799,7 +804,7 @@ pages; a segment holds rows of one table, and a row has one entry for each colum
   `ints` (a `DASHandle` or an `EKFile`). They hold no state, so many tasks can read one
   store at the same time. `open_ek(path) -> EKFile` throws the kinds of `dasopr`,
   `:wrongarchitecture`, `:invalidformat`, `:eknosegments` or `:ekcolnummismatch`.
-- `_ek_encode_query(tables, ks, td::TimeDefaults, query) -> (q, error, errmsg)` is a
+- `_ek_encode_query(tables, ks, td::TimeDefaults, query) -> (q, failed, errmsg)` is a
   pure function that returns the message of `ekfind_c` for a query that is not valid,
   and throws `SpiceError` only where CSPICE signals a SPICE error. Its docstring lists
   the known differences from CSPICE.

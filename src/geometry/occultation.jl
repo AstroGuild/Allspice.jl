@@ -379,7 +379,7 @@ function _geo_occ_roles(ks::KernelSet, tols::DSKTolerances, front::_GeoOccBody, 
      (back.kind == _GEO_OCC_DSK && front.kind != _GEO_OCC_POINT)) && throw(SpiceError(
         :invalidshapecombo, "a target with DSK data needs a point as the other target"))
     full = _geo_abcorr(abcorr)
-    corr = full.uselt ? Aberration(; lt=true, converged=full.converged, transmit=full.transmit) :
+    corr = full.uselt ? Aberration(; uselt=true, converged=full.converged, transmit=full.transmit) :
            full
     return _geo_occ_eval(ks, tols, front, fframe, back, bframe, bsrf, obs, corr, et)
 end
