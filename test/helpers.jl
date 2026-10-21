@@ -61,12 +61,14 @@ end
     group(body, name, kernels...)
 
 Run `body()` inside `@testset name`, or print a skip notice if one of `kernels` is not
-on disk. Postcondition: the group is either run or listed in `SKIPPED`.
+on disk; with ALLSPICE_REQUIRE_KERNELS=1 a missing kernel throws an error instead.
+Postcondition: the group is either run or listed in `SKIPPED`.
 """
 function group(body, name::AbstractString, kernels...)
     gone = Kernels.missing_kernels(kernels...)
     if !isempty(gone)
         reason = "missing kernels: " * join(gone, ", ")
+        Kernels.REQUIRED && error("$name: $reason (ALLSPICE_REQUIRE_KERNELS=1)")
         printstyled("SKIP  ", name, "  (", reason, ")\n"; color=:yellow, bold=true)
         push!(SKIPPED, (String(name), reason))
         return nothing

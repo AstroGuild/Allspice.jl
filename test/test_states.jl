@@ -142,7 +142,7 @@ group("1b. states against CSPICE, de405", Kernels.DE405, Kernels.LSK) do
     set = [Kernels.LSK, Kernels.DE405]
     oracle_load(set)
     ctx = neo_context(set)
-    # Body 1000000 of this file has the degenerate coverage [0, 0]; leave it out.
+    # Some copies of this file have a body 1000000 with the degenerate coverage [0, 0].
     bodies = [b for b in spk_bodies(Kernels.DE405) if b < 1000]
     @test length(bodies) >= 14
     epochs = random_epochs(rng, 20, DE405_COVERAGE...)

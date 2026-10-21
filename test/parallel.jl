@@ -14,6 +14,7 @@
 # groups have the same weight, so the second run is faster than the first.
 
 const TESTDIR = @__DIR__
+include(joinpath(TESTDIR, "kernels.jl"))
 const TIMES_FILE = joinpath(TESTDIR, ".group_seconds")
 const TIMES_HEADER = "Time of each group (s), longest first"
 
@@ -76,6 +77,7 @@ function main(args)
     mean = isempty(known) ? 1.0 : sum(values(known)) / length(known)
     jobs = partition(selected, g -> get(known, g, mean), njobs)
 
+    Kernels.fetch_kernels()     # once here, so that the processes do not download in parallel
     logdir = mktempdir()
     julia = `$(Base.julia_cmd()) --startup-file=no --threads=$(Threads.nthreads())
         --project=$TESTDIR $(joinpath(TESTDIR, "runtests.jl"))`
