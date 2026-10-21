@@ -1,8 +1,6 @@
 # Geometry group: limb points, terminator points and the tangent point of a ray
 # (`limbpt`, `termpt`, `tangpt`) against CSPICE.
 #
-# Feature file: features/geometry_limb_terminator.feature
-#
 # Error measures: the number of points per cutting half plane must be equal; then the
 # norm of the difference from the CSPICE vector over the norm of the CSPICE vector, and
 # the absolute difference of the epochs in seconds.

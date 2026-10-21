@@ -1,8 +1,6 @@
 # Geometry group: illumination angles, the phase angle and the angular separation of two
 # bodies (`ilumin`, `illumg`, `illumf`, `phaseq`, `trgsep`) against CSPICE.
 #
-# Feature file: features/geometry_illumination.feature
-#
 # Error measures: the absolute difference of the angles in radians, the norm of the
 # difference of the observer-to-point vector over its norm, and the absolute difference
 # of the epoch in seconds.

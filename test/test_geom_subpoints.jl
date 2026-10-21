@@ -1,8 +1,6 @@
 # Geometry group: sub-observer point, sub-solar point, surface intercept (`subpnt`,
 # `subslr`, `sincpt`, `srfrec`) against CSPICE.
 #
-# Feature file: features/geometry_surface_points.feature
-#
 # Error measures: the norm of the difference from the CSPICE vector over the norm of
 # the CSPICE vector, and the absolute difference of the epoch in seconds.
 #

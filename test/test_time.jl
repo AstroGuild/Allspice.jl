@@ -1,7 +1,5 @@
 # Group 9: the time subsystem against CSPICE.
 #
-# Feature file: features/time_conversions.feature
-#
 # Strings to ET (`str2et`, `utc2et`, `tparse`), ET to strings (`timout`, `et2utc`,
 # `etcal`), pictures (`tpictr`), uniform scales (`unitim`), time vectors (`ttrans`,
 # compared with the Fortran-style entry `ttrans_` of the CSPICE library, which SPICE.jl

@@ -9,7 +9,7 @@ Queries are safe from many threads at once, because all loaded data belong to a 
 The package needs Julia 1.10 or later. Install it from GitHub:
 
 ```julia-repl
-pkg> add https://github.com/EllissoideRotondo/Allspice.jl
+pkg> add https://github.com/AstroGuild/Allspice.jl
 ```
 
 The examples of this manual run on three small kernels that the manual writes itself: leap seconds, the constants of the Earth, and two-body orbits of the Earth around the Sun and of a spacecraft named `PROBE` around the Earth. The positions are therefore not those of the real bodies; with kernels from NAIF the same calls give real positions.

@@ -244,7 +244,7 @@ and readers on many threads do not contend.
   is not the result of the text kernels of `loaded` alone (`pool_write.jl`).
 - `bodydefs`: the name and code pairs of `boddef`, oldest first.
 - `dskfiles`: the loaded DSK files, in load order; `DSKSegment.file` indexes this vector.
-- `dsk`: DSK segments by centre body ID, in the search order of CSPICE (later file
+- `dsk`: DSK segments by center body ID, in the search order of CSPICE (later file
   first, and inside a file later segment first).
 - `ekfiles`: the loaded EK files, in load order (a file that is loaded twice is here once).
 - `ektables`: the tables of the loaded EK files, in load order; `EKTable.segs` indexes

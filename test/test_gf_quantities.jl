@@ -27,8 +27,6 @@
 # Allspice follows its own. For these two quantities an end point that differs by more
 # than 2e-6 s is accepted only if the quantity has the same value at the two epochs, to
 # the rounding of the states (`gf_compare` with `value`).
-#
-# Behaviour specification: test/features/gf_quantities.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
 

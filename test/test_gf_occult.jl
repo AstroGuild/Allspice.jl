@@ -24,8 +24,6 @@
 # not their product; it does not make the table of search times. The exhaustive run
 # searches random spans of 2 to 12 years, every transit with every correction, every
 # synthetic case and every pair of a DSK method and a correction.
-#
-# Behaviour specification: test/features/gf_occult.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
 isdefined(@__MODULE__, :GEOLIB) || include("geomfixtures.jl")

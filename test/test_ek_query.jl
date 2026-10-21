@@ -1,8 +1,6 @@
 # Group EK 2: loaded EK tables and queries (`ekntab`, `ektnam`, `ekccnt`, `ekcii`,
 # `ekpsel`, `ekfind`, `eknelt`, `ekgc`, `ekgd`, `ekgi`).
 #
-# Feature file: features/ek_queries.feature
-#
 # Three references are used.
 #
 #   1. CSPICE, for every query of the corpus: the error flag, the error message, the row

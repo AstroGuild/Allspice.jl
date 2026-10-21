@@ -99,7 +99,7 @@ The access calls (`dskgd`, `dskb02`, `dskz02`, `dskp02`, `dskv02`, `dskn02`, `ds
 
 A caller reads these fields:
 - `dladsc`, `dskdsc`: the [`DLADescr`](@ref) and the [`DSKDescr`](@ref) of the segment.
-- `boxctr`, `boxrad`: centre and radius (km) of the bounding sphere of the segment, in the
+- `boxctr`, `boxrad`: center and radius (km) of the bounding sphere of the segment, in the
   frame of the segment. `boxrad` is NaN unless the coordinate system of the segment is
   latitudinal, rectangular or planetodetic.
 """
@@ -157,7 +157,7 @@ _dsk_withfile(s::DSKSegment, file::Integer) = DSKSegment(Int32(file), s.dladsc, 
 """
     _dsk_segment_table(files) -> Dict{Int32,Vector{DSKSegment}}
 
-The segments of the loaded DSK `files` (load order) by centre body, in the search
+The segments of the loaded DSK `files` (load order) by center body, in the search
 order of CSPICE: later file first, and inside one file later segment first. Each
 segment gets the number of its file.
 """

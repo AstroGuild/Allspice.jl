@@ -15,13 +15,13 @@
 #
 # ALLSPICE_TEST_FULL=1 selects the exhaustive run (large samples, all derivative orders).
 #
-# Kernel paths are in `test/kernels.jl`; the environment variables ALLSPICE_KERNEL_DIR,
-# ALLSPICE_DE440S and ALLSPICE_DE405 override them. A group whose kernels are missing is
-# skipped with a visible notice. ALLSPICE_TEST_SEED changes the random samples.
-#
-# Behaviour specifications (Given / When / Then) are in `test/features/*.feature`.
+# The kernels are downloaded into `test/data/` on the first run (about 110 MB); the
+# environment variables of `test/kernels.jl` change their paths and the download. A
+# group whose kernels are missing is skipped with a visible notice, or fails with
+# ALLSPICE_REQUIRE_KERNELS=1. ALLSPICE_TEST_SEED changes the random samples.
 
 include("helpers.jl")
+Kernels.fetch_kernels()
 
 const GROUPS = ["states", "rotations", "derivatives", "identities", "pool", "management",
     "threads", "quality", "aberration", "spktypes", "time", "sclk", "ck", "dafwrite",

@@ -1,8 +1,6 @@
 # Group: ephemeris and rotation tables (`ephemeris_table`, `table_position`, `table_state`,
 # `table_jet`, `table_to_spk`, `rotation_table`, `table_rotation`, `table_rotation_jet`).
 #
-# Feature file: features/ephemeris_table.feature
-#
 # The oracle is CSPICE at random epochs of the table. Thresholds:
 #   native grid (geometric, inertial, SPK type 2): the table is the polynomial of the
 #     kernels, so the position agrees to a few units of rounding (measured 6e-16

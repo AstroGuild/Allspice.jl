@@ -1,8 +1,6 @@
 # Geometry group: states relative to an observer or a target with a constant position or
 # a constant velocity in a frame (`spkcpo`, `spkcpt`, `spkcvo`, `spkcvt`) against CSPICE.
 #
-# Feature file: features/geometry_fixed_observer.feature
-#
 # Error measure: the norm of the difference from the CSPICE vector over the norm of the
 # CSPICE vector, for the position and the velocity apart, and the relative difference
 # of the light time. The differences are those of the aberration group: a corrected

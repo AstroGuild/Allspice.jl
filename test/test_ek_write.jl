@@ -1,7 +1,5 @@
 # Group EK 3: writing EK files.
 #
-# Feature file: features/ek_write.feature
-#
 # CSPICE is the oracle. A seeded random model is written by CSPICE and by Allspice with
 # the same sequence of calls; after the close the three DAS address spaces of the two
 # files (characters, doubles, integers) must be equal word for word. The same holds

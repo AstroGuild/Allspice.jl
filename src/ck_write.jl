@@ -348,7 +348,7 @@ end
           rate, nints, starts; ctx=default_context()) -> Nothing
 
 Write a CK segment of type 5, as `ckw05_c`. The type holds the interpolation methods of
-the attitude files of ESOC, the operations centre of ESA (format DDID).
+the attitude files of ESOC, the operations center of ESA (format DDID).
 
 `subtyp` selects the interpolation and the content of a packet. `q` is a SPICE
 quaternion (scalar first), `dq` its derivative, `av` the angular velocity in `ref`

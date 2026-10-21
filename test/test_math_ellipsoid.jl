@@ -1,7 +1,5 @@
 # Group 15: ellipsoid, plane and ellipse geometry against CSPICE.
 #
-# Feature file: features/math_ellipsoid.feature
-#
 # The ellipsoids have a random size from 1e-10 to 1e10 and axis ratios up to 10; some
 # are spheres or spheroids and a few have a semi-axis that is zero or negative. The
 # points are outside, inside, on the surface, on the axes, in the principal planes and
@@ -190,6 +188,7 @@ group("15. math: ellipsoids, planes and ellipses", Kernels.FULL_SET_FILES...) do
             x = surfpt(po .+ tt .* v, u .+ tt .* du, a, b, c)
             @test map(q -> Allspice.derivatives(q)[2], x) ≈ d rtol = 1e-9
             y = nearpt(p .+ tt .* v, a, b, c)[1]
+            @test map(q -> Allspice.derivatives(q)[1], y) ≈ nearpt(p, a, b, c)[1] rtol = 1e-15
             @test map(q -> Allspice.derivatives(q)[2], y) ≈ jac * v rtol = 1e-9
         end
     end

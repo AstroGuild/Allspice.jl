@@ -1,5 +1,8 @@
 # Allspice.jl
 
+[![CI](https://github.com/AstroGuild/Allspice.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/AstroGuild/Allspice.jl/actions/workflows/CI.yml)
+[![Manual](https://img.shields.io/badge/docs-dev-blue.svg)](https://astroguild.github.io/Allspice.jl/dev/)
+
 Allspice.jl is a native Julia port of CSPICE N0067 for the computation of spacecraft
 and planetary geometry. It reads the data files of
 [SPICE](https://naif.jpl.nasa.gov/naif/), called kernels, which NASA's Navigation and
@@ -26,7 +29,7 @@ wrapper such as SPICE.jl.
 Allspice.jl requires Julia 1.10 or later. Install it directly from GitHub:
 
 ```julia-repl
-pkg> add https://github.com/EllissoideRotondo/Allspice.jl
+pkg> add https://github.com/AstroGuild/Allspice.jl
 ```
 
 ## Quick start
@@ -98,7 +101,7 @@ Publications that use SPICE should cite the references requested by NAIF:
   the handling of space science mission geometry", *Planetary and Space Science*
   150, 9–12, 2018.
 
-## Licence
+## License
 
-Allspice.jl is available under the [MIT licence](LICENSE). This licence covers only
+Allspice.jl is available under the [MIT license](LICENSE). This license covers only
 the work in this repository and grants no rights over CSPICE.
