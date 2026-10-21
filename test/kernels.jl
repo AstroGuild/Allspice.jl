@@ -36,30 +36,56 @@ const REQUIRED = get(ENV, "ALLSPICE_REQUIRE_KERNELS", "0") == "1"
 const NAIF = "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/"
 
 """
-URL and SHA-256 of each kernel, by file name. NAIF keeps only a shorter DE405, so the
-full one comes from JPL SSD; it has no binary-file-format string (a file from before
-toolkit N0050).
+URLs and SHA-256 of each kernel, by file name. The URLs of a kernel hold the same file
+and are tried in order. NAIF keeps only a shorter DE405 (10.9 MB, from 2000), so the full
+one (65.4 MB) comes from JPL SSD; it has no binary-file-format string (a file from before
+toolkit N0050). No other host of the full file is known.
 """
 const SOURCES = Dict(
-    "naif0012.tls" => (NAIF * "lsk/naif0012.tls",
+    "naif0012.tls" => ([NAIF * "lsk/naif0012.tls"],
         "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b"),
-    "pck00011.tpc" => (NAIF * "pck/pck00011.tpc",
+    "pck00011.tpc" => ([NAIF * "pck/pck00011.tpc"],
         "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1"),
-    "pck00010.tpc" => (NAIF * "pck/pck00010.tpc",
+    "pck00010.tpc" => ([NAIF * "pck/pck00010.tpc"],
         "59468328349aa730d18bf1f8d7e86efe6e40b75dfb921908f99321b3a7a701d2"),
-    "moon_pa_de440_200625.bpc" => (NAIF * "pck/moon_pa_de440_200625.bpc",
+    "moon_pa_de440_200625.bpc" => ([NAIF * "pck/moon_pa_de440_200625.bpc"],
         "60cd55aa401ea2ea97360636f567554bfe4e37bb829f901b4460a455dfaf783f"),
-    "moon_de440_200625.tf" => (NAIF * "fk/satellites/a_old_versions/moon_de440_200625.tf",
+    "moon_de440_200625.tf" => ([NAIF * "fk/satellites/a_old_versions/moon_de440_200625.tf"],
         "a1352d73783c87ba7c452441ade92348ac7ac97dfd00e34daa4bbcae46086e8f"),
-    "moon_080317.tf" => (NAIF * "fk/satellites/moon_080317.tf",
+    "moon_080317.tf" => ([NAIF * "fk/satellites/moon_080317.tf"],
         "78732477b96f9863e7b0d65bcee3c22b8707ca5ed0db56d1173319cb2e8c7993"),
-    "gm_de431.tpc" => (NAIF * "pck/gm_de431.tpc",
+    "gm_de431.tpc" => ([NAIF * "pck/gm_de431.tpc"],
         "15756c162151853f329d473fa00c38d35e62d83c3e25ddceece6516bbd98738b"),
-    "de440s.bsp" => (NAIF * "spk/planets/de440s.bsp",
+    "de440s.bsp" => ([NAIF * "spk/planets/de440s.bsp"],
         "c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2"),
-    "de405.bsp" => ("https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de405.bsp",
+    "de405.bsp" => (["https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de405.bsp"],
         "7ef3d1518e66402b923421cf4037ceeb537352234c7a76330768bf60ca918236"),
 )
+
+"Seconds of the waits before the second and the third attempt of a download."
+const RETRY_WAITS = (10.0, 30.0)
+
+"""
+    download_any(urls, dest, io) -> Bool
+
+Download the first of `urls` that answers into `dest`, with three attempts for each URL
+and the waits `RETRY_WAITS` between them, and report each failure on `io`. Return
+`false` if every attempt failed.
+"""
+function download_any(urls::Vector{String}, dest::AbstractString, io::IO)
+    for url in urls, attempt in 1:length(RETRY_WAITS)+1
+        # invariant: every attempt before this one failed
+        attempt > 1 && sleep(RETRY_WAITS[attempt-1])
+        try
+            println(io, "Downloading ", url, attempt > 1 ? " (attempt $attempt)" : "")
+            Downloads.download(url, dest)
+            return true
+        catch err
+            println(io, "Download of ", url, " failed: ", sprint(showerror, err))
+        end
+    end
+    return false
+end
 
 "Paths of all kernels of the tests on this machine."
 all_kernels() = String[LSK, PCK11, PCK10, MOON_BPC, MOON_TF, MOON_TF_OLD, GM_TPC, DE440S, DE405]
@@ -69,7 +95,7 @@ all_kernels() = String[LSK, PCK11, PCK10, MOON_BPC, MOON_TF, MOON_TF_OLD, GM_TPC
 
 Download each kernel of [`all_kernels`](@ref) that is not on disk and whose file name
 is in `SOURCES`, unless ALLSPICE_DOWNLOAD_KERNELS=0, and return the paths that are
-still missing. A download goes to a temporary file in the target directory and is
+still missing. Each URL of a kernel gets three attempts (see `download_any`). A download goes to a temporary file in the target directory and is
 moved into place after its SHA-256 is checked, so that processes that fetch at the same
 time never see a partial file. A failed download is reported on `io` and leaves the
 kernel missing; a file with the wrong SHA-256 is deleted and throws an error.
@@ -78,22 +104,18 @@ function fetch_kernels(io::IO=stdout)
     get(ENV, "ALLSPICE_DOWNLOAD_KERNELS", "1") == "0" && return missing_kernels(all_kernels()...)
     for path in all_kernels()     # invariant: the kernels before `path` were fetched or reported
         (isfile(path) || !haskey(SOURCES, basename(path))) && continue
-        url, sha = SOURCES[basename(path)]
+        urls, sha = SOURCES[basename(path)]
         mkpath(dirname(path))
         tmp, tio = mktemp(dirname(path); cleanup=false)
         close(tio)
-        try
-            println(io, "Downloading ", url)
-            Downloads.download(url, tmp)
-        catch err
+        if !download_any(urls, tmp, io)
             rm(tmp; force=true)
-            println(io, "Download of ", url, " failed: ", sprint(showerror, err))
             continue
         end
         got = bytes2hex(open(SHA.sha256, tmp))
         if got != sha
             rm(tmp; force=true)
-            error("SHA-256 of $url is $got, expected $sha")
+            error("SHA-256 of $(basename(path)) is $got, expected $sha")
         end
         mv(tmp, path; force=true)
     end
