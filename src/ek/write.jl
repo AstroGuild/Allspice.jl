@@ -974,18 +974,39 @@ end
 Check that the inputs of a fast writer hold what the column needs: a null flag for
 every row of a column that allows nulls, an entry size for every row of a column with
 entries of variable size, and the values of all rows (a null row takes the room of
-its entry size). Throws `SpiceError(:invalidcount)`. CSPICE cannot make this check.
+its entry size). Throws `SpiceError(:invalidcount)`; CSPICE cannot make this check.
+
+The entry size of a non-null row of a variable-size column must be at least 1 for a
+numeric column (`SpiceError(:badsubscript)`, where `zzekac04` and `zzekac05` stop the
+process) and at least 0 for a character column (`SpiceError(:outofrange)`, as
+`zzekac06` signals). The entry size of a null row must be at least 0
+(`SpiceError(:invalidcount)`; CSPICE reads outside the values).
 """
 function _ekw_fast_counts(who::AbstractString, segdsc::Vector{Int32}, coldsc::Vector{Int32},
         nvals::Int, entszs::AbstractVector, nlflgs::AbstractVector)
     nrows = Int(segdsc[_EK_NRIDX])
     size = Int(coldsc[_EK_SIZIDX])
-    (coldsc[_EK_NFLIDX] != -1 && length(nlflgs) < nrows) && throw(SpiceError(:invalidcount,
+    nullok = coldsc[_EK_NFLIDX] != -1
+    (nullok && length(nlflgs) < nrows) && throw(SpiceError(:invalidcount,
         "$who: $(length(nlflgs)) null flags for $nrows rows"))
     need = nrows
-    if coldsc[_EK_CLSIDX] in (4, 5, 6)
+    class = coldsc[_EK_CLSIDX]
+    if class in (4, 5, 6)
         (size == -1 && length(entszs) < nrows) && throw(SpiceError(:invalidcount,
             "$who: $(length(entszs)) entry sizes for $nrows rows"))
+        if size == -1
+            least = class == 6 ? 0 : 1
+            for r in 1:nrows             # invariant: the entry sizes of the rows before r are valid
+                n = Int(entszs[r])
+                if nullok && nlflgs[r] != 0
+                    n < 0 && throw(SpiceError(:invalidcount,
+                        "$who: entry size $n of the null row $r is negative"))
+                elseif n < least
+                    throw(SpiceError(class == 6 ? :outofrange : :badsubscript,
+                        "$who: entry size $n of row $r is less than $least"))
+                end
+            end
+        end
         need = size == -1 ? sum(Int(entszs[i]) for i in 1:nrows) : nrows * size
     end
     nvals < need && throw(SpiceError(:invalidcount,
@@ -1021,8 +1042,8 @@ started, as `ekaclc_c` of CSPICE.
 
 - `cvals`: the strings of all rows in row order (for an array column the strings of
   row 1, then those of row 2, and so on). A null row also takes the room of its entry.
-- `entszs[r]`: the number of strings of row `r`, at least 1 unless the row is null.
-  Used only for a column with `SIZE = VARIABLE`.
+- `entszs[r]`: the number of strings of row `r`, at least 0; a row of size 0 that is
+  not null holds an empty entry. Used only for a column with `SIZE = VARIABLE`.
 - `nlflgs[r]`: true if row `r` is null. Used only for a column that allows nulls.
 - `rcptrs`: the second result of `ekifld`.
 
@@ -1038,6 +1059,8 @@ Throws `SpiceError` with the kind:
 - `:invalidcount` if `cvals` has fewer strings than the rows need, or if `entszs` or
   `nlflgs`, where the column uses it, has fewer elements than rows (CSPICE cannot make
   this check);
+- `:outofrange` if an entry size is negative, and `:invalidcount` if that row is
+  null (CSPICE reads outside `cvals`);
 - `:columnstoredtwice` if this fast load stored the column already (CSPICE has no
   check and writes a segment that cannot be read);
 - `:invalidsize` if a fixed-count column has a string length outside 1 to 1014.
@@ -1095,7 +1118,8 @@ Store the whole double precision or time column `column` of the segment that
 
 `dvals` holds the values of all rows in row order; a time is in seconds past J2000
 TDB. The other arguments and the errors are those of [`ekaclc`](@ref), with
-`:wrongdatatype` for a column of another type.
+`:wrongdatatype` for a column of another type. An entry size below 1 of a row that is
+not null throws `SpiceError(:badsubscript)`, where CSPICE stops the process.
 
 See the example of [`ekifld`](@ref).
 """
@@ -1113,7 +1137,8 @@ as `ekacli_c` of CSPICE.
 `ivals` holds the values of all rows in row order. The file stores 32-bit integers: a
 value that `Int32` cannot hold throws `SpiceError(:valueoutofrange)`. The other arguments and the
 errors are those of [`ekaclc`](@ref), with `:wrongdatatype` for a column of another
-type.
+type. An entry size below 1 of a row that is not null throws `SpiceError(:badsubscript)`,
+where CSPICE stops the process.
 
 See the example of [`ekifld`](@ref).
 """

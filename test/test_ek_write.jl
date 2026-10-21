@@ -1080,6 +1080,27 @@ group("EK write: input checks give the errors of CSPICE") do
     # The refused record changes left the segment with fixed-count columns as it was.
     @test c_ekssum(hr, 2).nrows == 2 && c_ekrcei(hr, 2, 1, "K") == ([7], false)
     c_ekcls(hr)
+    # (fault fixed: an entry size below 1 for a non-null row of a numeric SIZE = VARIABLE
+    # column, below 0 for a character column, or below 0 for a null row threw a
+    # BoundsError. CSPICE stops the process with BADSUBSCRIPT in `zzekac04` and
+    # `zzekac05`, and signals OUTOFRANGE in `zzekac06`, so the kinds are not compared live.)
+    hv = Allspice.ekopn(joinpath(dir, "sizes.bes"), "OWN")
+    sv, rv = Allspice.ekifld(hv, "V", 3, ["I", "D", "C"],
+        ["DATATYPE = INTEGER, SIZE = VARIABLE, NULLS_OK = TRUE",
+            "DATATYPE = DOUBLE PRECISION, SIZE = VARIABLE", "DATATYPE = CHARACTER*(8), SIZE = VARIABLE"])
+    words = (copy(hv.chars), copy(hv.dps), copy(hv.ints))
+    @test neo_kind(() -> Allspice.ekacli(hv, sv, "I", [1, 2, 3, 4], [2, 0, 2], falses(3), rv)) === :badsubscript
+    @test neo_kind(() -> Allspice.ekacld(hv, sv, "D", [1.0, 2, 3, 4], [2, -1, 3], falses(3), rv)) === :badsubscript
+    @test neo_kind(() -> Allspice.ekaclc(hv, sv, "C", ["a", "b", "c", "d"], [2, -1, 3], falses(3), rv)) === :outofrange
+    @test neo_kind(() -> Allspice.ekacli(hv, sv, "I", [1, 2, 3, 4], [-1, 2, 2], [true, false, false], rv)) === :invalidcount
+    @test (hv.chars, hv.dps, hv.ints) == words
+    # A null row of size 0 and an empty character entry are valid, as in CSPICE.
+    Allspice.ekacli(hv, sv, "I", [1, 2, 3, 4], [2, 0, 2], [false, true, false], rv)
+    Allspice.ekacld(hv, sv, "D", [1.0, 2, 3, 4], [2, 1, 1], falses(3), rv)
+    Allspice.ekaclc(hv, sv, "C", ["a", "b", "c", "d"], [2, 0, 2], falses(3), rv)
+    Allspice.ekffld(hv, sv, rv)
+    @test Allspice.ekrcec(hv, sv, 2, "C") == (String[], false)
+    ekcls(hv)
     measured("ek_write: $checked input checks with the error kind of CSPICE, " *
              "$(length(mismatch)) mismatches; $nw words equal after the failed calls")
 end
