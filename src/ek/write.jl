@@ -881,8 +881,8 @@ of CSPICE. Return the segment number (from 1) and the state of the load.
 `tabnam`, `cnames` and `decls` are those of [`ekbseg`](@ref). Store every column
 exactly once with [`ekaclc`](@ref), [`ekacld`](@ref) or [`ekacli`](@ref), then call
 [`ekffld`](@ref); pass `rcptrs` to each of these calls. Until `ekffld` the segment
-cannot be read or extended, and a file closed before it holds a segment that
-[`eklef`](@ref) refuses. Other segments of the file can be changed meanwhile, which
+cannot be read or extended. [`ekcls`](@ref) before `ekffld` closes the file without an
+error, as in CSPICE, but the file then holds a segment that [`eklef`](@ref) refuses. Other segments of the file can be changed meanwhile, which
 CSPICE does not allow.
 
 If the columns are declared with `FIXED_COUNT = TRUE`, the number of rows is fixed:

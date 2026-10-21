@@ -40,7 +40,8 @@ end
 Close the EK file of `handle`, as `ekcls_c`.
 
 For a write handle all data are on disk when the call returns. Closing a closed handle
-does nothing.
+does nothing. A fast load that [`ekffld`](@ref) did not end leaves a segment that
+cannot be read, without an error, as in CSPICE (see [`ekifld`](@ref)).
 
 See also [`ekopr`](@ref), [`ekopw`](@ref), [`ekopn`](@ref).
 """
