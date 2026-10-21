@@ -9,12 +9,7 @@ The general rules (what earns a test, what does not, the review trigger) are in 
 
 ## Before writing tests: the behaviour matrix
 
-Write one row for each scenario before any code, and delete duplicate rows first.
-
-| Behaviour | Regression it detects | Why distinct from other rows | Layer |
-|---|---|---|---|
-
-Layers in this repository: differential (result compared with CSPICE through SPICE.jl), analytic (closed-form answer), invariant (round trip, identity), error (kind of `SpiceError`), concurrency, allocation.
+Write the behaviour-to-test table of the global skill `julia-tests` first. Layers in this repository: differential (result compared with CSPICE through SPICE.jl), analytic (closed-form answer), invariant (round trip, identity), error (kind of `SpiceError`), concurrency, allocation.
 
 ## Rules of this repository
 
