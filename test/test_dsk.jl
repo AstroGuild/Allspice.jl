@@ -938,7 +938,7 @@ function dsk_part_13(env)
     srf = [1, 2, 3, 4, 5, 6, 7]
     for fixfid in (iau, tilt, pck2), (lst, et) in (((), 0.0), (srf, 75.0), ((2, 5), 0.0)),
         (vtx, d) in ((v, -v), (v, miss), (V3(0.1, 0.2, 0.3), miss))
-        @test dsk_warm(alloc_dskxsi, ctx, lst, et, fixfid, vtx, d) == 0
+        @test dsk_warm(alloc_dskxsi, ctx, lst, et, fixfid, vtx, d) == 0 skip = STACK_BUFFERS_ESCAPE
     end
     n = 256
     vtx = [dsk_ray(rng, 1, shape_e)[1] for _ in 1:n]
@@ -946,7 +946,7 @@ function dsk_part_13(env)
     xpt = Vector{V3}(undef, n)
     fnd = Vector{Bool}(undef, n)
     for fixfid in (iau, tilt)
-        @test dsk_warm(alloc_dskxv!, xpt, fnd, ctx, srf, 75.0, fixfid, vtx, dirs) == 0
+        @test dsk_warm(alloc_dskxv!, xpt, fnd, ctx, srf, 75.0, fixfid, vtx, dirs) == 0 skip = STACK_BUFFERS_ESCAPE
     end
     seg = dskxsi(ctx, false, 499, [2], 0.0, iau, v, -v)[2]
     @test dsk_warm(alloc_dskx02, ks, seg, v, -v) == 0

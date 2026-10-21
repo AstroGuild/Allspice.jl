@@ -192,7 +192,7 @@ group("20. math: polynomials and interpolation") do
             (rquad, (1.0, 2.0, 3.0), NTuple{2,SVector{2,Float64}}), (diags2, (s,), Tuple{M2,M2})]
         for (f, args, T) in calls
             @test (@inferred f(args...)) isa T
-            @test alloc_of(f, args...) == 0
+            @test alloc_of(f, args...) == 0 skip = STACK_BUFFERS_ESCAPE && f in (lgrint, lgrind)
         end
     end
 end

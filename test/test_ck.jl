@@ -516,9 +516,9 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         for case in CK_CASES
             tags = ck_tags(case)
             t = case.dtype == 1 ? tags[17] : ck_interior_tick(rng, case, tags, 2:28)
-            @test CKFix.warm(alloc_ckgp, ks, case.inst, t, 0.0, 1) == 0
-            @test CKFix.warm(alloc_ckgp, ks, case.inst, t, 5000.0, 17) == 0
-            @test CKFix.warm(alloc_ckgpav, ks, case.inst, t, 5000.0, 17) == 0
+            @test CKFix.warm(alloc_ckgp, ks, case.inst, t, 0.0, 1) == 0 skip = STACK_BUFFERS_ESCAPE
+            @test CKFix.warm(alloc_ckgp, ks, case.inst, t, 5000.0, 17) == 0 skip = STACK_BUFFERS_ESCAPE
+            @test CKFix.warm(alloc_ckgpav, ks, case.inst, t, 5000.0, 17) == 0 skip = STACK_BUFFERS_ESCAPE
             @test (@inferred ckgp(ks, case.inst, t, 0.0, 1)) isa Tuple{SMatrix{3,3,Float64,9},Float64,Bool}
             @test (@inferred ckgpav(ks, case.inst, t, 0.0, 1)) isa
                   Tuple{SMatrix{3,3,Float64,9},SVector{3,Float64},Float64,Bool}
@@ -526,18 +526,18 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
             et = sct2e(ctx, case.sc, t)
             id = Int(namfrm(ctx, case.frame))
             iau = Int(namfrm(ctx, "IAU_EARTH"))
-            @test CKFix.warm(alloc_ck_pxform, ctx, 1, id, et) == 0
-            @test CKFix.warm(alloc_ck_pxform, ctx, id, iau, et) == 0
-            @test CKFix.warm(alloc_ck_pxder, ctx, 1, id, et, Val(1)) == 0
-            @test CKFix.warm(alloc_ck_pxder, ctx, iau, id, et, Val(3)) == 0
+            @test CKFix.warm(alloc_ck_pxform, ctx, 1, id, et) == 0 skip = STACK_BUFFERS_ESCAPE
+            @test CKFix.warm(alloc_ck_pxform, ctx, id, iau, et) == 0 skip = STACK_BUFFERS_ESCAPE
+            @test CKFix.warm(alloc_ck_pxder, ctx, 1, id, et, Val(1)) == 0 skip = STACK_BUFFERS_ESCAPE
+            @test CKFix.warm(alloc_ck_pxder, ctx, iau, id, et, Val(3)) == 0 skip = STACK_BUFFERS_ESCAPE
             @test (@inferred pxform(ctx, 1, id, et)) isa SMatrix{3,3,Float64,9}
             @test (@inferred pxder(ctx, 1, id, et, Val(2))) isa NTuple{3,SMatrix{3,3,Float64,9}}
             @test (@inferred Allspice.frame_rotation(ks, Int32(1), Int32(id),
                 Allspice.taylor_var(et, Val(2)))) isa SMatrix{3,3,Allspice.Taylor{2,Float64},9}
             case.av || continue
-            @test CKFix.warm(alloc_ck_sxform, ctx, 1, id, et) == 0
-            @test CKFix.warm(alloc_ck_sxform, ctx, iau, id, et) == 0
-            @test CKFix.warm(alloc_ck_spkezr, ctx, et, id) == 0
+            @test CKFix.warm(alloc_ck_sxform, ctx, 1, id, et) == 0 skip = STACK_BUFFERS_ESCAPE
+            @test CKFix.warm(alloc_ck_sxform, ctx, iau, id, et) == 0 skip = STACK_BUFFERS_ESCAPE
+            @test CKFix.warm(alloc_ck_spkezr, ctx, et, id) == 0 skip = STACK_BUFFERS_ESCAPE
             @test (@inferred sxform(ctx, 1, id, et)) isa SMatrix{6,6,Float64,36}
             @test (@inferred spkezr(ctx, 301, et, id, "NONE", 399)) isa Tuple{SVector{6,Float64},Float64}
         end
@@ -545,9 +545,9 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
         et = sct2e(ctx, CKFix.SC_TDB, tk[20] + 1000.0)
         cam = Int(namfrm(ctx, CKFix.TK_FRAME))
         t5 = Int(namfrm(ctx, "TESTSC_T5S1"))
-        @test CKFix.warm(alloc_ck_pxform, ctx, cam, t5, et) == 0
-        @test CKFix.warm(alloc_ck_sxform, ctx, cam, t5, et) == 0
-        @test CKFix.warm(alloc_ck_pxder, ctx, cam, t5, et, Val(2)) == 0
+        @test CKFix.warm(alloc_ck_pxform, ctx, cam, t5, et) == 0 skip = STACK_BUFFERS_ESCAPE
+        @test CKFix.warm(alloc_ck_sxform, ctx, cam, t5, et) == 0 skip = STACK_BUFFERS_ESCAPE
+        @test CKFix.warm(alloc_ck_pxder, ctx, cam, t5, et, Val(2)) == 0 skip = STACK_BUFFERS_ESCAPE
     end
 
     @apart @testset "ckcov" begin

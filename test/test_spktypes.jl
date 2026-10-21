@@ -557,9 +557,9 @@ group("9. SPK data types against CSPICE") do
         for c in cases
             et = c.t0 + 0.37 * (c.t1 - c.t0)
             @testset "$(c.label)" begin
-                @test warm_alloc(alloc_type_geo, ctx, c.body, et) == 0
+                @test warm_alloc(alloc_type_geo, ctx, c.body, et) == 0 skip = STACK_BUFFERS_ESCAPE
                 for N in 0:3
-                    @test warm_alloc(alloc_type_der, ctx, c.body, et, Val(N)) == 0
+                    @test warm_alloc(alloc_type_der, ctx, c.body, et, Val(N)) == 0 skip = STACK_BUFFERS_ESCAPE
                 end
                 @test (@inferred spkgeo(ctx, c.body, et, 1, EARTH)) isa Tuple{SVector{6,Float64},Float64}
                 @test (@inferred spkder(ctx, c.body, et, 1, EARTH, Val(3))) isa NTuple{4,SVector{3,Float64}}
