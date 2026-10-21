@@ -761,7 +761,7 @@ Throws `SpiceError`:
 - the error kinds of [`dafbna`](@ref) and [`dafgda`](@ref) if a handle is closed, `newh`
   is not open for writing, or the addresses of `descr` are not in the file.
 
-A call that throws writes nothing.
+A call that throws writes nothing and leaves no array begun on `newh`.
 
 # Examples
 ```jldoctest
@@ -810,7 +810,9 @@ function spksub(newh::DAFHandle, handle::DAFHandle, descr::AbstractVector{<:Real
     end
     dtype in (1, 2, 3, 5, 8, 9, 12, 13, 15, 17, 18, 19, 20, 21) || throw(SpiceError(
         :spktypenotsupp, "spksub: SPK data type $dtype is not supported"))
-    dafbna(newh, ndscr, ident)
+    # The data are read before the array is begun, so that a read error leaves no array
+    # begun on `newh`; the checks of the handle come first, as in CSPICE.
+    _daf_check_write(newh, "dafbna")
     r = _SegReader(handle, baddr, eaddr)
     data = if dtype == 1 || dtype == 21
         _spks01(r, baddr, eaddr, t0, t1, dtype == 21)
@@ -832,6 +834,7 @@ function spksub(newh::DAFHandle, handle::DAFHandle, descr::AbstractVector{<:Real
     else
         _spks20(r, baddr, eaddr, t0, t1)
     end
+    dafbna(newh, ndscr, ident)
     dafada(newh, data)
     dafena(newh)
     return nothing

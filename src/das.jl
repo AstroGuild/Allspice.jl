@@ -106,12 +106,12 @@ end
 
 Check that `path` is an existing DAS file that this machine can read, and return its
 file record and whether its byte order is the other one. Throws `SpiceError` with kind
-`:blankfilename`, `:filenotfound`, `:filereadfailed`, `:unknownfilarc`,
+`:emptystring`, `:blankfilename`, `:filenotfound`, `:filereadfailed`, `:unknownfilarc`,
 `:filarchmismatch`, `:ftpxfererror`, `:unknownbff` or `:unsupportedbff`. A file from
 before the binary-file-format string (bytes 85 to 92 zero) is taken as native.
 """
 function _das_probe(path::AbstractString, who::AbstractString)
-    isempty(strip(path)) && throw(SpiceError(:blankfilename, "$who: the file name is blank"))
+    _chk_filename(who, path)
     isfile(path) || throw(SpiceError(:filenotfound, "$who: the file $path does not exist"))
     raw = open(io -> read(io, _DAS_RECLEN), path, "r")
     length(raw) == _DAS_RECLEN || throw(SpiceError(:filereadfailed,
@@ -397,7 +397,8 @@ The file can have either byte order, and it need not be segregated (see
 [`DASHandle`](@ref)). Close the handle with [`dascls`](@ref).
 
 Throws `SpiceError`:
-- `:blankfilename` if `path` is blank, `:filenotfound` if the file does not exist;
+- `:emptystring` if `path` is empty, `:blankfilename` if it holds only blanks;
+- `:filenotfound` if the file does not exist;
 - `:filereadfailed` if the file is shorter than one record (1024 bytes);
 - `:filarchmismatch` if the file is a DAF, `:unknownfilarc` if it is neither a DAF
   nor a DAS file (a text kernel, for example);

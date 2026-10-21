@@ -63,7 +63,9 @@ group("20. math: polynomials and interpolation") do
         @test chbigr(cp, x2s, 2.0)[2] == 0.0
         @test throws_kind(() -> chbval(Float64[], x2s, 1.0), :invaliddegree)
         @test throws_kind(() -> chbval(cp, [1.0], 1.0), :badarg)
-        @test throws_kind(() -> chbder(cp, x2s, 1.0, -1), :badarg)
+        # Regression: chbder threw :badarg for nderiv < 0; chbder_c signals no error and
+        # fills the nderiv + 1 elements of its output, none here, as polyds does.
+        @test chbder(cp, x2s, 1.0, -1) == Float64[]
     end
 
     @apart @testset "Lagrange and Hermite interpolation" begin

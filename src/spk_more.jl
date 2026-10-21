@@ -151,17 +151,3 @@ No allocation; the epoch type must be a bits type.
     p, v = _spk_state(data, seg, taylor_var(et, Val(N - 1)))
     return (_values(p), _vec_derivatives(v)...)
 end
-
-"""
-    _spk_more_position(data, seg, et::T, ::Val{N}) -> NTuple{N+1,Vec3{T}}
-
-`spk_eval_position` for the types of this file: every order is a derivative of the
-CSPICE position function. No allocation.
-"""
-@inline _spk_more_position(data::Vector{Float64}, seg::Segment, et::T, ::Val{0}) where {T<:Real} =
-    (_spk_state(data, seg, et)[1],)
-@inline function _spk_more_position(data::Vector{Float64}, seg::Segment, et::T,
-        ::Val{N}) where {T<:Real,N}
-    p, _ = _spk_state(data, seg, taylor_var(et, Val(N)))
-    return _vec_derivatives(p)
-end

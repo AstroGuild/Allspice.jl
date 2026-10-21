@@ -211,7 +211,8 @@ EK.
 
 All segments of a table must have columns with the same names and attributes.
 
-Throws `SpiceError(:filenotfound)` if the file does not exist,
+Throws `SpiceError(:emptystring)` if `path` is empty, `SpiceError(:blankfilename)` if it
+holds only blanks, `SpiceError(:filenotfound)` if the file does not exist,
 `SpiceError(:wrongarchitecture)` if it is not an EK, and
 `SpiceError(:ekcolnummismatch)`, `SpiceError(:ekmissingcolumn)` or
 `SpiceError(:badattributes)` if a segment of the file does not have the columns of a
@@ -220,6 +221,7 @@ loaded table of the same name. After an error the context is unchanged.
 See also [`ekfind`](@ref), [`ekntab`](@ref).
 """
 function eklef(ctx::SpiceContext, path::AbstractString)::String
+    _chk_filename("eklef", path)
     p = String(path)
     isfile(p) || throw(SpiceError(:filenotfound, "eklef: kernel file not found: $p"))
     kernel_arch(p) === :EK || throw(SpiceError(:wrongarchitecture,

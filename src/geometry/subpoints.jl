@@ -242,7 +242,8 @@ Throws `SpiceError` with the kind
 - `:subpointnotfound` if the ray misses the DSK surface, `:degeneratecase` if it
   misses the ellipsoid;
 - the kinds of [`srfrec`](@ref) if the radii of `target` are missing or not valid,
-  `:dskdatanotfound` if no DSK data are loaded for it.
+  `:noloadeddskfiles` if no DSK file is loaded and `:dskdatanotfound` if no DSK data are
+  loaded for it (DSK method).
 
 Also throws the errors of [`spkpos`](@ref).
 

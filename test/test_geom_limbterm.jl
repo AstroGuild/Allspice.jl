@@ -342,6 +342,11 @@ end
             () -> limbpt(ctx, T, "MOON", et, "IAU_MOON", "LT", "CENTER", "EARTH", z, 0.1, 3, 1e-4, 1e-7, 10); expect=:badradiuscount)
         @test same_kind(() -> g_termpt(U, "SUN", "MOON", et, "IAU_MOON", "LT", "CENTER", "EARTH", z, 0.1, 3, 1e-4, 1e-7, 10),
             () -> termpt(ctx, U, "SUN", "MOON", et, "IAU_MOON", "LT", "CENTER", "EARTH", z, 0.1, 3, 1e-4, 1e-7, 10); expect=:badradiuscount)
+        # Regression: a radius that is not positive gave :degeneratecase, the kind of
+        # `edlimb_c`; limbpt_ calls `edlimb_`, which signals INVALIDAXISLENGTH.
+        both_pdpool(ctx, "BODY301_RADII", [1737.4, -1.0, 1737.4])
+        @test same_kind(() -> g_limbpt(T, "MOON", et, "IAU_MOON", "LT", "CENTER", "EARTH", z, 0.1, 3, 1e-4, 1e-7, 10),
+            () -> limbpt(ctx, T, "MOON", et, "IAU_MOON", "LT", "CENTER", "EARTH", z, 0.1, 3, 1e-4, 1e-7, 10); expect=:invalidaxislength)
         both_pdpool(ctx, "BODY301_RADII", radii)
         # A source that touches the sphere about the target.
         sun = gdpool(ctx, "BODY10_RADII")

@@ -17,7 +17,9 @@ Throws `SpiceError`:
 - `:unknownframe` if a frame name is not known;
 - `:badarg` if `et` is not finite;
 - `:framedatanotfound` if the definition or the constants of a frame are not loaded
-  (the `BODY<id>_PM` variables of a PCK frame, the matrix of a fixed-offset frame);
+  (the `BODY<id>_PM` variables of a PCK frame);
+- the error kinds of [`tkfram`](@ref) for a fixed-offset frame whose definition is
+  incomplete or not valid;
 - `:noframeconnect` if a CK frame has no pointing or no clock kernel at `et`, or a
   switch frame has no base there;
 - `:valueoutofrange` if `et` is outside the range of the clock of a CK frame.

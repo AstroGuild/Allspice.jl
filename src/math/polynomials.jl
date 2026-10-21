@@ -120,9 +120,11 @@ end
 Return the value and the derivatives of orders 1 to `nderiv` with respect to `x` of
 the Chebyshev expansion of [`chbval`](@ref), as `chbder_c` of CSPICE.
 
-Element `k + 1` of the result is the derivative of order `k`.
+Element `k + 1` of the result is the derivative of order `k`. A negative `nderiv`
+gives an empty result, as for [`polyds`](@ref); `chbder_c` signals no error then.
 
-Throws `SpiceError(:badarg)` if `nderiv < 0`, and as [`chbval`](@ref).
+Throws `SpiceError(:invaliddegree)` if `cp` is empty, and `SpiceError(:badarg)` if `x2s`
+does not have 2 elements.
 
 # Examples
 ```jldoctest
@@ -137,10 +139,10 @@ julia> chbder([1, 2, 3], [0, 1], 0.5, 3)
 See also [`chbint`](@ref), [`polyds`](@ref).
 """
 function chbder(cp::AbstractVector, x2s::AbstractVector, x::Real, nderiv::Integer)
-    nderiv >= 0 || throw(SpiceError(:badarg, "chbder: the derivative order must be >= 0; was $nderiv"))
     s, rad = _m_cheb_s(cp, x2s, x)
     T = typeof(s)
     nd = Int(nderiv)
+    nd < 0 && return T[]
     # The recurrence of `_clenshaw_step` for an order that is known only at run time:
     # column m+1 of `b` holds the Clenshaw terms b_k, b_{k+1}, b_{k+2} of derivative m.
     b = zeros(T, 3, nd + 1)

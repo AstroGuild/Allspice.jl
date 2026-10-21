@@ -161,7 +161,8 @@ With a DSK method, the angles and the flags use all loaded surfaces of the targe
 `trgepc`; [`illumg`](@ref) takes those that cover `et`. Both are as in CSPICE.
 
 The arguments, the notes on `et`, allocation and tolerances, and the errors are those of
-[`illumg`](@ref), except `:dskdatanotfound` if no DSK data are loaded for `target`.
+[`illumg`](@ref), except `:dskdatanotfound` if DSK files are loaded but none has data
+for `target`.
 
 See also [`ilumin`](@ref), [`illumg`](@ref).
 """

@@ -17,8 +17,7 @@
 #   (b) no allocation and inferred result types of `spkgeo` and `spkder`;
 #   (c) orders 2 and 3 of `spkder` against the nested `ForwardDiff.derivative` of the
 #       velocity part of `spkgeo` (the generic path with a `Dual` epoch), and order 2
-#       against a central finite difference of the velocity;
-#   (d) the orders of `spk_eval_position` against the nested derivative of `spkpos`.
+#       against a central finite difference of the velocity.
 #
 # Tolerance of (a). The two engines make the same operations in the same order on the
 # same numbers, so the states differ by a few units in the last place. The bound is
@@ -44,7 +43,6 @@ const CInt = Cint                  # `SpiceInt`, and `integer`, `logical`, `ftnl
 
 const TYPE_RTOL = 5e-13
 const AD_VEL_RTOL = (1e-10, 1e-8)   # orders 2 and 3 of spkder
-const AD_POS_RTOL = (1e-13, 1e-11, 1e-9, 1e-7)   # orders 0 to 3 of spk_eval_position
 const FD_VEL_RTOL = 1e-5
 
 const EARTH = 399
@@ -484,26 +482,6 @@ function type_reldiff(a, b)
     return nb == 0 ? norm(a - b) : norm(a - b) / nb
 end
 
-"""
-Nesting depth of ForwardDiff through `spk_eval` in check (d). Each depth is a new
-compilation of the evaluators of all the data types (about 0.7 s, 1 s and 1.4 s), so
-the default run nests to depth 1 and the exhaustive run to depth 3.
-"""
-const TYPE_AD_ORDER = nsample(1, 3)
-
-"The function `t -> d^N f / dt^N` by nested forward mode; `f` itself for `N == 0`."
-type_ad_nth(f, ::Val{0}) = f
-function type_ad_nth(f, ::Val{N}) where {N}
-    g = type_ad_nth(f, Val(N - 1))
-    return s -> ForwardDiff.derivative(g, s)
-end
-
-"Nested forward-mode derivatives of `f` at `t`, orders 0 to `N`, as a tuple. Requires `N >= 0`."
-function type_ad_jet(f, t::Float64, ::Val{N}) where {N}
-    @assert N isa Int && N >= 0
-    return ntuple(k -> type_ad_nth(f, Val(k - 1))(t), Val(N + 1))
-end
-
 alloc_type_geo(ctx, body, et) = @allocated spkgeo(ctx, body, et, 1, EARTH)
 alloc_type_der(ctx, body, et, ::Val{N}) where {N} = @allocated spkder(ctx, body, et, 1, EARTH, Val(N))
 
@@ -590,24 +568,6 @@ group("9. SPK data types against CSPICE") do
             @test worst[1] <= AD_VEL_RTOL[1]
             @test worst[2] <= AD_VEL_RTOL[2]
             @test worst[3] <= FD_VEL_RTOL
-        end
-    end
-
-    @apart @testset "spk_eval_position: every order is a derivative of the position" begin
-        for c in cases
-            seg = ks.spk[Int32(c.body)][1]
-            data = ks.daf[seg.file]
-            pos(t) = Allspice.spk_eval(data, seg, t, Val(0))[1]
-            worst = zeros(TYPE_AD_ORDER + 1)
-            for et in smooth_epochs(rng, c, nsample(2, 4))
-                jet = Allspice.spk_eval_position(data, seg, et, Val(3))
-                ad = type_ad_jet(pos, et, Val(TYPE_AD_ORDER))
-                worst .= max.(worst, [type_reldiff(jet[k], ad[k]) for k in 1:TYPE_AD_ORDER+1])
-                @test (@inferred Allspice.spk_eval_position(data, seg, et, Val(3))) isa
-                      NTuple{4,SVector{3,Float64}}
-                @test Allspice.spk_eval_position(data, seg, et, Val(0))[1] == jet[1]
-            end
-            @test all(worst[k] <= AD_POS_RTOL[k] for k in 1:TYPE_AD_ORDER+1)
         end
     end
 
@@ -712,9 +672,7 @@ group("9. SPK data types against CSPICE") do
         # Type 10 (two-line elements) is not available.
         seg10 = Allspice.Segment(Int32(-1), Int32(399), Int32(1), Int32(10), 0.0, 1.0, Int32(0),
             1, 20, 0.0, 0.0, Int32(0), Int32(0))
-        @test throws_kind(() -> Allspice.spk_eval(zeros(20), seg10, 0.5, Val(1)), :notsupported)
-        @test throws_kind(() -> Allspice.spk_eval_position(zeros(20), seg10, 0.5, Val(2)), :notsupported)
-        # A count at the end of a segment that does not agree with its length. (For
+        @test throws_kind(() -> Allspice.spk_eval(zeros(20), seg10, 0.5, Val(1)), :notsupported)        # A count at the end of a segment that does not agree with its length. (For
         # type 3 the count is checked when the file is opened, as for type 2.)
         for c in cases
             c.dtype in (3, 15, 17, 20) && continue

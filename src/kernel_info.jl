@@ -130,8 +130,11 @@ Return `(filtyp, source, handle)` of the loaded kernel with the path `file`, as
 `file` is compared as a string with the path given to [`furnsh`](@ref), as in CSPICE.
 If the path is loaded more than once, the first entry is reported. The elements have
 the meaning that they have in [`kdata`](@ref); `handle` is always 0.
+
+Throws `SpiceError(:emptystring)` if `file` is empty.
 """
 function kinfo(ks::KernelSet, file::AbstractString)
+    isempty(file) && throw(SpiceError(:emptystring, "kinfo: the file name is empty"))
     i = findfirst(e -> e.path == file, ks.loaded)
     i === nothing && return nothing
     e = ks.loaded[i]
