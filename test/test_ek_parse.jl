@@ -1,8 +1,6 @@
 # Group: the EK query parser (scanner, parser, normalisation of the WHERE clause, name
 # resolution, time resolution, semantic check) and the SELECT clause analysis of `ekpsel`.
 #
-# Feature file: features/ek_query_language.feature
-#
 # CSPICE is the oracle, through direct calls: `zzekencd_` gives the encoded query (the
 # integer cell, the character buffer and the double buffer), the accessors `zzekqtab_`,
 # `zzekqcnj_`, `zzekqcon_`, `zzekqord_` and `zzekqsel_` decode it, and `ekfind_c` and

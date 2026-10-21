@@ -8,8 +8,6 @@
 # Default run and exhaustive run (`ALLSPICE_TEST_FULL=1`). `gfrefn`, `uddf`, `uddc` and the
 # window helpers have two branches each, so the default run takes 20 and 10 random cases
 # and the exhaustive run 200 and 100. The random searches are the same in the two runs.
-#
-# Behaviour specification: test/features/gf_solver.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
 

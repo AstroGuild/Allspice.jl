@@ -1,8 +1,6 @@
 # Geometry group: azimuth and elevation (`azlrec`, `recazl`, `dazldr`, `drdazl`,
 # `azlcpo`) against CSPICE.
 #
-# Feature file: features/geometry_fixed_observer.feature
-#
 # Error measures: for the coordinate calls, the absolute difference of each output over
 # the size of the largest output of the call; for `azlcpo`, the difference of the range
 # over the range, of the angles in radians, and of each rate over the size of the rates

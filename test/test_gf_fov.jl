@@ -19,8 +19,6 @@
 # the Sun and on 2 days and not 5 for the ray that crosses the camera once a day, and
 # does not make the table of search times. The least numbers of intervals that the
 # test requires are in proportion to the number of searches and to the span.
-#
-# Behaviour specification: test/features/gf_fov.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
 isdefined(@__MODULE__, :GEOLIB) || include("geomfixtures.jl")

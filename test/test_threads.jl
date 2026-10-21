@@ -1,7 +1,5 @@
 # Group 7: thread safety by immutable snapshots.
 #
-# Feature file: features/concurrent_use.feature
-#
 # CSPICE is not called in this group: the reference answers come from Allspice itself,
 # computed serially before any task starts.
 #

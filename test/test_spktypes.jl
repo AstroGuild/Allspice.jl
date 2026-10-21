@@ -1,7 +1,5 @@
 # Group 9: the SPK data types other than 2 against CSPICE.
 #
-# Feature file: features/spk_data_types.feature
-#
 # Type 2 is the type of `de440s.bsp` and `de405.bsp` (groups 1 to 4). No kernel of the
 # other types, type 3 included, is on this machine, so the group writes them: one SPK file
 # with one segment per case, made with the segment writers of CSPICE (`spkwNN_c`, the

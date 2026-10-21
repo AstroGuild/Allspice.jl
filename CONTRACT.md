@@ -828,7 +828,6 @@ SPICE.jl from a spawned task.
 | Seed | `test/helpers.jl` | `ALLSPICE_TEST_SEED` sets `SEED` (default 20261011), the seed of every random sample. |
 | Kernels | `test/kernels.jl` | `fetch_kernels` downloads the missing kernels into `test/data/` and checks their SHA-256; `ALLSPICE_KERNEL_DIR`, `ALLSPICE_DE440S`, `ALLSPICE_DE405` override the paths and `ALLSPICE_DOWNLOAD_KERNELS=0` turns the download off. A group whose kernels are missing is skipped with a visible notice, or fails with `ALLSPICE_REQUIRE_KERNELS=1`. |
 | Coverage | `test/coverage_summary.jl` | Run the tests with `--code-coverage=@src`, then `julia --startup-file=no test/coverage_summary.jl [--keep] [output file]`; it adds the `.cov` files of all processes, prints one line for each file of `src/` and `ext/` and the total, and deletes the `.cov` files unless `--keep` is given. |
-| Behaviour | `test/features/*.feature` | Given / When / Then specifications. |
 
 - Time budget: the default run of all groups together has a budget of 120 s, and
   `runtests.jl` prints the time of each group, longest first, at the end of a run. A

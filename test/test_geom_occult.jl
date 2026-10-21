@@ -1,7 +1,5 @@
 # Geometry group: occultation state (`occult`) against CSPICE.
 #
-# Feature file: features/geometry_occultation.feature
-#
 # The output is a code, so the comparison is exact. A code changes at an instant; where
 # the two libraries differ, the test accepts the difference only if CSPICE itself gives
 # two codes within 1e-3 s of the epoch (the epoch is on a contact), and it counts these

@@ -17,8 +17,6 @@
 # The default run compares one case in four of the product of options (`gf_pick`) and
 # does not make the table of search times; the exhaustive run (`ALLSPICE_TEST_FULL=1`)
 # compares every case and makes the table.
-#
-# Behaviour specification: test/features/gf_illum.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
 isdefined(@__MODULE__, :GEOLIB) || include("geomfixtures.jl")

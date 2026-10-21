@@ -1,7 +1,5 @@
 # Group 11: DAS files and the DLA segment list.
 #
-# Feature file: features/das_files.feature
-#
 # CSPICE is the oracle. No DAS file is needed on the machine: the group makes its files
 # with the CSPICE writers and with the Allspice writers in a temporary directory, and
 # each engine reads the files of the other.

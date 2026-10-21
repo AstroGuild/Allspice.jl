@@ -19,8 +19,6 @@
 # environment variables of `test/kernels.jl` change their paths and the download. A
 # group whose kernels are missing is skipped with a visible notice, or fails with
 # ALLSPICE_REQUIRE_KERNELS=1. ALLSPICE_TEST_SEED changes the random samples.
-#
-# Behaviour specifications (Given / When / Then) are in `test/features/*.feature`.
 
 include("helpers.jl")
 Kernels.fetch_kernels()

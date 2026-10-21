@@ -1,8 +1,6 @@
 # Geometry group: instrument fields of view (`getfov`, `getfvn`, `fovtrg`, `fovray`)
 # against CSPICE.
 #
-# Feature file: features/geometry_fov.feature
-#
 # The instruments are those of `geo_instrument_kernel`: a circle, an ellipse, a
 # rectangle and a polygon given by corners, a circle, an ellipse and a rectangle given
 # by angles, a wide polygon whose axis comes from the convex hull search, and a polygon

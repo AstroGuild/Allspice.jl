@@ -1,7 +1,5 @@
 # Group 12: DSK type 2 (triangular plates).
 #
-# Feature file: features/dsk_type2.feature
-#
 # CSPICE is the oracle. No DSK file is needed on the machine: the group makes plate
 # models (a tessellated ellipsoid, rough random surfaces, cubes, patches of a surface),
 # writes them with the CSPICE writer and with the Allspice writer, and compares:

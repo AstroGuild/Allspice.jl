@@ -1,7 +1,5 @@
 # Group EK 3: EK queries on many threads while another task loads and unloads an EK file.
 #
-# Feature file: features/ek_queries.feature (scenarios "Many tasks ...")
-#
 # CSPICE is called only to write the EK files, before any task starts; it has one global
 # query result and cannot run this test. The reference answers come from Allspice,
 # computed serially (group `ek_query` compares the same kinds of queries with CSPICE).

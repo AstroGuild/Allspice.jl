@@ -1,8 +1,6 @@
 # Group 13: rotation calls (Euler angles, axis and angle, quaternions, state
 # transformations) against CSPICE.
 #
-# Feature file: features/math_rotations.feature
-#
 # The random rotations come from Euler angles over the whole circle. The degenerate
 # inputs are the identity, the half turns about each axis, Euler sequences with the
 # middle angle at an end of its range, matrices that are not rotations, and axis numbers

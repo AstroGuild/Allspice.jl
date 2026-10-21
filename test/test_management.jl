@@ -1,7 +1,4 @@
 # Group 6: kernel management.
-#
-# Feature files: features/unload.feature, features/load_order_precedence.feature,
-# features/coverage_error.feature
 
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the

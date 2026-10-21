@@ -1,7 +1,5 @@
 # Group 3: time derivatives of states and rotations.
 #
-# Feature file: features/derivative_orders.feature
-#
 # Three independent checks of `spkder` and `pxder`:
 #   (a) orders 0 and 1 are the `spkezr` state (the `pxform` matrix and the derivative
 #       block of `sxform`);

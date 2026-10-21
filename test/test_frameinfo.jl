@@ -147,9 +147,9 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
     @apart @testset "tipbod and tisbod" begin
         dp = Float64[]; ds = Float64[]; dd = Float64[]
         structure_ok = true
-        for body in (399, 301, 499, 599, 10, 199, 299, 699, 799, 899, 401, 502, 606, 31006),
+        # 31008 is the frame class of the lunar binary PCK; the others use text PCK constants.
+        for body in (399, 301, 499, 599, 10, 199, 299, 699, 799, 899, 401, 502, 606, 31008),
             ref in ("J2000", "ECLIPJ2000", "B1950", "FK4", "GALACTIC", 1, 17)
-            body == 31006 && continue
             for et in random_epochs(rng, 6, -6.0e8, 6.0e8)
                 refname = ref isa Integer ? frmnam(ctx, ref) : ref
                 a = tipbod(ctx, ref, body, et)

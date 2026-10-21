@@ -1,7 +1,5 @@
 # Group 9: aberration corrections against CSPICE.
 #
-# Feature file: features/aberration_corrections.feature
-#
 # Error measure: the Euclidean norm of the difference from the CSPICE vector divided by
 # the norm of the CSPICE vector (position and velocity apart), and the relative
 # difference of the light time. The table that is printed has the largest value of each

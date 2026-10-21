@@ -1,7 +1,5 @@
 # Group 12: vector and matrix calls, and the base 16 strings of doubles, against CSPICE.
 #
-# Feature file: features/math_vectors.feature
-#
 # Each function runs on several hundred seeded random inputs with magnitudes from 1e-10
 # to 1e10, mixed with the degenerate inputs (zero vector, unit axes, equal, parallel and
 # opposite pairs, very small and very large components). The limit of each function is

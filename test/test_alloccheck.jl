@@ -1,7 +1,5 @@
 # Group: static proof that the numeric kernels do not allocate (AllocCheck).
 #
-# Feature file: features/allocation_proof.feature
-#
 # The other groups measure the allocation of one call (`@allocated`), which covers the
 # path that the call took. AllocCheck examines the compiled code, so a finding of zero
 # covers every path that does not throw. The calls that take names of bodies and frames

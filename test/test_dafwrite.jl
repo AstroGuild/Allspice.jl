@@ -1,7 +1,5 @@
 # Group 9: DAF access, SPK, CK and binary PCK writers, kernel information.
 #
-# Feature file: features/daf_write.feature
-#
 # CSPICE is the oracle. Every writer gets the same random, valid segment with both
 # engines, into two temporary files, and the files are compared:
 #

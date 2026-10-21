@@ -1,7 +1,5 @@
 # Group 1: states against CSPICE.
 #
-# Feature file: features/load_then_query.feature
-#
 # Error measure, in the manner of the ANISE validation: for each query the absolute
 # difference per component, |Allspice - CSPICE|, and the same difference divided by the
 # Euclidean norm of the CSPICE vector (position norm for position components, velocity

@@ -2,8 +2,6 @@
 # polynomial, the numerical derivative, the roots of a quadratic and the
 # diagonalization of a symmetric 2 by 2 matrix, against CSPICE.
 #
-# Feature file: features/math_polynomials.feature
-#
 # The random inputs are expansions of degree 0 to 20 and point sets of 1 to 12 points,
 # with values from 1e-2 to 1e2 and abscissas inside and outside the interval of the
 # data; quadratics with a zero leading coefficient, a zero or a negative discriminant
