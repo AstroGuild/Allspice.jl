@@ -44,6 +44,8 @@ jobs:
         with:
           path: test/data
           key: kernels-${{ hashFiles('test/kernels.jl') }}
+          # One archive serves every runner, so Windows does not download.
+          enableCrossOsArchive: true
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
         with:
