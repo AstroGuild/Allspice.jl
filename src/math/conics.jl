@@ -76,19 +76,14 @@ function prop2b(gm::Real, pvinit::AbstractVector, dt::Real)
     h = _m_cross(pos, vel)
     _m_dot(h, h) == 0.0 && throw(SpiceError(:nonconicmotion,
         "the initial position and velocity are parallel: the motion is not conic"))
-    p, v = _m_prop2b(mu, pos, vel, _m_f(dt))
+    p, v = _prop2b(mu, pos, vel, _m_f(dt), :dtoutofrange)
     return _m_state(p, v)
 end
 
-"`_prop2b` with its remaining failure reported as `SpiceError(:dtoutofrange)`."
-@inline function _m_prop2b(mu::Float64, pos::SVector{3,Float64}, vel::SVector{3,Float64}, dt::Real)
-    try
-        return _prop2b(mu, pos, vel, dt)
-    catch e
-        (e isa SpiceError && e.kind === :badorbit) || rethrow()
-        throw(SpiceError(:dtoutofrange, "the time interval is too long for two-body propagation: " * e.msg))
-    end
-end
+# `prop2b` and `conics` check their input first, so the remaining failure of `_prop2b`
+# is a time interval that is too long, `SpiceError(:dtoutofrange)` as in CSPICE. The kind
+# goes in as an argument, so that the calls have no catch block: on Windows AllocCheck
+# counts the `ijl_setjmp` of a catch block as a possible allocation.
 
 """
     conics(elts, et) -> SVector{6}
@@ -159,7 +154,7 @@ function conics(elts::AbstractVector, et::Real)
         n = sqrt(mu / (rp * 2.0)) / rp
         dt = t - t0 + m0 / n
     end
-    p, vv = _m_prop2b(mu, rp * basisp, v * basisq, dt)
+    p, vv = _prop2b(mu, rp * basisp, v * basisq, dt, :dtoutofrange)
     return _m_state(p, vv)
 end
 

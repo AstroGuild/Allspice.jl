@@ -36,9 +36,15 @@ group("allocation proof: numeric kernels (AllocCheck)") do
     ]
     bad = String[]
     for (f, tt) in cases        # invariant: `bad` names the functions before this one with a finding
-        isempty(AllocCheck.check_allocs(f, tt)) || push!(bad, string(f))
+        found = AllocCheck.check_allocs(f, tt)
+        isempty(found) && continue
+        push!(bad, string(f))
+        # Each finding (allocation site, dynamic dispatch or runtime call) with its
+        # backtrace, so that a CI log shows the cause; not the expected one below.
+        (f === Allspice.spk_eval && STACK_BUFFERS_ESCAPE) && continue
+        println("AllocCheck: $(length(found)) finding(s) for $f$tt")
+        foreach(x -> (show(stdout, x); println()), found)
     end
-    isempty(bad) || @info "AllocCheck findings" functions = bad
     # `spk_eval` reaches the MVector buffers of the interpolating SPK types.
     @test isempty(setdiff(bad, ["spk_eval"]))
     @test "spk_eval" ∉ bad skip = STACK_BUFFERS_ESCAPE

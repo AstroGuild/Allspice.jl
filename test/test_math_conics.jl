@@ -156,6 +156,10 @@ group("16. math: conics") do
         @test throws_kind(() -> prop2b(mu, [0.0, 0, 0, 1, 2, 3], 1.0), :zeroposition)
         @test throws_kind(() -> prop2b(mu, [1.0, 2, 3, 0, 0, 0], 1.0), :zerovelocity)
         @test throws_kind(() -> prop2b(mu, [1.0, 2, 3, 2, 4, 6], 1.0), :nonconicmotion)
+        # A time interval that is too long: the propagator gets the error kind as an
+        # argument, and no catch block converts it.
+        @test outcome(() -> prop2b(1.0, [1.0, 0, 0, 0, 1, 0], 1e300)) ===
+              outcome(() -> CS.prop2b(1.0, [1.0, 0, 0, 0, 1, 0], 1e300)) === :dtoutofrange
         # the derivative with respect to the time is the velocity and the acceleration
         for dt in (-9000.0, 0.0, 10.0, 3.0e4)
             q = prop2b(mu, s, dt)
