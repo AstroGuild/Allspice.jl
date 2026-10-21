@@ -2128,6 +2128,22 @@ group("9. DAF access, SPK and CK writers") do
         pc, kc, pn, kn = spksub_both(p13, dir, "long_name", "x"^60, a.first, a.last)
         @test kn === kc === :none
         @test read(pn) == read(pc)
+        # Regression: spksub began the new array before it read the source, so that a
+        # read error left an array begun on `newh` and `dafac` threw :dafnewconflict.
+        src = dafopr(p13)
+        dafbfs(src)
+        daffna(src)
+        x = dafus(dafgs(src), 2, 6)
+        newh = spkopn(joinpath(dir, "after_failure.bsp"), "CHECK", 0)
+        try
+            @test throws_kind(() -> spksub(newh, src, dafps(x[1], [x[2][1:5]; 10^8]), "S",
+                a.first, a.last), :filereadfailed)
+            dafac(newh, ["a comment after the failed call"])
+            @test dafec(newh) == ["a comment after the failed call"]
+        finally
+            dafcls(newh)
+            dafcls(src)
+        end
     end
 end
 
