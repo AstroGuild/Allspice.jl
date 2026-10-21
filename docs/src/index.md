@@ -4,6 +4,8 @@ Allspice.jl reads SPICE kernels and answers the questions that the CSPICE toolki
 
 Queries are safe from many threads at once, because all loaded data belong to a context object and no call keeps hidden state. The epoch can be a dual number of ForwardDiff.jl, and `spkder` and `pxder` return time derivatives of any order, so that a state can go into an optimizer or an integrator without finite differences. A trajectory or a rotation can be extracted into a flat array of coefficients that a GPU evaluates.
 
+A program that must call the CSPICE library of NAIF itself, for example to obtain results that are identical to those of another CSPICE program on every platform, is better served by the wrapper SPICE.jl. The toolkit programs of NAIF, such as `brief` and `mkspk`, are not part of this package.
+
 ## Installation
 
 The package needs Julia 1.10 or later. Install it from GitHub:
@@ -67,3 +69,7 @@ Pages = [
 ]
 Depth = 1
 ```
+
+## Contributing
+
+Report defects and ask questions in the [issues of the repository](https://github.com/AstroGuild/Allspice.jl/issues). Allspice.jl is an independent project: NAIF and the Jet Propulsion Laboratory do not develop or support it, so do not send its defects to NAIF.

@@ -44,4 +44,21 @@ Each routine follows the arithmetic of its CSPICE counterpart, operation by oper
 
 ## What is absent
 
-The toolkit utilities that are programs (`brief`, `mkspk`, `spkmerge` and the others) are not part of the package. [Coverage and validation](@ref) lists the areas of the library that exist.
+Of the 651 routines that the header of CSPICE N0067 declares, 162 have no counterpart of the same name. Each of them is a facility that Julia provides, a routine that NAIF has declared deprecated and replaced, or a part of the C interface that the call conventions above make unnecessary. The table gives the call to use in place of each group, so that a program written for CSPICE or SPICE.jl can be ported without a search.
+
+| CSPICE routines | In this package |
+|---|---|
+| Error handling: `chkin`, `chkout`, `erract`, `errch`, `errdp`, `errint`, `errprt`, `failed`, `getmsg`, `qcktrc`, `reset`, `return`, `setmsg`, `sigerr`, `trcdep`, `trcnam`, `trcoff` and others | A call throws [`SpiceError`](@ref); catch it with `try` |
+| Cells and sets: `insrtd`, `removd`, `elemi`, `union`, `inter`, `diff`, `sdiff`, `scard`, `size`, `valid` and others | `Vector` and `Set` of Julia; windows are a [`Window`](@ref) |
+| Arrays: `bsrchd`, `isrchi`, `lstled`, `orderd`, `reordd`, `shelld`, `maxd`, `sumad`, `filld`, `moved`, `mequ` and others | `searchsortedfirst`, `findfirst`, `sortperm`, `sort!`, `maximum`, `sum`, `fill!`, `copy` |
+| Strings and parsing: `ucase`, `lcase`, `cmprss`, `lparse`, `nextwd`, `prsdp`, `prsint`, `repmc`, `matchw`, `lx4num` and others | `uppercase`, `lowercase`, `split`, `parse`, `replace`, `occursin`, `Regex` |
+| Constants: `pi`, `dpmax`, `dpmin`, `intmax`, `intmin` | `π`, `floatmax`, `-floatmax`, `typemax(Int32)`, `typemin(Int32)` |
+| Files and the command line: `exists`, `rdtext`, `prompt`, `getcml`, `putcml`, `ftncls` | `isfile`, `eachline`, `readline`, `ARGS`, `close` |
+| Deprecated by NAIF: `bodvar`, `illum`, `spkapp`, `srfxpt`, `subpt`, `subsol`, `dafrda` | [`bodvrd`](@ref) or [`bodvcd`](@ref), [`ilumin`](@ref), [`spkaps`](@ref), [`sincpt`](@ref), [`subpnt`](@ref), [`subslr`](@ref), [`dafgda`](@ref) |
+| Loading one file by handle: `spklef`, `spkuef`, `cklpf`, `ckupf`, `pcklof`, `pckuof` | [`furnsh`](@ref) and [`unload`](@ref) |
+| Settings of the geometry finder: `gfsstp`, `gfstep`, `gfrepi`, `gfrepu`, `gfrepf`, `gfbail`, `gfinth`, `gfclrh`, `gfseth` | The step argument of each search (`udstep` in [`gfevnt`](@ref), [`gffove`](@ref) and [`gfocce`](@ref)) and the keywords `report` and `bail`; see [`gfdist`](@ref) |
+| The current file of DAF and DAS: `dafcs`, `dafgh`, `daswbr` | The handle object passed to each call |
+
+The routines whose names begin with `zz` are private to CSPICE and are left out as well.
+
+The toolkit programs (`brief`, `chronos`, `mkspk`, `spkmerge` and the others) are not part of the package. SPICEApplications.jl runs them from Julia through the NAIF executables. [Coverage and validation](@ref) lists the areas of the library that exist.

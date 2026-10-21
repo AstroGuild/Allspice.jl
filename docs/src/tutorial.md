@@ -21,6 +21,15 @@ ktotal("ALL")
 
 A meta-kernel, which is a text kernel that lists other kernels, works as in CSPICE, so that one `furnsh` call can load a whole set.
 
+The kernels of real bodies come from NAIF. The package SPICEKernels.jl downloads the generic kernels of NAIF on first use and returns their paths, which `furnsh` takes as they are:
+
+```julia
+using SPICEKernels
+
+furnsh(naif0012_tls())   # leap seconds
+furnsh(de440s())         # planets, Moon and Sun, 1849 to 2150
+```
+
 ## Convert a time
 
 All calls take an epoch as seconds past J2000 in Barycentric Dynamical Time (TDB), which SPICE calls ET. [`str2et`](@ref) converts a calendar string to that number. [`timout`](@ref) converts back with a picture, which is a string that shows the wanted format; the marker `::TDB` asks for the TDB time scale.
