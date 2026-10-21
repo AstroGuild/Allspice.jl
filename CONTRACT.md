@@ -257,7 +257,10 @@ the call (`:noleapseconds`, `:missingtimeinfo` or `:kernelvarnotfound`).
 ## `rotations.jl`
 
 - `build_tk(pool, frames) -> Dict{Int32,TKFrame}` (`TKFRAME_<id>_SPEC` of `MATRIX`,
-  `ANGLES`, `QUATERNION`; `_RELATIVE` resolved to a frame ID).
+  `ANGLES`, `QUATERNION`; `_RELATIVE` resolved to a frame ID), keyed by frame ID, from
+  `_tk_parse(pool, frames, classid) -> TKFrame`, which reads the variables as `tkfram_`
+  does and throws its errors. A frame that does not parse is left out of the table;
+  `_tk_missing(ks, fd)` parses it again at a query and throws the error.
 - `build_bodyrot(pool) -> Dict{Int32,BodyRot}`.
 - `frame_rotation(ks::KernelSet, from::Int32, to::Int32, et::T) -> Mat3{T}`: matrix
   that rotates vectors from frame `from` to frame `to` at `et`, generic over `T`. With
@@ -271,7 +274,7 @@ the call (`:noleapseconds`, `:missingtimeinfo` or `:kernelvarnotfound`).
   ordinary derivatives.
 - `_frame_step(ks, id::Int32, et::T) -> (parent::Int32, rot::Mat3{T})` is one link of a
   chain (requires `id != 1`), and `_frame_parent(ks, id)` gives the parent without any
-  evaluation. A class 4 frame without data throws `SpiceError(:framedatanotfound)`, and
+  evaluation. A class 4 frame without data throws the error of `_tk_missing`, and
   a class 3 frame without a CK segment at `et` throws `SpiceError(:noframeconnect)`.
 - `_body_rotation(ks, classid::Int32, et::T) -> Mat3{T}`: J2000 to a class 2 frame, as
   `tisbod_`; throws `SpiceError(:framedatanotfound)`.

@@ -488,7 +488,15 @@ function badkpv(ks::KernelSet, caller::AbstractString, name::AbstractString,
     for (arg, s) in (("caller", caller), ("name", name), ("comp", comp))
         isempty(s) && throw(SpiceError(:emptystring, "badkpv: the argument $arg is empty"))
     end
-    dim, class = dtpool(ks, name)
+    return _badkpv(ks.pool, caller, name, comp, size, divby, type)
+end
+
+# `badkpv` on the pool dictionary, for the checks of a pool that is not yet in a
+# `KernelSet` (`build_tk`); the arguments are not empty.
+function _badkpv(pool::AbstractDict, caller::AbstractString, name::AbstractString,
+        comp::AbstractString, size::Integer, divby::Integer, type::AbstractChar)
+    v = get(pool, String(strip(name)), nothing)
+    dim, class = v === nothing ? (0, :X) : (length(v), v isa Vector{Float64} ? :N : :C)
     class === :X && throw(SpiceError(:variablenotfound, "$caller: the kernel pool " *
         "variable '$name' is not currently present in the kernel pool"))
     op = rstrip(comp, ' ')
