@@ -108,9 +108,6 @@ order because `Loaded`, `KernelSet` and `SpiceContext` have fields of their type
   `SpiceError(:notsupported, ...)`: type 10 needs the leap seconds, which `spk_eval` does
   not have, so only a query through a `KernelSet` evaluates it (see `spk_api.jl`).
   Precondition, not checked: `seg.t0 <= primal(et) <= seg.t1`.
-- `spk_eval_position(data, seg, et::T, ::Val{N})`: as above but always derivatives of
-  the position function (differs from `spk_eval` where the CSPICE velocity is not the
-  derivative of the position, for example types 3, 8, 9, 14).
 - `pck_eval(data::Vector{Float64}, seg::Segment, et::T, ::Val{N}) -> NTuple{N+1,Vec3}`:
   the stored 3-1-3 Euler angles (PHI, DELTA, W) in radians of a binary PCK type 2
   segment, as `pcke02` returns them, and their time derivatives. `PHI = RA + pi/2`,
@@ -134,9 +131,9 @@ evaluator pair `spkrNN`/`spkeNN` of CSPICE, so a plain epoch gives the CSPICE st
 | `_spk_equal`, `_spk_unequal`, `_spk18`, `_spk19` | `interp.jl` | 8 and 12, 9 and 13, 18, 19 |
 | `_spk14`, `_spk20` | `chebyshev.jl` | 14, 20 |
 
-- `_spk_more(data, seg, et::T, ::Val{N})` and `_spk_more_position(...)` are the
-  branches of `spk_eval` and `spk_eval_position` for these types: order k >= 2 comes
-  from the same `state` function with a Taylor epoch. No allocation.
+- `_spk_more(data, seg, et::T, ::Val{N})` is the branch of `spk_eval` for these
+  types: order k >= 2 comes from the same `state` function with a Taylor epoch. No
+  allocation.
 - A type other than 2, 3 and 20 has no directory values in its `Segment`: the
   evaluator reads them from the end of the segment at each call and checks them with
   `_seg_count`, which throws `SpiceError(:baddaf)`. `_lstltd(data, base, n, x)` and
