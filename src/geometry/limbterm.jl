@@ -287,8 +287,14 @@ end
     _geo_bad_locus(corloc, "CENTER and $second")
 end
 
+# `limbpt_` calls `edlimb_`, which signals SPICE(INVALIDAXISLENGTH) for a radius that is not
+# positive; `edlimb_c`, the counterpart of `edlimb`, signals SPICE(DEGENERATECASE).
+@noinline _geo_bad_limb_radii(r) = throw(SpiceError(:invalidaxislength,
+    "semi-axis lengths: a = $(r[1]), b = $(r[2]), c = $(r[3])"))
+
 "The limb plane normal that points toward the observer, and the limb center."
 @inline function _geo_limb_frame(radii::NTuple{3,Float64}, axis::Vec3{Float64})
+    (radii[1] <= 0.0 || radii[2] <= 0.0 || radii[3] <= 0.0) && _geo_bad_limb_radii(radii)
     limb = edlimb(radii[1], radii[2], radii[3], axis)
     enorml = _m_ucrss(limb.semimajor, limb.semiminor)
     _m_dot(enorml, axis) < 0.0 && (enorml = -1.0 * enorml)
@@ -665,7 +671,7 @@ Throws `SpiceError` with the kind
   plane has more than 2000;
 - `:noseparation` if the observer is at the target center;
 - `:kernelvarnotfound` if the radii of `target` are not loaded, `:badradiuscount` if
-  there are not 3 of them, `:degeneratecase` if one is not positive;
+  there are not 3 of them, `:invalidaxislength` if one is not positive;
 - `:noloadeddskfiles` if no DSK file is loaded, `:dskdatanotfound` if no DSK data are
   loaded for `target` (DSK method).
 
