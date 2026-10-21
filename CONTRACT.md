@@ -30,8 +30,9 @@ Conventions that hold everywhere:
   into `ERROR_KINDS` (`errors.jl`): the constructor refuses a kind that is not there, and
   a test compares the registry with the kinds in the source.
 - CSPICE keeps state in saved variables and in process-wide tables; this package keeps
-  none. State that CSPICE hides is an object that the caller owns (`DAFHandle`,
-  `DASHandle`, `EKResult`, `EKFastLoad`) or an atomic field of the `SpiceContext`.
+  one, the table of open files of `daf_access.jl`. Other state that CSPICE hides is an
+  object that the caller owns (`DAFHandle`, `DASHandle`, `EKResult`, `EKFastLoad`) or an
+  atomic field of the `SpiceContext`.
 - Where CSPICE computes with 32-bit integers, the port gives the same value: `_cint`
   (the C cast of a double) and `_wrap32` (reduction to the 32-bit range) of `time.jl`,
   with `_dnint` and `_nint`, the rounding functions of f2c (the Fortran to C translator
@@ -458,9 +459,18 @@ open files and one hidden "current array" for each search; here the opened file 
 | comments, file record | `dafac`, `dafec -> Vector{String}`, `dafdc`, `dafrfr` |
 | architecture | `getfat(path) -> (arch, kind)`, `idw2at(idword) -> (arch, kind)` |
 
-- Thread safety: there is no global state, so two tasks can work on two handles at the
-  same time. One handle is not safe for concurrent use, and a caller that shares a
-  handle between tasks must hold a lock around every call.
+- Thread safety: the only global state is the table of open files, `_OPEN_FILES` under
+  `_OPEN_FILES_LOCK`, so two tasks can work on two handles at the same time. One handle
+  is not safe for concurrent use, and a caller that shares a handle between tasks must
+  hold a lock around every call.
+- The table of open files holds, with weak keys, each `DAFHandle` and `DASHandle` that a
+  public open call returned (`dafopr`, `dafopw`, `dafonw`, `dasopr`, `dasopw`, `dasonw`,
+  `ekopr`, and the calls on top of them), with the device and inode of its file.
+  `_open_register!(h, path, writable, who; check=writable)` throws
+  `SpiceError(:fileopenconflict)` for a write open of a file that another open handle
+  has open, as `zzddhopn` of CSPICE does; a read open is not checked (CSPICE gives
+  RWCONFLICT for a file open for write). A close calls `_open_unregister!(h)`. The
+  handles of `furnsh` and other internal readers are not in the table.
 - A file never shrinks, and the bytes of an array are in place before its summary is,
   so a reader that opens the file between two calls sees a valid DAF. Rule for the
   caller: `furnsh` a file only after `dafcls`, `spkcls` or `ckcls` has returned, and

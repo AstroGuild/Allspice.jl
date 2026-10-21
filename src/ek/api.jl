@@ -31,7 +31,7 @@ See also [`ekopw`](@ref), [`ekopn`](@ref).
 function ekopr(path::AbstractString)
     h = _das_load(path, "ekopr", false)
     _ek_check(h, h.path, "ekopr")
-    return h
+    return _open_register!(h, path, false, "ekopr")
 end
 
 """
@@ -40,7 +40,8 @@ end
 Close the EK file of `handle`, as `ekcls_c`.
 
 For a write handle all data are on disk when the call returns. Closing a closed handle
-does nothing.
+does nothing. A fast load that [`ekffld`](@ref) did not end leaves a segment that
+cannot be read, without an error, as in CSPICE (see [`ekifld`](@ref)).
 
 See also [`ekopr`](@ref), [`ekopw`](@ref), [`ekopn`](@ref).
 """
@@ -126,7 +127,8 @@ segment `segno`, without trailing blanks, as `ekrcec_c`.
 
 `segno` and `recno` count from 1; `ekrcec_c` counts from 0. The column name is matched
 without regard to case. The entry of a scalar column gives a vector of one string. A
-null entry gives an empty vector and `isnull == true`.
+null entry gives an empty vector and `isnull == true`; for a null entry CSPICE gives a
+count of 1, or the size of a fixed-size array column, and values without meaning.
 
 Throws `SpiceError` with the kind
 - `:invalidindex` if `segno` is not a segment of the file;

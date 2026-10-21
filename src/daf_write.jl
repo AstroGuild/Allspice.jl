@@ -160,7 +160,8 @@ function dafonw(path::AbstractString, ftype::AbstractString, nd::Integer, ni::In
         throw(SpiceError(:fileopenfailed,
             "dafonw: attempt to create the new file $path failed: $(sprint(showerror, e))"))
     end
-    h = _daf_handle(path, io, true, false, Int(nd), Int(ni))
+    h = _open_register!(_daf_handle(path, io, true, false, Int(nd), Int(ni)), path, true,
+        "dafonw"; check=false)
     fward = Int(resv) + 2
     free = _daf_rwa(fward + 2)
     filerec = zeros(UInt8, _DAF_RECLEN)
@@ -190,15 +191,16 @@ end
 
 Open the existing DAF file `path` for writing, as `dafopw_c`, to add arrays or comments.
 
-The file must have the native byte order. No other handle may write the same file: the
-call does not check this, where CSPICE refuses the second open, and arrays that two
-handles add at the same time overwrite each other. A handle that reads the file finds a
-change in a search that begins after the change. Unload the file from every context
-before the call and load it again after the close: a kernel that is loaded does not see
-arrays that are added later.
+The file must have the native byte order, and no open handle of this process may have
+it open, for read or for write, under any path. After the call, [`dafopr`](@ref) can
+still open the file for read, where CSPICE refuses; a search on that handle finds the
+changes made before the search began. A kernel that `furnsh` loaded does not count as open,
+where CSPICE refuses: unload the file from every context before the call and load it
+again after the close, because a loaded kernel does not see arrays that are added later.
 
 Throws the `SpiceError` kinds of [`dafopr`](@ref), `:unsupportedbff` if the file has the
-other byte order, and `:fileopenfailed` if the file cannot be opened for update.
+other byte order, `:fileopenconflict` if another handle has the file open, and
+`:fileopenfailed` if the file cannot be opened for update.
 """
 function dafopw(path::AbstractString)
     nd, ni, swap = _daf_probe(path, "dafopw")
@@ -209,7 +211,14 @@ function dafopw(path::AbstractString)
     catch e
         throw(SpiceError(:fileopenfailed, "dafopw: cannot open $path for write: $(sprint(showerror, e))"))
     end
-    return _daf_handle(path, io, true, false, nd, ni)
+    h = _daf_handle(path, io, true, false, nd, ni)
+    try
+        _open_register!(h, path, true, "dafopw")
+    catch
+        close(io)
+        rethrow()
+    end
+    return h
 end
 
 # ---------------------------------------------------------------------------------------

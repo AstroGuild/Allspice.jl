@@ -323,6 +323,7 @@ function _geo_limbpt(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
         target::NameOrID, et0::Real, fixref::NameOrID, abcorr::AbcorrArg,
         corloc::AbstractString, obsrvr::NameOrID, refvec0::AbstractVector, rolstp0::Real,
         ncuts::Integer, schstp0::Real, soltol0::Real, maxn::Integer)
+    _plain_epoch(et0, "limbpt")
     corr = _geo_abcorr(abcorr)
     s = _geo_sign(corr)
     trgcde = _geo_body(ks, target, "target")
@@ -469,6 +470,7 @@ function _geo_termpt(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
         ilusrc::NameOrID, target::NameOrID, et0::Real, fixref::NameOrID, abcorr::AbcorrArg,
         corloc::AbstractString, obsrvr::NameOrID, refvec0::AbstractVector, rolstp0::Real,
         ncuts::Integer, schstp0::Real, soltol0::Real, maxn::Integer)
+    _plain_epoch(et0, "termpt")
     corr = _geo_abcorr(abcorr)
     corr.transmit && throw(SpiceError(:invalidoption,
         "the aberration correction $(string(corr)) calls for transmission; termpt " *
@@ -652,6 +654,7 @@ angle `soltol`. With an ellipsoid method both values are ignored.
 DSK method uses the tolerances that [`dskstl`](@ref) set on the context.
 
 Throws `SpiceError` with the kind
+- `:badarg` if `et` is a `ForwardDiff.Dual`;
 - `:invalidoption` if `abcorr` is not a valid correction;
 - `:idcodenotfound` if a body name is not known;
 - `:bodiesnotdistinct` if `target` and `obsrvr` are the same body;
@@ -740,8 +743,8 @@ As in CSPICE, a half plane with `n` points takes `n^2` of the `maxn` places, not
 With an ellipsoid `n` is 1. With a DSK method, `:outofroom` can occur before `maxn`
 points are found, so give `maxn` a margin.
 
-Throws the kinds of [`limbpt`](@ref) for the bodies, the frame, `refvec`, `rolstp` and
-`maxn < 1`, and `SpiceError` with the kind
+Throws the kinds of [`limbpt`](@ref) for `et`, the bodies, the frame, `refvec`, `rolstp`
+and `maxn < 1`, and `SpiceError` with the kind
 - `:invalidoption` if `abcorr` is not valid or is a transmission correction;
 - `:bodiesnotdistinct` if `target` is also the observer or the source;
 - `:invalidtermtype` if `method` has neither `TANGENT` nor `GUIDED`, `:invalidshadow`
@@ -820,6 +823,7 @@ TDB and cannot be a `ForwardDiff.Dual`. The call does not allocate when the bodi
 the frames are integer IDs.
 
 Throws `SpiceError` with the kind
+- `:badarg` if `et` is a `ForwardDiff.Dual`;
 - `:invalidoption` if `abcorr` is not a valid correction;
 - `:notsupported` if `method` is not `"ELLIPSOID"` or `corloc` is not one of the two
   values;
@@ -840,6 +844,7 @@ See also [`limbpt`](@ref), [`sincpt`](@ref), [`npedln`](@ref).
 function tangpt(ks::KernelSet, method::AbstractString, target::NameOrID, et0::Real,
         fixref::NameOrID, abcorr::AbcorrArg, corloc::AbstractString, obsrvr::NameOrID,
         dref::NameOrID, dvec0::AbstractVector)
+    _plain_epoch(et0, "tangpt")
     corr = _geo_abcorr(abcorr)
     s = _geo_sign(corr)
     (method == "ELLIPSOID" || _dsk_eqstr(method, "ELLIPSOID")) || throw(SpiceError(

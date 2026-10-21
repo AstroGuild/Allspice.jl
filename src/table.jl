@@ -86,7 +86,8 @@ EphemerisTable{T}(tab::EphemerisTable) where {T<:AbstractFloat} =
 Return the first and the last epoch of the table `tab`, in seconds past J2000 TDB.
 
 `tab` is an [`EphemerisTable`](@ref) or a [`RotationTable`](@ref). A query is valid
-for `first <= et <= last`.
+for `first <= et <= last`. A table that [`ephemeris_table`](@ref) made from the records
+of the kernels covers whole records, so its span can be wider than the requested one.
 """
 @inline table_span(tab::EphemerisTable) = (tab.t0, tab.t0 + tab.nint * tab.dt)
 
@@ -337,8 +338,10 @@ Two methods give the coefficients:
 - **Records of the kernels.** If `abcorr` is `"NONE"`, `ref` is inertial, and every
   segment between the two bodies is SPK type 2 in an inertial frame with record
   boundaries on one common grid, the table takes the record length and the degree of
-  the kernels. It then agrees with `spkpos` to rounding, it can start before `t0` and
-  end after `t1`, and `tol`, `ncoef` and `maxintervals` are not used.
+  the kernels. It then agrees with `spkpos` to rounding, and `tol`, `ncoef` and
+  `maxintervals` are not used. The table covers whole records of the shortest record
+  length, at least `t0` to `t1`: it can start up to one record before `t0` and end up
+  to one record after `t1`, and a query in that margin does not throw.
 - **Interpolation.** In all other cases the call interpolates on `t0` to `t1` with
   `ncoef` coefficients for each interval, and it doubles the number of intervals
   until the measured error is at most `tol` (km). With `tol`, the result has

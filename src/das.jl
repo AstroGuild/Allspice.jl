@@ -14,8 +14,9 @@
 # segregated file of native byte order, an owned copy in every other case. A write
 # handle works on the arrays in memory, and `dascls` writes the complete, segregated
 # file and moves it into place in one step, so a reader that has the old file mapped
-# keeps a consistent image. There is no global state. One handle is not safe for
-# concurrent use: a caller that shares a handle between tasks must hold a lock.
+# keeps a consistent image. The only global state is the table of open files of
+# `daf_access.jl`. One handle is not safe for concurrent use: a caller that shares a
+# handle between tasks must hold a lock.
 
 const _DAS_RECLEN = 1024
 const _DAS_NW = (1024, 128, 256)          # words in a record of type 1 (char), 2 (dp), 3 (int)
@@ -43,7 +44,9 @@ open for reading are never modified.
 A DAS file is segregated if all records of one data type are together.
 
 Two handles are independent. One handle is not safe for concurrent use: tasks that share a
-handle must hold a lock around every call.
+handle must hold a lock around every call. A file that an open handle has open, for read or
+for write, cannot be opened for write by another handle (`SpiceError(:fileopenconflict)`),
+as in CSPICE.
 
 A call on a closed handle throws `SpiceError(:dasnosuchhandle)`; the close calls do
 nothing instead. A write call on a handle that is open for reading throws
@@ -410,7 +413,7 @@ Throws `SpiceError`:
 
 See also [`dasopw`](@ref), [`dlabfs`](@ref), [`dasrdd`](@ref).
 """
-dasopr(path::AbstractString) = _das_load(path, "dasopr", false)
+dasopr(path::AbstractString) = _open_register!(_das_load(path, "dasopr", false), path, false, "dasopr")
 
 """
     dasopw(path) -> DASHandle
@@ -420,14 +423,18 @@ Open the existing DAS file `path` for writing, as `dasopw_c`.
 The file is read into memory. The file on disk does not change until [`dascls`](@ref),
 which writes the complete file.
 
-Throws the `SpiceError` kinds of [`dasopr`](@ref), and `:fileopenfailed` if the file is
-not writable.
+No open handle of this process may have the file open, for read or for write, under any
+path. After the call, [`dasopr`](@ref) can still open the file for read, where CSPICE
+refuses; that handle keeps the data of the file as they were when it opened.
+
+Throws the `SpiceError` kinds of [`dasopr`](@ref), `:fileopenconflict` if another handle
+has the file open, and `:fileopenfailed` if the file is not writable.
 """
 function dasopw(path::AbstractString)
     h = _das_load(path, "dasopw", true)
     (uperm(path) & 0x02) != 0 || throw(SpiceError(:fileopenfailed,
         "dasopw: the file $path cannot be opened for write"))
-    return h
+    return _open_register!(h, path, true, "dasopw")
 end
 
 """
@@ -478,7 +485,7 @@ function dasonw(path::AbstractString, ftype::AbstractString, ifname::AbstractStr
         throw(SpiceError(:fileopenfailed,
             "dasonw: cannot create $path: $(sprint(showerror, e))"))
     end
-    return h
+    return _open_register!(h, path, true, "dasonw"; check=false)
 end
 
 """
@@ -540,6 +547,7 @@ function dascls(h::DASHandle)
         _das_write_image(h)
     end
     h.isopen = false
+    _open_unregister!(h)
     return nothing
 end
 

@@ -41,7 +41,7 @@ With ForwardDiff.jl loaded, the epoch can be a `ForwardDiff.Dual` in these calls
 - the surface calls `subpnt`, `subslr`, `sincpt`, `ilumin`, `illumg`, `illumf`, `phaseq` and `azlcpo`;
 - the time conversions `unitim` and `deltet`.
 
-Other calls, such as `limbpt`, `tangpt`, `occult` and `et2lst`, take a `Float64` epoch. An event search takes a window of `Float64` epochs.
+Other calls, such as `limbpt`, `termpt`, `tangpt`, `occult`, `fovtrg` and `et2lst`, take a plain real epoch and throw `SpiceError(:badarg)` for a `Dual`. An event search takes a window of `Float64` epochs.
 
 A function built from the calls of the list can be differentiated as a whole, and an optimizer can differentiate through an acceleration from `spkder`. The derivative of the corrected position below includes the change of the light time.
 
