@@ -132,7 +132,8 @@ Throws `SpiceError` with the kind
 - `:badmethodsyntax` if `method` is malformed, `:badpriorityspec` if a DSK method does
   not have `UNPRIORITIZED`, `:invalidmethod` if it holds a sub-point type;
 - `:bodiesnotdistinct` if `target` and `obsrvr` are the same body; `ilusrc` can be
-  either of them;
+  either of them (`ilusrc == target` puts the source at the target center, so
+  `incdnc > π/2` on the ellipsoid);
 - `:noframe` if `fixref` is not known, `:invalidframe` if it is not centered on `target`;
 - `:badarg` if `spoint` does not have 3 elements;
 - the kinds of [`srfrec`](@ref) if the radii of `target` are missing or not valid
@@ -159,7 +160,7 @@ With a DSK method, the angles and the flags use all loaded surfaces of the targe
 `SURFACES` list of `method` is ignored. The DSK segments are those that cover
 `trgepc`; [`illumg`](@ref) takes those that cover `et`. Both are as in CSPICE.
 
-The arguments, the notes on `et`, allocation and `ctx`, and the errors are those of
+The arguments, the notes on `et`, allocation and tolerances, and the errors are those of
 [`illumg`](@ref), except `:dskdatanotfound` if no DSK data are loaded for `target`.
 
 See also [`ilumin`](@ref), [`illumg`](@ref).
@@ -186,7 +187,7 @@ end
         -> (trgepc, srfvec, phase, incdnc, emissn)
 
 Return the illumination angles at the surface point `spoint` of `target`, with the Sun
-as the source, as `ilumin_c` of CSPICE.
+as the illumination source, as `ilumin_c` of CSPICE.
 
 `phase`, `incdnc` and `emissn` are the phase angle, the solar incidence angle and the
 emission angle (rad). `trgepc` is the epoch at the point (seconds past J2000 TDB) and
@@ -200,7 +201,7 @@ with `ilusrc = 10`; see there for the arguments, the notes and the errors.
 et = str2et("2025 MAR 01 12:00:00 UTC")
 spoint, = subpnt("NEAR POINT/ELLIPSOID", "MARS", et, "IAU_MARS", "LT+S", "EARTH")
 trgepc, srfvec, phase, incdnc, emissn = ilumin("ELLIPSOID", "MARS", et, "IAU_MARS", "LT+S", "EARTH", spoint)
-daylight = incdnc < halfpi()           # the Sun is above the horizon of the point
+daylight = incdnc <= halfpi()          # the Sun is above the horizon of the point
 ```
 
 See also [`illumg`](@ref), [`illumf`](@ref), [`phaseq`](@ref), [`subslr`](@ref).
@@ -221,7 +222,7 @@ ilumin(method::AbstractString, target::NameOrID, et::Real, fixref::NameOrID, abc
 
 Return the phase angle at `target` at `et` (seconds past J2000 TDB), in radians in
 [0, π], as `phaseq_c` of CSPICE. It is the angle between the directions from the target
-to the illumination source `illmn` and to the observer `obsrvr`.
+to the source `illmn` and to the observer `obsrvr`.
 
 With a correction, the target is taken as seen by the observer, and the source as seen
 by the target at `et - lt`, where `lt` is the light time between the observer and the
@@ -332,7 +333,7 @@ Throws `SpiceError`:
 ```julia
 # Needs an SPK with the Sun, the Earth and the Moon, and a PCK with their radii.
 et = str2et("2024 APR 08 18:18:00 UTC")
-sep = trgsep(et, "MOON", "SPHERE", "IAU_MOON", "SUN", "SPHERE", "IAU_SUN", "EARTH", "LT+S")
+sep = trgsep(et, "MOON", "SPHERE", " ", "SUN", "SPHERE", " ", "EARTH", "LT+S")
 overlap = sep < 0           # the disks of the Moon and of the Sun overlap
 ```
 

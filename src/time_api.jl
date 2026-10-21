@@ -28,9 +28,10 @@ letter case is ignored. `"GET"` returns the default (`""` if the item is not set
 A zone is stored as an offset, such as `"UTC-8"`. A system clears the zone and a zone
 clears the system.
 
-The defaults apply to [`str2et`](@ref) for a string that names no system or zone, and
-to [`timout`](@ref) for a picture that names no system, zone or calendar. They belong
-to the context; CSPICE keeps one set for the process.
+The defaults apply to [`str2et`](@ref) (the calendar, and the system or the zone for
+a string that names neither) and to [`timout`](@ref) for a picture that names no
+system, zone or calendar. They belong to the context; CSPICE keeps one set for the
+process.
 
 Throws `SpiceError(:badtimedefault)` if the action, the item or the value is not one
 of the above; the defaults are then unchanged.

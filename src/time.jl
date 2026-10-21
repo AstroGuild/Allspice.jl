@@ -520,8 +520,8 @@ end
 """
     unitim([ctx,] epoch, insys, outsys) -> Real
 
-Return the epoch `epoch` of the uniform time scale `insys` expressed in the scale
-`outsys`, as `unitim_c`.
+Return the epoch `epoch` of the uniform time scale `insys`, a scale without leap
+seconds, expressed in the scale `outsys`, as `unitim_c`.
 
 | Scale                    | Epoch is                                  |
 |:-------------------------|:------------------------------------------|

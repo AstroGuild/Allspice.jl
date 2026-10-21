@@ -2,7 +2,7 @@
 
 ## What is available
 
-The package covers the library part of CSPICE N0067. The table lists each area with its calls; the reference pages document each call.
+The package covers the library part of CSPICE N0067.
 
 | Area | Available |
 |---|---|
@@ -32,8 +32,8 @@ CSPICE itself is the reference. The test suite calls each routine of this packag
 | File | A kernel that this package wrote with the kernel that CSPICE wrote, byte for byte |
 | Derivative | The first derivative with the velocity of CSPICE, and each higher derivative with automatic differentiation of the one below it |
 | Error | The kind of the error, and the text of the message where a program can depend on it |
-| Concurrency | Answers from many threads during changes of the kernel set with the answers of one thread |
-| Allocation | A static proof (AllocCheck.jl) that 61 numeric routines cannot allocate |
+| Concurrency | Answers from many threads during changes of the loaded kernels with the answers of one thread |
+| Allocation | A static proof (AllocCheck.jl) that 61 numeric routines cannot allocate: vector, matrix, rotation, coordinate and ellipsoid calls, conic elements, `unitim`, `deltet` and the table queries ([list](https://github.com/AstroGuild/Allspice.jl/blob/main/test/test_alloccheck.jl)) |
 
 | Measure | Value |
 |---|---|
@@ -50,4 +50,4 @@ A result that differs from CSPICE differs by rounding. For the states of the Moo
 |---|---|---|
 | Position, velocity and light time | all nine (`NONE` to `XCN+S`) | 7.3e-16 |
 
-Three limits hold in CSPICE as well as in this package, because they come from the size of a number or from the method of CSPICE. The rotation angle of the Earth in `IAU_EARTH` grows with time and is about 50,000 radians in this century, so that the rounding of that angle alone moves the Sun by some meters in the frame. An aberration-corrected position has steps of some millimeters at the boundaries between the records of an SPK, which are the stretches of time that one set of coefficients covers, because the target is evaluated at an earlier epoch than the observer, so that the two cross a boundary at different times. `spkezr` and `spkpos` differ from each other by up to 2e-11 relative with the converged corrections (`CN`, `CN+S`, which iterate the light-time equation until it converges), because the two routines stop their iterations by different rules.
+Three limits hold in CSPICE as well as in this package, because they come from the size of a number or from the method of CSPICE. The rotation angle of the Earth in `IAU_EARTH` grows with time and is about 50,000 radians in this century, so that the rounding of that angle alone moves the Sun by some meters in the frame. An aberration-corrected position has steps of some millimeters at the boundaries between the [records](@ref "Exact derivatives and the rates of CSPICE") of an SPK, because the target is evaluated at an earlier epoch than the observer, so that the two cross a boundary at different times. `spkezr` and `spkpos` differ from each other by up to 2e-11 relative with the converged corrections (`CN`, `CN+S`, which iterate the light-time equation until it converges), because the two routines stop their iterations by different rules.

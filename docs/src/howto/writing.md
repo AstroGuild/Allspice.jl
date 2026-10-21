@@ -71,6 +71,6 @@ state[1:3]                                   # km
 | Binary PCK, type 2 | [`pckopn`](@ref) | [`pckw02`](@ref) | [`pckcls`](@ref) |
 | DSK type 2 | [`dskopn`](@ref) | [`dskmi2`](@ref), [`dskw02`](@ref) | [`dskcls`](@ref) |
 | EK | [`ekopn`](@ref), [`ekops`](@ref) | [`ekbseg`](@ref), [`ekappr`](@ref), `ekace*`, or whole columns with [`ekifld`](@ref) | [`ekcls`](@ref) |
-| Any DAF or DAS (the container of DSK and EK files) | [`dafonw`](@ref), [`dasonw`](@ref) | `dafada`, `dasadd` and related calls | [`dafcls`](@ref), [`dascls`](@ref) |
+| Any DAF, or any DAS (the container of DSK and EK files) | [`dafonw`](@ref), [`dasonw`](@ref) | `dafada`, `dasadd` and related calls | [`dafcls`](@ref), [`dascls`](@ref) |
 
 A text kernel is plain text; write it with `write`, or put values straight into the kernel pool with [`pdpool`](@ref), [`pcpool`](@ref) and [`pipool`](@ref).

@@ -610,8 +610,9 @@ Return limb points of `target` as seen by `obsrvr` at `et` (seconds past J2000 T
 as `limbpt_c` of CSPICE.
 
 The points lie in `ncuts` half planes bounded by the line from the target center to
-the observer. Half plane `i` contains `refvec` rotated about that line by
-`(i - 1) * rolstp` radians. `refvec` has 3 elements, in the body-fixed frame `fixref`.
+the observer. Half plane `i` contains `refvec` rotated by `(i - 1) * rolstp` radians,
+counterclockwise about the vector from the target center to the observer. `refvec` has
+3 elements, in the body-fixed frame `fixref`.
 
 - `npts`: `npts[i]` is the number of points found in half plane `i` (`ncuts` elements).
 - `points`: the limb points, in km in `fixref`, half plane after half plane.
@@ -658,9 +659,9 @@ Throws `SpiceError` with the kind
   from the target to the observer;
 - `:invalidsize` if `maxn < 1`, `:invalidcount` unless `1 <= ncuts <= maxn`,
   `:invalidrollstep` if `rolstp` is zero and `ncuts > 1`;
-- with a DSK method, `:invalidsearchstep` if `schstp` is not positive and
-  `:invalidtolerance` if `soltol` is not positive;
-- `:invalidconststep` if `schstp` is too small to change the angle;
+- with a DSK method, `:invalidsearchstep` if `schstp` is not positive,
+  `:invalidtolerance` if `soltol` is not positive, and, with `TANGENT`,
+  `:invalidconststep` if `schstp` is too small to change the angle;
 - `:outofroom` if more than `maxn` points are found, `:arraytoosmall` if one half
   plane has more than 2000;
 - `:noseparation` if the observer is at the target center;
@@ -708,8 +709,9 @@ Return terminator points of `target` lit by the source `ilusrc`, as seen by `obs
 
 The points lie in `ncuts` half planes bounded by the line from the target center to
 the source center. Half plane `i` contains `refvec` (body-fixed frame `fixref`)
-rotated about that line by `(i - 1) * rolstp` radians. The outputs have the layout of
-[`limbpt`](@ref); `trmvcs` holds the vectors from the observer to the points (km).
+rotated by `(i - 1) * rolstp` radians, counterclockwise about the vector from the
+target center to the source. The outputs have the layout of [`limbpt`](@ref), and are
+empty for `ncuts = 0`; `trmvcs` holds the vectors from the observer to the points (km).
 
 The source is a sphere with the largest radius of `ilusrc`. `method` joins the shadow,
 the point definition and the shape, for example `"UMBRAL/TANGENT/ELLIPSOID"` or
@@ -724,14 +726,15 @@ the point definition and the shape, for example `"UMBRAL/TANGENT/ELLIPSOID"` or
 
 `corloc` is `"CENTER"` or `"ELLIPSOID TERMINATOR"` (`TANGENT` methods only), with the
 meaning it has in [`limbpt`](@ref). `abcorr` is `"NONE"` or a reception correction.
-`schstp`, `soltol`, `maxn`, `et` and `ctx` are as in [`limbpt`](@ref).
+`schstp`, `soltol`, `maxn`, `et` and the [`dskstl`](@ref) tolerances are as in
+[`limbpt`](@ref).
 
 As in CSPICE, a half plane with `n` points takes `n^2` of the `maxn` places, not `n`.
 With an ellipsoid `n` is 1. With a DSK method, `:outofroom` can occur before `maxn`
 points are found, so give `maxn` a margin.
 
 Throws the kinds of [`limbpt`](@ref) for the bodies, the frame, `refvec`, `rolstp` and
-`maxn`, and `SpiceError` with the kind
+`maxn < 1`, and `SpiceError` with the kind
 - `:invalidoption` if `abcorr` is not valid or is a transmission correction;
 - `:bodiesnotdistinct` if `target` is also the observer or the source;
 - `:invalidtermtype` if `method` has neither `TANGENT` nor `GUIDED`, `:invalidshadow`

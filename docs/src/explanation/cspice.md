@@ -1,6 +1,6 @@
 # Differences from CSPICE
 
-The package keeps the names, the argument order, the units and the numerical results of CSPICE N0067. It departs from CSPICE where the C interface carries hidden state or output arguments, and this page lists each departure.
+The package keeps the names, the argument order, the units and the numerical results of CSPICE N0067. It departs from CSPICE where the C interface carries hidden state, output arguments or arguments for C memory, and in the argument order of a few calls; this page lists each departure.
 
 ## Call conventions
 
@@ -16,11 +16,14 @@ The package keeps the names, the argument order, the units and the numerical res
 | A file handle is an integer, and several calls work on a hidden "current" file | A handle is an object ([`DAFHandle`](@ref), [`DASHandle`](@ref)) that the caller passes to each call |
 | Loaded kernels are one table for the whole process | Loaded kernels belong to a [`SpiceContext`](@ref); see [Contexts and threads](@ref) |
 | Output strings need a length argument | A call returns a `String` |
+| Some arguments serve only the C memory: counts, sizes, `room`, workspaces | These arguments are absent: [`gdpool`](@ref) takes only the name, and [`gfdist`](@ref) has no `nintvls` |
+| `spkobj_c`, `spkcov_c`, `pckfrm_c` and `pckcov_c` take the output cell last | [`spkobj!`](@ref), [`spkcov!`](@ref), [`pckfrm!`](@ref) and [`pckcov!`](@ref) take it first, as SPICE.jl does |
+| `spksub_c` takes the handle of the new file last | [`spksub`](@ref) takes it first |
 | A cell or a window has a size that the caller declares | A [`Window`](@ref) grows as needed |
 
 The kind of an error is the short message of CSPICE in lower case where the same condition exists there, so `SPICE(INVALIDDEGREE)` becomes `:invaliddegree`.
 
-SPICE.jl already returns its results, names a call that changes its argument with `!`, returns `nothing` for a failed lookup and counts from 1. For a program written with SPICE.jl, the rows that change are the static arrays, which cannot be changed in place where SPICE.jl returns a `Vector` or a `Matrix`; the error type, which is the [`SpiceError`](@ref) of this package with its field `kind` and not `SPICE.SpiceError`; the [`Window`](@ref) in the place of a cell; and the context.
+SPICE.jl already returns its results, names a call that changes its argument with `!`, returns `nothing` for a failed lookup and counts from 1. For a program written with SPICE.jl, the rows that change are the static arrays, which cannot be changed in place where SPICE.jl returns a `Vector` or a `Matrix`; the error type, which is the [`SpiceError`](@ref) of this package with its field `kind` and not `SPICE.SpiceError`; the [`Window`](@ref) in the place of a cell; the context; and the arguments for C memory that SPICE.jl keeps, such as `start` and `room` of `gdpool`, `nintvls` of `gfdist` and `maxn` of `bodvrd`. A call that must return a value also throws where SPICE.jl returns `nothing`, as `gdpool` does for a variable that is not loaded.
 
 ## No state between calls
 
@@ -47,7 +50,7 @@ P(t) = R(t + s |pc(t)| / c) * A(p(t), s * v_obs(t))
 
 where `ℓ` is the light time, `A` is the stellar aberration and `R` is the rotation from J2000 to the output frame. For the `LT` corrections `ℓ(t) = |r_targ(t) - r_obs(t)| / c`, the geometric light time, because the single iteration of CSPICE evaluates the target at that light time; for the `CN` corrections, which iterate the light-time equation until it converges, `ℓ` solves `ℓ(t) = |p(t)| / c`, and its derivatives satisfy that equation order by order. `A` is the identity without `+S`, and otherwise `A(p, v) = p + |p| sinφ v̂⊥ + |p| (cosφ - 1) p̂`, with `v⊥` the part of `v` perpendicular to `p` and `sinφ = |v⊥| / c`. `R` is constant for an inertial frame; for another frame, the epoch of `R` is corrected for the light time to the center of the frame, which is the body that the frame is attached to (the Earth for `IAU_EARTH`), and `pc` is `p` with that center in the place of the target.
 
-The velocity of `spkezr` differs from order 1 for two reasons. CSPICE takes the rate of the light time from the converged light-time equation also for the `LT` corrections, which gives a relative difference of about 1e-8 for the Moon seen from the Earth (8.4e-9 measured with `de440s.bsp`). CSPICE also takes the acceleration of the observer for the `+S` corrections from a difference of velocities over ±1 s, which gives a difference at rounding level.
+The velocity of `spkezr` differs from order 1 for two reasons. CSPICE takes the rate of the light time from the converged light-time equation also for the `LT` corrections, which gives a relative difference of about 1e-8 for the Moon seen from the Earth (8.4e-9 measured with `de440s.bsp`). CSPICE also takes the acceleration of the observer for the `+S` corrections from a difference of velocities over ±1 s, which gives a relative difference of about 1e-13.
 
 For a rotation, the table says what `pxder` differentiates and what `sxform` returns in its place.
 
@@ -55,7 +58,8 @@ For a rotation, the table says what `pxder` differentiates and what `sxform` ret
 |---|---|---|
 | Inertial, PCK, fixed offset | the rotation | the same |
 | CK | the interpolation of the CK segment, composed with the clock conversion of `sce2c`; the stored angular velocity is not used | built from the stored angular velocity; only segments that have one are used |
-| Dynamic, mean or true equator and equinox of date | the precession, nutation and obliquity series, with all terms | the nutation rates of CSPICE, which omit the drift of the coefficients |
+| Dynamic, mean equator or mean ecliptic and equinox of date | the precession and obliquity series | the same |
+| Dynamic, true equator and equinox of date | the precession, nutation and obliquity series, with all terms | the nutation rates of CSPICE, which omit the drift of the coefficients |
 | Dynamic, two-vector | each defining vector with its aberration correction, as in `spkder` | velocities of `spkezr`; a central difference for a velocity vector; zero for a constant vector |
 | Dynamic, Euler | the polynomials of the angles | the same |
 | Dynamic, frozen at the epoch that `FREEZE_EPOCH` gives in its definition | a constant: zero relative to the base frame | zero |
@@ -87,10 +91,10 @@ Of the 651 routines that the header of CSPICE N0067 declares, 162 have no counte
 | Constants: `pi`, `dpmax`, `dpmin`, `intmax`, `intmin` | `π`, `floatmax`, `-floatmax`, `typemax(Int32)`, `typemin(Int32)` |
 | Files and the command line: `exists`, `rdtext`, `prompt`, `getcml`, `putcml`, `ftncls` | `isfile`, `eachline`, `readline`, `ARGS`, `close` |
 | Deprecated by NAIF: `bodvar`, `illum`, `spkapp`, `srfxpt`, `subpt`, `subsol`, `dafrda` | [`bodvrd`](@ref) or [`bodvcd`](@ref), [`ilumin`](@ref), [`spkaps`](@ref), [`sincpt`](@ref), [`subpnt`](@ref), [`subslr`](@ref), [`dafgda`](@ref) |
-| Loading one file by handle: `spklef`, `spkuef`, `cklpf`, `ckupf`, `pcklof`, `pckuof` | [`furnsh`](@ref) and [`unload`](@ref) |
+| Loading one file by handle: `spklef`, `spkuef`, `cklpf`, `ckupf`, `pcklof`, `pckuof` | [`furnsh`](@ref) and [`unload`](@ref); [`eklef`](@ref) and [`ekuef`](@ref) remain as `furnsh` and `unload` of a file that must be an EK |
 | Settings of the geometry finder: `gfsstp`, `gfstep`, `gfrepi`, `gfrepu`, `gfrepf`, `gfbail`, `gfinth`, `gfclrh`, `gfseth` | The step argument of each search (`udstep` in [`gfevnt`](@ref), [`gffove`](@ref) and [`gfocce`](@ref)) and the keywords `report` and `bail`; see [`gfdist`](@ref) |
 | The current file of DAF and DAS: `dafcs`, `dafgh`, `daswbr` | The handle object passed to each call |
 
 The routines whose names begin with `zz` are private to CSPICE and are left out as well.
 
-The toolkit programs (`brief`, `chronos`, `mkspk`, `spkmerge` and the others) are not part of the package. SPICEApplications.jl runs them from Julia through the NAIF executables. [Coverage and validation](@ref) lists the areas of the library that exist.
+The toolkit programs (`brief`, `chronos`, `mkspk`, `spkmerge` and the others) are not part of the package. [SPICEApplications.jl](https://github.com/jdc-pub/SPICEApplications.jl) runs them from Julia through the NAIF executables. [Coverage and validation](@ref) lists the areas of the library that exist.

@@ -768,7 +768,8 @@ Return the normal `(v2 - v1) x (v3 - v2)` of the plate with the vertices `v1`, `
 
 The normal follows the right-hand rule: it points to the side from which the vertices
 are in counterclockwise order. The result does not have unit length. It is zero for a
-degenerate plate. Its direction is that of [`dskn02`](@ref), whose formula is equal.
+degenerate plate. Up to rounding it is equal to `(v2 - v1) x (v3 - v1)`, whose unit
+vector [`dskn02`](@ref) returns.
 """
 pltnrm(v1, v2, v3) = _dsk_pltnrm(_dsk_vec3(v1), _dsk_vec3(v2), _dsk_vec3(v3))
 

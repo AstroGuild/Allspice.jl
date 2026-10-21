@@ -190,10 +190,12 @@ end
 
 Open the existing DAF file `path` for writing, as `dafopw_c`, to add arrays or comments.
 
-The file must have the native byte order. No other handle may write the same file; a
-handle that reads it finds a change in a search that begins after the change. Unload the
-file from every context before the call and load it again after the close: a kernel that
-is loaded does not see arrays that are added later.
+The file must have the native byte order. No other handle may write the same file: the
+call does not check this, where CSPICE refuses the second open, and arrays that two
+handles add at the same time overwrite each other. A handle that reads the file finds a
+change in a search that begins after the change. Unload the file from every context
+before the call and load it again after the close: a kernel that is loaded does not see
+arrays that are added later.
 
 Throws the `SpiceError` kinds of [`dafopr`](@ref), `:unsupportedbff` if the file has the
 other byte order, and `:fileopenfailed` if the file cannot be opened for update.

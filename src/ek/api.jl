@@ -209,11 +209,13 @@ The result is the path itself, not an integer handle as in CSPICE. It is not a
 file do not take it. The call has the effect of [`furnsh`](@ref) on a file that is an
 EK.
 
-Throws `SpiceError(:filenotfound)` if the file does not exist and
-`SpiceError(:wrongarchitecture)` if it is not an EK; the context is then unchanged.
-Throws `SpiceError(:ekcolnummismatch)`, `SpiceError(:ekmissingcolumn)` or
+All segments of a table must have columns with the same names and attributes.
+
+Throws `SpiceError(:filenotfound)` if the file does not exist,
+`SpiceError(:wrongarchitecture)` if it is not an EK, and
+`SpiceError(:ekcolnummismatch)`, `SpiceError(:ekmissingcolumn)` or
 `SpiceError(:badattributes)` if a segment of the file does not have the columns of a
-loaded table of the same name.
+loaded table of the same name. After an error the context is unchanged.
 
 See also [`ekfind`](@ref), [`ekntab`](@ref).
 """
@@ -248,7 +250,7 @@ Return the name, in upper case, of loaded table number `n`, as `ektnam_c`.
 were loaded.
 
 Throws `SpiceError(:noloadedfiles)` if no EK file is loaded and
-`SpiceError(:invalidindex)` unless `1 <= n <= ekntab()`.
+`SpiceError(:invalidindex)` unless `1 <= n <= ekntab(ctx)`.
 """
 function ektnam(ks::KernelSet, n::Integer)
     isempty(ks.ektables) && throw(SpiceError(:noloadedfiles, "No E-kernels are currently loaded."))
@@ -292,7 +294,7 @@ first loaded segment of the table. [`EKColumnAttr`](@ref) states one difference 
 CSPICE, in `strlen`.
 
 Throws `SpiceError(:tablenotloaded)` if the table is not loaded and
-`SpiceError(:invalidindex)` unless `1 <= cindex <= ekccnt(table)`.
+`SpiceError(:invalidindex)` unless `1 <= cindex <= ekccnt(ctx, table)`.
 
 See also [`EKColumnAttr`](@ref), [`ekccnt`](@ref).
 """
@@ -451,7 +453,8 @@ Return the number of elements of the entry in row `row` and SELECT column `selid
 
 `selidx` and `row` count from 1; `eknelt_c` counts from 0. The result is 1 for a
 scalar column and the entry size for an array column of fixed size, also when the
-entry is null. A null entry of an array column of variable size has 1 element.
+entry is null. A null entry of an array column of variable size has 1 element, as in
+CSPICE, although [`ekrcec`](@ref) and its siblings return no element for it.
 
 Throws `SpiceError(:invalidindex)` unless `1 <= row <= result.nmrows` and `selidx` is
 the position of a SELECT column.

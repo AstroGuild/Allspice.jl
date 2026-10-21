@@ -4,6 +4,11 @@ Sibling calls can throw different kinds for one condition, such as an unknown fr
 radii that are not valid, because each kind is the one of the CSPICE routine that the
 call ports; see [`SpiceError`](@ref).
 
+A reception correction (`"LT"`, `"CN"`, with or without `"+S"`) gives the target as the
+observer sees it at `et`, and a transmission correction (`"XLT"`, `"XCN"`) gives it
+where a signal that the observer sends at `et` reaches it; [`Aberration`](@ref) lists
+the corrections.
+
 ## Points on a body
 
 ```@docs

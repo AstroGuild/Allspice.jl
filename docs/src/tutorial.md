@@ -1,6 +1,6 @@
 # First session
 
-This page goes through one complete session: it loads kernels, converts a time, asks for a state and a rotation, finds the point of the Earth below a spacecraft, and searches for the times of perigee. Each call has the name that it has in CSPICE, without the `_c` suffix.
+This page goes through one complete session: it loads kernels, converts a time, asks for a state and a rotation, finds the point of the Earth below a spacecraft, and searches for the times of perigee. Each call has the name that it has in CSPICE, without the `_c` suffix and with `!` for a call that changes its argument.
 
 ```@setup first
 using Allspice
@@ -10,12 +10,12 @@ kernels = DocKernels.write(mktempdir())
 
 ## Load kernels
 
-A kernel is a file of data: an SPK holds trajectories, a text kernel holds constants such as leap seconds and body radii. [`furnsh`](@ref) loads a kernel of any kind, and [`ktotal`](@ref) counts the loaded kernels of one kind or of all kinds. In the block below, `kernels` is a vector of three paths.
+A kernel is a file of data: an SPK holds trajectories in segments, each of which gives one body relative to a center over an interval of time, and a text kernel holds constants such as leap seconds and body radii. [`furnsh`](@ref) loads a kernel of any kind, and [`ktotal`](@ref) counts the loaded kernels of one kind or of all kinds. In the block below, `kernels` is a vector of three paths.
 
 ```@example first
 using Allspice
 
-foreach(furnsh, kernels)      # leap seconds, constants of the Earth, an SPK
+foreach(furnsh, kernels)      # leap seconds, constants of the Sun and the Earth, an SPK
 ktotal("ALL")
 ```
 
@@ -33,7 +33,7 @@ furnsh(pck00011())       # orientation and radii of the bodies
 
 ## Convert a time
 
-All calls take an epoch as seconds past J2000 in Barycentric Dynamical Time (TDB), which SPICE calls ET. [`str2et`](@ref) converts a calendar string to that number. [`timout`](@ref) converts back with a picture, which is a string that shows the wanted format; the marker `::TDB` asks for the TDB time scale.
+The state, frame, geometry and event calls take an epoch as seconds past J2000 in Barycentric Dynamical Time (TDB), which SPICE calls ET; the CK calls take encoded spacecraft clock instead. [`str2et`](@ref) converts a calendar string to that number. [`timout`](@ref) converts back with a picture, which is a string that shows the wanted format; the marker `::TDB` asks for the TDB time scale.
 
 ```@example first
 et = str2et("2025 MAR 01 12:00:00 UTC")
@@ -54,7 +54,7 @@ state, lt = spkezr("PROBE", et, "J2000", "NONE", "EARTH")
 state
 ```
 
-The result is a static vector of six numbers, so the call allocates nothing. [`spkpos`](@ref) returns the position alone:
+The result is a static vector of six numbers; with names in upper case, as here, the call allocates no memory. [`spkpos`](@ref) returns the position alone:
 
 ```@example first
 sun, lt_sun = spkpos("SUN", et, "J2000", "LT+S", "PROBE")
@@ -82,7 +82,7 @@ radius, lon, lat = reclat(point)
 
 ## Search for an event
 
-The geometry finder calls (names that begin with `gf`) search an interval of time for the epochs at which a quantity meets a condition. The interval and the result are both a [`Window`](@ref), which is a list of disjoint intervals. The search below looks for the local minima (`"LOCMIN"`) of the distance from the Earth during one day. The two zeros are a reference value and an adjustment, which this relation does not use, and 600 seconds is the step of the search; [The step](@ref) says how to choose it.
+The geometry finder calls (names that begin with `gf`) search an interval of time for the epochs at which a quantity meets a condition. The interval and the result are both a [`Window`](@ref), which is a list of disjoint intervals. The search below looks for the local minima (`"LOCMIN"`) of the distance from the Earth during one day. The two zeros are the reference value of a comparison such as `">"` and the adjustment, which widens an absolute extremum to the times within that amount of it; a local minimum uses neither, and 600 seconds is the step of the search; [The step](@ref) says how to choose it.
 
 ```@example first
 search = Window()
@@ -100,7 +100,7 @@ The orbit of the example has a perigee radius of 7078.137 km, which the search r
 
 ## Unload
 
-[`kclear`](@ref) removes all kernels, and [`unload`](@ref) removes one.
+[`kclear`](@ref) removes all kernels, and [`unload`](@ref) removes one file, or a meta-kernel with the files that it loaded.
 
 ```@example first
 kclear()
@@ -121,4 +121,4 @@ end
 
 A query that the loaded SPK files cannot answer throws the subtype [`SpkInsufficientDataError`](@ref). Its fields `target` and `observer` hold the two bodies, `et` the epoch, `body` the body without data, and `loaded` whether that body has data at other epochs, so that a program can load another kernel or skip the epoch without reading the text.
 
-The task pages in the menu continue from here, and [Differences from CSPICE](@ref) lists what a CSPICE user must know before a port.
+[Differences from CSPICE](@ref) lists what a CSPICE user must know before a port.

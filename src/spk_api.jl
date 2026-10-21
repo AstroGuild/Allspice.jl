@@ -297,8 +297,10 @@ light time, as `spkezr_c`.
   the same with the prefix `X` for transmission. Letter case and blanks are ignored.
   An [`Aberration`](@ref) value is also accepted.
 
-The call does not allocate when the bodies and the frame are integer IDs and `abcorr`
-is an `Aberration`. With ForwardDiff loaded, `et` can be a dual number.
+The call does not allocate when each body and the frame is an integer ID or a name in
+upper case with single blanks, such as `"MARS BARYCENTER"`; a name in another form is
+converted first, which allocates. With ForwardDiff loaded, `et` can be a dual number
+(see [Dual-number epochs](@ref)).
 
 The SPK segments connect a body to its center, and that center to the next one. The
 call needs such a chain from `targ` and from `obs` to a common body.
@@ -347,7 +349,8 @@ are those of [`spkezr`](@ref), except that an `abcorr` that is not valid throws
 
 As in CSPICE, the `CN` corrections make exactly three light-time iterations here;
 [`spkezr`](@ref) makes up to five, with the convergence test of [`spkltc`](@ref). The
-position can therefore differ from the position part of `spkezr` at rounding level.
+position can therefore differ from the position part of `spkezr` by up to 2e-11
+relative (see [Known limits of accuracy](@ref)).
 
 # Examples
 ```julia

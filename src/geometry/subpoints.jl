@@ -223,7 +223,7 @@ J2000 TDB), as `subpnt_c` of CSPICE.
 
 Case is not significant. `UNPRIORITIZED` means that all loaded DSK segments of the
 target are used, whatever their load order. A DSK method can end with
-`"/SURFACES = <list>"`, a list of surface names or IDs. The CSPICE forms
+`"/SURFACES = <list>"`, a list of surface names or IDs. The older forms
 `"Near point: ellipsoid"` and `"Intercept: ellipsoid"` are also valid.
 
 `abcorr` is a correction string of [`spkezr`](@ref) or an [`Aberration`](@ref).
@@ -273,8 +273,8 @@ TDB), as `subslr_c` of CSPICE.
 
 The methods are those of [`subpnt`](@ref), with the Sun in place of the observer in the
 definition of the point. With a correction, the Sun is taken where it appears from the
-point at `trgepc`. The other arguments and the notes on `et`, allocation and `ctx` are
-those of [`subpnt`](@ref).
+point at `trgepc`. The other arguments and the notes on `et`, allocation and the
+[`dskstl`](@ref) tolerances are those of [`subpnt`](@ref).
 
 Throws `SpiceError(:notsupported)` if `abcorr` is a transmission correction, and
 `SpiceError(:invalidtarget)` if `target` is the Sun. The other kinds are those of

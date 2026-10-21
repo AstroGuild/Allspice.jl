@@ -34,8 +34,8 @@ dskopn(fname::AbstractString, ifname::AbstractString, ncomch::Integer) =
 Close the DSK file of `handle`, as `dskcls_c`. A file that is open for writing is written
 to disk by this call.
 
-`optmiz` has no effect. The file is always written segregated (see
-[`DASHandle`](@ref)), which is what `optmiz = true` gives in CSPICE.
+`optmiz` is accepted for CSPICE compatibility and ignored. The file is always written
+segregated (see [`DASHandle`](@ref)), which is what `optmiz = true` gives in CSPICE.
 
 Throws `SpiceError(:daswritefail)` if the file cannot be written; the handle then stays
 open.
@@ -271,8 +271,8 @@ elements) and the integer part `spaixi` (`spxisz` elements). [`dskw02`](@ref) ta
   `makvtl` it must also hold `nv + 3np`. The least value is `np + 1`.
 - `voxpsz`: the size of the voxel-plate pointer array, at least `corscl^3` times the
   number of coarse voxels that are not empty.
-- `voxlsz`: the size of the voxel-plate list, at least the first bound of `worksz`. The
-  least value is `np + 1`.
+- `voxlsz`: the size of the voxel-plate list, at least the number of pairs of a plate
+  and a fine voxel that meet. The least value is `np + 1`.
 - `makvtl`: `true` to make the vertex-plate list.
 - `spxisz`: the size of `spaixi`, at least `100007 + voxpsz + voxlsz`, plus `2nv + 3np`
   if `makvtl` is `true`.

@@ -219,12 +219,16 @@ end
 Return the IDs of the frames of the class `frmcls` that the kernel pool defines, in
 increasing order and without duplicates, as `kplfrm_c` of CSPICE.
 
-`frmcls` is a frame class of [`frinfo`](@ref) (1 to 6), or -1 for every class. A
-frame is listed if the pool has `FRAME_<name> = <id>` for the value of a
-`FRAME_*_NAME` variable, `FRAME_<id>_NAME`, and `FRAME_<id>_CLASS` or
-`FRAME_<name>_CLASS`, as in CSPICE. The other variables of a frame definition are not
-checked, so an ID can be listed that [`frinfo`](@ref) does not know. The built-in
-frames are not included unless the pool defines them; [`bltfrm`](@ref) gives those.
+`frmcls` is a frame class of [`frinfo`](@ref) (1 to 6), or -1 for every class. As in
+CSPICE, a frame is listed if the pool has
+
+- `FRAME_<name> = <id>`, for the value `<name>` of a `FRAME_*_NAME` variable;
+- `FRAME_<id>_NAME`;
+- `FRAME_<id>_CLASS` or `FRAME_<name>_CLASS`.
+
+The other variables of a frame definition are not checked, so an ID can be listed that
+[`frinfo`](@ref) does not know. The built-in frames are not included unless the pool
+defines them; [`bltfrm`](@ref) gives those.
 
 Throws `SpiceError(:badframeclass)` if `frmcls` is not -1 or a class 1 to 6.
 
@@ -321,8 +325,9 @@ Return the matrix that rotates a position vector from the inertial frame `ref` t
 body-fixed frame of `body` at `et`, as `tipbod_c`.
 
 `ref` is the name or the ID of a built-in inertial frame. `body` is a NAIF body ID, or
-the frame class ID of a binary PCK frame. `et` is in seconds past J2000 TDB. A binary
-PCK has priority over the constants of a text PCK.
+the frame class ID of a binary PCK frame, the ID that its segments carry (31008 for
+`MOON_PA_DE440`). `et` is in seconds past J2000 TDB. A binary PCK has priority over the
+constants of a text PCK.
 
 Throws `SpiceError(:irfnotrec)` if `ref` is not a built-in inertial frame,
 `SpiceError(:badarg)` if `et` is not finite, and `SpiceError(:framedatanotfound)` if

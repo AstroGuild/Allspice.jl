@@ -368,8 +368,8 @@ vcrss(v1::AbstractVector, v2::AbstractVector) = _m_cross(_m_v3(v1), _m_v3(v2))
 
 Return the Euclidean norm of a vector of 3 elements, as `vnorm_c` of CSPICE.
 
-The components are divided by the largest one before they are squared, so the squares
-do not overflow or underflow. The result is zero only for the zero vector.
+The components are divided by the one largest in magnitude before they are squared, so
+the squares do not overflow or underflow. The result is zero only for the zero vector.
 
 Throws `SpiceError(:badarg)` if `v1` does not have 3 elements.
 
@@ -512,7 +512,7 @@ Return the component of the vector `a` that is perpendicular to the vector `b`, 
 `vperp_c` of CSPICE.
 
 For a zero `b` this call returns `a`, as the header of `vperp_c` says; the code of
-`vperp_c` in CSPICE N0067 returns the zero vector.
+`vperp_c` in CSPICE version N0067 returns the zero vector.
 
 Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
 
@@ -615,9 +615,9 @@ vupack(v::AbstractVector) = Tuple(_m_v3(v))
 
 Return the unit vector along the cross product `v1 × v2`, as `ucrss_c` of CSPICE.
 
-Each vector is scaled by its largest component before the product, so the product does
-not overflow. The result is the zero vector if the vectors are parallel or one of them
-is zero.
+Each vector is scaled by its component largest in magnitude before the product, so the
+product does not overflow. The result is the zero vector if the vectors are parallel or
+one of them is zero.
 
 Throws `SpiceError(:badarg)` if an argument does not have 3 elements.
 
@@ -898,7 +898,7 @@ Return the matrix that rotates a coordinate system by `angle` radians about the 
 The product of the result and a vector gives the components of that vector in the
 rotated system. The vector itself is not rotated: [`axisar`](@ref) and [`vrotv`](@ref)
 do that, and their matrix is the transpose. As in CSPICE, any integer `iaxis` is taken
-modulo 3, so 4 is x and 0 is z.
+modulo 3, so 4 is x, 0 is z and -1 is y.
 
 # Examples
 ```jldoctest
@@ -1065,9 +1065,9 @@ Return a right-handed orthonormal frame whose first axis is along `x`, as `frame
 CSPICE.
 
 `x̂` is the unit vector along `x`, and `y` and `z` complete the frame; the three are
-`SVector{3}` values. `y[i] == 0` for the index `i` of the smallest `abs(x̂[i])`. The
-zero vector gives the axes of the input frame. CSPICE overwrites its argument `x` with
-`x̂`; this call does not change `x`.
+`SVector{3}` values. `y[i] == 0` for the first index `i` of the smallest
+`abs(x̂[i])`. The zero vector gives the axes of the input frame. CSPICE overwrites its
+argument `x` with `x̂`; this call does not change `x`.
 
 Throws `SpiceError(:badarg)` if `x` does not have 3 elements.
 
@@ -1301,7 +1301,7 @@ end
     vnormg(v1)
 
 Return the Euclidean norm of a vector of any length, as `vnormg_c` of CSPICE. The
-elements are divided by the largest one before they are squared, as in
+elements are divided by the one largest in magnitude before they are squared, as in
 [`vnorm`](@ref).
 
 See also [`unormg`](@ref), [`vdistg`](@ref).
@@ -1344,7 +1344,7 @@ end
 """
     vdistg(v1, v2)
 
-Return the distance between two points of equal length, as `vdistg_c` of CSPICE.
+Return the distance between two points of equal dimension, as `vdistg_c` of CSPICE.
 
 Throws `SpiceError(:badarg)` if the lengths differ.
 
@@ -1371,9 +1371,8 @@ end
 Return the angle between two vectors of equal length, in radians in [0, pi], with the
 method of [`vsep`](@ref). The result is 0 if a vector is zero.
 
-`vsepg_c` of CSPICE N0067 has the acute and the obtuse case exchanged. `vsepg_c` thus
-loses up to half of the digits near 0 and pi, and the result of this call differs from
-that of `vsepg_c` by that error.
+`vsepg_c` of CSPICE N0067 can lose up to half of the digits near 0 and pi, so the
+results of the two differ there.
 
 Throws `SpiceError(:badarg)` if the lengths differ.
 """
@@ -1602,8 +1601,7 @@ mxmtg(m1::StaticMatrix{N,M}, m2::StaticMatrix{P,M}) where {N,M,P} =
 """
     xposeg(matrix)
 
-Return the transpose of a matrix of any size, as `xposeg_c` of CSPICE. A static matrix
-gives a static matrix.
+Return the transpose of a matrix of any size, as `xposeg_c` of CSPICE.
 
 See also [`xpose`](@ref), [`xpose6`](@ref).
 """

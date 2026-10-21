@@ -72,7 +72,8 @@ Return the value at `x` of the Chebyshev expansion with the coefficients `cp`, a
 
 The expansion is `p(x) = sum(cp[k] * T_{k-1}(s))` with `s = (x - x2s[1]) / x2s[2]`:
 `x2s` holds the midpoint and the radius of the interval of the expansion. The degree
-is `length(cp) - 1`. A value of `x` outside the interval is not an error.
+is `length(cp) - 1`. A value of `x` outside the interval is not an error. As in CSPICE,
+`x2s[2]` is not checked: 0 gives NaN, and a negative radius is used as given.
 
 Throws `SpiceError(:invaliddegree)` if `cp` is empty. Throws `SpiceError(:badarg)` if
 `x2s` does not have 2 elements.
@@ -475,7 +476,8 @@ Return the diagonal matrix `d` and the rotation `r` that diagonalize the symmetr
 Only the upper triangle of `symmat` is read. The columns of `r` are unit eigenvectors,
 and `d[i, i]` is the eigenvalue of column `i`. Of the rotations that diagonalize
 `symmat`, `r` has an angle of the smallest magnitude, so a diagonal `symmat` gives the
-identity.
+identity. If `symmat[1, 1] == symmat[2, 2]`, the angle is ±pi/4 and `d[2, 2]` is the
+larger eigenvalue.
 
 Throws `SpiceError(:badarg)` if `symmat` is not 2 by 2.
 

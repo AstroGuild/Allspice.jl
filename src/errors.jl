@@ -167,7 +167,8 @@ SpiceError(kind::Symbol, msg::AbstractString) = SpiceKindError(kind, msg)
 
 The [`SpiceError`](@ref) of a state query that the loaded SPK data cannot answer.
 
-[`spkezr`](@ref) and every call that needs the position of a body throw it.
+[`spkezr`](@ref) and every call that reads the SPK segments of the loaded kernels throw
+it.
 
 | Field | Meaning |
 |---|---|

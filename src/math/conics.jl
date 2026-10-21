@@ -12,8 +12,8 @@
 """
     stmp03(x) -> (c0, c1, c2, c3)
 
-Return the Stumpff functions `c0`, `c1`, `c2`, `c3` of `x`, as `stmp03` of
-SPICELIB.
+Return the Stumpff functions `ck(x) = sum((-x)^j / (2j + k)!, j = 0:∞)` for
+`k = 0:3`, as `stmp03` of SPICELIB.
 
 `c0 = 1 - x * c2` and `c1 = 1 - x * c3` hold to rounding. For `x > 0`, `c0` is
 `cos(sqrt(x))` and `c1` is `sin(sqrt(x)) / sqrt(x)`.
@@ -359,7 +359,7 @@ A zero mean longitude rate gives a velocity of NaN, as in CSPICE.
 Throws `SpiceError`:
 - `:badsemiaxis` if `a <= 0`;
 - `:eccoutofrange` if `sqrt(h² + k²) > 0.9`;
-- `:eccoutofbounds` if the eccentricity is 0.9 to rounding (`h² + k² >= 0.81`);
+- `:eccoutofbounds` if not, but `h² + k² >= 0.81` (an eccentricity of 0.9 to rounding);
 - `:badarg` if `eqel` does not have 9 elements.
 
 # Examples

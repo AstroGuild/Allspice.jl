@@ -19,7 +19,7 @@ Create the CK file `path` and open it for writing, as `ckopn_c`.
 `ifname` is the internal file name and `ncomch` is the number of comment characters to
 make room for. The file is on disk when the call returns. An existing file is never
 replaced. Add segments with the `ckwNN` writers and close the handle with
-[`ckcls`](@ref). Load the file with `furnsh` only after the close.
+[`ckcls`](@ref). Load the file with [`furnsh`](@ref) only after the close.
 
 Throws `SpiceError(:emptystring)` if `path` or `ifname` is empty and `:blankfilename` if
 `path` is blank, as CSPICE, and `:fileopenfailed` if the file exists or cannot be created.
@@ -56,7 +56,7 @@ end
 
 Close the CK file of `handle`, as `ckcls_c`. The call does nothing if the handle is closed
 already. The close writes no data: every write call puts its bytes on disk before it
-returns. Load the file with `furnsh` after the close.
+returns. Load the file with [`furnsh`](@ref) after the close.
 
 Throws `SpiceError(:nosegmentsfound)` if the file is open for writing and holds no
 segment. The handle then stays open; close it with [`dafcls`](@ref).
@@ -127,21 +127,25 @@ Write a CK segment of type 1 (discrete pointing) to the file of `handle`, as `ck
 The arguments `handle`, `begtim`, `endtim`, `inst`, `ref`, `segid` and `ctx` have the same
 meaning in every `ckwNN` writer. [`ckw06`](@ref) names the coverage `first`, `last`.
 - `handle`: a [`DAFHandle`](@ref) from [`ckopn`](@ref).
-- `begtim`, `endtim`: the coverage of the segment, encoded spacecraft clock ticks.
+- `begtim`, `endtim`: the coverage of the segment, encoded spacecraft clock ticks
+  ([`sce2c`](@ref) converts a time to them).
 - `inst`: the NAIF ID of the instrument or structure.
 - `ref`: the reference frame, a name or a frame ID. A name is resolved in `ctx` (a
   `SpiceContext` or a `KernelSet`); built-in frames need no kernel.
 - `segid`: the segment identifier, at most 40 printable characters.
 - `sclkdp`: the times of the pointing records, encoded spacecraft clock ticks.
-- `quats`: one SPICE quaternion (scalar first) for each record.
-- `avvs`: one angular velocity vector (rad/s) for each record, or `nothing`.
+- `quats`: one SPICE quaternion (scalar first) for each record. [`q2m`](@ref) of it is
+  the matrix that rotates vectors from `ref` to the frame of `inst`, the `cmat` of
+  [`ckgp`](@ref).
+- `avvs`: for each record, the angular velocity of the frame of `inst` relative to
+  `ref`, in `ref` (rad/s); or `nothing`.
 
 The number of records is `length(sclkdp)`. A table such as `quats` is a vector of vectors
 (the form of SPICE.jl), a matrix with one record in each column, or a flat vector.
 
 The segment has angular velocity if `avvs` holds one vector for each record. It has none
-if `avvs` is `nothing`, which is the default. `avvs` with one vector and more than one
-record is treated as `nothing`.
+if `avvs` is `nothing`, which is the default, and also if `avvs` holds one vector for
+more than one record. Another number of vectors throws `SpiceError(:badarg)`.
 
 Every `ckwNN` writer puts its segment on disk when the call returns, with the data that
 CSPICE writes from the same input. A call that throws writes nothing.
@@ -274,9 +278,10 @@ Write a CK segment of type 3 (pointing with linear interpolation inside interval
 `ckw03_c`.
 
 `sclkdp` holds the times of the `nrec` records (encoded spacecraft clock ticks), `quats`
-their quaternions and `starts` the start times of the interpolation intervals. `avvs`
-is as for [`ckw01`](@ref), which also gives the other arguments and the errors of every
-writer.
+their quaternions and `starts` the start times of the interpolation intervals. Inside
+an interval the pointing is interpolated between adjacent records; between the last
+record of an interval and the start of the next there is none. `avvs` is as for
+[`ckw01`](@ref), which also gives the other arguments and the errors of every writer.
 
 Throws `SpiceError`:
 - `:invalidnumrec` if there is no record, `:invalidnumint` if there is no interval;

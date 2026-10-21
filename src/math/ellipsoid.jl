@@ -32,8 +32,9 @@ Ellipse of the points `center + cos(θ) * semimajor + sin(θ) * semiminor`, as
 `SpiceEllipse` of CSPICE.
 
 The fields `center`, `semimajor` and `semiminor` are `SVector{3,T}` values. An ellipse
-from [`cgv2el`](@ref) has orthogonal semi-axes, and `semimajor` is not shorter than
-`semiminor`. The constructor does not check this.
+from [`cgv2el`](@ref), [`edlimb`](@ref), [`inedpl`](@ref) or [`pjelpl`](@ref) has
+orthogonal semi-axes, and `semimajor` is not shorter than `semiminor`. The constructor
+does not check this.
 
 See also [`el2cgv`](@ref).
 """
@@ -1084,7 +1085,7 @@ Return the number of points where an ellipse meets a plane, and the points, as
 
 Throws `SpiceError(:invalidplane)` if the plane has a zero normal or a negative
 constant. Throws `SpiceError(:invalidellipse)` if the semi-axes of the ellipse are not
-orthogonal.
+orthogonal ([`SpiceEllipse`](@ref) names the calls that make them so).
 
 # Examples
 ```jldoctest
@@ -1436,17 +1437,18 @@ end
 Return `npts` points of the terminator of an ellipsoidal body that a spherical body
 lights, as `edterm_c` of CSPICE.
 
-`trmtyp` is `"UMBRAL"` or `"PENUMBRAL"`. `source` is the light source and `target` the
-lit body. `et` is the epoch at the observer `obsrvr`, in seconds past J2000 TDB.
-`fixref` is a body-fixed frame of the target. `abcorr` is an aberration correction
-of [`spkezr`](@ref), for example `"NONE"` or `"LT+S"`.
-Bodies and frames are names or IDs.
+`trmtyp` is `"UMBRAL"` or `"PENUMBRAL"`. `source` is the illumination source and
+`target` the lit body. `et` is the epoch at the observer `obsrvr`, in seconds past
+J2000 TDB. `fixref` is a body-fixed frame of the target. `abcorr` is an aberration
+correction of [`spkezr`](@ref), for example `"NONE"` or `"LT+S"`. Bodies and frames
+are names or IDs.
 
 - `trgepc`: the epoch at the target, in seconds past J2000 TDB: `et` corrected for
   light time if `abcorr` asks for it.
 - `obspos`: the position of the observer relative to the target center, in km, in
   `fixref` at `trgepc`.
-- `trmpts`: the terminator points relative to the target center, in km, in `fixref`.
+- `trmpts`: the terminator points relative to the target center, in km, in `fixref` at
+  `trgepc`.
 
 The call needs SPK data for the three bodies, the orientation of `fixref`, and the
 `BODY<id>_RADII` of the source and the target.

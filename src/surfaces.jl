@@ -512,7 +512,7 @@ Throws `SpiceError`:
 - the kinds of [`latsrf`](@ref) for `method`, `target` and `fixref`;
 - `:kernelvarnotfound` if the radii are not loaded, `:badaxislength` if they are not three
   positive values, `:pointnotonsurface` if a point is not on the ellipsoid within the
-  point-membership margin `PTMEMM` of [`dskgtl`](@ref) (ellipsoid);
+  point-membership margin `PTMEMM`, 1e-7 unless [`dskstl`](@ref) set another (ellipsoid);
 - `:nodsksegments` if no DSK segment of the target is loaded, `:pointnotinsegment` if no
   segment holds a point, `:pointoffsurface` if a point is not on a plate (DSK).
 """

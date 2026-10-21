@@ -51,8 +51,9 @@ Return the local solar time at `et` for the longitude `lon` on the body with ID
 
 - `et`: seconds past J2000 TDB.
 - `lon`: longitude in radians.
-- `type`: `"PLANETOCENTRIC"` or `"PLANETOGRAPHIC"`, in any letter case; it says how
-  `lon` is measured.
+- `type`: `"PLANETOCENTRIC"` (`lon` positive east) or `"PLANETOGRAPHIC"` (`lon` with
+  the sense of [`recpgr`](@ref) for the body: positive west for a prograde body such as
+  Mars), in any letter case.
 
 `hr`, `mn` and `sc` are the integer hour, minute and second on a 24 hour clock. `time`
 is the string `HH:MM:SS`, and `ampm` is the string `HH:MM:SS A.M.` or `HH:MM:SS P.M.`
@@ -66,16 +67,16 @@ the body-fixed frame of [`cidfrm`](@ref). The sign of the second value of
 result is always 12:00:00. The call needs SPK data for the body and the Sun and PCK
 data for the body.
 
-Throws `SpiceError`:
-- `:unknownsystem` if `type` is not one of the two;
-- `:cantfindframe` if the body has no body-fixed frame;
-- `:cantgetrotationtype` if `BODY<body>_PM` is absent or is not a numeric variable of
-  two or more values;
+Throws `SpiceError`, with the checks in this order, as in CSPICE:
 - `:invalidoption`, for `"PLANETOGRAPHIC"`, if `BODY<body>_PGR_POSITIVE_LON` is not
   `EAST` or `WEST`;
 - `:missingdata`, for `"PLANETOGRAPHIC"`, if `BODY<body>_PGR_POSITIVE_LON` and
-  `BODY<body>_PM` are both absent;
-- the kinds of [`spkezr`](@ref).
+  `BODY<body>_PM` are both absent and the body is not the Earth;
+- `:unknownsystem` if `type` is not one of the two;
+- `:cantfindframe` if the body has no body-fixed frame;
+- the kinds of [`spkezr`](@ref);
+- `:cantgetrotationtype` if `BODY<body>_PM` is absent or is not a numeric variable of
+  two or more values.
 
 # Examples
 ```julia

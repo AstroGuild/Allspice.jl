@@ -1086,7 +1086,7 @@ A string can also hold an era (`B.C.`, `A.D.`), `A.M.` or `P.M.`, a weekday, and
 a zone and a system together. A year can be abbreviated as `'97` or given with two digits.
 
 - Without a zone and a system the string is UTC, or what [`timdef`](@ref) set for the
-  context.
+  context; a default system `"TT"` leaves it UTC, as in CSPICE.
 - The date is Gregorian, or of the calendar that `timdef` set for the context.
 - A year of two digits is in 1969 to 2068, or in the 100 years that
   [`tsetyr`](@ref) set for the context.
@@ -1292,9 +1292,10 @@ Return the seconds past J2000 of the time string `s` on a formal calendar, as
 `tparse_c`.
 
 On the formal calendar every day has 86400 seconds: there are no leap seconds, and
-the call needs no kernel. The result is not an epoch of a time scale; it is the count
-that [`etcal`](@ref) writes back. `s` has a form that [`str2et`](@ref) accepts,
-without a time zone, a time system, or `A.M.` and `P.M.`.
+the call needs no kernel. The result is the count that [`etcal`](@ref) writes back,
+not an epoch of a uniform time scale; for a UTC string it is the `"UTC"` epoch of
+[`deltet`](@ref). `s` has a form that [`str2et`](@ref) accepts, without a time zone,
+a time system, or `A.M.` and `P.M.`.
 
 A year of two digits follows [`tsetyr`](@ref) of the context: at start the year 69 is
 1969 and the year 68 is 2068. The components are not checked against their ranges, so

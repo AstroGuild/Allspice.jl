@@ -205,8 +205,8 @@ Create the SPK file `path` and open it for writing, as `spkopn_c`.
 `ifname` is the internal file name and `ncomch` is the number of comment characters to
 make room for. The file is on disk when the call returns, byte for byte the file that
 `spkopn_c` creates. An existing file is never replaced. Add segments with the `spkwNN`
-writers and close the handle with [`spkcls`](@ref). Load the file with `furnsh` only after
-the close.
+writers and close the handle with [`spkcls`](@ref). Load the file with [`furnsh`](@ref)
+only after the close.
 
 Throws `SpiceError(:emptystring)` if `path` or `ifname` is empty and `:blankfilename` if
 `path` is blank, as CSPICE, and `:fileopenfailed` if the file exists or cannot be created.
@@ -249,9 +249,11 @@ end
 
 Open the existing SPK file `path` for writing, to append segments, as `spkopa_c`.
 
-The file must have the native byte order. No other handle may write the same file; a
-handle that reads it finds a change in a search that begins after the change. Unload the
-file from every context before the call, and load it again after [`spkcls`](@ref).
+The file must have the native byte order. No other handle may write the same file: the
+call does not check this, where CSPICE refuses the second open, and two handles that
+write the file at the same time can damage it (see [`dafopw`](@ref)). A handle that reads
+the file finds a change in a search that begins after the change. Unload the file from
+every context before the call, and load it again after [`spkcls`](@ref).
 
 Throws `SpiceError(:emptystring)` if `path` is empty, `:filenotfound` if the file does not
 exist, `:fileisnotspk` if it is not a DAF file of the type SPK, and `:unsupportedbff` if
@@ -285,8 +287,9 @@ end
 
 Close the SPK file of `handle`, as `spkcls_c`. The call does nothing if the handle is
 closed already. The close writes no data: every write call puts its bytes on disk before it
-returns. A type 14 segment that [`spk14e`](@ref) did not end is not in the file. Load the
-file with `furnsh` after the close.
+returns, except [`spk14b`](@ref) and [`spk14a`](@ref), so a type 14 segment that
+[`spk14e`](@ref) did not end is not in the file. Load the file with [`furnsh`](@ref) after
+the close.
 
 Throws `SpiceError(:nosegmentsfound)` if the file is open for writing and holds no
 segment. The handle then stays open; close it with [`dafcls`](@ref).
@@ -750,8 +753,7 @@ _spk18_subtype(s::Symbol) = s === :S18TP0 ? 0 : s === :S18TP1 ? 1 : -1
            ctx=default_context()) -> Nothing
 
 Write an SPK segment of type 18 (Hermite or Lagrange interpolation of packets at unequal
-time steps), as `spkw18_c`. NAIF calls the type ESOC/DDID, after the orbit files of the
-European Space Operations Centre.
+time steps), as `spkw18_c`.
 
 `subtyp` selects the interpolation and the content of a packet (km, km/s, km/s²):
 
@@ -955,10 +957,10 @@ end
 Write an SPK segment of type 1 (modified difference arrays), as `spkw01` of SPICELIB.
 CSPICE has no C wrapper for it.
 
-`dlines` holds `n` difference lines of 71 doubles each: a vector of vectors, a matrix with
-one line in each column, or a flat vector of `71n` doubles. `epochs` holds the final epoch
-of each line (seconds past J2000 TDB). See [`spkw02`](@ref) for the other arguments and
-for the errors of every writer.
+`dlines` holds `n` difference lines, each the 71 doubles of one modified difference
+array: a vector of vectors, a matrix with one line in each column, or a flat vector of
+`71n` doubles. `epochs` holds the final epoch of each line (seconds past J2000 TDB).
+See [`spkw02`](@ref) for the other arguments and for the errors of every writer.
 
 Throws `SpiceError`:
 - `:segidtoolong` or `:nonprintablechars` if `segid` is not valid;
@@ -1287,7 +1289,8 @@ record in each column. `epochs[i]` is the start of the interval of record `i`, i
 past J2000 TDB.
 
 Throws `SpiceError`:
-- `:segmentnotopen` if `spk14e` ended the writer;
+- `:segmentnotopen` if `spk14e` ended the writer, `:dafnosuchhandle` if the handle is
+  closed;
 - `:invalidargument` unless `ncsets > 0`;
 - `:badarg` if `coeffs` or `epochs` does not have the size that `ncsets` requires;
 - `:unorderedrefs` unless `epochs` is strictly increasing and starts after the last epoch
@@ -1332,7 +1335,9 @@ End the type 14 segment `writer` and write it to its file, as `spk14e_c`.
 ended is not in the file. The segment is on disk when the call returns, with the data that
 CSPICE writes. The writer cannot be used again.
 
-Throws `SpiceError(:segmentnotopen)` if the writer was ended before.
+Throws `SpiceError(:segmentnotopen)` if the writer was ended before, and
+`SpiceError(:dafnosuchhandle)` if the handle was closed after [`spk14b`](@ref); the
+segment is then lost.
 """
 function spk14e(w::SPK14Writer)
     who = "spk14e"

@@ -10,7 +10,7 @@ foreach(furnsh, DocKernels.write(mktempdir()))
 
 ## Direct calls
 
-[`spkder`](@ref) returns the position of a target relative to an observer and its first `N` time derivatives, and [`pxder`](@ref) does the same for a rotation matrix. The order is a `Val`, so that the result is a tuple of static arrays and the call allocates nothing.
+[`spkder`](@ref) returns the position of a target relative to an observer and its first `N` time derivatives, and [`pxder`](@ref) does the same for a rotation matrix. The order is a `Val`, so that the result is a tuple of static arrays; with names in upper case, as below, the call allocates no memory.
 
 ```@example der
 using Allspice
@@ -54,4 +54,4 @@ ForwardDiff.derivative(apparent, et)        # km/s in the rotating frame
 
 ## Order 1 and the velocity of `spkezr`
 
-Order 0 of `spkder` and of `pxder` is the result of `spkpos` and of `pxform`. For a geometric position, order 1 is the velocity that `spkezr` returns, and each higher order is a derivative of that velocity. With an aberration correction, and for some frames, the first derivative that CSPICE returns (the velocity of `spkezr`, the lower left block of `sxform`) is an approximation, so order 1 can differ from it: by about 1e-8 relative for the Moon seen from the Earth with `LT`. [Exact derivatives and the rates of CSPICE](@ref) gives the function that is differentiated for each correction and each kind of frame.
+Order 0 of `spkder` and of `pxder` is the result of `spkpos` and of `pxform`. For a geometric position, order 1 is the velocity that `spkezr` returns, and each higher order is a derivative of that velocity. With the `LT` corrections (`LT`, `LT+S`, `XLT`, `XLT+S`), CSPICE approximates the rate of the light time, so that order 1 differs from the velocity of `spkezr` by about 1e-8 relative for the Moon seen from the Earth; with the `CN` corrections the two agree to about 1e-13 relative. For some frames, order 1 of `pxder` likewise differs from the derivative block of `sxform`, which follows the rates of CSPICE. [Exact derivatives and the rates of CSPICE](@ref) gives the function that is differentiated for each correction and each kind of frame.

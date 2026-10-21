@@ -29,17 +29,18 @@ const _DAS_NATIVE_BFF = _DAS_NATIVE_LITTLE ? "LTL-IEEE" : "BIG-IEEE"
 
 An open DAS file. It replaces the integer handle of CSPICE.
 
-[`dasopr`](@ref), [`dasopw`](@ref), [`dasonw`](@ref), [`dasops`](@ref), [`dlaopn`](@ref)
-and [`dskopn`](@ref) return a handle. Close it with [`dascls`](@ref), [`dskcls`](@ref) or
-`close`; `isopen(handle)` tells whether it is open.
+[`dasopr`](@ref), [`dasopw`](@ref), [`dasonw`](@ref), [`dasops`](@ref), [`dlaopn`](@ref),
+[`dskopn`](@ref), [`ekopr`](@ref), [`ekopw`](@ref), [`ekopn`](@ref) and [`ekops`](@ref)
+return a handle. Close it with [`dascls`](@ref), [`dasllc`](@ref), [`dskcls`](@ref),
+[`ekcls`](@ref) or `close`, which all do the same; `isopen(handle)` tells whether it is
+open.
 
 The handle holds the three address spaces of the file in memory: characters, doubles and
 32-bit integers, each numbered from 1. A handle that is open for writing changes this
 memory only, and the file on disk changes when `dascls` runs. The data of a handle that is
 open for reading are never modified.
 
-A DAS file is segregated if all records of one data type are together. A file that is
-being written by CSPICE can have the types mixed.
+A DAS file is segregated if all records of one data type are together.
 
 Two handles are independent. One handle is not safe for concurrent use: tasks that share a
 handle must hold a lock around every call.
@@ -742,11 +743,11 @@ end
     dasudd(handle, first, last, data) -> Nothing
 
 Replace the doubles at the DAS addresses `first:last` with the first `last - first + 1`
-elements of `data`, as `dasudd` of SPICELIB. Nothing happens if `first > last`.
+elements of `data`, as `dasudd` of SPICELIB.
 
-Throws `SpiceError(:invalidaddress)` if `first` or `last` is not an address of the
-double address space, also when `first > last`, and `SpiceError(:badarg)` if `data` is
-too short.
+Throws `SpiceError(:invalidaddress)` unless `first` and `last` are both addresses of the
+double address space, and `SpiceError(:badarg)` if `data` is too short. If they are
+addresses and `first > last`, nothing changes.
 """
 function dasudd(h::DASHandle, first::Integer, last::Integer, data::AbstractVector{<:Real})
     _das_check_write(h, "dasudd")
@@ -761,11 +762,12 @@ end
     dasudi(handle, first, last, data) -> Nothing
 
 Replace the integers at the DAS addresses `first:last` with the first `last - first + 1`
-elements of `data`, as `dasudi` of SPICELIB. Nothing happens if `first > last`.
+elements of `data`, as `dasudi` of SPICELIB.
 
-Throws `SpiceError(:invalidaddress)` if `first` or `last` is not an address of the
-integer address space, also when `first > last`, `SpiceError(:badarg)` if `data` is too
-short, and `SpiceError(:valueoutofrange)` if a value does not fit in 32 bits.
+Throws `SpiceError(:invalidaddress)` unless `first` and `last` are both addresses of the
+integer address space, `SpiceError(:badarg)` if `data` is too short, and
+`SpiceError(:valueoutofrange)` if a value does not fit in 32 bits. If they are addresses
+and `first > last`, nothing changes.
 """
 function dasudi(h::DASHandle, first::Integer, last::Integer, data::AbstractVector{<:Integer})
     _das_check_write(h, "dasudi")
@@ -782,11 +784,11 @@ end
 
 Replace the characters at the DAS addresses `first:last` with the first
 `last - first + 1` code units of the string `data`, as `dasudc_c`. `dasudc_c` takes
-substrings of an array of strings. Nothing happens if `first > last`.
+substrings of an array of strings.
 
-Throws `SpiceError(:invalidaddress)` if `first` or `last` is not an address of the
-character address space, also when `first > last`, and `SpiceError(:badarg)` if `data`
-is too short.
+Throws `SpiceError(:invalidaddress)` unless `first` and `last` are both addresses of the
+character address space, and `SpiceError(:badarg)` if `data` is too short. If they are
+addresses and `first > last`, nothing changes.
 
 See also [`dasadc`](@ref), [`dasrdc`](@ref).
 """

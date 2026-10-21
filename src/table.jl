@@ -148,10 +148,11 @@ Base.@propagate_inbounds table_position(tab::EphemerisTable, et::Real) = table_j
 Return the position (km) and the velocity (km/s) from the ephemeris table `tab` at
 `et`.
 
-The velocity is the derivative of the position polynomial. For a table with an
-aberration correction it is therefore order 1 of [`spkder`](@ref), not the velocity
-of [`spkezr`](@ref). The rules for the epoch, for `@inbounds` and for the number
-types are those of [`table_jet`](@ref).
+The velocity is the derivative of the position polynomial. For SPK data whose
+velocity is the derivative of the position, such as type 2, it is therefore order 1 of
+[`spkder`](@ref) to the accuracy of the table; with an `LT` correction, that differs
+from the velocity of [`spkezr`](@ref). The rules for the epoch, for `@inbounds` and for
+the number types are those of [`table_jet`](@ref).
 
 Throws `SpiceError(:spkinsuffdata)` if `et` is outside the table.
 """

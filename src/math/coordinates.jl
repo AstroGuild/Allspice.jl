@@ -572,7 +572,7 @@ end
     drdsph(r, colat, slon) -> SMatrix{3,3}
 
 Return the Jacobian of rectangular coordinates with respect to the spherical
-coordinates `(r, colat, slon)`, as `drdsph_c` of CSPICE. Angles are in radians.
+coordinates `(r, colat, slon)`, as `drdsph_c` of CSPICE.
 
 See also [`dsphdr`](@ref), [`sphrec`](@ref), [`drdlat`](@ref).
 """
@@ -582,8 +582,7 @@ drdsph(r::Real, colat::Real, slon::Real) = _m_drdsph(promote(_m_f(r), _m_f(colat
     dsphdr(x, y, z) -> SMatrix{3,3}
 
 Return the Jacobian of the spherical coordinates `(r, colat, slon)` with respect to
-rectangular coordinates, at the point `(x, y, z)`, as `dsphdr_c` of CSPICE. Angles are
-in radians.
+rectangular coordinates, at the point `(x, y, z)`, as `dsphdr_c` of CSPICE.
 
 Throws `SpiceError(:pointonzaxis)` if the point is on the z axis.
 
@@ -606,7 +605,7 @@ end
     drdcyl(r, clon, z) -> SMatrix{3,3}
 
 Return the Jacobian of rectangular coordinates with respect to the cylindrical
-coordinates `(r, clon, z)`, as `drdcyl_c` of CSPICE. `clon` is in radians.
+coordinates `(r, clon, z)`, as `drdcyl_c` of CSPICE.
 
 See also [`dcyldr`](@ref), [`cylrec`](@ref), [`drdlat`](@ref).
 """
@@ -616,8 +615,7 @@ drdcyl(r::Real, clon::Real, z::Real) = _m_drdcyl(promote(_m_f(r), _m_f(clon), _m
     dcyldr(x, y, z) -> SMatrix{3,3}
 
 Return the Jacobian of the cylindrical coordinates `(r, clon, z)` with respect to
-rectangular coordinates, at the point `(x, y, z)`, as `dcyldr_c` of CSPICE. `clon` is
-in radians.
+rectangular coordinates, at the point `(x, y, z)`, as `dcyldr_c` of CSPICE.
 
 Throws `SpiceError(:pointonzaxis)` if the point is on the z axis.
 
@@ -659,8 +657,7 @@ end
 Return the Jacobian of rectangular coordinates with respect to the geodetic coordinates
 `(lon, lat, alt)`, as `drdgeo_c` of CSPICE.
 
-The spheroid has the equatorial radius `re` and the flattening `f`. Angles are in
-radians.
+The spheroid has the equatorial radius `re` and the flattening `f`.
 
 Throws `SpiceError(:valueoutofrange)` if `f >= 1`, and `SpiceError(:badradius)` if
 `re <= 0`.
@@ -685,8 +682,7 @@ end
 Return the Jacobian of the geodetic coordinates `(lon, lat, alt)` with respect to
 rectangular coordinates, at the point `(x, y, z)`, as `dgeodr_c` of CSPICE.
 
-The spheroid has the equatorial radius `re` and the flattening `f`. Angles are in
-radians.
+The spheroid has the equatorial radius `re` and the flattening `f`.
 
 Throws `SpiceError(:valueoutofrange)` if `f >= 1`, `SpiceError(:badradius)` if
 `re <= 0`, and `SpiceError(:pointonzaxis)` if the point is on the z axis.
@@ -700,9 +696,9 @@ dgeodr(x::Real, y::Real, z::Real, re::Real, f::Real) =
     drdpgr([ctx,] body, lon, lat, alt, re, f) -> SMatrix{3,3}
 
 Return the Jacobian of rectangular coordinates with respect to the planetographic
-coordinates `(lon, lat, alt)` of `body`, as `drdpgr_c` of CSPICE. Angles are in
-radians. The kernel pool of `ctx` (without `ctx`, of [`default_context`](@ref)) gives
-the sense of the longitude, by the rules in [`recpgr`](@ref).
+coordinates `(lon, lat, alt)` of `body`, as `drdpgr_c` of CSPICE. The kernel pool of
+`ctx` (without `ctx`, of [`default_context`](@ref)) gives the sense of the longitude,
+by the rules in [`recpgr`](@ref).
 
 Throws the errors of [`recpgr`](@ref).
 
@@ -722,9 +718,8 @@ end
 
 Return the Jacobian of the planetographic coordinates `(lon, lat, alt)` of `body` with
 respect to rectangular coordinates, at the point `(x, y, z)`, as `dpgrdr_c` of CSPICE.
-Angles are in radians. The kernel pool of `ctx` (without `ctx`, of
-[`default_context`](@ref)) gives the sense of the longitude, by the rules in
-[`recpgr`](@ref).
+The kernel pool of `ctx` (without `ctx`, of [`default_context`](@ref)) gives the sense
+of the longitude, by the rules in [`recpgr`](@ref).
 
 Throws the errors of [`recpgr`](@ref), and `SpiceError(:pointonzaxis)` if the point is
 on the z axis.
@@ -796,8 +791,9 @@ input; with `"GEODETIC"` or `"PLANETOGRAPHIC"` it is in km, the unit of the radi
 
 `body` (name or ID) gives the spheroid of the last two systems, from `BODY<id>_RADII`
 in the kernel pool of `ctx`, or of [`default_context`](@ref) without `ctx`. It is not
-read for the other systems, so `""` is enough there. The planetographic longitude
-follows the rules and throws the errors of [`recpgr`](@ref).
+read for the other systems, so `""` is enough there. Each output longitude has the
+range of the conversion from rectangular coordinates to its system, such as
+[`reccyl`](@ref); the planetographic one also throws the errors of [`recpgr`](@ref).
 
 Throws:
 - `SpiceError(:coordsysnotrec)` if a system name is not known.

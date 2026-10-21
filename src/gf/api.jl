@@ -71,7 +71,8 @@ result cell, a workspace and an interval count; this call needs none.
 
 # Arguments
 - `target`, `obsrvr`: names or IDs of two different bodies.
-- `abcorr`: any aberration correction of [`spkezr`](@ref), a string or an `Aberration`.
+- `abcorr`: any aberration correction of [`spkezr`](@ref), a string or an
+  [`Aberration`](@ref).
 - `relate`: `"<"`, `"="`, `">"`, `"LOCMIN"`, `"LOCMAX"`, `"ABSMIN"` or `"ABSMAX"`, in any
   case. An inequality gives the intervals on which it holds. `"="` and the extrema with
   `adjust = 0` give intervals of zero length, one for each event. A local extremum is
@@ -240,8 +241,8 @@ gfsep(targ1::NameOrID, shape1::AbstractString, frame1::NameOrID, targ2::NameOrID
 
 Return the window of epochs, in seconds past J2000 TDB, on which the phase angle in
 radians satisfies the relation `relate` with `refval`, as `gfpa_c`. The phase angle is
-the angle at `target` between the directions to the illuminator `illmn` and to the
-observer `obsrvr`.
+the angle at `target` between the directions to the illumination source `illmn` and to
+the observer `obsrvr`.
 
 `abcorr` is `"NONE"` or a reception correction. The three bodies must differ. The other
 arguments, the keywords and the result are those of [`gfdist`](@ref).
@@ -322,8 +323,10 @@ The coordinate systems and their coordinates, in any case, are
 Angles, and `refval` and `adjust` for an angle, are in radians; lengths are in km.
 Longitude is in (-pi, pi] in the latitudinal, spherical and geodetic systems. Longitude
 in the cylindrical and planetographic systems, and right ascension, are in [0, 2 pi).
-The geodetic and planetographic systems use the radii of the center of `frame`, whose
-two equatorial radii must be equal.
+Longitude is positive east, except the planetographic one, which has the sense of
+[`recpgr`](@ref) for the center of `frame` (positive west for a prograde body such as
+Mars). The geodetic and planetographic systems use the radii of the center of `frame`,
+whose two equatorial radii must be equal.
 
 A search on a longitude or on a right ascension accounts for the jump at the branch
 cut: the jump gives no root and no extremum. Such a search converges to
@@ -511,8 +514,9 @@ geometry finder, with a step and a refinement function that the caller supplies.
 - `udstep`: the step in seconds, a positive number or a function `et -> step`. A step
   function that returns a value that is not positive throws `SpiceError(:invalidstep)`
   during the search.
-- `udrefn`: the refinement function `(t1, t2, s1, s2) -> t`. It returns an epoch in the
-  bracket [`t1`, `t2`]. `s1` and `s2` are the values (`Bool`) of the condition of the
+- `udrefn`: the refinement function `(t1, t2, s1, s2) -> t`, which picks the next epoch
+  to test in a bracket [`t1`, `t2`] across which the condition changes. It returns an
+  epoch in the bracket. `s1` and `s2` are the values (`Bool`) of the condition of the
   search at `t1` and `t2`. [`gfrefn`](@ref) is the bisection of CSPICE.
 - `gquant`: `"DISTANCE"`, `"ANGULAR SEPARATION"`, `"COORDINATE"`, `"RANGE RATE"`,
   `"PHASE ANGLE"` or `"ILLUMINATION ANGLE"`, in any case.

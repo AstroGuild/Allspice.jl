@@ -385,9 +385,10 @@ of the sub-observer point on `target`, as seen from `obsrvr`, satisfies the rela
 `relate` with `refval`, as `gfsubc_c`.
 
 The point is the one of [`subpnt`](@ref), in the body-fixed frame `fixref`, which must
-be centered on `target`. `method` is `"Near point: ellipsoid"` or
-`"Intercept: ellipsoid"`; case and blanks are ignored. As in CSPICE, no other spelling
-is accepted: `"NEAR POINT/ELLIPSOID"` and a DSK method throw.
+be centered on `target`. `method` is one of the older forms of `subpnt`,
+`"Near point: ellipsoid"` or `"Intercept: ellipsoid"`; case and blanks are ignored. As
+in CSPICE, no other spelling is accepted: `"NEAR POINT/ELLIPSOID"` and a DSK method
+throw.
 
 The coordinate systems, the coordinates, their units and ranges, and the convergence of
 a longitude search are those of [`gfposc`](@ref). The other arguments, the keywords and

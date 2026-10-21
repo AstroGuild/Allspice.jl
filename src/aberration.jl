@@ -640,8 +640,8 @@ Element `k + 1` of the result is the derivative of order `k`, in km/s^k. `et` is
 seconds past J2000 TDB. `targ`, `obs` and `ref` are names or integer IDs. The form
 without `abcorr` is geometric, as is `abcorr = "NONE"`; `abcorr` is a string or an
 [`Aberration`](@ref), as for [`spkezr`](@ref). With ForwardDiff loaded, `et` can be a
-dual number. The call does not allocate when the bodies and the frame are integer IDs
-and `abcorr` is absent or an `Aberration`.
+dual number. The call does not allocate under the condition that [`spkezr`](@ref)
+states.
 
 Order 0 is the position of [`spkezr`](@ref) and of [`spkpos`](@ref), to rounding.
 Every higher order is the exact derivative of that position as a function of `et`, and

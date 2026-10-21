@@ -18,10 +18,12 @@ Features include:
   an immutable snapshot of the loaded kernels, which a later load does not change.
 - Kernel contexts, which are objects that each hold a separate set of loaded kernels,
   for a program that compares two ephemerides or keeps two missions apart.
-- Epochs that can be dual numbers of ForwardDiff.jl, and time derivatives of any
-  order with `spkder` and `pxder`.
+- Epochs that can be dual numbers of ForwardDiff.jl in the state, rotation, surface
+  and time-conversion calls that the manual lists, and time derivatives of any order
+  with `spkder` and `pxder`.
 - Ephemeris and rotation tables for inner loops and GPU functions.
-- Event searches, surface geometry, and the writing of SPK, CK, DSK and EK kernels.
+- Event searches, surface geometry, and the writing of SPK, CK, binary PCK, DSK and EK
+  kernels.
 
 Allspice.jl is meant for programs that need SPICE geometry as native Julia code. A
 program that must call the CSPICE library of NAIF itself is better served by a

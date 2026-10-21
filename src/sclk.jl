@@ -244,14 +244,14 @@ end
 Return the epoch, in seconds past J2000 TDB, of the encoded spacecraft clock value
 `sclkdp` of the clock `sc`, as `sct2e_c`.
 
-`sc` is the NAIF ID of the spacecraft. `sclkdp` is in ticks from the start of the
-first partition; [`scencd`](@ref) makes it from a clock string. A partition is a span
-on which the clock counts without a reset or a jump. An SCLK kernel for
-`sc` must be loaded, and a leap-second kernel if the parallel time system of the
-clock, the time scale to which the kernel relates the ticks, is TDT
-(`SCLK01_TIME_SYSTEM_<-sc> = 2`). The
-result has the number type of `sclkdp` (`Float64` for an integer), so a dual number
-keeps its derivative. The call does not allocate.
+`sc` is the NAIF ID of the spacecraft. `sclkdp` is in ticks, the counts of the last
+field of the clock, from the start of the first partition; [`scencd`](@ref) makes it
+from a clock string. A partition is a span on which the clock counts without a reset
+or a jump. An SCLK kernel for `sc` must be loaded, and a leap-second kernel if the
+parallel time system of the clock, the time scale to which the kernel relates the
+ticks, is TDT (`SCLK01_TIME_SYSTEM_<-sc> = 2`). The result has the number type of
+`sclkdp` (`Float64` for an integer), so a dual number keeps its derivative. The call
+does not allocate.
 
 Throws `SpiceError(:kernelvarnotfound)` if no SCLK kernel for `sc` is loaded or its
 data are incomplete, and `SpiceError(:notsupported)` if the clock is not of type 1.
@@ -425,7 +425,8 @@ partition number, as `scfmt_c`.
 
 `ticks` is rounded to a whole number and split into the fields of the clock. Each
 field is written with leading zeros to the width of its largest value, with the
-output delimiter of the clock between the fields. This is the inverse of
+output delimiter of the clock between the fields: the character `.`, `:`, `-`, `,` or
+blank that `SCLK01_OUTPUT_DELIM_<-sc>` selects with 1 to 5. This is the inverse of
 [`sctiks`](@ref).
 
 Throws `SpiceError(:valueoutofrange)` if `ticks` is negative.

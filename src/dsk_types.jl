@@ -92,10 +92,11 @@ end
 One segment of a loaded DSK file. [`dskxsi`](@ref) returns it in place of the handle, the
 DLA descriptor and the DSK descriptor that `dskxsi_c` returns.
 
-The access calls (`dskgd`, `dskb02`, `dskz02`, `dskp02`, `dskv02`, `dskn02`, `dski02`,
-`dskd02`, `dskx02`) take the segment. The calls that read data of the file also take the
-`KernelSet` or the `SpiceContext` that holds the file, and throw
-`SpiceError(:nosuchhandle)` if the file is not loaded there any more.
+[`dskgd`](@ref), [`dskb02`](@ref) and [`dskz02`](@ref) take the segment alone.
+[`dskp02`](@ref), [`dskv02`](@ref), [`dskn02`](@ref), [`dski02`](@ref), [`dskd02`](@ref)
+and [`dskx02`](@ref) read data of the file, so they also take the `KernelSet` or the
+`SpiceContext` that holds the file, the default context if it is left out. They throw
+`SpiceError(:nosuchhandle)` if the file is not loaded there.
 
 A caller reads these fields:
 - `dladsc`, `dskdsc`: the [`DLADescr`](@ref) and the [`DSKDescr`](@ref) of the segment.

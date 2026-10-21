@@ -2,18 +2,25 @@
 
 A file handle is a [`DAFHandle`](@ref) or a [`DASHandle`](@ref) object, not an integer.
 The writers take the arguments of CSPICE in the same order, but leave out most counts and
-flags that follow from the input; [`spksub`](@ref) is the exception to the order, with
-the new file first.
+flags that follow from the input. Two writers change the order: [`spksub`](@ref) takes
+the new file first, and [`ckw03`](@ref) takes `avvs` last, as an optional argument. The
+calls that continue a DAF array search or an array that is being added
+([`daffna`](@ref), [`daffpa`](@ref), [`dafgs`](@ref), [`dafgn`](@ref), [`dafws`](@ref),
+[`dafrs`](@ref), [`dafrn`](@ref), [`dafada`](@ref), [`dafena`](@ref)) take the handle,
+which the C calls do not, because the handle holds that state.
 
 A call that needs a context takes it as the optional first argument `[ctx,]`, a
 [`SpiceContext`](@ref), and uses [`default_context`](@ref) without it. `[ctx | ks,]`
 means that the call also accepts a `KernelSet`, the immutable snapshot of the kernels of
 a context that `Allspice.kernelset(ctx)` returns. The SPK and CK segment writers,
-[`spk14b`](@ref) and [`spkpds`](@ref) take the context or the kernel set as the keyword
-`ctx` instead; [`dskw02`](@ref) takes it as the first argument.
+[`spk14b`](@ref), [`spkpds`](@ref) and [`table_to_spk`](@ref) take the context or the
+kernel set as the keyword
+`ctx` instead, and [`dskxv!`](@ref) takes it after its two output arguments.
 
 The identifier of an SPK or CK segment (`segid`, `ident`) is the name of its DAF array,
-which [`dafgn`](@ref) returns. An input of the wrong shape throws `SpiceError(:badarg)`.
+which [`dafgn`](@ref) returns. An input of the wrong shape throws `SpiceError(:badarg)`,
+except `avvs` of [`ckw01`](@ref) and [`ckw03`](@ref): one vector for several records
+counts as `nothing`.
 
 ## DAF files
 
@@ -152,6 +159,13 @@ dlafps
 ```
 
 ## DSK files
+
+The spatial index of a type 2 segment divides a box around the plates into cubes of
+equal size, the fine voxels, which form groups of `corscl^3`, the coarse voxels. The
+voxel-plate list gives the plates that meet each fine voxel, and the vertex-plate list
+the plates that share each vertex. The DSK Required Reading of NAIF
+([https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/dsk.html](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/dsk.html))
+describes the index.
 
 ```@docs
 DSKDescr

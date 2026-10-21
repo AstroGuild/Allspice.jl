@@ -123,12 +123,8 @@ end
 """
     EKTable
 
-One loaded EK table: all loaded segments that have the same table name. This is the
-type of the entries of the table catalog of a context. No call returns it and a
-caller does not build it: read the catalog with [`ekntab`](@ref), [`ektnam`](@ref),
-[`ekccnt`](@ref) and [`ekcii`](@ref).
-
-All segments of a table have columns with the same names and attributes.
+One loaded EK table, an entry of the table catalog of a context, which
+[`ekntab`](@ref), [`ektnam`](@ref), [`ekccnt`](@ref) and [`ekcii`](@ref) read.
 """
 struct EKTable
     name::String

@@ -30,9 +30,9 @@ end
 Return the rotation matrix `[angle3]_axis3 * [angle2]_axis2 * [angle1]_axis1` of three
 Euler angles in radians, as `eul2m_c` of CSPICE.
 
-`[angle]_axis` is `rotate(angle, axis)`: a rotation of the coordinate system about the
-axis 1, 2 or 3 (x, y, z). The rotation by `angle1` acts first on a vector. `axis2`
-can be equal to `axis3` or to `axis1`; [`m2eul`](@ref) does not accept such axes.
+`[angle]_axis` is `rotate(angle, axis)`, about the axis 1, 2 or 3 (x, y, z). The factor
+of `angle1` is applied first to the components of a vector. `axis2` can be equal to
+`axis3` or to `axis1`; [`m2eul`](@ref) does not accept such axes.
 
 Throws `SpiceError(:badaxisnumbers)` if an axis is not 1, 2 or 3.
 
@@ -138,12 +138,13 @@ Return the 6 by 6 state transformation of three Euler angles and their rates, as
 `eul2xf_c` of CSPICE.
 
 `eulang[1:3]` and `axisa`, `axisb`, `axisc` are `angle3`, `angle2`, `angle1` and
-`axis3`, `axis2`, `axis1` of [`eul2m`](@ref). `eulang[4:6]` are their rates in rad/s.
-`axisb` can be equal to `axisa` or to `axisc`, as in CSPICE: the two angles add.
+`axis3`, `axis2`, `axis1` of [`eul2m`](@ref). `eulang[4:6]` are their rates in radians
+per unit of time. `axisb` can be equal to `axisa` or to `axisc`, as in CSPICE: the two
+angles add.
 
 The upper left and lower right 3 by 3 blocks of the result are the matrix
 `eul2m(eulang[1], eulang[2], eulang[3], axisa, axisb, axisc)`. The lower left block is
-its time derivative. The upper right block is zero.
+its derivative with respect to that time. The upper right block is zero.
 
 Throws `SpiceError(:badaxisnumbers)` if an axis is not 1, 2 or 3, and
 `SpiceError(:badarg)` if `eulang` does not have 6 elements.
@@ -209,8 +210,8 @@ Return the Euler angles and their rates of the 6 by 6 state transformation `xfor
 a flag that tells if they are unique, as `xf2eul_c` of CSPICE.
 
 `eulang` has the layout of [`eul2xf`](@ref): three angles in radians, then their rates.
-`unique` is `false` in the degenerate case of [`m2eul`](@ref); the first angle and its
-rate are then 0.
+`unique` is `false` in the degenerate case of [`m2eul`](@ref); `eulang[1]` (`angle3`)
+and its rate `eulang[4]` are then 0.
 
 Throws as [`m2eul`](@ref) for the upper left 3 by 3 block, and `SpiceError(:badarg)` if
 `xform` is not 6 by 6.
@@ -432,9 +433,10 @@ Return the angular velocity of a frame from its quaternion `q` and the time deri
 `dq`, as `qdq2av_c` of CSPICE.
 
 `q` has the SPICE convention (scalar part first) and is scaled to unit length.
-`q2m(q)` transforms the components of a vector from a base frame to the frame. The
-result is the angular velocity of the frame relative to the base frame, in the base
-frame, as [`xf2rav`](@ref) gives it. The unit is radians per time unit of `dq`.
+`q2m(q)` transforms the components of a vector from a base frame to the frame; for
+`q = (cos(θ/2), sin(θ/2) * u)` the frame is the base frame rotated by `-θ` about `u`.
+The result is the angular velocity of the frame relative to the base frame, in the base
+frame, as [`xf2rav`](@ref) gives it. The unit is radians per unit of the time of `dq`.
 
 Throws `SpiceError(:badarg)` if an argument does not have 4 elements.
 
@@ -455,9 +457,10 @@ Return the 6 by 6 state transformation of the rotation matrix `rot` and the angu
 velocity `av`, as `rav2xf_c` of CSPICE.
 
 `rot` transforms the components of a vector from frame 1 to frame 2. `av` is the
-angular velocity of frame 2 relative to frame 1, in frame 1, in rad/s. The upper left
-and lower right 3 by 3 blocks of the result are `rot`. The lower left block is the time
-derivative of `rot`. The upper right block is zero.
+angular velocity of frame 2 relative to frame 1, in frame 1, in radians per unit of
+time. The upper left and lower right 3 by 3 blocks of the result are `rot`. The lower
+left block is the derivative of `rot` with respect to that time. The upper right block
+is zero.
 
 Throws `SpiceError(:badarg)` if `rot` is not 3 by 3 or `av` does not have 3 elements.
 
