@@ -224,6 +224,7 @@ Base.showerror(io::IO, e::SpkInsufficientDataError) =
 # SPICE(EMPTYSTRING) in the wrapper, a blank one SPICE(BLANKFILENAME) in the routine.
 @inline function _chk_filename(who::AbstractString, path::AbstractString)
     isempty(path) && throw(SpiceError(:emptystring, "$who: the file name is empty"))
-    isempty(strip(path)) && throw(SpiceError(:blankfilename, "$who: the file name is blank"))
+    isempty(strip(path)) &&
+        throw(SpiceError(:blankfilename, "$who: the file name is blank"))
     return nothing
 end
