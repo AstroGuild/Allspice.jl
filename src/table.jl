@@ -23,7 +23,7 @@ array type; the table is then an `isbits` value on a GPU.
 | `t0`, `dt`, `nint` | the table covers `t0 <= et <= t0 + nint * dt`, seconds past J2000 TDB |
 | `ncoef`            | Chebyshev coefficients for each component and interval               |
 | `coef`             | the coefficients, km                                                 |
-| `maxerr`           | largest difference from the source that `ephemeris_table` measured, km |
+| `maxerr`           | largest difference from `spkpos` that `ephemeris_table` measured, km   |
 
 Interval `i` (from 0) covers `t0 + i dt` to `t0 + (i + 1) dt`. It holds `ncoef`
 coefficients for each of x, y and z, in this order, from index `3 ncoef i + 1` of
@@ -148,10 +148,11 @@ Base.@propagate_inbounds table_position(tab::EphemerisTable, et::Real) = table_j
 Return the position (km) and the velocity (km/s) from the ephemeris table `tab` at
 `et`.
 
-The velocity is the derivative of the position polynomial. For a table with an
-aberration correction it is therefore order 1 of [`spkder`](@ref), not the velocity
-of [`spkezr`](@ref). The rules for the epoch, for `@inbounds` and for the number
-types are those of [`table_jet`](@ref).
+The velocity is the derivative of the position polynomial. For SPK data whose
+velocity is the derivative of the position, such as type 2, it is therefore order 1 of
+[`spkder`](@ref) to the accuracy of the table; with an `LT` correction, that differs
+from the velocity of [`spkezr`](@ref). The rules for the epoch, for `@inbounds` and for
+the number types are those of [`table_jet`](@ref).
 
 Throws `SpiceError(:spkinsuffdata)` if `et` is outside the table.
 """
@@ -343,8 +344,8 @@ Two methods give the coefficients:
   until the measured error is at most `tol` (km). With `tol`, the result has
   `maxerr <= tol` or the call throws. Without `tol` the goal is `1e-12` times the
   largest distance in the table, and the call also stops when the error is below
-  `1e-6` times that distance and one more doubling does not divide it by four. The
-  source then limits the accuracy: rounding of a rotation angle of many turns, or the
+  `1e-6` times that distance and one more doubling does not divide it by four.
+  `spkpos` then limits the accuracy: rounding of a rotation angle of many turns, or the
   small steps of an aberration-corrected position at the record boundaries.
 
 Throws `SpiceError(:badarg)` if the epochs are not finite with `t0 < t1`, if
@@ -415,15 +416,16 @@ file therefore gives the position of the table to rounding, and the velocity is 
 derivative. `handle` comes from [`spkopn`](@ref) or [`spkopa`](@ref); `segid` is the
 segment identifier; `first` and `last` are the bounds of the segment in seconds past
 J2000 TDB. The segment is for `tab.target` relative to `tab.observer` in the frame
-`tab.frame`. The coefficients are written as `Float64`; a table on a GPU is copied to
-the CPU. `ctx` is passed to [`spkw02`](@ref).
+`tab.frame`, which must be a frame known in `ctx` (see [`frinfo`](@ref)). The coefficients
+are written as `Float64`; a table on a GPU is copied to the CPU.
 
 A segment has no aberration correction. Write only a table that was made with
 `abcorr = "NONE"`; the call cannot check this.
 
-Throws the errors of [`spkw02`](@ref). Among its conditions: `tab.ncoef <= 28`,
-`tab.target != 0`, `tab.target != tab.observer`, a known frame, and `first` and `last`
-inside the table.
+Throws `SpiceError(:invalidrefframe)` if `tab.frame` is not a frame of `ctx`, as
+`spkw02_c` for an unknown frame, and the other errors of [`spkw02`](@ref). Among its
+conditions: `tab.ncoef <= 28`, `tab.target != 0`, `tab.target != tab.observer`, and
+`first` and `last` inside the table.
 
 # Examples
 ```julia
@@ -436,6 +438,8 @@ spkcls(h)
 function table_to_spk(h::DAFHandle, tab::EphemerisTable, segid::AbstractString;
         first::Real=table_span(tab)[1], last::Real=table_span(tab)[2],
         ctx::SegContext=default_context())
+    frinfo(_seg_ks(ctx), tab.frame) === nothing && throw(SpiceError(:invalidrefframe,
+        "table_to_spk: the reference frame $(tab.frame) of the table is not known"))
     cdata = reshape(Vector{Float64}(Array(tab.coef)), 3 * tab.ncoef, tab.nint)
     spkw02(h, tab.target, tab.observer, Int(tab.frame), first, last, segid, tab.dt, cdata, tab.t0;
         ctx=ctx)
@@ -460,11 +464,12 @@ Chebyshev polynomials that need no kernel to evaluate: the counterpart of
 | `t0`, `dt`, `nint` | the table covers `t0 <= et <= t0 + nint * dt`, seconds past J2000 TDB |
 | `ncoef`            | Chebyshev coefficients for each matrix element and interval          |
 | `coef`             | the coefficients                                                     |
-| `maxerr`           | largest Frobenius norm of the difference from the source that `rotation_table` measured |
+| `maxerr`           | largest Frobenius norm of the difference from `pxform` that `rotation_table` measured   |
 
 Interval `i` (from 0) holds `ncoef` coefficients for each of the nine elements of the
 matrix, column after column, from index `9 ncoef i + 1` of `coef`. A matrix of the
-table is orthogonal to the accuracy `maxerr`; it is not made orthogonal again.
+table is orthogonal to the accuracy `maxerr`; it is not made orthogonal again. A query
+outside the table throws `SpiceError(:spkinsuffdata)`, as for an `EphemerisTable`.
 
 `RotationTable{T}(tab)` returns a copy with coefficients of type `T` on the CPU;
 `maxerr` is not measured again.
@@ -562,7 +567,7 @@ each interval, and it doubles the number of intervals until the measured error
 (Frobenius norm, no unit) is at most `tol`. With `tol`, the result has
 `maxerr <= tol` or the call throws. Without `tol` the goal is `1.7e-12`, and the call
 also stops when the error is below `1.7e-6` and one more doubling does not divide it
-by four. The source then limits the accuracy: the rotation angle of many turns has a
+by four. `pxform` then limits the accuracy: the rotation angle of many turns has a
 rounding error above the goal. Read `maxerr` for the error that was reached.
 
 Throws `SpiceError(:badarg)` if the epochs are not finite with `t0 < t1`, if

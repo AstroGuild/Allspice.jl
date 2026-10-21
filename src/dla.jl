@@ -57,12 +57,14 @@ A DLA file is a DAS file that holds a doubly linked list of segments; a DSK file
 comment characters to make room for. The new file has no segment. The file on disk is not
 a complete DLA file until [`dascls`](@ref) runs.
 
-Throws `SpiceError(:badrecordcount)` if `ncomch < 0`, and the kinds of [`dasonw`](@ref).
+Throws `SpiceError(:emptystring)` if `path` is empty, `SpiceError(:badrecordcount)` if
+`ncomch < 0`, and the error kinds of [`dasonw`](@ref).
 
 See also [`dskopn`](@ref), [`dlabns`](@ref).
 """
 function dlaopn(path::AbstractString, ftype::AbstractString, ifname::AbstractString,
         ncomch::Integer)
+    isempty(path) && throw(SpiceError(:emptystring, "dlaopn: the file name is empty"))
     ncomch < 0 && throw(SpiceError(:badrecordcount,
         "dlaopn: the requested number of comment characters must be non-negative but was $ncomch"))
     ncomr = ncomch > 0 ? (Int(ncomch) - 1) ÷ _DAS_RECLEN + 1 : 0

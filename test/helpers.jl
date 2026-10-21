@@ -202,6 +202,15 @@ function throws_kind(f, kind::Symbol)
     return false
 end
 
+"The short message of the error that CSPICE signalled, as a lower-case symbol (`:none` without one); resets the error state."
+function cspice_kind()
+    ccall((:failed_c, SPICE.libcspice), Cint, ()) == 0 && return :none
+    buf = zeros(UInt8, 64)
+    ccall((:getmsg_c, SPICE.libcspice), Cvoid, (Cstring, Cint, Ptr{UInt8}), "SHORT", 64, buf)
+    ccall((:reset_c, SPICE.libcspice), Cvoid, ())
+    return Symbol(lowercase(replace(unsafe_string(pointer(buf)), "SPICE(" => "", ")" => "")))
+end
+
 """
     spksub_both(src, dir, tag, ident, t0, t1; descr=identity) -> (pc, kc, pn, kn)
 
@@ -234,13 +243,7 @@ function spksub_both(src::AbstractString, dir::AbstractString, tag::AbstractStri
     nc = SPICE.spkopn(pc, "SUBSET", 0)
     ccall((:spksub_c, SPICE.libcspice), Cvoid, (Cint, Ptr{Cdouble}, Cstring, Cdouble, Cdouble, Cint),
         hc, descr(SPICE.dafgs(5)), ident, t0, t1, nc)
-    kc = :none
-    if ccall((:failed_c, SPICE.libcspice), Cint, ()) != 0
-        buf = zeros(UInt8, 64)
-        ccall((:getmsg_c, SPICE.libcspice), Cvoid, (Cstring, Cint, Ptr{UInt8}), "SHORT", 64, buf)
-        kc = Symbol(lowercase(replace(unsafe_string(pointer(buf)), "SPICE(" => "", ")" => "")))
-        ccall((:reset_c, SPICE.libcspice), Cvoid, ())
-    end
+    kc = cspice_kind()
     SPICE.dafcls(nc)
     SPICE.dafcls(hc)
     return pc, kc, pn, kn

@@ -12,20 +12,21 @@ with such a kind is never true.
 """
 const ERROR_KINDS = (
     :arraysizemismatch, :arraytoosmall, :avaloutofrange, :axisunderflow, :badarg,
-    :badarraysize, :badattribute, :badattributes, :badaxis, :badaxislength, :badaxisnumbers,
+    :badarraysize, :badattribute, :badattributes, :badaxislength, :badaxisnumbers,
     :badboresightspec, :badboundary, :badcoarsevoxscale, :badcolumdecl, :badcolumndecl,
     :badcommentarea, :badcoordbounds, :badcoordsys, :baddaf, :baddascommentarea,
     :baddasdirectory, :baddescrtimes, :baddimensions, :baddladescriptor, :badeccentricity,
     :badendpoints, :badepochtype, :badfile, :badfinevoxelscale, :badformat, :badframe,
     :badframeclass,
-    :badframecount, :badgeometry, :badgm, :badindex, :badinitstate, :badkernel,
+    :badframecount, :badframespec, :badframespec2, :badgeometry, :badgm, :badindex,
+    :badinitstate, :badkernel,
     :badlatitudebounds, :badlatituderange, :badlatusrectum, :badlimblocusmix,
     :badlongituderange, :badmeanmotion, :badmeccentricity, :badmethodsyntax, :badmsemimajor,
     :badnumber, :badorbit, :badpartnumber, :badpeccentricity, :badperiapsevalue,
     :badplatecount, :badpool, :badpriorityspec, :badquatsign, :badradius, :badradiuscount,
     :badrecordcount, :badrefvectorspec, :badsemiaxis, :badsemilatus, :badsourceradius,
     :badstoptime, :badsurfacemap, :badtermlocusmix, :badtime, :badtimebounds, :badtimecase,
-    :badtimedefault, :badtimetype, :badtkframe, :badtle, :badtypeshapecombo, :badunits,
+    :badtimedefault, :badtimetype, :badtle, :badtypeshapecombo, :badunits,
     :badvariablesize, :badvariabletype, :badvarname, :badvector, :badvertexcount,
     :badvertexindex, :badwindowsize, :barraytoosmall, :barycenterephem, :blankfilename,
     :blankfiletype, :blanknameassigned, :bodiesnotdistinct, :bodyandcentersame,
@@ -47,7 +48,8 @@ const ERROR_KINDS = (
     :fileopenfailed, :filereadfailed, :fovtoowide, :framechain, :framedatanotfound,
     :framedeferror, :frameidnotfound, :frameinfonotfound, :framemissing, :framenamenotfound,
     :ftpxfererror, :gridtoolarge, :idcodenotfound, :idstringtoolong, :illegalcharacter,
-    :immutablevalue, :incompatiblescale, :incompatibleunits, :indexoutofrange,
+    :immutablevalue, :incompatiblescale, :incompatibleunits, :incompleteframe,
+    :indexoutofrange,
     :inputoutofbounds, :inputstoolarge, :insidebody, :insufficientangles, :intindextoosmall,
     :intlennotpos, :invalidaddress, :invalidangle, :invalidarchtype, :invalidargument,
     :invalidaxis, :invalidaxislength, :invalidconststep, :invalidcount, :invaliddatatype,
@@ -67,7 +69,8 @@ const ERROR_KINDS = (
     :missingtimeinfo, :missingvalue, :namesnotresolved, :noclass, :noconverg,
     :noconvergence, :nocurrentarray, :nodetoofull, :nodsksegments, :noframe,
     :noframeconnect, :noframeinfo, :nofreenodes, :nointerval, :noleapseconds,
-    :noloadedfiles, :nonconicmotion, :nonemptyentry, :nonemptytree, :nonpositiveaxis,
+    :noloadeddskfiles, :noloadedfiles, :nonconicmotion, :nonemptyentry, :nonemptytree,
+    :nonpositiveaxis,
     :nonpositivemass, :nonpositiveradius, :nonpositivescale, :nonpositivevalue,
     :nonprintablechars, :nonprintingchars, :nopartition, :nosegmentsfound, :noseparation,
     :nosuchfile, :nosuchhandle, :notanumber, :notarotation, :notcomputable, :notdisjoint,
@@ -86,13 +89,15 @@ const ERROR_KINDS = (
     :typenotsupported, :unallocatednode, :undefinedframe, :uninitialized,
     :uninitializedvalue, :unitsmissing, :unitsnotrec, :unknownbff, :unknownckmeta,
     :unknowncompare,
-    :unknownfilarc, :unknownframe, :unknownframetype, :unknownmode, :unknownspktype,
+    :unknownfilarc, :unknownframe, :unknownframespec, :unknownframetype, :unknownmode,
+    :unknownspktype,
     :unknownsystem, :unmatchendpts, :unnaturalrelation, :unorderedrefs, :unorderedtimes,
     :unrecognizedtype, :unresolvednames, :unresolvedtimes, :unsupportedbff,
     :unsupportedspec, :valueoutofrange, :variablenotfound, :varnametoolong, :vectortoobig,
     :vertexnotingrid,
     :workspacetoosmall, :wrongarchitecture, :wrongdatatype, :wrongsegment, :zeroboresight,
-    :zeroboundsextent, :zerolengthcolumn, :zeroposition, :zeroquaternion, :zerostep,
+    :zeroboundsextent, :zeroframeid, :zerolengthcolumn, :zeroposition, :zeroquaternion,
+    :zerostep,
     :zerovector, :zerovelocity,
 )
 
@@ -106,20 +111,25 @@ end
     SpiceError <: Exception
     SpiceError(kind::Symbol, msg) -> SpiceKindError
 
-The abstract type of the exceptions that the package throws for a call that fails.
+The abstract type of the exceptions that the package throws for a call that fails. Its
+subtypes are [`SpiceKindError`](@ref), which most failures throw, and
+[`SpkInsufficientDataError`](@ref), which a state query throws for missing SPK data.
 
 Every subtype has the fields `kind` and `msg`. `kind` is a short symbol that names the
 failure, such as `:spkinsuffdata`, `:kernelvarnotfound` or `:badarg`; test it to handle
 one failure. `msg` is the text for a person. The constructor returns a
-[`SpiceKindError`](@ref), which has these two fields only.
+`SpiceKindError`. In the docstrings, `SpiceError(:x)` means a `SpiceError` of either
+subtype whose `kind` is `:x`.
 
-A kind is the short error message that CSPICE signals in the same call, in lower case
-(`:kernelvarnotfound` for `SPICE(KERNELVARNOTFOUND)`). Two calls can therefore report
-the same failure with different kinds, as in CSPICE: a file that does not exist is
-`:nosuchfile` in `furnsh` and `:filenotfound` in `spkobj`. Test the kinds that the
-docstring of the call lists. Where CSPICE has no message, because the failure cannot
-occur in C or the call has no counterpart, the kind is a name of this package; the
-main one is `:badarg`, for an argument of the wrong size or type.
+A kind is the short error message of the CSPICE routine that the call ports, in lower
+case (`:kernelvarnotfound` for `SPICE(KERNELVARNOTFOUND)`). Sibling calls can therefore
+report one failure with different kinds, as in CSPICE: a file that does not exist is
+`:nosuchfile` in `furnsh` and `:filenotfound` in `spkobj`, a bad correction is
+`:invalidoption` in `spkezr` and `:spkinvalidoption` in `spkpos`, and an unknown body
+name is `:idcodenotfound` in `spkezr` and `:notranslation` in `bodvrd`. Test the kinds
+that the docstring of the call lists. Where CSPICE has no message, because the failure
+cannot occur in C or the call has no counterpart, the kind is a name of this package;
+the main one is `:badarg`, for an argument of the wrong size or type.
 
 A call of CSPICE that has a `found` flag returns `nothing` here when nothing is found,
 unless its docstring names another result (an error, `0`, an empty string or vector, or
@@ -162,7 +172,8 @@ SpiceError(kind::Symbol, msg::AbstractString) = SpiceKindError(kind, msg)
 
 The [`SpiceError`](@ref) of a state query that the loaded SPK data cannot answer.
 
-[`spkezr`](@ref) and every call that needs the position of a body throw it.
+[`spkezr`](@ref) and every call that reads the SPK segments of the loaded kernels throw
+it.
 
 | Field | Meaning |
 |---|---|
@@ -214,3 +225,12 @@ end
 Base.showerror(io::IO, e::SpiceError) = print(io, "SpiceError(", e.kind, "): ", e.msg)
 Base.showerror(io::IO, e::SpkInsufficientDataError) =
     print(io, "SpkInsufficientDataError(", e.kind, "): ", e.msg)
+
+# The check of a file name argument in the C interface of CSPICE: an empty string is
+# SPICE(EMPTYSTRING) in the wrapper, a blank one SPICE(BLANKFILENAME) in the routine.
+@inline function _chk_filename(who::AbstractString, path::AbstractString)
+    isempty(path) && throw(SpiceError(:emptystring, "$who: the file name is empty"))
+    isempty(strip(path)) &&
+        throw(SpiceError(:blankfilename, "$who: the file name is blank"))
+    return nothing
+end

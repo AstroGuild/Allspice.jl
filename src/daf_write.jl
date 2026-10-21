@@ -119,7 +119,8 @@ Create the DAF file `path` and open it for writing, as `dafonw` of SPICELIB.
 - `ftype`: the file type, for example `"SPK"`. Four characters are stored.
 - `nd`, `ni`: the numbers of doubles and of integers in an array summary.
 - `ifname`: the internal file name. 60 characters are stored.
-- `resv`: the number of reserved records, which hold the comments.
+- `resv`: the number of reserved records, which hold the comments, 1000 characters in
+  each.
 
 The file is on disk when the call returns: the file record, `resv` comment records with an
 empty comment area, one empty summary record and one name record, byte for byte as CSPICE
@@ -189,9 +190,12 @@ end
 
 Open the existing DAF file `path` for writing, as `dafopw_c`, to add arrays or comments.
 
-The file must have the native byte order. Make sure that no other handle writes the same
-file. Unload the file from every context before the call and load it again after the
-close: a kernel that is loaded does not see arrays that are added later.
+The file must have the native byte order. No other handle may write the same file: the
+call does not check this, where CSPICE refuses the second open, and arrays that two
+handles add at the same time overwrite each other. A handle that reads the file finds a
+change in a search that begins after the change. Unload the file from every context
+before the call and load it again after the close: a kernel that is loaded does not see
+arrays that are added later.
 
 Throws the `SpiceError` kinds of [`dafopr`](@ref), `:unsupportedbff` if the file has the
 other byte order, and `:fileopenfailed` if the file cannot be opened for update.
@@ -364,10 +368,12 @@ end
     dafws(handle, sum) -> Nothing
 
 Replace the packed summary of the current array of the search on `handle` with `sum`, as
-`dafws_c`. The two address components are replaced too; [`dafrs`](@ref) keeps them.
+`dafws_c`. The two address components are replaced too; [`dafrs`](@ref) keeps them. The
+change is on disk when the call returns.
 
 Throws `SpiceError(:nocurrentarray)` if the search has no current array, and
-`:dafinvalidparams` if `sum` has fewer doubles than a summary of the file.
+`:dafinvalidparams` if `sum` has fewer doubles than a summary of the file. A call that
+throws does not change the file.
 """
 function dafws(h::DAFHandle, sum::AbstractVector{<:Real})
     _daf_check_write(h, "dafws")
@@ -387,10 +393,12 @@ end
     dafrs(handle, sum) -> Nothing
 
 Replace the summary of the current array of the search on `handle` with `sum`, as
-`dafrs_c`, but keep its two address components (the last two integers).
+`dafrs_c`, but keep its two address components (the last two integers). The change is on
+disk when the call returns.
 
 Throws `SpiceError(:nocurrentarray)` if the search has no current array, and
-`:dafinvalidparams` if `sum` has fewer doubles than a summary of the file.
+`:dafinvalidparams` if `sum` has fewer doubles than a summary of the file. A call that
+throws does not change the file.
 """
 function dafrs(h::DAFHandle, sum::AbstractVector{<:Real})
     _daf_check_write(h, "dafrs")
@@ -407,9 +415,11 @@ end
     dafrn(handle, name) -> Nothing
 
 Replace the name of the current array of the search on `handle` with `name`, as
-`dafrn_c`. `name` is cut or padded to the name size of the file.
+`dafrn_c`. `name` is cut or padded to the name size of the file. The change is on disk
+when the call returns.
 
-Throws `SpiceError(:nocurrentarray)` if the search has no current array.
+Throws `SpiceError(:nocurrentarray)` if the search has no current array. A call that
+throws does not change the file.
 """
 function dafrn(h::DAFHandle, name::AbstractString)
     _daf_check_write(h, "dafrn")
@@ -491,15 +501,18 @@ end
 
 Append the comment lines `lines` to the comment area of the DAF file, as `dafac_c`.
 
-Trailing blanks of a line are not stored. If the reserved records do not have room,
-records are added and the data of the file move. Every address that was read from a
-summary before the call is then stale, so read the summaries again.
+A line can have any length; trailing blanks are not stored. If the reserved records do
+not have room, records are added and the data of the file move. Every address that was
+read from a summary before the call is then stale, and a search on the handle is at its
+end: begin a new search. The comments are on disk when the call returns.
 
 Throws `SpiceError`:
 - `:invalidargument` if `lines` is empty;
 - `:illegalcharacter` if a line has a character outside the printable ASCII codes 32 to
   126;
 - `:dafnewconflict` if an array is begun and not ended on the handle.
+
+A call that throws does not change the file.
 
 # Examples
 ```jldoctest
@@ -589,10 +602,12 @@ end
 Delete the comment area of the DAF file, as `dafdc_c`.
 
 All reserved records are removed and the data of the file move up. Every address that was
-read from a summary before the call is then stale. The file does not get shorter on disk,
+read from a summary before the call is then stale, and a search on the handle is at its
+end. The change is on disk when the call returns. The file does not get shorter on disk,
 as in CSPICE.
 
-Throws `SpiceError(:dafnewconflict)` if an array is begun and not ended on the handle.
+Throws `SpiceError(:dafnewconflict)` if an array is begun and not ended on the handle. A
+call that throws does not change the file.
 """
 function dafdc(h::DAFHandle)
     _daf_check_write(h, "dafdc")

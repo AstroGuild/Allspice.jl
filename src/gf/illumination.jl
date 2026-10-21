@@ -129,7 +129,7 @@ end
 
 """
     gfilum([ctx,] method, angtyp, target, illmn, fixref, abcorr, obsrvr, spoint, relate,
-           refval, adjust, step, cnfine; tol, bail=nothing, report=nothing,
+           refval, adjust, step, cnfine; tol=gfstol(ctx), bail=nothing, report=nothing,
            threads=false) -> Window
 
 Return the window of epochs, in seconds past J2000 TDB, on which an illumination angle

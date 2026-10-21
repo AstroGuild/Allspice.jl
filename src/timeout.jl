@@ -787,11 +787,10 @@ ignored:
 | `"ISOC"` | `1986-04-12T16:31:09.814`    |
 | `"ISOD"` | `1986-102T16:31:09.814`      |
 
-`prec` is the number of decimal places of the seconds, or of the Julian date. A
-value below 0 counts as 0 and a value above 14 counts as 14. As in CSPICE, the string
-has at most 13 decimal places of seconds and 7 of a Julian date. The fraction is
-rounded. The seconds are 60 inside a leap second. A year before 1000 has `A.D.` or
-`B.C.` in the formats `C` and `D`.
+`prec` is the number of decimal places of the seconds, or of the Julian date; a value below
+0 counts as 0, and the string has at most 13 decimal places of seconds and 7 of a Julian
+date, as in CSPICE. The fraction is rounded. The seconds are 60 inside a leap second. A year
+before 1000 has `A.D.` or `B.C.` in the formats `C` and `D`.
 
 Throws `SpiceError(:badformat)` if `format` is not one of the five,
 `SpiceError(:badtime)` if the year is before 1 A.D. in an ISO format, and
@@ -864,11 +863,11 @@ end
 """
     etcal([ctx,] et) -> String
 
-Return the calendar string of `et` (seconds past J2000 TDB) on a formal calendar, as
-`etcal_c`.
+Return the calendar string of `et` (seconds past J2000 TDB) on the formal calendar, on
+which every day has 86400 seconds, as `etcal_c`.
 
-The string has the form `1986 APR 12 16:31:09.814`. It is a TDB date: every day has
-86400 seconds, there are no leap seconds, and the call needs no kernel; `ctx` is
+The string has the form `1986 APR 12 16:31:09.814`. It is a TDB date without leap
+seconds, and the call needs no kernel; `ctx` is
 accepted and not used. Use
 [`et2utc`](@ref) or [`timout`](@ref) for UTC. A year before 1000 has `A.D.` after it,
 and a year before 1 is written with `B.C.`. The seconds are rounded to milliseconds,

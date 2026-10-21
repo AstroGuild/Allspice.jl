@@ -1,6 +1,6 @@
 # Contexts and threads
 
-All loaded kernels belong to a [`SpiceContext`](@ref). Every call exists in two forms: with a context as the first argument, and without one, in which case the call uses the context that [`default_context`](@ref) returns, which is one object for the whole process and is as safe to share as any other. A program that loads one set of kernels and uses one thread never needs to name a context.
+All loaded kernels belong to a [`SpiceContext`](@ref), and this page calls the loaded kernels of one context its kernel set. Every call that reads the loaded kernels, the kernel pool or a setting of a context exists in two forms: with a context as the first argument, and without one, in which case the call uses the context that [`default_context`](@ref) returns, which is one object for the whole process and is as safe to share as any other. The exceptions are the SPK and CK segment writers, [`spk14b`](@ref), [`spkpds`](@ref) and [`table_to_spk`](@ref), which take the context as the keyword `ctx`. A call that depends on its arguments alone, such as `vnorm`, has no context argument. A program that loads one set of kernels never needs to name a context.
 
 ```@setup ctx
 using Allspice
@@ -23,7 +23,7 @@ foreach(k -> furnsh(mission, k), kernels)
 
 ## Queries from many threads
 
-A query reads one immutable snapshot of the kernel set and takes no lock, so any number of threads can call `spkezr`, `pxform` and the other queries on the same context at once. The loop below computes a distance at 10,000 epochs on all the threads that Julia has.
+A query reads one snapshot of the kernel set, which is an immutable version that a later load or unload does not change, and takes no lock, so any number of threads can call `spkezr`, `pxform` and the other queries on the same context at once. The loop below computes a distance at 10,000 epochs on all the threads that Julia has.
 
 ```@example ctx
 et = str2et(mission, "2025 MAR 01 12:00:00 UTC")
@@ -42,4 +42,4 @@ A thread can also load or unload a kernel while other threads query. [`furnsh`](
 
 ## What must not be shared
 
-A file that is open for direct access (a handle from `dafopr`, `dasopr`, `spkopn` and similar calls) belongs to the code that opened it, and one handle must not be used from two threads at once. The same holds for a [`Window`](@ref) that a thread changes. A table of [Ephemeris and rotation tables](@ref) is immutable and can be shared.
+A file that is open for direct access (a handle from `dafopr`, `dasopr`, `spkopn` and similar calls) belongs to the code that opened it, and one handle must not be used from two threads at once. The same holds for a [`Window`](@ref) that a thread changes. An [`EphemerisTable`](@ref) or a [`RotationTable`](@ref) is immutable and can be shared.

@@ -255,6 +255,45 @@ sub_alloc_rec(ks) = @allocated srfrec(ks, 301, 0.1, 0.2)
             g_subpnt("NEAR POINT/ELLIPSOID", "MOON", et, "IAU_MOON", "LT", "EARTH")[1]) < SUB_TOL.point
     end
 
+    @testset "DSK method without any DSK file loaded" begin
+        # Regression: with no DSK file loaded, the calls with a DSK method threw
+        # :dskdatanotfound or :nodsksegments; CSPICE signals NOLOADEDDSKFILES when the
+        # search for DSK segments begins (`zzdskbss`). With a DSK file of another body
+        # loaded, the kinds already agree ("error conditions" above).
+        files = collect(Kernels.FULL_SET_FILES)
+        oracle_load(files)
+        nodsk = neo_context(files)
+        et, m, p = 1.0e8, "DSK/UNPRIORITIZED", [1737.0, 0.0, 0.0]
+        ray = ("MOON", et, "IAU_MOON", "NONE", "EARTH", "J2000", [-1.0, 0.0, 0.0])
+        cut = (et, "IAU_MOON", "NONE", "CENTER", "EARTH", [0.0, 0.0, 1.0], 0.5, 2, 1e-4, 1e-7, 10)
+        occ = ("MOON", m, "IAU_MOON", "SUN", "POINT", " ", "NONE", "EARTH")
+        gfo(c...) = try GFO.gfoclt(c...) catch e; e isa GFO.CError ? error("CSPICE error: $(e.kind)") : rethrow() end
+        calls = (
+            (() -> g_subpnt("INTERCEPT/" * m, ray[1:5]...), () -> subpnt(nodsk, "INTERCEPT/" * m, ray[1:5]...)),
+            (() -> g_subslr("NADIR/" * m, ray[1:5]...), () -> subslr(nodsk, "NADIR/" * m, ray[1:5]...)),
+            (() -> g_sincpt(m, ray...), () -> sincpt(nodsk, m, ray...)),
+            (() -> g_illumg(m, "MOON", "SUN", et, "IAU_MOON", "NONE", "EARTH", p),
+                () -> illumg(nodsk, m, "MOON", "SUN", et, "IAU_MOON", "NONE", "EARTH", p)),
+            (() -> g_illumf(m, "MOON", "SUN", et, "IAU_MOON", "NONE", "EARTH", p),
+                () -> illumf(nodsk, m, "MOON", "SUN", et, "IAU_MOON", "NONE", "EARTH", p)),
+            (() -> g_occult(occ..., et), () -> occult(nodsk, occ..., et)),
+            (() -> g_limbpt("TANGENT/" * m, "MOON", cut...), () -> limbpt(nodsk, "TANGENT/" * m, "MOON", cut...)),
+            (() -> g_termpt("UMBRAL/TANGENT/" * m, "SUN", "MOON", cut...),
+                () -> termpt(nodsk, "UMBRAL/TANGENT/" * m, "SUN", "MOON", cut...)),
+            (() -> c_latsrf(m, "MOON", et, "IAU_MOON", [[0.1, 0.2]]), () -> latsrf(nodsk, m, "MOON", et, "IAU_MOON", [[0.1, 0.2]])),
+            (() -> c_srfnrm(m, "MOON", et, "IAU_MOON", [p]), () -> srfnrm(nodsk, m, "MOON", et, "IAU_MOON", [p])),
+            (() -> gfo("ANY", occ..., 300.0, [et, et + 3600.0]),
+                () -> gfoclt(nodsk, "ANY", occ..., 300.0, Window([et, et + 3600.0]))),
+        )
+        try
+            for (c, n) in calls
+                @test same_kind(c, n; expect=:noloadeddskfiles)
+            end
+        finally
+            oracle_load(geo_kernels(; dsk=true))
+        end
+    end
+
     @testset "no allocation and inferred types on ellipsoids" begin
         ks = Allspice.kernelset(ctx)
         et = 2.5e8

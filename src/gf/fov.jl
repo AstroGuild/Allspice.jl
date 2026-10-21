@@ -265,7 +265,7 @@ end
 
 """
     gftfov([ctx,] inst, target, tshape, tframe, abcorr, obsrvr, step, cnfine;
-           tol, bail=nothing, report=nothing, threads=false) -> Window
+           tol=gfstol(ctx), bail=nothing, report=nothing, threads=false) -> Window
 
 Return the window of epochs, in seconds past J2000 TDB, on which the body `target` is in
 the field of view of the instrument `inst`, as seen from `obsrvr`, as `gftfov_c`.
@@ -330,7 +330,7 @@ gftfov(inst::NameOrID, target::NameOrID, tshape::AbstractString, tframe::NameOrI
 
 """
     gfrfov([ctx,] inst, raydir, rframe, abcorr, obsrvr, step, cnfine;
-           tol, bail=nothing, report=nothing, threads=false) -> Window
+           tol=gfstol(ctx), bail=nothing, report=nothing, threads=false) -> Window
 
 Return the window of epochs, in seconds past J2000 TDB, on which the ray from `obsrvr`
 along `raydir` is in the field of view of the instrument `inst`, as `gfrfov_c`.

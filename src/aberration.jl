@@ -19,7 +19,7 @@ const _AB_X = 0x08      # transmission (the default is reception)
     Aberration(abcorr::AbstractString)
     Aberration(; lt=false, converged=false, stellar=false, transmit=false)
 
-An aberration correction as a plain-bits value. Every call that takes a correction
+An aberration correction as an `isbits` value. Every call that takes a correction
 string also takes an `Aberration`; the string is then not parsed at each call.
 
 | String             | Correction                                                          |
@@ -599,7 +599,7 @@ one-way light time, as `spkez_c`.
 
 This is [`spkezr`](@ref), which takes names or IDs, restricted to NAIF ID codes for the
 bodies, as in CSPICE; the other arguments, the result and the errors are those of
-`spkezr`. `state` is an `SVector{6}` in km and km/s, and `lt` is in seconds.
+`spkezr`.
 
 See also [`spkezp`](@ref), [`spkgeo`](@ref).
 """
@@ -618,7 +618,7 @@ the one-way light time, as `spkezp_c`.
 
 This is [`spkpos`](@ref), which takes names or IDs, restricted to NAIF ID codes for the
 bodies, as in CSPICE; the other arguments, the result and the errors are those of
-`spkpos`. `pos` is an `SVector{3}` in km and `lt` is in seconds.
+`spkpos`.
 
 See also [`spkez`](@ref), [`spkgps`](@ref).
 """
@@ -640,13 +640,15 @@ Element `k + 1` of the result is the derivative of order `k`, in km/s^k. `et` is
 seconds past J2000 TDB. `targ`, `obs` and `ref` are names or integer IDs. The form
 without `abcorr` is geometric, as is `abcorr = "NONE"`; `abcorr` is a string or an
 [`Aberration`](@ref), as for [`spkezr`](@ref). With ForwardDiff loaded, `et` can be a
-dual number. The call does not allocate when the bodies and the frame are integer IDs
-and `abcorr` is absent or an `Aberration`.
+dual number. The call does not allocate under the condition that [`spkezr`](@ref)
+states.
 
 Order 0 is the position of [`spkezr`](@ref) and of [`spkpos`](@ref), to rounding.
-Every higher order is the exact derivative of that position as a function of `et`. The
-result therefore agrees with a finite difference and with automatic differentiation of
-`spkpos`.
+Every higher order is the exact derivative of that position as a function of `et`, and
+agrees with a finite difference of `spkpos`. The exception is an SPK segment that stores
+the velocity apart from the position (for example types 3 and 9): there order 1 is the
+stored velocity and the higher orders are its derivatives. A dual-number epoch gives
+the same derivatives as this call.
 
 Order 1 is the velocity of `spkezr` for a geometric state. With an `LT` correction it
 differs from that velocity, by about 1e-8 relative for the Moon seen from the Earth,
@@ -714,8 +716,7 @@ end
 Return the state of body `targ` relative to an observer with a given barycentric
 state, corrected for light time, with the light time and its rate, as `spkltc_c`.
 
-- `et`: epoch of the observer in seconds past J2000 TDB; the same in
-  [`spkaps`](@ref), [`spkacs`](@ref) and [`spkapo`](@ref).
+- `et`: epoch of the observer in seconds past J2000 TDB.
 - `stobs`: state of the observer relative to the solar system barycenter at `et`, in
   `ref`; 6 elements, km and km/s.
 - `ref`: an inertial frame, by name or ID.

@@ -1,5 +1,11 @@
 # Time
 
+A call that needs the leap-second kernel and finds none throws a kind that is the short
+message of the CSPICE routine that the call ports: `:kernelvarnotfound` from
+[`deltet`](@ref), `:noleapseconds` from [`str2et`](@ref) and [`utc2et`](@ref), and
+`:missingtimeinfo` from [`et2utc`](@ref), [`timout`](@ref), [`unitim`](@ref) and the
+spacecraft clock calls such as [`sct2e`](@ref).
+
 ## Conversion
 
 ```@docs

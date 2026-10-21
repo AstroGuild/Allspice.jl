@@ -221,14 +221,15 @@ J2000 TDB), as `subpnt_c` of CSPICE.
 | `"NADIR/DSK/UNPRIORITIZED"` | where the ray from the observer toward the nearest point of the ellipsoid meets the DSK surface |
 | `"INTERCEPT/DSK/UNPRIORITIZED"` | where the ray from the observer toward the target center meets the DSK surface |
 
-Case is not significant. A DSK method can end with `"/SURFACES = <list>"`, a list
-of surface names or IDs. The CSPICE forms `"Near point: ellipsoid"` and
-`"Intercept: ellipsoid"` are also valid.
+Case is not significant. `UNPRIORITIZED` means that all loaded DSK segments of the
+target are used, whatever their load order. A DSK method can end with
+`"/SURFACES = <list>"`, a list of surface names or IDs. The older forms
+`"Near point: ellipsoid"` and `"Intercept: ellipsoid"` are also valid.
 
 `abcorr` is a correction string of [`spkezr`](@ref) or an [`Aberration`](@ref).
 Bodies and frames are names or integer IDs. With an ellipsoid method, `et` can be a
 `ForwardDiff.Dual`, and the call does not allocate when the bodies and the frame are
-integer IDs. With a DSK method, a `ctx` gives the tolerances set by [`dskstl`](@ref).
+integer IDs. A DSK method uses the tolerances that [`dskstl`](@ref) set on the context.
 
 Throws `SpiceError` with the kind
 - `:invalidoption` if `abcorr` is not a valid correction;
@@ -240,7 +241,9 @@ Throws `SpiceError` with the kind
 - `:noseparation` if the observer is at the target center;
 - `:subpointnotfound` if the ray misses the DSK surface, `:degeneratecase` if it
   misses the ellipsoid;
-- the kinds of [`srfrec`](@ref) if the radii of `target` are missing or not valid.
+- the kinds of [`srfrec`](@ref) if the radii of `target` are missing or not valid,
+  `:noloadeddskfiles` if no DSK file is loaded and `:dskdatanotfound` if no DSK data are
+  loaded for it (DSK method).
 
 Also throws the errors of [`spkpos`](@ref).
 
@@ -271,8 +274,8 @@ TDB), as `subslr_c` of CSPICE.
 
 The methods are those of [`subpnt`](@ref), with the Sun in place of the observer in the
 definition of the point. With a correction, the Sun is taken where it appears from the
-point at `trgepc`. The other arguments and the notes on `et`, allocation and `ctx` are
-those of [`subpnt`](@ref).
+point at `trgepc`. The other arguments and the notes on `et`, allocation and the
+[`dskstl`](@ref) tolerances are those of [`subpnt`](@ref).
 
 Throws `SpiceError(:notsupported)` if `abcorr` is a transmission correction, and
 `SpiceError(:invalidtarget)` if `target` is the Sun. The other kinds are those of

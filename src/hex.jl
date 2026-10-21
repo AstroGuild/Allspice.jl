@@ -138,9 +138,10 @@ with an optional sign. Letter case is ignored, and blanks before and after the s
 and after the caret are skipped. The digits are read as a fraction: `"2A^3"` is
 (2/16 + 10/16²)·16³ = 672.
 
-Throws `SpiceError(:emptystring)` if `str` is empty, and `SpiceError(:badnumber)` if
-CSPICE sets its error flag; the message is then the one that `hx2dp_c` returns in
-`errmsg`.
+Throws `SpiceError(:emptystring)` if `str` is empty. Throws `SpiceError(:badnumber)`,
+with the message of `hx2dp_c`, for a blank string, a character out of place, more than
+31 mantissa digits, a missing caret or exponent, an exponent outside the 32-bit
+integers, or a result too large in magnitude for a double.
 
 # Examples
 ```jldoctest

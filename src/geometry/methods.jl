@@ -279,8 +279,10 @@ end
         _GEO_NOSURF, _DSK_DEFAULT_TOLS)
 end
 
-"`zzdsksph` for the body `trgcde`; `SpiceError(:dskdatanotfound)` without DSK data."
+"`zzdsksph` for the body `trgcde`; `SpiceError(:noloadeddskfiles)` without DSK files,
+`SpiceError(:dskdatanotfound)` without DSK data for the body."
 function _geo_dsksph(ks::KernelSet, trgcde::Int32, srflst)
+    _dsk_check_files(ks)
     segs = get(ks.dsk, trgcde, nothing)
     segs === nothing && _dsk_no_segments(trgcde, srflst)
     return _dsk_sph(ks, segs, trgcde, srflst)

@@ -72,7 +72,8 @@ Return the value at `x` of the Chebyshev expansion with the coefficients `cp`, a
 
 The expansion is `p(x) = sum(cp[k] * T_{k-1}(s))` with `s = (x - x2s[1]) / x2s[2]`:
 `x2s` holds the midpoint and the radius of the interval of the expansion. The degree
-is `length(cp) - 1`. A value of `x` outside the interval is not an error.
+is `length(cp) - 1`. A value of `x` outside the interval is not an error. As in CSPICE,
+`x2s[2]` is not checked: 0 gives NaN, and a negative radius is used as given.
 
 Throws `SpiceError(:invaliddegree)` if `cp` is empty. Throws `SpiceError(:badarg)` if
 `x2s` does not have 2 elements.
@@ -119,10 +120,11 @@ end
 Return the value and the derivatives of orders 1 to `nderiv` with respect to `x` of
 the Chebyshev expansion of [`chbval`](@ref), as `chbder_c` of CSPICE.
 
-Element `k + 1` of the result is the derivative of order `k`. The work array of CSPICE
-is allocated by the call.
+Element `k + 1` of the result is the derivative of order `k`. A negative `nderiv`
+gives an empty result, as for [`polyds`](@ref); `chbder_c` signals no error then.
 
-Throws `SpiceError(:badarg)` if `nderiv < 0`, and as [`chbval`](@ref).
+Throws `SpiceError(:invaliddegree)` if `cp` is empty, and `SpiceError(:badarg)` if `x2s`
+does not have 2 elements.
 
 # Examples
 ```jldoctest
@@ -137,10 +139,10 @@ julia> chbder([1, 2, 3], [0, 1], 0.5, 3)
 See also [`chbint`](@ref), [`polyds`](@ref).
 """
 function chbder(cp::AbstractVector, x2s::AbstractVector, x::Real, nderiv::Integer)
-    nderiv >= 0 || throw(SpiceError(:badarg, "chbder: the derivative order must be >= 0; was $nderiv"))
     s, rad = _m_cheb_s(cp, x2s, x)
     T = typeof(s)
     nd = Int(nderiv)
+    nd < 0 && return T[]
     # The recurrence of `_clenshaw_step` for an order that is known only at run time:
     # column m+1 of `b` holds the Clenshaw terms b_k, b_{k+1}, b_{k+2} of derivative m.
     b = zeros(T, 3, nd + 1)
@@ -180,8 +182,7 @@ end
 Return the value at `x` of the Chebyshev expansion of [`chbval`](@ref) and its integral
 from the midpoint `x2s[1]` to `x`, as `chbigr_c` of CSPICE.
 
-The degree of CSPICE is `length(cp) - 1` here. The integral is in the units of the
-expansion times the units of `x`.
+The integral is in the units of the expansion times the units of `x`.
 
 Throws `SpiceError(:invaliddegree)` if `cp` is empty, `SpiceError(:invalidradius)` if
 `x2s[2] <= 0`, and `SpiceError(:badarg)` if `x2s` does not have 2 elements.
@@ -229,8 +230,7 @@ end
     lgrint(xvals, yvals, x) -> p
 
 Return the value at `x` of the polynomial of degree `n - 1` through the `n` points
-`(xvals[i], yvals[i])`, as `lgrint_c` of CSPICE (Lagrange interpolation by the Neville
-recurrence).
+`(xvals[i], yvals[i])`, as `lgrint_c` of CSPICE (Lagrange interpolation).
 
 The abscissas need not be ordered. A static `yvals` gives a call without allocation.
 
@@ -284,8 +284,6 @@ end
 Return the value at `x` of the polynomial through the points
 `(first + (i - 1) * step, yvals[i])`, as `lgresp_c` of CSPICE (Lagrange interpolation on
 equally spaced abscissas).
-
-The abscissas are scaled to `1, 2, 3, ...` before the interpolation, as in CSPICE.
 
 Throws `SpiceError(:invalidsize)` if `yvals` is empty and
 `SpiceError(:invalidstepsize)` if `step == 0`.
@@ -472,24 +470,24 @@ function rquad(a::Real, b::Real, c::Real)
 end
 
 """
-    diags2(symmat) -> (diag, rotate)
+    diags2(symmat) -> (d, r)
 
-Return the diagonal matrix `diag` and the rotation `rotate` that diagonalize the
-symmetric 2 by 2 matrix `symmat`, so that `diag = rotate' * symmat * rotate`, as
-`diags2_c` of CSPICE.
+Return the diagonal matrix `d` and the rotation `r` that diagonalize the symmetric 2 by
+2 matrix `symmat`, so that `d = r' * symmat * r`, as `diags2_c` of CSPICE.
 
-Only the upper triangle of `symmat` is read. The columns of `rotate` are unit
-eigenvectors, and `diag[i, i]` is the eigenvalue of column `i`. Of the rotations that
-diagonalize `symmat`, `rotate` has an angle of the smallest magnitude, so a diagonal
-`symmat` gives the identity.
+Only the upper triangle of `symmat` is read. The columns of `r` are unit eigenvectors,
+and `d[i, i]` is the eigenvalue of column `i`. Of the rotations that diagonalize
+`symmat`, `r` has an angle of the smallest magnitude, so a diagonal `symmat` gives the
+identity. If `symmat[1, 1] == symmat[2, 2]`, the angle is ±pi/4 and `d[2, 2]` is the
+larger eigenvalue.
 
 Throws `SpiceError(:badarg)` if `symmat` is not 2 by 2.
 
 # Examples
 ```jldoctest
-julia> diag, rotate = diags2([2 1; 1 2]);
+julia> d, r = diags2([2 1; 1 2]);
 
-julia> round.(diag; digits=12) == [1 0; 0 3]
+julia> round.(d; digits=12) == [1 0; 0 3]
 true
 ```
 

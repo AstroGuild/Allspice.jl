@@ -1,9 +1,9 @@
 # Group 19: frame information, the lists of frames, body constants, body-fixed rotations,
 # binary PCK coverage, local solar time and L_s against CSPICE.
 #
-# Conventions for an absent item: `frinfo`, `cidfrm`, `cnmfrm`, `ccifrm` and `tkfram`
-# return `nothing` where CSPICE returns `found = false`. `tkfram_` has no wrapper in
-# SPICE.jl and is called through `ccall`.
+# Conventions for an absent item: `frinfo`, `cidfrm`, `cnmfrm` and `ccifrm` return
+# `nothing` where CSPICE returns `found = false`; `tkfram` throws where `tkfram_c` signals
+# an error. `tkfram_` has no wrapper in SPICE.jl and is called through `ccall`.
 
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
@@ -16,20 +16,21 @@ isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 isdefined(@__MODULE__, :CKFix) || include("ckfixtures.jl")
 isdefined(@__MODULE__, :DynFix) || include("dynfixtures.jl")
 
-"`tkfram_` of CSPICE: `(rot, relative frame ID)`, or `nothing` if not found or on an error."
+"`tkfram_` of CSPICE: `(rot, relative frame ID)`, the error kind, or `nothing` if not found."
 function oracle_tkfram(id::Integer)
     rot = zeros(9)
     frame = Ref{Cint}(0)
     found = Ref{Cint}(0)
     ccall((:tkfram_, SPICE.libcspice), Cint, (Ref{Cint}, Ptr{Float64}, Ref{Cint}, Ref{Cint}),
         Cint(id), rot, frame, found)
-    if ccall((:failed_c, SPICE.libcspice), Cint, ()) != 0
-        ccall((:reset_c, SPICE.libcspice), Cvoid, ())
-        return nothing
-    end
+    kind = cspice_kind()
+    kind === :none || return kind
     found[] == 0 && return nothing
     return SMatrix{3,3,Float64,9}(rot), Int(frame[])
 end
+
+"`tkfram(ctx, id)`, or the kind of the `SpiceError` that it throws."
+neo_tkfram(ctx, id) = try tkfram(ctx, id) catch e; e isa Allspice.SpiceError ? e.kind : rethrow() end
 
 group("19. frame information, body constants, local solar time", Kernels.FULL_SET_FILES...) do
     rng = MersenneTwister(SEED + 19)
@@ -125,9 +126,8 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
             nfound = 0
             for id in (-77900, 31000, 31001, 31002, 31003, 31006, 31007, 1850001, 10013, 5, -5)
                 want = oracle_tkfram(id)
-                got = tkfram(ctx, id)
-                @test (got === nothing) == (want === nothing)
-                (got === nothing || want === nothing) && continue
+                got = neo_tkfram(ctx, id)
+                want isa Tuple || (@test got === want; continue)
                 nfound += 1
                 @test got[2] == want[2]
                 worst = max(worst, maximum(abs.(got[1] .- want[1])))
@@ -136,6 +136,51 @@ group("19. frame information, body constants, local solar time", Kernels.FULL_SE
             @test worst <= 4 * eps()
             measured(@sprintf("  %-58s n=%-7d max=%.3e", "tkfram: element of the matrix",
                 nfound, worst))
+        end
+    end
+
+    @testset "tkfram and pxform: a TK frame definition that is not valid" begin
+        # Regression: tkfram returned `nothing`, and pxform threw :framedatanotfound, for
+        # an incomplete or inconsistent TK frame definition; tkfram_c and pxform_c signal
+        # the error of tkfram_ for each. One case for each check of tkfram_.
+        head = ["FRAME_TKA = -1000", "FRAME_-1000_NAME = 'TKA'", "FRAME_-1000_CLASS = 4",
+            "FRAME_-1000_CLASS_ID = -1000", "FRAME_-1000_CENTER = 399"]
+        rel(name) = "TKFRAME_-1000_RELATIVE = '$name'"
+        spec(s) = "TKFRAME_-1000_SPEC = '$s'"
+        angles(units, axes) = [rel("J2000"); spec("ANGLES"); "TKFRAME_-1000_ANGLES = (1, 2, 3)";
+            "TKFRAME_-1000_AXES = $axes"; "TKFRAME_-1000_UNITS = '$units'"]
+        unit = "TKFRAME_-1000_MATRIX = (1, 0, 0, 0, 1, 0, 0, 0, 1)"
+        cases = (
+            (-1000, head),                                                  # variablenotfound
+            (-1000, [head; rel("NO_SUCH_FRAME"); spec("MATRIX"); unit]),    # badframespec
+            (-1000, [head; rel("TKA"); spec("MATRIX"); unit]),              # badframespec2
+            (-1000, [head; rel("J2000"); "TKFRAME_TKA_RELATIVE = 'J2000'"; spec("MATRIX"); unit]),
+            (-1000, [head; rel("J2000"); spec("EULER")]),                   # unknownframespec
+            (-1000, [head; rel("J2000"); spec("MATRIX"); "TKFRAME_-1000_MATRIX = (1, 0, 0)"]),
+            (-1000, [head; angles("FURLONGS", "(3, 1, 3)")]),               # unitsnotrec
+            (-1000, [head; angles("DEGREES", "(3, 4, 3)")]),                # badaxisnumbers
+            (-2001, ["FRAME_TKB = -1001", "FRAME_-1001_NAME = 'TKB'", "FRAME_-1001_CLASS = 4",
+                "FRAME_-1001_CLASS_ID = -2001", "FRAME_-1001_CENTER = 399",
+                "TKFRAME_-2001_RELATIVE = 'J2000'", "TKFRAME_-2001_SPEC = 'QUATERNION'",
+                "TKFRAME_-2001_Q = (1, 0, 0, 0)"]),                         # incompleteframe
+        )
+        r = zeros(9)
+        try
+            for (id, lines) in cases
+                SPICE.kclear()
+                SPICE.lmpool(lines)
+                tctx = SpiceContext()
+                lmpool(tctx, lines)
+                want = oracle_tkfram(id)
+                @test want isa Symbol && neo_tkfram(tctx, id) === want
+                name = id == -1000 ? "TKA" : "TKB"
+                ccall((:pxform_c, SPICE.libcspice), Cvoid, (Cstring, Cstring, Cdouble,
+                    Ptr{Float64}), name, "J2000", 0.0, r)
+                @test throws_kind(() -> pxform(tctx, name, "J2000", 0.0), cspice_kind())
+            end
+            @test neo_tkfram(SpiceContext(), 0) === oracle_tkfram(0) === :zeroframeid
+        finally
+            oracle_load(set)
         end
     end
 

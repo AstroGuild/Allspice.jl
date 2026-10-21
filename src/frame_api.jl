@@ -10,16 +10,19 @@ Return the matrix that rotates a position vector from frame `from` to frame `to`
 For the matrix `R`, `R * v` gives in `to` the components of a vector `v` given in
 `from`. `from` and `to` are frame names or frame IDs. `et` is in seconds past J2000
 TDB. The frame classes of CSPICE are supported: inertial, PCK, CK, fixed offset,
-dynamic and switch frames. Two inertial frames need no kernel. With ForwardDiff
-loaded, `et` can be a dual number.
+dynamic and switch frames (a switch frame takes one of several base frames by epoch).
+Two inertial frames need no kernel. With ForwardDiff loaded, `et` can be a dual number.
 
 Throws `SpiceError`:
 - `:unknownframe` if a frame name is not known;
 - `:badarg` if `et` is not finite;
 - `:framedatanotfound` if the definition or the constants of a frame are not loaded
-  (the `BODY<id>_PM` variables of a PCK frame, the matrix of a fixed-offset frame);
+  (the `BODY<id>_PM` variables of a PCK frame);
+- the error kinds of [`tkfram`](@ref) for a fixed-offset frame whose definition is
+  incomplete or not valid;
 - `:noframeconnect` if a CK frame has no pointing or no clock kernel at `et`, or a
-  switch frame has no base there.
+  switch frame has no base there;
+- `:valueoutofrange` if `et` is outside the range of the clock of a CK frame.
 
 # Examples
 ```jldoctest
@@ -36,6 +39,8 @@ With a planetary constants kernel loaded:
 
 ```julia
 furnsh("pck00011.tpc")
+et = 0.0                                # seconds past J2000 TDB
+r_inertial = [7000.0, 0.0, 0.0]         # km, in J2000
 R = pxform("J2000", "IAU_EARTH", et)
 r_fixed = R * r_inertial
 ```
@@ -93,13 +98,14 @@ arguments `from`, `to` and `et` are those of [`pxform`](@ref). Order 0 is the ma
 `pxform`, and every higher order is the exact derivative of that matrix as a function
 of `et`.
 
-Order 1 is the derivative block of [`sxform`](@ref) for inertial, PCK and fixed-offset
-frames. It can differ for these frames, where `sxform` follows the rates of CSPICE:
+Order 1 is the derivative block of [`sxform`](@ref), except for the following frames,
+where it can differ because `sxform` follows the rates of CSPICE:
 
 - CK frames (class 3);
-- dynamic frames (class 5), also a frozen frame and one with
-  `ROTATION_STATE = 'INERTIAL'`;
-- switch frames (class 6) whose base is one of the above.
+- dynamic frames (class 5) of the true equator and equinox of date, two-vector frames,
+  and frames defined with `ROTATION_STATE = 'INERTIAL'`;
+- switch frames (class 6), which take a base frame by epoch, where the base is one of
+  the above.
 
 [Exact derivatives and the rates of CSPICE](@ref) says what is differentiated for each
 class.
@@ -137,9 +143,9 @@ time derivative in 1/s. `from` and `to` are frame names or frame IDs; `et` is in
 seconds past J2000 TDB.
 
 `dR` is the rate that CSPICE gives. For a CK frame it comes from the angular velocity
-of the CK segment, and only segments with angular velocity are used. For the frame
-classes that [`pxder`](@ref) lists, `dR` is not the exact derivative of `R`; use
-order 1 of `pxder` for that.
+of the CK segment, and only segments with angular velocity are used. For CK frames,
+some dynamic frames and switch frames, which [`pxder`](@ref) lists, `dR` can differ
+from the exact derivative of `R`; order 1 of `pxder` gives that.
 
 Throws the errors of [`pxform`](@ref).
 
@@ -149,6 +155,7 @@ furnsh("naif0012.tls")
 furnsh("pck00011.tpc")
 et = str2et("2025-03-01T12:00:00")
 X = sxform("J2000", "IAU_MARS", et)
+state_inertial = [3500.0, 0.0, 0.0, 0.0, 2.0, 0.0]     # km, km/s, in J2000
 state_fixed = X * state_inertial       # km, km/s
 ```
 

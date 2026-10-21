@@ -124,7 +124,8 @@ end
 
 """
     gfoclt([ctx,] occtyp, front, fshape, fframe, back, bshape, bframe, abcorr, obsrvr,
-           step, cnfine; tol, bail=nothing, report=nothing, threads=false) -> Window
+           step, cnfine; tol=gfstol(ctx), bail=nothing, report=nothing,
+           threads=false) -> Window
 
 Return the window of epochs, in seconds past J2000 TDB, on which the body `front`
 occults the body `back` as seen from `obsrvr`, as `gfoclt_c`. A transit of `front`
@@ -135,7 +136,7 @@ The result is a new `Window` that is a subset of the confinement window `cnfine`
 
 # Arguments
 - `occtyp`: `"FULL"` (the back target is hidden), `"ANNULAR"` (the front target lies
-  wholly within the disc of the back target), `"PARTIAL"` (the discs overlap in part) or
+  wholly within the disk of the back target), `"PARTIAL"` (the disks overlap in part) or
   `"ANY"` (one of the three), in any case. With a point target only `"ANY"` is valid.
 - `front`, `back`, `obsrvr`: names or IDs of three different bodies.
 - `fshape`, `bshape`: `"ELLIPSOID"`, `"POINT"` or
@@ -151,8 +152,11 @@ The result is a new `Window` that is a subset of the confinement window `cnfine`
   gap between two of them. Each change of state is then bisected until the bracket is
   not longer than `tol`.
 
-The keywords are those of [`gfdist`](@ref). With a DSK shape, a `ctx` gives the
-tolerances set by [`dskstl`](@ref).
+The keywords are those of [`gfdist`](@ref). A DSK shape uses the tolerances that
+[`dskstl`](@ref) set on the context. An observer on the surface of a target, such as a
+ground station under `front = "EARTH"`, gives `:notdisjoint` or a wrong window; for the
+rising and setting of a body, search the elevation of [`azlcpo`](@ref) with
+[`gfuds`](@ref).
 
 Throws `SpiceError(:invalidstep)` if `step <= 0`, `SpiceError(:invalidtolerance)` if
 `tol <= 0`, and
@@ -170,11 +174,11 @@ Throws `SpiceError(:invalidstep)` if `step <= 0`, `SpiceError(:invalidtolerance)
   target or the targets overlap.
 
 Also throws the kinds of [`srfrec`](@ref) if the radii of an ellipsoid are missing or
-not valid, and the kinds of [`occult`](@ref) for a DSK shape string. The errors of
+not valid, and the kinds of [`occult`](@ref) for a DSK shape. The errors of
 [`spkpos`](@ref) and [`sincpt`](@ref) come from the epochs that the search samples.
 
 # Examples
-The example needs a leapseconds kernel, an SPK, and a PCK with the radii and the
+The example needs a leap seconds kernel, an SPK, and a PCK with the radii and the
 orientation of the Sun and the Moon, loaded with [`furnsh`](@ref).
 ```julia
 cnfine = Window([str2et("2025 JAN 01"), str2et("2026 JAN 01")])

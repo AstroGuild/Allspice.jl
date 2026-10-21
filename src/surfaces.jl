@@ -137,7 +137,7 @@ body name or a string that holds a body ID; the result is that of [`srfc2s`](@re
 
 A body that is not known gives the code as a decimal string and `isname = false`.
 
-Throws `SpiceError(:emptystring)` if `bodstr` is empty, and the kinds of
+Throws `SpiceError(:emptystring)` if `bodstr` is empty, and the error kinds of
 [`srfc2s`](@ref).
 """
 function srfcss(ks::KernelSet, code::Integer, bodstr::AbstractString)
@@ -157,7 +157,7 @@ A name that the kernel pool assigns has priority; case and extra blanks do not m
 Otherwise the result is the integer that the string holds. `nothing` replaces the `found`
 flag of CSPICE.
 
-Throws `SpiceError(:emptystring)` if `srfstr` is empty, and the kinds of
+Throws `SpiceError(:emptystring)` if `srfstr` is empty, and the error kinds of
 [`srfc2s`](@ref).
 """
 function srfscc(ks::KernelSet, srfstr::AbstractString, bodyid::Integer)
@@ -174,8 +174,8 @@ a body name or a string that holds a body ID; the result is that of [`srfscc`](@
 
 A body that is not known gives `nothing`.
 
-Throws `SpiceError(:emptystring)` if `srfstr` or `bodstr` is empty, and the kinds of
-[`srfc2s`](@ref).
+Throws `SpiceError(:emptystring)` if `srfstr` or `bodstr` is empty, and the error
+kinds of [`srfc2s`](@ref).
 """
 function srfs2c(ks::KernelSet, srfstr::AbstractString, bodstr::AbstractString)
     _dsk_nonempty("srfs2c", "srfstr", srfstr)
@@ -434,7 +434,7 @@ n pairs. `target` and `fixref` are names or IDs; the frame must be centered on t
   given direction and goes to the center; the point is its first intercept. The list
   names surfaces by name or by ID; without it every surface of the body is used.
 
-A DSK method uses the DSK tolerances of the context ([`dskstl`](@ref)).
+A DSK method uses the tolerances that [`dskstl`](@ref) set on the context.
 
 Throws `SpiceError`:
 - `:emptystring` if `method`, `target` or `fixref` is an empty string;
@@ -445,7 +445,8 @@ Throws `SpiceError`:
   have `UNPRIORITIZED`, `:invalidmethod` if `method` has a sub-observer point type;
 - `:kernelvarnotfound` if the radii are not loaded, `:badaxislength` if they are not three
   positive values (ellipsoid);
-- `:dskdatanotfound` if no DSK segment of the target with a listed surface is loaded,
+- `:noloadeddskfiles` if no DSK file is loaded, `:dskdatanotfound` if no DSK segment of
+  the target with a listed surface is loaded,
   `:pointnotfound` if a ray meets no surface, `:shapenotsupported` if an intercept is on
   the far side of the center (DSK).
 
@@ -480,6 +481,7 @@ function _dsk_latsrf(ks::KernelSet, tols::DSKTolerances, method::AbstractString,
         end
         return out
     end
+    _dsk_check_files(ks)
     segs = get(ks.dsk, trgcde, nothing)
     segs === nothing && _dsk_no_segments(trgcde, srflst)
     r = _dsk_sph(ks, segs, trgcde, srflst)[2] * 2
@@ -505,16 +507,17 @@ body-fixed frame `fixref`, as `srfnrm_c`.
 
 `srfpts` holds the points (km, in the frame `fixref`): a 3 x n matrix, or a vector of n
 3-vectors. `method`, `target`, `et` and `fixref` are as for [`latsrf`](@ref). For a DSK
-method the normal is that of the plate on which the point lies.
+method the normal is that of the plate (the triangle of the DSK surface) on which the
+point lies.
 
 Throws `SpiceError`:
 - the kinds of [`latsrf`](@ref) for `method`, `target` and `fixref`;
 - `:kernelvarnotfound` if the radii are not loaded, `:badaxislength` if they are not three
-  positive values, `:pointnotonsurface` if a
-  point is not on the ellipsoid within the point-membership margin (item `PTMEMM` of
-  [`dskgtl`](@ref)) (ellipsoid);
-- `:nodsksegments` if no DSK segment of the target is loaded, `:pointnotinsegment` if no
-  segment holds a point, `:pointoffsurface` if a point is not on a plate (DSK).
+  positive values, `:pointnotonsurface` if a point is not on the ellipsoid within the
+  point-membership margin `PTMEMM`, 1e-7 unless [`dskstl`](@ref) set another (ellipsoid);
+- `:noloadeddskfiles` if no DSK file is loaded, `:nodsksegments` if no DSK segment of
+  the target is loaded, `:pointnotinsegment` if no segment holds a point,
+  `:pointoffsurface` if a point is not on a plate (DSK).
 """
 function srfnrm(ks::KernelSet, method::AbstractString, target::NameOrID, et::Real,
         fixref::NameOrID, srfpts)

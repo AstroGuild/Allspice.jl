@@ -76,8 +76,9 @@ clock value `sclkdp`, as `ckgp_c`.
 
 `cmat` is an `SMatrix{3,3}` that rotates a vector from `ref` to the instrument frame.
 `clkout` is the clock value, in ticks, of the pointing that was used. If no loaded CK
-segment gives a pointing, `found` is `false`, `cmat` is zero and `clkout` is 0.
-Segments with and without angular velocity are searched in priority order.
+segment gives a pointing, `found` is `false`, `cmat` is zero and `clkout` is 0. The
+result keeps the `found` flag of CSPICE, where SPICE.jl returns `nothing`. Segments with
+and without angular velocity are searched in priority order.
 
 If `ref` is not the frame of the segment, the matrix is changed with the rotation
 between the two frames at the epoch of `clkout`. This needs the SCLK kernel of the
@@ -85,12 +86,14 @@ spacecraft, unless both frames are inertial.
 
 Throws `SpiceError(:valueoutofrange)` if `tol < 0`. Throws
 `SpiceError(:unknownframe)` if `ref` is not a known frame name; `ref` is read only
-when a pointing is found. The change of frame throws the kinds of [`sct2e`](@ref) if
-the SCLK kernel is not loaded, and the kinds of [`pxform`](@ref).
+when a pointing is found. The change of frame throws the kinds of [`pxform`](@ref),
+and the kinds of [`sct2e`](@ref) if the SCLK kernel is not loaded: [`ckfrot`](@ref)
+returns `nothing` in this case, and `ckgp` throws, both as in CSPICE.
 
 # Examples
 ```julia
 furnsh("naif0012.tls"); furnsh("mission.tsc"); furnsh("mission.bc")
+et = str2et("2026-10-16T12:00:00")
 sclkdp = sce2c(-77, et)
 cmat, clkout, found = ckgp(-77000, sclkdp, 0.0, "J2000")
 found && (boresight_j2000 = cmat' * [0.0, 0.0, 1.0])
@@ -150,7 +153,8 @@ end
     ckfrot([ctx,] inst, et) -> Union{Nothing,Tuple{SMatrix{3,3},Int}}
 
 Return the rotation from the CK frame of the instrument or structure `inst` to its base
-frame at `et`, and the frame ID of the base frame, as `ckfrot_c`.
+frame, the reference frame of the CK segment, at `et`, and the frame ID of the base
+frame, as `ckfrot_c`.
 
 - `inst`: CK ID (frame class ID) of the CK frame.
 - `et`: seconds past J2000 TDB.
@@ -163,11 +167,10 @@ without angular velocity. This is the link of the frame chain that [`pxform`](@r
 follows for a CK frame. As in `pxform`, `et` can be a dual number when ForwardDiff is
 loaded; the elements of `rot` then are dual numbers.
 
-`nothing` takes the place of the `found` flag of CSPICE. It is the result if no CK is
-loaded, if the SCLK kernel of the clock is not loaded, or if no segment covers `et`.
-
-Throws `SpiceError(:valueoutofrange)` if `et` is outside the range of the clock, also
-when no segment covers `et`; and `:badarg` if `et` is not finite.
+`nothing` takes the place of the `found` flag of CSPICE. The checks come in this
+order: `SpiceError(:badarg)` if `et` is not finite; `nothing` if no CK is loaded or the
+SCLK kernel of the clock is not loaded, as in CSPICE; `SpiceError(:valueoutofrange)`
+if `et` is outside the range of the clock; `nothing` if no segment covers `et`.
 
 # Examples
 ```julia
@@ -269,7 +272,8 @@ The file is read from disk and need not be loaded.
 
 Throws `SpiceError`:
 - `:filenotfound` if the file does not exist;
-- `:invalidformat` if it is a transfer file, `:invalidarchtype` if it is not a DAF;
+- `:invalidformat` if it is a transfer file (a binary kernel in text form),
+  `:invalidarchtype` if it is not a DAF;
 - `:invalidfiletype` if it is an SPK or a binary PCK;
 - `:baddaf` if the DAF is damaged.
 

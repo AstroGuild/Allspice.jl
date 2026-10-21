@@ -1,8 +1,7 @@
 # Mathematics
 
-The calls of this page take numbers and arrays only, and need no kernel, except
-[`recpgr`](@ref) and its relatives and [`xfmsta`](@ref). These rules hold for all of
-them:
+The calls of this page need no kernel, except [`recpgr`](@ref), [`pgrrec`](@ref),
+[`drdpgr`](@ref), [`dpgrdr`](@ref) and [`xfmsta`](@ref). These rules hold for all of them:
 
 - Integer components are converted to `Float64`.
 - A sum of products is evaluated term by term in index order, as in CSPICE, so that a
@@ -62,8 +61,9 @@ ident
 ## Vectors and matrices of any dimension
 
 The `g` calls take no dimension argument: the arguments give the dimension. Static
-arguments give a static result; other arguments give a `Vector` or a `Matrix`. Two
-vectors must have equal length.
+arguments give a static result. Other arguments, or static and other arguments together,
+give a `Vector` or a `Matrix`; the exception is a mix in [`vaddg`](@ref), [`vsubg`](@ref)
+or [`vlcomg`](@ref), which gives a `SizedVector`. Two vectors must have equal length.
 
 ```@docs
 vaddg
@@ -170,9 +170,6 @@ dpgrdr
 ## Ellipsoids, planes and ellipses
 
 An ellipsoid has its center at the origin and the semi-axes `a`, `b`, `c` along x, y, z.
-The error kind for a semi-axis that is not positive follows CSPICE call by call
-(`:badaxislength`, `:invalidaxislength`, `:invalidradii` or `:degeneratecase`), so read
-it in the entry of the call.
 
 ```@docs
 SpicePlane
@@ -218,10 +215,11 @@ stmp03
 
 ## Polynomials and interpolation
 
-A Chebyshev expansion is given by its coefficients and by `x2s = [midpoint, radius]` of
-its interval, as in an SPK segment of type 2 or 3. A table for interpolation is given by
-its abscissas, or by the first abscissa and the step of an equally spaced table; a
-Hermite table holds the value and the derivative at each abscissa, in this order.
+A Chebyshev expansion, a sum of Chebyshev polynomials of the first kind, is given by its
+coefficients and by `x2s = [midpoint, radius]` of its interval, as in an SPK segment of
+type 2 or 3. A table for interpolation is given by its abscissas, or by the first
+abscissa and the step of an equally spaced table; a Hermite table holds the value and
+the derivative at each abscissa, in this order.
 
 ```@docs
 chbval
@@ -242,7 +240,7 @@ diags2
 ## Hexadecimal strings
 
 A double is written as hexadecimal digits of a mantissa in [1/16, 1) and an exponent of
-16, so that the string holds every bit of the number.
+16.
 
 ```@docs
 dp2hx

@@ -1,6 +1,6 @@
 # Ephemeris and rotation tables
 
-An optimizer or a GPU function that needs the position of a body many times on a known interval of time does not need the SPICE kernels in its inner loop. [`ephemeris_table`](@ref) extracts the position of one body relative to another on that interval into an [`EphemerisTable`](@ref), which is one flat array of Chebyshev coefficients on intervals of equal length. The evaluation then needs no kernel set, no search for a segment and no chain of bodies.
+An optimizer or a GPU function that needs the position of a body many times on a known interval of time does not need the SPICE kernels in its inner loop. [`ephemeris_table`](@ref) extracts the position of one body relative to another on that interval into an [`EphemerisTable`](@ref), which is one flat array of Chebyshev coefficients on intervals of equal length. The evaluation then needs no loaded kernels, no search for a segment and no chain of bodies.
 
 ```@setup tab
 using Allspice
@@ -33,11 +33,11 @@ acceleration                                # km/s^2
 
 ## How the table is built
 
-The function builds the table in one of two ways. For a geometric position in an inertial frame from SPK type 2 data, which is the case of the planetary ephemerides, the position is one polynomial for each record of the kernels; the table then takes the record length and the degree of the kernels and agrees with `spkpos` to rounding. In all other cases (a rotating frame, an aberration correction, another SPK type) the function interpolates and doubles the number of intervals until the measured error is below the tolerance `tol`, and the field `maxerr` of the table records the error that it measured.
+The function builds the table in one of two ways, and [`ephemeris_table`](@ref) states the conditions of each. For a geometric position in an inertial frame from SPK type 2 data, which is the case of the planetary ephemerides, the position is one polynomial for each [record](@ref "Exact derivatives and the rates of CSPICE") of the kernels; the table then takes the record length and the degree of the kernels and agrees with `spkpos` to rounding. In all other cases (a rotating frame, an aberration correction, another SPK type) the function interpolates and doubles the number of intervals until the measured error is below the tolerance `tol`, and the field `maxerr` of the table records the error that it measured.
 
-The velocity of a table is always the derivative of its position, so that it can differ in the last digits from the velocity of `spkezr` for SPK types that store a separate velocity. An epoch can be a `ForwardDiff.Dual` number, also on the GPU.
+The velocity of a table is always the derivative of its position, so that it can differ from the velocity of `spkezr` with an `LT` correction and for SPK types that store the velocity apart from the position. An epoch can be a `ForwardDiff.Dual` number, also on the GPU.
 
-A query checks that the epoch is inside the table and throws `SpiceError(:spkinsuffdata)` if it is not. The check is a bounds check, so `@inbounds` removes it, as a GPU function requires; an epoch outside the table then gives the extrapolation of the nearest interval.
+A query checks that the epoch is inside the table and throws a [`SpiceError`](@ref) of kind `:spkinsuffdata` if it is not; this error is a [`SpiceKindError`](@ref), without the fields of [`SpkInsufficientDataError`](@ref). The check is a bounds check, so `@inbounds` removes it, as a GPU function requires; an epoch outside the table then gives the extrapolation of the nearest interval.
 
 ## On a GPU
 
@@ -46,13 +46,13 @@ The table is a parametric type over its array, and Adapt.jl moves it to a device
 ```julia
 using CUDA, Adapt
 
-gpu = adapt(CuArray, tab)                   # `cu(tab)` gives Float32 coefficients
+gpu = adapt(CuArray, tab)                   # `cu(tab)` of CUDA.jl gives Float32 coefficients
 states = map(et -> @inbounds(table_state(gpu, et)), CuArray(epochs))
 ```
 
 ## In a CasADi model
 
-CasADiCodegen.jl generates Julia code from a model of CasADi, and its `callback` puts a Julia function into the model with the derivatives that CasADi needs. Because [`table_jet`](@ref) returns static vectors, a table can give the position of a body to a force model in generated code with no memory allocation per call, and the same call gives the time derivatives of the position for the Jacobian of the model. The block below is a sketch and not a complete program: the body is a satellite of the Earth that the Moon perturbs, and the times `t0` and `t1` and the gravitational parameters `GM_EARTH` and `GM_MOON` are values of the application.
+[CasADiCodegen.jl](https://github.com/EllissoideRotondo/CasADiCodegen.jl) generates Julia code from a model of CasADi, and its `callback` puts a Julia function into the model with the derivatives that CasADi needs. Because [`table_jet`](@ref) returns static vectors, a table can give the position of a body to a force model in generated code with no memory allocation per call, and the same call gives the time derivatives of the position for the Jacobian of the model. The block below is a sketch and not a complete program: the body is a satellite of the Earth that the Moon perturbs, and the times `t0` and `t1` and the gravitational parameters `GM_EARTH` and `GM_MOON` are values of the application.
 
 ```julia
 using Allspice, CasADiCodegen, LinearAlgebra
@@ -71,18 +71,9 @@ g, g! = build_function(f; expression = Val{false})
 
 The epoch `t` is in seconds past J2000 TDB, and `order(k)` returns the derivative `k` of the position in km/s^k. CasADi takes the first derivatives of the callback from `order(1)` and the second derivatives from `order(2)`.
 
-The table below gives the time per in-place call of a model that adds the same term for the Sun, from a second table and a second callback, measured once on Julia 1.13. The last row is the same model in plain Julia with ForwardDiff.jl, with which the results agree to rounding.
-
-| Outputs | Time per call | Memory per call |
-|---|---:|---:|
-| Right side | 0.09 µs | 0 B |
-| Right side and Jacobians by state and time | 0.19 µs | 0 B |
-| Right side, Jacobian and second derivatives by state and time | 0.63 µs | 0 B |
-| Right side, plain Julia | 0.12 µs | 0 B |
-
 ## Measured accuracy and speed
 
-The table below gives measured values for 400 days of de440s.bsp, from `bench/table_gpu.jl`: one thread of an Intel CPU, and an NVIDIA RTX 3090 with 4,000,000 epochs. The error is the largest difference from the kernels in km, and the tolerance is the default unless the row names one.
+The table below gives measured values for 400 days of de440s.bsp, from `bench/table_gpu.jl`: one thread of an Intel CPU, and an NVIDIA RTX 3090 with 4,000,000 epochs. The error is the largest difference from the kernels in km, and the tolerance is the default unless the row names one. `MOON_PA` is the principal-axis frame of the Moon from the lunar orientation kernel of NAIF.
 
 | Case | Intervals | Error (km) | Table (ns per epoch) | `spkezr` (ns per epoch) |
 |---|---:|---:|---:|---:|
@@ -94,9 +85,7 @@ The table below gives measured values for 400 days of de440s.bsp, from `bench/ta
 | Earth relative to Sun, J2000, GPU, `Float64` | 101 | 1.2e-7 | 1.2 | |
 | Earth relative to Sun, J2000, GPU, `Float32` | 101 | 16 | 0.33 | |
 
-Two limits come from the source and not from the table. The rounding of the rotation angle of the Earth moves the Sun by some meters in the `IAU_EARTH` frame (see [Known limits of accuracy](@ref)), and no table can be more accurate than that. An aberration-corrected position has steps of some millimetres at the record boundaries of the kernels, because the target is evaluated at an earlier epoch than the observer, so that the two cross a boundary at different times.
-
-With coefficients of type `Float32` a position keeps about seven digits, which is 16 km at the distance of the Sun.
+No table is more accurate than its source. The rows of the Sun in `IAU_EARTH` and of the Moon with `LT+S` reach two limits of the source, which [Known limits of accuracy](@ref) describes.
 
 ## Save a table as a kernel
 
@@ -128,4 +117,4 @@ The matrix is not made orthogonal again, because its distance from an orthogonal
 | `J2000` | `IAU_EARTH` | 16 | 1.5e-11 | 2.0e-11 |
 | `MOON_PA` | `IAU_EARTH` | 16 | 1.6e-11 | 1.9e-11 |
 
-The errors are Frobenius norms (the root of the sum of the squares of the nine differences) and have no unit; the last column compares the table with `pxform` of CSPICE. `MOON_PA` is the principal-axis frame of the Moon from the lunar orientation kernel of NAIF. The two tables that reach the Earth stop at 1.5e-11 because of the same rounding of the rotation angle of the Earth.
+The errors are Frobenius norms (the root of the sum of the squares of the nine differences) and have no unit; the last column compares the table with `pxform` of CSPICE. The two tables that reach the Earth stop at 1.5e-11 because of the rounding of the rotation angle of the Earth (see [Known limits of accuracy](@ref)).
