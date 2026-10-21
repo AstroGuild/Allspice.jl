@@ -164,7 +164,8 @@ Without `ctx` the kernel goes into [`default_context`](@ref).
   assignments of a text kernel are applied on top of them.
 - An SPK, PCK or CK file in the non-native byte order is read; it is converted in memory.
 
-Throws `SpiceError(:blankfilename)` if `path` is blank, `SpiceError(:nosuchfile)` if the
+Throws `SpiceError(:emptystring)` if `path` is empty, `SpiceError(:blankfilename)` if it
+holds only blanks, `SpiceError(:nosuchfile)` if the
 file (or a file that a meta-kernel lists) does not exist, and
 `SpiceError(:recursiveloading)` if a meta-kernel lists a meta-kernel. A binary file that is damaged throws
 `SpiceError(:baddaf)`, and a meta-kernel that is not consistent throws
@@ -184,7 +185,7 @@ furnsh(ctx, "mission.tm")
 See also [`unload`](@ref), [`kclear`](@ref), [`ktotal`](@ref), [`kdata`](@ref).
 """
 function furnsh(ctx::SpiceContext, path::AbstractString)
-    isempty(strip(path)) && throw(SpiceError(:blankfilename, "furnsh: the kernel path is blank"))
+    _chk_filename("furnsh", path)
     lock(ctx.lock) do
         defs = @atomic ctx.timedefs
         entries = load_entries(path, defs.yearbound, defs.check)
@@ -211,9 +212,12 @@ If a text kernel is removed, the kernel pool is built again from the text kernel
 that stay, so direct edits of the pool ([`pdpool`](@ref), ...) are lost, as in CSPICE.
 The kernels that stay are not read from disk again.
 
+Throws `SpiceError(:emptystring)` if `path` is empty.
+
 See also [`kclear`](@ref).
 """
 function unload(ctx::SpiceContext, path::AbstractString)
+    isempty(path) && throw(SpiceError(:emptystring, "unload: the file name is empty"))
     p = String(path)
     lock(ctx.lock) do
         old = kernelset(ctx).loaded

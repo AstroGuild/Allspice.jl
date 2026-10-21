@@ -20,8 +20,9 @@ make room for. The new file has no segment. Segments that [`dskw02`](@ref) adds 
 memory, and the file on disk is not a complete DSK file, until [`dskcls`](@ref) runs. An
 existing file is never replaced.
 
-Throws `SpiceError(:badrecordcount)` if `ncomch < 0`, `:fileopenfailed` if `fname` exists
-or cannot be created, and the other error kinds of [`dasonw`](@ref).
+Throws `SpiceError(:emptystring)` if `fname` is empty, `:badrecordcount` if `ncomch < 0`,
+`:fileopenfailed` if `fname` exists or cannot be created, and the other error kinds of
+[`dasonw`](@ref).
 
 See also [`dskw02`](@ref) for an example, [`dasac`](@ref) to add comments.
 """

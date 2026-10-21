@@ -253,12 +253,12 @@ The file must have the native byte order. No other handle may write the same fil
 handle that reads it finds a change in a search that begins after the change. Unload the
 file from every context before the call, and load it again after [`spkcls`](@ref).
 
-Throws `SpiceError(:emptystring)` if `path` is empty, `:filenotfound` if the file does not
-exist, `:fileisnotspk` if it is not a DAF file of the type SPK, and `:unsupportedbff` if
-it has the other byte order.
+Throws `SpiceError(:emptystring)` if `path` is empty, `:blankfilename` if it holds only
+blanks, `:filenotfound` if the file does not exist, `:fileisnotspk` if it is not a DAF
+file of the type SPK, and `:unsupportedbff` if it has the other byte order.
 """
 function spkopa(path::AbstractString)
-    _seg_chkfstr("spkopa", "path", path)
+    _chk_filename("spkopa", path)
     isfile(path) || throw(SpiceError(:filenotfound,
         "spkopa: the file $path is not recognized as an existing file"))
     arch, kind = getfat(path)

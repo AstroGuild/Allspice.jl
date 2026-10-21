@@ -353,10 +353,11 @@ Different from [`furnsh`](@ref), the file does not enter the list of loaded kern
 variables are direct edits of the pool, with the rules of [`pdpool`](@ref). A
 `KERNELS_TO_LOAD` list in the file is not followed.
 
-Throws `SpiceError(:fileopenfailed)` if the file does not exist and `SpiceError(:badkernel)`
-if an assignment is malformed.
+Throws `SpiceError(:emptystring)` if `fname` is empty, `SpiceError(:fileopenfailed)` if the
+file does not exist and `SpiceError(:badkernel)` if an assignment is malformed.
 """
 function ldpool(ctx::SpiceContext, fname::AbstractString)
+    isempty(fname) && throw(SpiceError(:emptystring, "ldpool: the file name is empty"))
     isfile(fname) || throw(SpiceError(:fileopenfailed, "ldpool: could not open $fname"))
     defs = timedefaults(ctx)
     tk = parse_text_kernel(String(fname), defs.yearbound, defs.check)

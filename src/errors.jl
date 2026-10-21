@@ -219,3 +219,11 @@ end
 Base.showerror(io::IO, e::SpiceError) = print(io, "SpiceError(", e.kind, "): ", e.msg)
 Base.showerror(io::IO, e::SpkInsufficientDataError) =
     print(io, "SpkInsufficientDataError(", e.kind, "): ", e.msg)
+
+# The check of a file name argument in the C interface of CSPICE: an empty string is
+# SPICE(EMPTYSTRING) in the wrapper, a blank one SPICE(BLANKFILENAME) in the routine.
+@inline function _chk_filename(who::AbstractString, path::AbstractString)
+    isempty(path) && throw(SpiceError(:emptystring, "$who: the file name is empty"))
+    isempty(strip(path)) && throw(SpiceError(:blankfilename, "$who: the file name is blank"))
+    return nothing
+end

@@ -210,12 +210,12 @@ end
 
 Check that `path` is an existing DAF file that this machine can read, and return its
 summary format and whether its byte order is the other one. Throws `SpiceError` with
-kind `:blankfilename`, `:filenotfound`, `:filereadfailed`, `:unknownfilarc`,
-`:filarchmismatch`, `:ftpxfererror`, `:unknownbff`, `:unsupportedbff` or
+kind `:emptystring`, `:blankfilename`, `:filenotfound`, `:filereadfailed`,
+`:unknownfilarc`, `:filarchmismatch`, `:ftpxfererror`, `:unknownbff`, `:unsupportedbff` or
 `:dafinvalidparams`.
 """
 function _daf_probe(path::AbstractString, who::AbstractString)
-    isempty(strip(path)) && throw(SpiceError(:blankfilename, "$who: the file name is blank"))
+    _chk_filename(who, path)
     isfile(path) || throw(SpiceError(:filenotfound, "$who: the file $path does not exist"))
     raw, little = open(path, "r") do io
         raw = read(io, _DAF_RECLEN)
@@ -256,7 +256,8 @@ The file can have either byte order. No array search is begun. Close the handle 
 [`dafcls`](@ref).
 
 Throws `SpiceError`:
-- `:blankfilename` if `path` is blank, `:filenotfound` if the file does not exist;
+- `:emptystring` if `path` is empty, `:blankfilename` if it holds only blanks;
+- `:filenotfound` if the file does not exist;
 - `:filereadfailed` if the file is shorter than one record (1024 bytes);
 - `:filarchmismatch` if the file is a DAS file, `:unknownfilarc` if it is neither
   a DAF nor a DAS file (a text kernel, for example);
@@ -378,11 +379,12 @@ Results are, for example, `("DAF", "SPK")`, `("DAF", "CK")`, `("DAF", "PCK")`,
 `("DAS", "DSK")` and `("KPL", "LSK")`. The result is `("?", "?")` for a file that is not
 recognized; a text kernel without the `KPL/<type>` first line is one.
 
-Throws `SpiceError(:blankfilename)` if `path` is blank, `:filenotfound` if the file does
-not exist, and `:filereadfailed` if the file has fewer than 12 bytes and no complete line.
+Throws `SpiceError(:emptystring)` if `path` is empty, `:blankfilename` if it holds only
+blanks, `:filenotfound` if the file does not exist, and `:filereadfailed` if the file has
+fewer than 12 bytes and no complete line.
 """
 function getfat(path::AbstractString)
-    isempty(strip(path)) && throw(SpiceError(:blankfilename, "getfat: the file name is blank"))
+    _chk_filename("getfat", path)
     isfile(path) || throw(SpiceError(:filenotfound, "getfat: the kernel file $path does not exist"))
     head = open(io -> read(io, 12), path, "r")
     # A file of fewer than 12 bytes that has no complete line cannot be read by CSPICE.

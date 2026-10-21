@@ -1551,7 +1551,35 @@ group("9. DAF access, SPK and CK writers") do
         @test throws_kind(() -> spkopn(joinpath(dir, "no_such_dir", "x.bsp"), "NAME"), :fileopenfailed)
         @test throws_kind(() -> dafopr(joinpath(dir, "no_such_file.bsp")), :filenotfound)
         @test throws_kind(() -> dafopw(joinpath(dir, "no_such_file.bsp")), :filenotfound)
-        @test throws_kind(() -> dafopr(" "), :blankfilename)
+        # Regression: an empty path gave :blankfilename where the C wrappers of CSPICE give
+        # :emptystring, and spkopa gave :filenotfound for a blank path.
+        ckind(f) = (f(); cspice_kind())
+        nkind(f) = try f(); :none catch e; e isa Allspice.SpiceError ? e.kind : rethrow() end
+        hc, ctx = Ref{Cint}(0), SpiceContext()
+        openers = (
+            (p -> dafopr(p), p -> ccall((:dafopr_c, SPICE.libcspice), Cvoid, (Cstring, Ref{Cint}), p, hc)),
+            (p -> dafopw(p), p -> ccall((:dafopw_c, SPICE.libcspice), Cvoid, (Cstring, Ref{Cint}), p, hc)),
+            (p -> dasopr(p), p -> ccall((:dasopr_c, SPICE.libcspice), Cvoid, (Cstring, Ref{Cint}), p, hc)),
+            (p -> dasopw(p), p -> ccall((:dasopw_c, SPICE.libcspice), Cvoid, (Cstring, Ref{Cint}), p, hc)),
+            (p -> dskopn(p, "X", 0), p -> ccall((:dskopn_c, SPICE.libcspice), Cvoid,
+                (Cstring, Cstring, Cint, Ref{Cint}), p, "X", 0, hc)),
+            (p -> dlaopn(p, "DSK", "X", 0), p -> ccall((:dlaopn_c, SPICE.libcspice), Cvoid,
+                (Cstring, Cstring, Cstring, Cint, Ref{Cint}), p, "DSK", "X", 0, hc)),
+            (p -> spkopa(p), p -> ccall((:spkopa_c, SPICE.libcspice), Cvoid, (Cstring, Ref{Cint}), p, hc)),
+            (p -> ekopr(p), p -> ccall((:ekopr_c, SPICE.libcspice), Cvoid, (Cstring, Ref{Cint}), p, hc)),
+            (p -> eklef(ctx, p), p -> ccall((:eklef_c, SPICE.libcspice), Cvoid, (Cstring, Ref{Cint}), p, hc)),
+            (p -> furnsh(ctx, p), p -> ccall((:furnsh_c, SPICE.libcspice), Cvoid, (Cstring,), p)),
+            (p -> ldpool(ctx, p), p -> ccall((:ldpool_c, SPICE.libcspice), Cvoid, (Cstring,), p)),
+            (p -> unload(ctx, p), p -> ccall((:unload_c, SPICE.libcspice), Cvoid, (Cstring,), p)),
+            (p -> kinfo(ctx, p), p -> ccall((:kinfo_c, SPICE.libcspice), Cvoid, (Cstring, Cint, Cint,
+                Ptr{UInt8}, Ptr{UInt8}, Ref{Cint}, Ref{Cint}), p, 8, 8, zeros(UInt8, 8),
+                zeros(UInt8, 8), hc, hc)),
+            (p -> getfat(p), p -> ccall((:getfat_c, SPICE.libcspice), Cvoid, (Cstring, Cint, Cint,
+                Ptr{UInt8}, Ptr{UInt8}), p, 8, 8, zeros(UInt8, 8), zeros(UInt8, 8))),
+        )
+        for (neo, c) in openers, p in ("", "  ")
+            @test nkind(() -> neo(p)) === ckind(() -> c(p))
+        end
         @test throws_kind(() -> dafopr(sclk), :filereadfailed)       # shorter than one record
         longtext = joinpath(dir, "long.tpc")
         write(longtext, "KPL/PCK\n" * "a line of text\n"^200)
