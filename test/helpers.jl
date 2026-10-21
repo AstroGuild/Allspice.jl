@@ -44,6 +44,22 @@ function nsample(fast::Integer, full::Integer)
     return FULL ? Int(full) : Int(fast)
 end
 
+"""
+True on x86-64, where CSPICE, the oracle, converts a double outside the 32-bit integers
+to `typemin(Int32)`, as Allspice does on every machine (`_cint`). The conversion is
+undefined in C, and CSPICE on other processors gives other values (ARM saturates).
+"""
+const ORACLE_CAST_X86 = Sys.ARCH === :x86_64
+
+"""
+    cast_dependent(s)
+
+True if the result of CSPICE for the string `s` depends on the processor: `s` holds a
+whole number outside the 32-bit integers and the machine is not x86-64.
+"""
+cast_dependent(s::AbstractString) = !ORACLE_CAST_X86 &&
+    any(m -> parse(BigInt, m.match) > typemax(Int32), eachmatch(r"\d+", s))
+
 "Names of the groups that were skipped, with the reason, for the summary of `runtests.jl`."
 const SKIPPED = Tuple{String,String}[]
 
