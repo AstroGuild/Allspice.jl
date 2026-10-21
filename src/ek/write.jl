@@ -127,6 +127,7 @@ Open the existing EK file `path` and return a handle that is open for write, as
 `ekopw_c` of CSPICE.
 
 The file is read into memory; all changes are on disk when [`ekcls`](@ref) returns.
+No other handle of this process may have the file open, as in [`dasopw`](@ref).
 
 Throws `SpiceError(:emptystring)` if `path` is empty, `SpiceError(:filenotfound)` if
 the file does not exist, `SpiceError(:fileopenfailed)` if it is not writable,
@@ -139,7 +140,13 @@ See also [`ekopn`](@ref), [`ekopr`](@ref).
 function ekopw(path::AbstractString)
     isempty(path) && throw(SpiceError(:emptystring, "ekopw: the file name must not be empty"))
     h = dasopw(path)
-    _ek_check(h, h.path, "ekopw")
+    try
+        _ek_check(h, h.path, "ekopw")
+    catch
+        h.isopen = false                 # the file is not an EK: close without a write
+        _open_unregister!(h)
+        rethrow()
+    end
     return h
 end
 

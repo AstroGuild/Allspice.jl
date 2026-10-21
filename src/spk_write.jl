@@ -249,15 +249,14 @@ end
 
 Open the existing SPK file `path` for writing, to append segments, as `spkopa_c`.
 
-The file must have the native byte order. No other handle may write the same file: the
-call does not check this, where CSPICE refuses the second open, and two handles that
-write the file at the same time can damage it (see [`dafopw`](@ref)). A handle that reads
-the file finds a change in a search that begins after the change. Unload the file from
-every context before the call, and load it again after [`spkcls`](@ref).
+The file must have the native byte order, and no other open handle may have it open
+(see [`dafopw`](@ref)). Unload the file from every context before the call, and load it
+again after [`spkcls`](@ref).
 
 Throws `SpiceError(:emptystring)` if `path` is empty, `:blankfilename` if it holds only
 blanks, `:filenotfound` if the file does not exist, `:fileisnotspk` if it is not a DAF
-file of the type SPK, and `:unsupportedbff` if it has the other byte order.
+file of the type SPK, `:unsupportedbff` if it has the other byte order, and
+`:fileopenconflict` if another handle has the file open.
 """
 function spkopa(path::AbstractString)
     _chk_filename("spkopa", path)

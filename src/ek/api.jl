@@ -31,7 +31,7 @@ See also [`ekopw`](@ref), [`ekopn`](@ref).
 function ekopr(path::AbstractString)
     h = _das_load(path, "ekopr", false)
     _ek_check(h, h.path, "ekopr")
-    return h
+    return _open_register!(h, path, false, "ekopr")
 end
 
 """

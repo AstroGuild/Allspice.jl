@@ -1605,6 +1605,25 @@ group("9. DAF access, SPK and CK writers") do
         @test throws_kind(() -> Allspice.dafonw(joinpath(dir, "p.daf"), "SPK", 124, 6, "X", 0), :dafinvalidparams)
         @test throws_kind(() -> Allspice.dafonw(joinpath(dir, "p.daf"), "SPK", 2, 6, "X", -1), :dafnoresv)
         @test !ispath(joinpath(dir, "p.daf"))
+        # (fault fixed: dafopw or spkopa of a file that a handle had open gave a second
+        # handle, and arrays that the two handles added overwrote each other; CSPICE
+        # signals FILEOPENCONFLICT, for a file open for write and for one open for read)
+        pw = joinpath(dir, "empty_n_spk_0.bsp")
+        hw = dafopw(pw)
+        symlink(pw, joinpath(dir, "alias.bsp"))
+        @test throws_kind(() -> spkopa(joinpath(dir, "alias.bsp")), :fileopenconflict)
+        hr = dafopr(pw)                       # allowed here; CSPICE signals RWCONFLICT
+        dafcls(hw)
+        @test throws_kind(() -> dafopw(pw), :fileopenconflict)
+        dafcls(hr)
+        dafcls(dafopw(pw))
+        pc = joinpath(dir, "empty_c_spk_0.bsp")
+        hcw = SPICE.dafopw(pc)
+        @test ckind(() -> openers[7][2](pc)) === :fileopenconflict        # spkopa_c
+        SPICE.dafcls(hcw)
+        hcr = SPICE.dafopr(pc)
+        @test ckind(() -> openers[2][2](pc)) === :fileopenconflict        # dafopw_c
+        SPICE.dafcls(hcr)
     end
 
     @apart @testset "low-level DAF access" begin
