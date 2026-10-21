@@ -473,14 +473,19 @@ records `_seg_cheb_records` lays out as for SPK types 2 and 3). Each writer make
 the same order, so the data area is equal bit for bit to the one that CSPICE writes
 from the same input.
 
-- Argument lists follow SPICE.jl (the Julia wrapper of CSPICE). A table of states,
-  quaternions or packets is a vector of vectors, a matrix with one row of the table in
-  each column, or a flat vector; `_seg_flat(who, what, x, rowlen) -> (flat, n, rowlen)`
-  converts it and throws `SpiceError(:badarg)` if the shape does not fit.
-- `SegFrame` is a frame name or a frame ID, and `SegContext` (the keyword `ctx`) is the
-  `SpiceContext` or `KernelSet` that resolves a name; `_seg_refcode(who, ctx, frame)`
-  throws `SpiceError(:invalidrefframe)`. `_seg_close(h, what)` closes a file as `spkcls`
-  does: a file that is open for write must hold a segment (`:nosegmentsfound`).
+- Argument lists follow CSPICE in its order, without the counts and flags that follow
+  from the input (`avflag` of `ckw01` and `ckw03` is `avvs !== nothing`; a count of
+  `avvs` other than the record count is `:badarg`). A table of states, quaternions or
+  packets is a vector of vectors (the form of SPICE.jl, the Julia wrapper of CSPICE), a
+  matrix with one row of the table in each column, or a flat vector;
+  `_seg_flat(who, what, x, rowlen) -> (flat, n, rowlen)` converts it and throws
+  `SpiceError(:badarg)` if the shape does not fit.
+- `SegFrame` is a frame name or a frame ID, and `SegContext` (the optional first
+  argument `ctx` of every writer, of `spkpds` and of `table_to_spk`; the method without
+  it passes `default_context()`) is the `SpiceContext` or `KernelSet` that resolves a
+  name; `_seg_refcode(who, ctx, frame)` throws `SpiceError(:invalidrefframe)`.
+  `_seg_close(h, what)` closes a file as `spkcls` does: a file that is open for write
+  must hold a segment (`:nosegmentsfound`).
 - Deviation from SPICE.jl 0.2.5: the record count of `ckw02` and `ckw03` is always the
   length of the input (that version passes one record less to CSPICE), and each element
   of a vector of vectors given to `pckw02` is one record of `3 * (degree + 1)`
@@ -490,10 +495,10 @@ from the same input.
   half-word of a binary PCK summary (5 integers) is zero, as a new CSPICE process
   writes it; a CSPICE process that handled an SPK or CK summary before writes there
   the sixth integer of that summary.
-- Type 14 has three calls, as in CSPICE: `spk14b(handle, segid, body, center, frame,
-  first, last, chbdeg) -> SPK14Writer`, `spk14a(writer, [ncsets,] coeffs, epochs)` and
-  `spk14e(writer)`. CSPICE keeps the segment in work in a table of files; here the
-  `SPK14Writer` holds it, and the file changes only when `spk14e` runs. The data area
+- Type 14 has three calls, as in CSPICE: `spk14b([ctx,] handle, segid, body, center,
+  frame, first, last, chbdeg) -> SPK14Writer`, `spk14a(writer, [ncsets,] coeffs,
+  epochs)` and `spk14e(writer)`. CSPICE keeps the segment in work in a table of files;
+  here the `SPK14Writer` holds it, and the file changes only when `spk14e` runs. The data area
   is the one of the generic segment writer `sgwes_` (constant, each record after its
   epoch, epochs, directory, 17 meta data items), equal word for word.
 
@@ -591,7 +596,8 @@ equator, mean equinox), which `type10.jl` turns to J2000 as `zzteme.f` does.
 ## `spk_segments.jl`
 
 `spksfs`, `spkpvn`, `spkuds` and `spksub`: SPK segments named by a file and a
-descriptor.
+descriptor. `spksub(handle, descr, ident, start, stop, newh)` takes the arguments of
+`spksub_c` in its order.
 
 - A loaded file has no handle, so `spksfs(ks, body, et) -> Union{Nothing,Tuple{String,
   Vector{Float64},String}}` returns the path of the file. The segment is
@@ -755,7 +761,7 @@ length. A query needs no kernel set, so it suits the inner loop of an optimizer.
   `table_state` and `table_span` read it without allocation and without kernel access.
   The range check throws `SpiceError(:spkinsuffdata)` and is a bounds check: under
   `@inbounds` it is removed, and an epoch outside the table is then extrapolated.
-- `table_to_spk(handle, tab, segid; first, last, ctx)` writes the table as one SPK
+- `table_to_spk([ctx,] handle, tab, segid; first, last)` writes the table as one SPK
   segment of type 2 through `spkw02`, with the records of the table as its records.
 - `RotationTable{T,A}` (fields `coef`, `t0`, `dt`, `nint`, `ncoef`, `from`, `to`,
   `maxerr`; `length(coef) == 9 ncoef nint`, the nine matrix elements column after

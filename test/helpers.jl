@@ -228,7 +228,7 @@ function spksub_both(src::AbstractString, dir::AbstractString, tag::AbstractStri
     @assert daffna(h)
     nn = spkopn(pn, "SUBSET", 0)
     kn = try
-        spksub(nn, h, descr(dafgs(h)), ident, t0, t1)
+        spksub(h, descr(dafgs(h)), ident, t0, t1, nn)
         :none
     catch e
         e isa Allspice.SpiceError || rethrow()

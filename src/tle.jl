@@ -211,8 +211,8 @@ evsgp4(ctx::SpiceContext, et::Real, geophs, elems) = evsgp4(kernelset(ctx), et, 
 evsgp4(et::Real, geophs, elems) = evsgp4(default_context(), et, geophs, elems)
 
 """
-    spkw10(handle, body, center, frame, first, last, segid, consts, elems, epochs;
-           ctx=default_context()) -> Nothing
+    spkw10([ctx,] handle, body, center, frame, first, last, segid, consts, elems, epochs)
+        -> Nothing
 
 Write an SPK segment of type 10 (two-line element sets), as `spkw10_c`.
 
@@ -231,9 +231,9 @@ Throws `SpiceError`:
 - `:numpacketsnotpos` if there is no element set;
 - `:unorderedrefs` unless the epochs are strictly increasing.
 """
-function spkw10(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
-        last::Real, segid::AbstractString, consts, elems, epochs;
-        ctx::SegContext=default_context())
+function spkw10(ctx::SegContext, h::DAFHandle, body::Integer, center::Integer,
+        frame::SegFrame, first::Real, last::Real, segid::AbstractString, consts, elems,
+        epochs)
     who = "spkw10"
     _daf_check_write(h, who)
     frame isa AbstractString && _seg_chkfstr(who, "frame", frame)
@@ -241,7 +241,7 @@ function spkw10(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
     con = _seg_fixed(who, "consts", consts, 8)
     el, n, _ = _seg_flat(who, "elems", elems, 10)
     ep = _seg_vec(who, "epochs", epochs, n)
-    descr = spkpds(body, center, frame, 10, first, last; ctx=ctx)
+    descr = spkpds(ctx, body, center, frame, 10, first, last)
     _seg_idlen(who, segid)
     cu = codeunits(String(segid))
     for i in 1:_daf_lastnb(segid)
@@ -266,6 +266,10 @@ function spkw10(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, f
     dafena(h)
     return nothing
 end
+spkw10(h::DAFHandle, body::Integer, center::Integer, frame::SegFrame, first::Real,
+    last::Real, segid::AbstractString, consts, elems, epochs) =
+    spkw10(default_context(), h, body, center, frame, first, last, segid, consts, elems,
+        epochs)
 
 """
     _t10_data(consts, refs, packets) -> Vector{Float64}
