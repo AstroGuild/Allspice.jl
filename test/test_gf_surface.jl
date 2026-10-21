@@ -43,8 +43,6 @@
 # of its window). The two libraries do not agree to the tolerances for every random
 # case: the exhaustive run fails for 2 of 3 other seeds (one end point each). The cases
 # of the default seed agree.
-#
-# Behaviour specification: test/features/gf_surface.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
 isdefined(@__MODULE__, :GEOLIB) || include("geomfixtures.jl")

@@ -1,8 +1,6 @@
 # Group 16: two-body calls (Stumpff functions, propagation, conic elements) against
 # CSPICE.
 #
-# Feature file: features/math_conics.feature
-#
 # The random orbits are ellipses, parabolas and hyperbolas about masses from 1e-3 to
 # 1e11 km^3/s^2, with perifocal distances from 1e-2 to 1e8 km. The degenerate inputs
 # are the circular and the equatorial orbits (prograde and retrograde), eccentricities

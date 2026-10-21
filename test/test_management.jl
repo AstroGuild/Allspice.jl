@@ -1,7 +1,4 @@
 # Group 6: kernel management.
-#
-# Feature files: features/unload.feature, features/load_order_precedence.feature,
-# features/coverage_error.feature
 
 # Compile time. In the default run the test code of this group is compiled without
 # optimization (`@optlevel 0` for `Main`, until the end of this file), because the
@@ -139,7 +136,12 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
     @apart @testset "meta-kernel in a temporary directory" begin
         mktempdir() do tmp
             files = [Kernels.LSK, Kernels.PCK11, Kernels.MOON_TF, Kernels.MOON_BPC]
-            mk = write_metakernel(tmp, Kernels.DIR, files)
+            dir = Kernels.DIR
+            if length(dir) > 80         # CSPICE limit of a PATH_VALUES entry
+                dir = mkdir(joinpath(tmp, "k"))
+                files = [cp(f, joinpath(dir, basename(f))) for f in files]
+            end
+            mk = write_metakernel(tmp, dir, files)
             oracle_load([mk, Kernels.DE440S])
             ctx = neo_context([mk, Kernels.DE440S])
             direct = neo_context([files..., Kernels.DE440S])

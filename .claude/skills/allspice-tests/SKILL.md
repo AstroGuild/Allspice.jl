@@ -9,12 +9,7 @@ The general rules (what earns a test, what does not, the review trigger) are in 
 
 ## Before writing tests: the behaviour matrix
 
-Write one row for each scenario before any code, and delete duplicate rows first.
-
-| Behaviour | Regression it detects | Why distinct from other rows | Layer |
-|---|---|---|---|
-
-Layers in this repository: differential (result compared with CSPICE through SPICE.jl), analytic (closed-form answer), invariant (round trip, identity), error (kind of `SpiceError`), concurrency, allocation.
+Write the behaviour-to-test table of the global skill `julia-tests` first. Layers in this repository: differential (result compared with CSPICE through SPICE.jl), analytic (closed-form answer), invariant (round trip, identity), error (kind of `SpiceError`), concurrency, allocation.
 
 ## Rules of this repository
 
@@ -26,7 +21,6 @@ Layers in this repository: differential (result compared with CSPICE through SPI
 - A count threshold that goes with a random sample (`nhit > 800`) is a fraction of the sample size, so that it holds in both tiers.
 - The cases of a fixture share one random stream: add a new case after the existing ones, so that the earlier cases keep their data.
 - Each group has a time budget; a group that grows states its new time. The default suite stays under 120 s in one process.
-- User-visible behaviour has a Given/When/Then scenario in `test/features/`; remove or change the scenario with the test.
 
 ## Trimming existing tests
 

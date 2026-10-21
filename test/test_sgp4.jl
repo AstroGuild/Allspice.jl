@@ -1,7 +1,5 @@
 # Group 17: two-line elements (SGP4 and SDP4) and SPK segments of type 10 against CSPICE.
 #
-# Feature file: features/sgp4_tle.feature
-#
 # The element sets are the 29 verification sets of the SGP4 revision of Vallado et al.
 # (2006), which the comment block of `zzsgp4.c` of CSPICE lists. They are grouped by the
 # branch of the propagator that they exercise:

@@ -1,7 +1,5 @@
 # Group 9: the time subsystem against CSPICE.
 #
-# Feature file: features/time_conversions.feature
-#
 # Strings to ET (`str2et`, `utc2et`, `tparse`), ET to strings (`timout`, `et2utc`,
 # `etcal`), pictures (`tpictr`), uniform scales (`unitim`), time vectors (`ttrans`,
 # compared with the Fortran-style entry `ttrans_` of the CSPICE library, which SPICE.jl
@@ -583,6 +581,8 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
         r = compare_outcomes("str2et, malformed strings", TS_MALFORMED, SPICE.str2et, s -> str2et(ctx, s))
         @test r.mixed == 0 && r.unequal == 0
         @test r.rejected >= length(TS_MALFORMED) - 6
+        kind(s) = try str2et(ctx, s); nothing catch e; e isa SpiceError ? e.kind : rethrow() end
+        @test all(s -> kind(s) in (nothing, :badtime), TS_MALFORMED)
         # A Julian date whose day number is outside the 32-bit integers: the day
         # arithmetic of CSPICE wraps, and the result has the sign of the wrapped number.
         r = compare_outcomes("str2et, Julian date above the integer range",
@@ -657,8 +657,8 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
 
     @apart @testset "et2utc, all formats and precisions" begin
         cases = [(et, fmt, prec) for et in epochs for (fmt, prec) in
-                 (("C", rand(rng, 0:14)), ("D", rand(rng, 0:6)), ("J", rand(rng, 0:14)),
-            ("ISOC", rand(rng, 0:14)), ("ISOD", rand(rng, 0:3)), (rand(rng, ("c", "isoc", "IsoD", "j")), 3))]
+                 (("C", rand(rng, 0:14)), ("D", rand(rng, 0:14)), ("J", rand(rng, 0:14)),
+            ("ISOC", rand(rng, 0:14)), ("ISOD", rand(rng, 0:14)), (rand(rng, ("c", "isoc", "IsoD", "j")), 3))]
         r = compare_outcomes("et2utc", cases, c -> oracle_et2utc(c...), c -> et2utc(ctx, c...))
         @test r.mixed == 0 && r.unequal == 0 && r.both > nsample(5000, 20000)
         @test et2utc(ctx, leap_et[end] - 0.5, "C", 3) == "2016 DEC 31 23:59:60.500"
@@ -923,7 +923,7 @@ group("9. time subsystem against CSPICE", Kernels.LSK) do
                 tsetyr(1969)
             end
             # `kclear` does not reset the defaults, as in CSPICE.
-            kclear(other); timdef(other, "SET", "ZONE", "PST"); furnsh(other, Kernels.LSK)
+            timdef(other, "SET", "ZONE", "PST"); kclear(other); furnsh(other, Kernels.LSK)
             @test timdef(other, "GET", "ZONE") == "UTC-8" && timdef(other, "GET", "SYSTEM") == ""
         finally
             reset_timdef(ctx)

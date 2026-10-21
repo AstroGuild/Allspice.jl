@@ -360,7 +360,7 @@ equal length) to the file of `handle`, as `spkw02_c`.
 `handle`, `body`, `center`, `frame`, `first`, `last`, `segid` and `ctx` have the same
 meaning in every `spkwNN` writer.
 - `handle`: a [`DAFHandle`](@ref) from [`spkopn`](@ref) or [`spkopa`](@ref).
-- `body`, `center`: NAIF IDs of the body and of its centre of motion.
+- `body`, `center`: NAIF IDs of the body and of its center of motion.
 - `frame`: the reference frame, a name or a frame ID. A name is resolved in `ctx` (a
   `SpiceContext` or a `KernelSet`); built-in frames need no kernel.
 - `first`, `last`: the coverage of the segment, seconds past J2000 TDB.
@@ -745,7 +745,7 @@ _spk18_subtype(s::Symbol) = s === :S18TP0 ? 0 : s === :S18TP1 ? 1 : -1
            ctx=default_context()) -> Nothing
 
 Write an SPK segment of type 18, as `spkw18_c`. The type holds the interpolation methods
-of the orbit files of ESOC, the operations centre of ESA (format DDID).
+of the orbit files of ESOC, the operations center of ESA (format DDID).
 
 `subtyp` selects the interpolation and the content of a packet (km, km/s, km/s²):
 

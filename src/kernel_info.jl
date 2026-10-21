@@ -1,7 +1,7 @@
 # Information calls: the bodies and the coverage of an SPK file (`spkobj`, `spkcov`),
 # the load list of a context (`ktotal`, `kdata`, `kinfo`) and the toolkit version.
 
-"CSPICE version whose behaviour and file formats this package follows."
+"CSPICE version whose behavior and file formats this package follows."
 const CSPICE_VERSION = "CSPICE_N0067"
 
 """
@@ -10,7 +10,7 @@ const CSPICE_VERSION = "CSPICE_N0067"
 Return the version string of the toolkit, as `tkvrsn_c`.
 
 For `item = "TOOLKIT"` the result is `"Allspice_v<package version>/CSPICE_N0067"`.
-The part after the slash is the CSPICE version whose behaviour and file formats the
+The part after the slash is the CSPICE version whose behavior and file formats the
 package follows; `tkvrsn_c` gives that part alone. Letter case is ignored, and the
 symbol `:TOOLKIT` is accepted as in SPICE.jl. Any other item gives
 `"No version found."`, as in CSPICE.

@@ -1243,7 +1243,7 @@ end
 
 Return the epoch of the UTC time string `s` in seconds past J2000 TDB, as `utc2et_c`.
 
-[`str2et`](@ref) is the call for new code; this one keeps the behaviour of the older
+[`str2et`](@ref) is the call for new code; this one keeps the behavior of the older
 CSPICE routine:
 
 - `s` has a form that `str2et` accepts, without a time zone, without `A.M.` or `P.M.`

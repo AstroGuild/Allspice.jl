@@ -1,8 +1,6 @@
 # Geometry group: limb points, terminator points and the tangent point of a ray
 # (`limbpt`, `termpt`, `tangpt`) against CSPICE.
 #
-# Feature file: features/geometry_limb_terminator.feature
-#
 # Error measures: the number of points per cutting half plane must be equal; then the
 # norm of the difference from the CSPICE vector over the norm of the CSPICE vector, and
 # the absolute difference of the epochs in seconds.
@@ -185,12 +183,9 @@ end
         # More points than `maxn`: Allspice throws, where `limbpt_c` writes past the arrays.
         et = 1.0e8
         ref = SVector(0.0, 0.0, 1.0)
-        n = limbpt(ctx, "TANGENT" * m3, "MOON", et, "IAU_MOON", "NONE", "CENTER", "EARTH", ref, 0.01, 4, 1e-4, 1e-9, 400)[1]
-        if sum(n) > 4
-            @test neo_kind(() -> limbpt(ctx, "TANGENT" * m3, "MOON", et, "IAU_MOON", "NONE", "CENTER", "EARTH", ref, 0.01, 4, 1e-4, 1e-9, 4)) == :outofroom
-        else
-            @test neo_kind(() -> limbpt(ctx, "TANGENT" * m3, "MOON", et, "IAU_MOON", "NONE", "CENTER", "EARTH", ref, 0.01, 4, 1e-4, 1e-9, 4)) === nothing
-        end
+        total = sum(limbpt(ctx, "TANGENT" * m3, "MOON", et, "IAU_MOON", "NONE", "CENTER", "EARTH", ref, 0.01, 4, 1e-4, 1e-9, 400)[1])
+        @test total >= 2
+        @test neo_kind(() -> limbpt(ctx, "TANGENT" * m3, "MOON", et, "IAU_MOON", "NONE", "CENTER", "EARTH", ref, 0.01, 4, 1e-4, 1e-9, total - 1)) == :outofroom
     end
 
     @testset "tangpt, 800 random rays" begin

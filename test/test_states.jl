@@ -1,7 +1,5 @@
 # Group 1: states against CSPICE.
 #
-# Feature file: features/load_then_query.feature
-#
 # Error measure, in the manner of the ANISE validation: for each query the absolute
 # difference per component, |Allspice - CSPICE|, and the same difference divided by the
 # Euclidean norm of the CSPICE vector (position norm for position components, velocity
@@ -142,7 +140,7 @@ group("1b. states against CSPICE, de405", Kernels.DE405, Kernels.LSK) do
     set = [Kernels.LSK, Kernels.DE405]
     oracle_load(set)
     ctx = neo_context(set)
-    # Body 1000000 of this file has the degenerate coverage [0, 0]; leave it out.
+    # Some copies of this file have a body 1000000 with the degenerate coverage [0, 0].
     bodies = [b for b in spk_bodies(Kernels.DE405) if b < 1000]
     @test length(bodies) >= 14
     epochs = random_epochs(rng, 20, DE405_COVERAGE...)

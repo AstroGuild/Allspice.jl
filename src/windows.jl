@@ -486,7 +486,7 @@ function wnexpd!(w::Window, left::Real, right::Real)
         return w
     end
     # The intervals were all moved by the same amounts, so they are still in order and
-    # only neighbours can overlap.
+    # only neighbors can overlap.
     i = 2
     j = 2
     while j < card                       # invariant: d[1:i-1] is final; j is the next right endpoint

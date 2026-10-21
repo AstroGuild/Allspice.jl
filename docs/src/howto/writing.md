@@ -22,7 +22,7 @@ states = [conics(elements, t) for t in epochs]
 
 path = joinpath(mktempdir(), "example.bsp")
 handle = spkopn(path, "example", 0)          # path, internal file name, comment characters
-# handle, body, centre, frame, coverage, segment name, mu, states, epochs
+# handle, body, center, frame, coverage, segment name, mu, states, epochs
 spkw05(handle, -77, 399, "J2000", t0, t1, "low orbit", mu, states, epochs)
 spkcls(handle)
 spkobj(path)                                 # the bodies in the file
@@ -38,14 +38,14 @@ The file changes on disk at each write call, as in CSPICE. The exception is the 
 spkcov(path, -77)
 ```
 
-An SPK is a DAF (double precision array file), which is the container format of SPK, CK and binary PCK files, and the DAF calls give access to the segments themselves. The summary of an SPK segment holds 2 doubles (the coverage) and 6 integers (body, centre, frame, data type and two addresses).
+An SPK is a DAF (double precision array file), which is the container format of SPK, CK and binary PCK files, and the DAF calls give access to the segments themselves. The summary of an SPK segment holds 2 doubles (the coverage) and 6 integers (body, center, frame, data type and two addresses).
 
 ```@example write
 daf = dafopr(path)
 dafbfs(daf)                                  # begin a forward search
 while daffna(daf)                            # move to the next segment
     doubles, integers = dafus(dafgs(daf), 2, 6)
-    println(dafgn(daf), ": body ", integers[1], ", centre ", integers[2], ", type ", integers[4])
+    println(dafgn(daf), ": body ", integers[1], ", center ", integers[2], ", type ", integers[4])
 end
 dafcls(daf)
 ```

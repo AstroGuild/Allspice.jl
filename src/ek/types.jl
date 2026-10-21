@@ -123,8 +123,8 @@ end
     EKTable
 
 One loaded EK table: all loaded segments that have the same table name. This is the
-type of the entries of the table catalogue of a context. No call returns it and a
-caller does not build it: read the catalogue with [`ekntab`](@ref), [`ektnam`](@ref),
+type of the entries of the table catalog of a context. No call returns it and a
+caller does not build it: read the catalog with [`ekntab`](@ref), [`ektnam`](@ref),
 [`ekccnt`](@ref) and [`ekcii`](@ref).
 
 All segments of a table have columns with the same names and attributes; a file whose
@@ -138,7 +138,7 @@ struct EKTable
     cols::Vector{Vector{_EKColumn}}
 end
 
-# A catalogue entry without column descriptors.
+# A catalog entry without column descriptors.
 EKTable(name, cnames, attrs, segs) = EKTable(name, cnames, attrs, segs, Vector{_EKColumn}[])
 
 _ek_attr(c::_EKColumn) = EKColumnAttr(Int(c.cclass), _EK_TYPE_SYMBOLS[c.dtype],
@@ -151,7 +151,7 @@ _ek_same_attributes(a::_EKColumn, b::_EKColumn) = a.cclass == b.cclass && a.dtyp
 """
     _ek_build_tables(files) -> Vector{EKTable}
 
-The table catalogue of the loaded EK `files` (load order), as `eklef` builds it: tables
+The table catalog of the loaded EK `files` (load order), as `eklef` builds it: tables
 in the order of their first segment, the segments of a table in load order, the columns
 of a table in the order of its first segment. Throws `SpiceError` as `eklef` if a
 segment does not fit a table that an earlier segment defined: `:ekcolnummismatch`

@@ -213,36 +213,20 @@ kind `:blankfilename`, `:filenotfound`, `:filereadfailed`, `:unknownfilarc`,
 function _daf_probe(path::AbstractString, who::AbstractString)
     isempty(strip(path)) && throw(SpiceError(:blankfilename, "$who: the file name is blank"))
     isfile(path) || throw(SpiceError(:filenotfound, "$who: the file $path does not exist"))
-    raw = open(io -> read(io, _DAF_RECLEN), path, "r")
-    length(raw) == _DAF_RECLEN || throw(SpiceError(:filereadfailed,
-        "$who: $path is too short ($(length(raw)) bytes) to hold a DAF file record"))
-    arch, _ = idw2at(String(raw[1:8]))
-    arch == "DAS" && throw(SpiceError(:filarchmismatch,
-        "$who: the file $path is a DAS file, not a DAF"))
-    arch == "DAF" || throw(SpiceError(:unknownfilarc,
-        "$who: the file $path is neither a DAF nor a DAS file"))
-    if raw[700:705] == _DAF_FTPSTR[1:6] && raw[700:727] != _DAF_FTPSTR
-        throw(SpiceError(:ftpxfererror, "$who: the FTP validation string of $path is " *
-            "damaged; the file was most likely moved in text mode"))
-    end
-    bff = rstrip(String(raw[89:96]))
-    little = if bff == "LTL-IEEE"
-        true
-    elseif bff == "BIG-IEEE"
-        false
-    elseif bff in ("VAX-GFLT", "VAX-DFLT")
-        throw(SpiceError(:unsupportedbff,
-            "$who: the binary file format $bff of $path is not supported"))
-    else
-        # Files older than the binary-file-format string: ND tells the byte order.
-        ndl = Int(_daf_i32(raw, 8, true))
-        ndb = Int(_daf_i32(raw, 8, false))
-        if all(iszero, raw[89:96]) && (1 <= ndl <= 124) != (1 <= ndb <= 124)
-            1 <= ndl <= 124
-        else
-            throw(SpiceError(:unknownbff,
-                "$who: the binary file format $(repr(bff)) of $path is not known"))
+    raw, little = open(path, "r") do io
+        raw = read(io, _DAF_RECLEN)
+        length(raw) == _DAF_RECLEN || throw(SpiceError(:filereadfailed,
+            "$who: $path is too short ($(length(raw)) bytes) to hold a DAF file record"))
+        arch, _ = idw2at(String(raw[1:8]))
+        arch == "DAS" && throw(SpiceError(:filarchmismatch,
+            "$who: the file $path is a DAS file, not a DAF"))
+        arch == "DAF" || throw(SpiceError(:unknownfilarc,
+            "$who: the file $path is neither a DAF nor a DAS file"))
+        if raw[700:705] == _DAF_FTPSTR[1:6] && raw[700:727] != _DAF_FTPSTR
+            throw(SpiceError(:ftpxfererror, "$who: the FTP validation string of $path is " *
+                "damaged; the file was most likely moved in text mode"))
         end
+        raw, _daf_little(io, raw, path, who)
     end
     swap = little != _DAF_NATIVE_LITTLE
     nd = Int(_daf_i32(raw, 8, little))

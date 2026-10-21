@@ -19,7 +19,7 @@ tab = ephemeris_table("PROBE", t0, t1, "J2000", "NONE", "EARTH"; tol=1e-6)
 (tab.nint, tab.ncoef, tab.maxerr)           # intervals, coefficients per interval, measured error in km
 ```
 
-The keyword `tol` is the accepted error in kilometres; without it the goal is 1e-12 times the largest distance in the table. [`table_position`](@ref) returns the position, [`table_state`](@ref) the position and the velocity, and [`table_jet`](@ref) the position with its derivatives to any order.
+The keyword `tol` is the accepted error in kilometers; without it the goal is 1e-12 times the largest distance in the table. [`table_position`](@ref) returns the position, [`table_state`](@ref) the position and the velocity, and [`table_jet`](@ref) the position with its derivatives to any order.
 
 ```@example tab
 et = t0 + 3600.0
@@ -94,7 +94,7 @@ The table below gives measured values for 400 days of de440s.bsp, from `bench/ta
 | Earth relative to Sun, J2000, GPU, `Float64` | 101 | 1.2e-7 | 1.2 | |
 | Earth relative to Sun, J2000, GPU, `Float32` | 101 | 16 | 0.33 | |
 
-Two limits come from the source and not from the table. The rounding of the rotation angle of the Earth moves the Sun by some metres in the `IAU_EARTH` frame (see [Known limits of accuracy](@ref)), and no table can be more accurate than that. An aberration-corrected position has steps of some millimetres at the record boundaries of the kernels, because the target is evaluated at an earlier epoch than the observer, so that the two cross a boundary at different times.
+Two limits come from the source and not from the table. The rounding of the rotation angle of the Earth moves the Sun by some meters in the `IAU_EARTH` frame (see [Known limits of accuracy](@ref)), and no table can be more accurate than that. An aberration-corrected position has steps of some millimetres at the record boundaries of the kernels, because the target is evaluated at an earlier epoch than the observer, so that the two cross a boundary at different times.
 
 With coefficients of type `Float32` a position keeps about seven digits, which is 16 km at the distance of the Sun.
 

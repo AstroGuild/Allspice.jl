@@ -23,6 +23,17 @@ long search spans and large files for the exhaustive run.
 const FULL = get(ENV, "ALLSPICE_TEST_FULL", "0") == "1"
 
 """
+True with `--check-bounds=yes` (the default of `julia-actions/julia-runtest`, and of
+`Pkg.test` on Julia 1.10). The bounds check of a `StaticArrays.MVector` work buffer then
+lets the buffer escape to the heap, so the routines with such a buffer (Lagrange and
+Hermite interpolation, the SPK types that use them, CK interpolation) allocate. Their
+allocation checks are skipped; the other allocation checks run.
+"""
+const STACK_BUFFERS_ESCAPE = Base.JLOptions().check_bounds == 1
+STACK_BUFFERS_ESCAPE && @info "--check-bounds=yes: the allocation checks of routines " *
+    "with MVector work buffers are skipped."
+
+"""
     nsample(fast, full)
 
 Size of a sample: `fast` in the default run, `full` in the exhaustive run
@@ -50,12 +61,14 @@ end
     group(body, name, kernels...)
 
 Run `body()` inside `@testset name`, or print a skip notice if one of `kernels` is not
-on disk. Postcondition: the group is either run or listed in `SKIPPED`.
+on disk; with ALLSPICE_REQUIRE_KERNELS=1 a missing kernel throws an error instead.
+Postcondition: the group is either run or listed in `SKIPPED`.
 """
 function group(body, name::AbstractString, kernels...)
     gone = Kernels.missing_kernels(kernels...)
     if !isempty(gone)
         reason = "missing kernels: " * join(gone, ", ")
+        Kernels.REQUIRED && error("$name: $reason (ALLSPICE_REQUIRE_KERNELS=1)")
         printstyled("SKIP  ", name, "  (", reason, ")\n"; color=:yellow, bold=true)
         push!(SKIPPED, (String(name), reason))
         return nothing

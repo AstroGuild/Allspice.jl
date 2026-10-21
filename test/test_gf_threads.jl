@@ -15,8 +15,6 @@
 # relations once), each made twice on many tasks and once on each of three tasks during
 # the loads and unloads; the exhaustive run (`ALLSPICE_TEST_FULL=1`) has 70 searches,
 # four times on many tasks and three times on each task but one of the process.
-#
-# Behaviour specification: test/features/gf_threads.feature
 
 isdefined(@__MODULE__, :GFO) || include("gforacle.jl")
 

@@ -1,7 +1,5 @@
 # Group EK 3: writing EK files.
 #
-# Feature file: features/ek_write.feature
-#
 # CSPICE is the oracle. A seeded random model is written by CSPICE and by Allspice with
 # the same sequence of calls; after the close the three DAS address spaces of the two
 # files (characters, doubles, integers) must be equal word for word. The same holds
@@ -1079,6 +1077,8 @@ group("EK write: input checks give the errors of CSPICE") do
     @test c_ekrcei(hr, 1, 3, "K") == ([3], false)
     @test c_ekrced(hr, 1, 2, "D") == ([2.0], false)
     @test c_ekrcei(hr, 2, 2, "K") == ([8], false)
+    # The refused record changes left the segment with fixed-count columns as it was.
+    @test c_ekssum(hr, 2).nrows == 2 && c_ekrcei(hr, 2, 1, "K") == ([7], false)
     c_ekcls(hr)
     measured("ek_write: $checked input checks with the error kind of CSPICE, " *
              "$(length(mismatch)) mismatches; $nw words equal after the failed calls")

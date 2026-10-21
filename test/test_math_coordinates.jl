@@ -1,8 +1,6 @@
 # Group 14: coordinate conversions, their Jacobians, state conversion between coordinate
 # systems and unit conversion against CSPICE.
 #
-# Feature file: features/math_coordinates.feature
-#
 # The random points have magnitudes from 1e-10 to 1e10. The degenerate inputs are the
 # origin, the points on the z axis (both poles) and in the x-y plane, points on the
 # branch cut of the longitude (negative x axis), and for the geodetic calls points on,

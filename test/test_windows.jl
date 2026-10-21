@@ -1,7 +1,5 @@
 # Group 10: windows (sets of disjoint closed intervals) against the SPICE cells of CSPICE.
 #
-# Feature file: features/windows.feature
-#
 # Every operation runs on the same random input with Allspice (`Window`) and with CSPICE
 # (`SPICE.SpiceDoubleCell`), and the endpoint vectors must be equal bit for bit. The
 # endpoints are small integers and halves, so that equal endpoints, touching intervals

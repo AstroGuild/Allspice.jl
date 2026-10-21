@@ -68,7 +68,7 @@ end
 @inline function _m_m2eul(r::SMatrix{3,3}, axis3::Integer, axis2::Integer, axis1::Integer)
     (_m_axisok(axis3) && _m_axisok(axis2) && _m_axisok(axis1)) || _m_badaxes(axis3, axis2, axis1)
     (axis3 == axis2 || axis1 == axis2) && throw(SpiceError(:badaxisnumbers,
-        "the middle axis matches a neighbour: $axis3 $axis2 $axis1"))
+        "the middle axis matches a neighbor: $axis3 $axis2 $axis1"))
     _m_isrot(r, 0.1, 0.1) || throw(SpiceError(:notarotation, "the input matrix is not a rotation"))
     t0 = _m_cols(_m_hat(_m_col(r, 1)), _m_hat(_m_col(r, 2)), _m_hat(_m_col(r, 3)))
     sign = axis2 == _m_next(axis3) ? 1.0 : -1.0

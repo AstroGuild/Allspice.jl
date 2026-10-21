@@ -1,7 +1,5 @@
 # Group EK 1: read access to an EK file through an owned handle.
 #
-# Feature file: features/ek_files.feature
-#
 # CSPICE is the oracle. The EK files are generated with the CSPICE writers (`ekbseg`,
 # `ekappr`, `ekacec`/`ekaced`/`ekacei`, and the fast writers) from a seeded random model
 # with every column class and data type, null entries, and entries that continue over

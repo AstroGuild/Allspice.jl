@@ -1298,7 +1298,7 @@ end
 # Bounding spheres of volume elements
 # ---------------------------------------------------------------------------------------
 
-"The box centre and radius that `zzlatbox` and `zzpdtbox` build from the cylindrical extents."
+"The box center and radius that `zzlatbox` and `zzpdtbox` build from the cylindrical extents."
 @inline function _dsk_cylbox(outrad::Float64, inrad::Float64, minlon::Float64, maxlon::Float64,
         maxz::Float64, minz::Float64)
     hdlon = (maxlon - minlon) / 2
@@ -1326,7 +1326,7 @@ function _dsk_box_lonlat(b::NTuple{6,Float64})
     return minlon, maxlon, max(b[3], -_DSK_HALFPI), min(b[4], _DSK_HALFPI)
 end
 
-"`zzlatbox`: centre and radius of a sphere that contains the latitudinal volume element `b`."
+"`zzlatbox`: center and radius of a sphere that contains the latitudinal volume element `b`."
 function _dsk_latbox(b::NTuple{6,Float64})
     minlon, maxlon, minlat, maxlat = _dsk_box_lonlat(b)
     minr = b[5]
@@ -1350,7 +1350,7 @@ function _dsk_latbox(b::NTuple{6,Float64})
     return _dsk_cylbox(outrad, inrad, minlon, maxlon, maxz, minz)
 end
 
-"`zzrecbox`: centre and radius of the sphere around the rectangular volume element `b`."
+"`zzrecbox`: center and radius of the sphere around the rectangular volume element `b`."
 function _dsk_recbox(b::NTuple{6,Float64})
     l1 = b[2] - b[1]
     l2 = b[4] - b[3]
@@ -1361,7 +1361,7 @@ function _dsk_recbox(b::NTuple{6,Float64})
     return center, _dsk_vnorm(Vec3{Float64}(l1 / 2, l2 / 2, l3 / 2))
 end
 
-"`zzpdtbox`: centre and radius of a sphere that contains the planetodetic volume element `b` on the spheroid `re`, `f`."
+"`zzpdtbox`: center and radius of a sphere that contains the planetodetic volume element `b` on the spheroid `re`, `f`."
 function _dsk_pdtbox(b::NTuple{6,Float64}, re::Float64, f::Float64)
     re > 0.0 || _dsk_throw(:valueoutofrange, "the equatorial radius must be positive")
     f < 1.0 || _dsk_throw(:valueoutofrange, "the flattening coefficient must be less than 1")
@@ -1392,7 +1392,7 @@ function _dsk_pdtbox(b::NTuple{6,Float64}, re::Float64, f::Float64)
     return _dsk_cylbox(outrad, inrad, minlon, maxlon, topv[3], botv[3])
 end
 
-"`zzsegbox`: centre and radius of the bounding sphere of the volume element of the descriptor `d`."
+"`zzsegbox`: center and radius of the bounding sphere of the volume element of the descriptor `d`."
 function _dsk_segbox(d::DSKDescr)
     b = _dsk_bounds(d)
     d.corsys == 1 && return _dsk_latbox(b)
@@ -1837,9 +1837,9 @@ end
 """
     _dsk_offset(ks, dsc) -> Vec3
 
-Position of the centre of the frame of the segment relative to the centre body of the
+Position of the center of the frame of the segment relative to the center body of the
 segment, in the frame of the segment at the middle of its coverage (the vector
-`STOFF` of `zzdsksba`): zero when the frame is centred on the body. Throws
+`STOFF` of `zzdsksba`): zero when the frame is centered on the body. Throws
 `SpiceError(:noframeinfo)` or `:noframename` if the frame is unknown.
 """
 function _dsk_offset(ks::KernelSet, dsc::DSKDescr)
@@ -1877,7 +1877,7 @@ end
 """
     _dsk_sph(ks, segs, bodyid, srflst) -> (minrad, maxrad)
 
-`zzdsksph`: radii of an inner and an outer bounding sphere, centred on the body, of
+`zzdsksph`: radii of an inner and an outer bounding sphere, centered on the body, of
 all segments of `bodyid` with a surface in `srflst` (any time). Throws
 `SpiceError(:dskdatanotfound)` if there is no such segment.
 """
