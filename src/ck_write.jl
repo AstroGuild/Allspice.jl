@@ -4,15 +4,16 @@
 # trailer in the layout of CSPICE, so the data area is equal bit for bit to the one
 # that CSPICE writes from the same input.
 #
-# Argument lists follow SPICE.jl, except that the record count is always the length
-# of the input (SPICE.jl 0.2.5 passes one record less to `ckw02_c` and `ckw03_c`).
-# Quaternions are SPICE quaternions (scalar first). A table of quaternions, angular
-# velocities or packets is a vector of vectors, a matrix with one row of the table in
-# each column, or a flat vector. Times are encoded spacecraft clock ticks. See
-# `spk_write.jl` for the frame argument, the keyword `ctx` and the error kinds.
+# Argument lists follow CSPICE without the counts and flags that follow from the input:
+# the record count is the length of the input, and `avflag` of `ckw01` and `ckw03` is
+# `avvs !== nothing`. Quaternions are SPICE quaternions (scalar first). A table of
+# quaternions, angular velocities or packets is a vector of vectors, a matrix with one
+# row of the table in each column, or a flat vector. Times are encoded spacecraft clock
+# ticks. See `spk_write.jl` for the frame argument, the optional first argument `ctx`
+# and the error kinds.
 
 """
-    ckopn(path, ifname="CK_file", ncomch=0) -> DAFHandle
+    ckopn(path, ifname, ncomch=0) -> DAFHandle
 
 Create the CK file `path` and open it for writing, as `ckopn_c`.
 
@@ -33,7 +34,7 @@ julia> h = ckopn(path, "example CK");
 
 julia> quats = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]];
 
-julia> ckw03(h, 0.0, 10.0, -77000, "J2000", "attitude", [0.0, 10.0], quats, [0.0])
+julia> ckw03(h, 0.0, 10.0, -77000, "J2000", "attitude", [0.0, 10.0], quats, nothing, [0.0])
 
 julia> ckcls(h)
 
@@ -44,7 +45,7 @@ julia> getfat(path)
 See also [`ckw01`](@ref), [`ckw02`](@ref), [`ckw03`](@ref), [`ckw05`](@ref),
 [`ckw06`](@ref), [`dafac`](@ref) to add comments.
 """
-function ckopn(path::AbstractString, ifname::AbstractString="CK_file", ncomch::Integer=0)
+function ckopn(path::AbstractString, ifname::AbstractString, ncomch::Integer=0)
     _seg_chkfstr("ckopn", "path", path)
     _seg_chkfstr("ckopn", "ifname", ifname)
     ncomr = ncomch > 0 ? (Int(ncomch) - 1) ÷ _DAF_CRECLEN + 1 : 0
@@ -73,18 +74,15 @@ end
 """
     _ck_avvs(who, avvs, nrec) -> (flat::Vector{Float64}, avflag::Bool)
 
-Angular velocities for `nrec` records: the segment has angular velocity if `avvs` holds
-`nrec` vectors; `nothing` (the default argument) means none, and so does one vector for
-more than one record (the default argument `[zeros(3)]` of SPICE.jl). Another count
-throws `SpiceError(:badarg)`.
+Angular velocities for `nrec` records: none if `avvs` is `nothing`, else `avvs` must
+hold `nrec` vectors. Another count throws `SpiceError(:badarg)`.
 """
 function _ck_avvs(who::AbstractString, avvs, nrec::Int)
     avvs === nothing && return Float64[], false
     av, n, _ = _seg_flat(who, "avvs", avvs, 3)
-    n == nrec && return av, true
-    n == 1 || throw(SpiceError(:badarg,
-        "$who: `avvs` must have $nrec elements (or be omitted) but has $n"))
-    return Float64[], false
+    n == nrec || throw(SpiceError(:badarg,
+        "$who: `avvs` must have $nrec elements (or be `nothing`) but has $n"))
+    return av, true
 end
 
 "Throws `SpiceError(:zeroquaternion)` if one of the `n` quaternions that start every `step` doubles in `flat` is zero."
@@ -118,20 +116,20 @@ function _ck_pointing(q::Vector{Float64}, av::Vector{Float64}, nrec::Int, avflag
 end
 
 """
-    ckw01(handle, begtim, endtim, inst, ref, segid, sclkdp, quats, avvs=nothing;
-          ctx=default_context()) -> Nothing
+    ckw01([ctx,] handle, begtim, endtim, inst, ref, segid, sclkdp, quats, avvs) -> Nothing
 
 Write a CK segment of type 1 (discrete pointing) to the file of `handle`, as `ckw01_c`.
 
 # Arguments
-The arguments `handle`, `begtim`, `endtim`, `inst`, `ref`, `segid` and `ctx` have the same
+The arguments `ctx`, `handle`, `begtim`, `endtim`, `inst`, `ref` and `segid` have the same
 meaning in every `ckwNN` writer. [`ckw06`](@ref) names the coverage `first`, `last`.
+- `ctx`: the context in which a frame name is resolved (default: the default context).
 - `handle`: a [`DAFHandle`](@ref) from [`ckopn`](@ref).
 - `begtim`, `endtim`: the coverage of the segment, encoded spacecraft clock ticks
   ([`sce2c`](@ref) converts a time to them).
 - `inst`: the NAIF ID of the instrument or structure.
-- `ref`: the reference frame, a name or a frame ID. A name is resolved in `ctx` (a
-  `SpiceContext` or a `KernelSet`); built-in frames need no kernel.
+- `ref`: the reference frame, a name or a frame ID. A name is resolved in `ctx`;
+  built-in frames need no kernel.
 - `segid`: the segment identifier, at most 40 printable characters.
 - `sclkdp`: the times of the pointing records, encoded spacecraft clock ticks.
 - `quats`: one SPICE quaternion (scalar first) for each record. [`q2m`](@ref) of it is
@@ -143,9 +141,9 @@ meaning in every `ckwNN` writer. [`ckw06`](@ref) names the coverage `first`, `la
 The number of records is `length(sclkdp)`. A table such as `quats` is a vector of vectors
 (the form of SPICE.jl), a matrix with one record in each column, or a flat vector.
 
-The segment has angular velocity if `avvs` holds one vector for each record. It has none
-if `avvs` is `nothing`, which is the default, and also if `avvs` holds one vector for
-more than one record. Another number of vectors throws `SpiceError(:badarg)`.
+The segment has angular velocity if `avvs` holds one vector for each record, and none if
+`avvs` is `nothing`; this takes the place of the `avflag` argument of CSPICE. Another
+number of vectors throws `SpiceError(:badarg)`.
 
 Every `ckwNN` writer puts its segment on disk when the call returns, with the data that
 CSPICE writes from the same input. A call that throws writes nothing.
@@ -167,8 +165,8 @@ Throws `SpiceError`. Every `ckwNN` writer throws:
 See also [`ckw02`](@ref), [`ckw03`](@ref), [`ckw05`](@ref), [`ckw06`](@ref), and
 [`ckopn`](@ref) for an example.
 """
-function ckw01(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::SegFrame,
-        segid::AbstractString, sclkdp, quats, avvs=nothing; ctx::SegContext=default_context())
+function ckw01(ctx::SegContext, h::DAFHandle, begtim::Real, endtim::Real, inst::Integer,
+        ref::SegFrame, segid::AbstractString, sclkdp, quats, avvs)
     who = "ckw01"
     _daf_check_write(h, who)
     ref isa AbstractString && _seg_chkfstr(who, "ref", ref)
@@ -199,10 +197,13 @@ function ckw01(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::Seg
     _ck_add!(h, inst, refcod, 1, avflag, begtim, endtim, segid, data)
     return nothing
 end
+ckw01(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::SegFrame,
+    segid::AbstractString, sclkdp, quats, avvs) =
+    ckw01(default_context(), h, begtim, endtim, inst, ref, segid, sclkdp, quats, avvs)
 
 """
-    ckw02(handle, begtim, endtim, inst, ref, segid, start, stop, quats, avvs, rates;
-          ctx=default_context()) -> Nothing
+    ckw02([ctx,] handle, begtim, endtim, inst, ref, segid, start, stop, quats, avvs, rates)
+        -> Nothing
 
 Write a CK segment of type 2 (pointing with a constant angular velocity on intervals), as
 `ckw02_c`.
@@ -221,8 +222,8 @@ Throws `SpiceError`:
 - `:badstoptime` if `stop[i-1] > start[i]`;
 - `:zeroquaternion` if a quaternion is zero.
 """
-function ckw02(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::SegFrame,
-        segid::AbstractString, start, stop, quats, avvs, rates; ctx::SegContext=default_context())
+function ckw02(ctx::SegContext, h::DAFHandle, begtim::Real, endtim::Real, inst::Integer,
+        ref::SegFrame, segid::AbstractString, start, stop, quats, avvs, rates)
     who = "ckw02"
     _daf_check_write(h, who)
     ref isa AbstractString && _seg_chkfstr(who, "ref", ref)
@@ -269,10 +270,14 @@ function ckw02(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::Seg
     _ck_add!(h, inst, refcod, 2, true, begtim, endtim, segid, data)
     return nothing
 end
+ckw02(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::SegFrame,
+    segid::AbstractString, start, stop, quats, avvs, rates) =
+    ckw02(default_context(), h, begtim, endtim, inst, ref, segid, start, stop, quats, avvs,
+        rates)
 
 """
-    ckw03(handle, begtim, endtim, inst, ref, segid, sclkdp, quats, starts, avvs=nothing;
-          ctx=default_context()) -> Nothing
+    ckw03([ctx,] handle, begtim, endtim, inst, ref, segid, sclkdp, quats, avvs, starts)
+        -> Nothing
 
 Write a CK segment of type 3 (pointing with linear interpolation inside intervals), as
 `ckw03_c`.
@@ -294,9 +299,8 @@ Throws `SpiceError`:
 
 See [`ckopn`](@ref) for an example.
 """
-function ckw03(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::SegFrame,
-        segid::AbstractString, sclkdp, quats, starts, avvs=nothing;
-        ctx::SegContext=default_context())
+function ckw03(ctx::SegContext, h::DAFHandle, begtim::Real, endtim::Real, inst::Integer,
+        ref::SegFrame, segid::AbstractString, sclkdp, quats, avvs, starts)
     who = "ckw03"
     _daf_check_write(h, who)
     ref isa AbstractString && _seg_chkfstr(who, "ref", ref)
@@ -346,10 +350,14 @@ function ckw03(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::Seg
     _ck_add!(h, inst, refcod, 3, avflag, begtim, endtim, segid, data)
     return nothing
 end
+ckw03(h::DAFHandle, begtim::Real, endtim::Real, inst::Integer, ref::SegFrame,
+    segid::AbstractString, sclkdp, quats, avvs, starts) =
+    ckw03(default_context(), h, begtim, endtim, inst, ref, segid, sclkdp, quats, avvs,
+        starts)
 
 """
-    ckw05(handle, subtyp, degree, begtim, endtim, inst, ref, avflag, segid, sclkdp, packts,
-          rate, nints, starts; ctx=default_context()) -> Nothing
+    ckw05([ctx,] handle, subtyp, degree, begtim, endtim, inst, ref, avflag, segid, sclkdp,
+          packts, rate, nints, starts) -> Nothing
 
 Write a CK segment of type 5 (Hermite or Lagrange interpolation of attitude packets), as
 `ckw05_c`.
@@ -390,9 +398,9 @@ Throws `SpiceError`:
 - `:emptysegment` if no time of `sclkdp` is inside [`begtim`, `endtim`];
 - `:invalidvalue` if `rate` is zero.
 """
-function ckw05(h::DAFHandle, subtyp::Integer, degree::Integer, begtim::Real, endtim::Real,
-        inst::Integer, ref::SegFrame, avflag::Bool, segid::AbstractString, sclkdp, packts,
-        rate::Real, nints::Integer, starts; ctx::SegContext=default_context())
+function ckw05(ctx::SegContext, h::DAFHandle, subtyp::Integer, degree::Integer,
+        begtim::Real, endtim::Real, inst::Integer, ref::SegFrame, avflag::Bool,
+        segid::AbstractString, sclkdp, packts, rate::Real, nints::Integer, starts)
     who = "ckw05"
     _daf_check_write(h, who)
     ref isa AbstractString && _seg_chkfstr(who, "ref", ref)
@@ -445,12 +453,17 @@ function ckw05(h::DAFHandle, subtyp::Integer, degree::Integer, begtim::Real, end
     _ck_add!(h, inst, refcod, 5, avflag, begtim, endtim, segid, data)
     return nothing
 end
+ckw05(h::DAFHandle, subtyp::Integer, degree::Integer, begtim::Real, endtim::Real,
+    inst::Integer, ref::SegFrame, avflag::Bool, segid::AbstractString, sclkdp, packts,
+    rate::Real, nints::Integer, starts) =
+    ckw05(default_context(), h, subtyp, degree, begtim, endtim, inst, ref, avflag, segid,
+        sclkdp, packts, rate, nints, starts)
 
 const _CK06_PKTSZS = (8, 4, 14, 7)
 
 """
-    ckw06(handle, inst, ref, avflag, first, last, segid, npkts, subtps, degres, packts,
-          rates, sclkdp, ivlbds, sellst; ctx=default_context()) -> Nothing
+    ckw06([ctx,] handle, inst, ref, avflag, first, last, segid, npkts, subtps, degres,
+          packts, rates, sclkdp, ivlbds, sellst) -> Nothing
 
 Write a CK segment of type 6 (mini-segments of Hermite or Lagrange interpolation), as
 `ckw06` of SPICELIB. CSPICE has no C wrapper for it.
@@ -492,10 +505,10 @@ For a mini-segment it throws:
 - `:badquatsign`, for a Hermite subtype, if a quaternion is farther from its
   predecessor than its negative is.
 """
-function ckw06(h::DAFHandle, inst::Integer, ref::SegFrame, avflag::Bool, first::Real,
-        last::Real, segid::AbstractString, npkts::AbstractVector{<:Integer},
+function ckw06(ctx::SegContext, h::DAFHandle, inst::Integer, ref::SegFrame, avflag::Bool,
+        first::Real, last::Real, segid::AbstractString, npkts::AbstractVector{<:Integer},
         subtps::AbstractVector{<:Integer}, degres::AbstractVector{<:Integer}, packts, rates,
-        sclkdp, ivlbds, sellst::Bool; ctx::SegContext=default_context())
+        sclkdp, ivlbds, sellst::Bool)
     who = "ckw06"
     _daf_check_write(h, who)
     ref isa AbstractString && _seg_chkfstr(who, "ref", ref)
@@ -606,3 +619,9 @@ function ckw06(h::DAFHandle, inst::Integer, ref::SegFrame, avflag::Bool, first::
     _ck_add!(h, inst, refcod, 6, avflag, first, last, segid, data)
     return nothing
 end
+ckw06(h::DAFHandle, inst::Integer, ref::SegFrame, avflag::Bool, first::Real, last::Real,
+    segid::AbstractString, npkts::AbstractVector{<:Integer},
+    subtps::AbstractVector{<:Integer}, degres::AbstractVector{<:Integer}, packts, rates,
+    sclkdp, ivlbds, sellst::Bool) =
+    ckw06(default_context(), h, inst, ref, avflag, first, last, segid, npkts, subtps,
+        degres, packts, rates, sclkdp, ivlbds, sellst)

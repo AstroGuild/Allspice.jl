@@ -719,22 +719,21 @@ function _spks14(newh::DAFHandle, r::_SegReader, ndscr::Vector{Float64}, ident::
 end
 
 """
-    spksub(newh, handle, descr, ident, start, stop) -> Nothing
+    spksub(handle, descr, ident, start, stop, newh) -> Nothing
 
 Write the part of an SPK segment that covers the interval `[start, stop]` as a new
 segment of another SPK file, as `spksub_c`.
 
-- `newh`: the [`DAFHandle`](@ref) of the new file, open for writing ([`spkopn`](@ref),
-  [`spkopa`](@ref)).
 - `handle`, `descr`: the file that holds the source segment ([`dafopr`](@ref)) and the
   descriptor of the segment ([`dafgs`](@ref), [`spksfs`](@ref)).
 - `ident`: the identifier of the new segment.
 - `start`, `stop`: the coverage of the new segment, seconds past J2000 TDB.
+- `newh`: the [`DAFHandle`](@ref) of the new file, open for writing ([`spkopn`](@ref),
+  [`spkopa`](@ref)).
 
 The new segment holds the records of the source that the evaluation in `[start, stop]`
 needs: the data that `spksub_c` writes from the same source, double for double. It is on
-disk when the call returns. `newh` comes first, as in `spksub!` of SPICE.jl; CSPICE has it
-last.
+disk when the call returns.
 
 In `[start, stop]` the new segment gives the states of the source segment, within
 rounding for the types 8 and 12. For type 20 the states differ from those of the source
@@ -779,7 +778,7 @@ julia> src = dafopr(joinpath(dir, "source.bsp")); dafbfs(src); daffna(src);
 
 julia> newh = spkopn(joinpath(dir, "part.bsp"), "part");
 
-julia> spksub(newh, src, dafgs(src), "records 2 and 3", 30.0, 60.0)
+julia> spksub(src, dafgs(src), "records 2 and 3", 30.0, 60.0, newh)
 
 julia> spkcls(newh); dafcls(src)
 
@@ -791,8 +790,8 @@ julia> spkuds(dafgs(h))
 julia> dafcls(h)
 ```
 """
-function spksub(newh::DAFHandle, handle::DAFHandle, descr::AbstractVector{<:Real},
-        ident::AbstractString, start::Real, stop::Real)
+function spksub(handle::DAFHandle, descr::AbstractVector{<:Real}, ident::AbstractString,
+        start::Real, stop::Real, newh::DAFHandle)
     _seg_chkfstr("spksub", "ident", ident)
     dc, ic = dafus(descr, 2, 6)
     alpha, omega = dc

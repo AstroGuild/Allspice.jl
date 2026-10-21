@@ -49,7 +49,7 @@ _lst_two(n::Integer) = string(n ÷ 10, n % 10)
 Return the local solar time at `et` for the longitude `lon` on the body with ID
 `body`, as `et2lst_c`.
 
-- `et`: seconds past J2000 TDB.
+- `et`: seconds past J2000 TDB, a plain real number (not a `ForwardDiff.Dual`).
 - `lon`: longitude in radians.
 - `type`: `"PLANETOCENTRIC"` (`lon` positive east) or `"PLANETOGRAPHIC"` (`lon` with
   the sense of [`recpgr`](@ref) for the body: positive west for a prograde body such as
@@ -67,7 +67,8 @@ the body-fixed frame of [`cidfrm`](@ref). The sign of the second value of
 result is always 12:00:00. The call needs SPK data for the body and the Sun and PCK
 data for the body.
 
-Throws `SpiceError`, with the checks in this order, as in CSPICE:
+Throws `SpiceError`, with the checks in this order, as in CSPICE after the first:
+- `:badarg` if `et` is a `ForwardDiff.Dual`;
 - `:invalidoption`, for `"PLANETOGRAPHIC"`, if `BODY<body>_PGR_POSITIVE_LON` is not
   `EAST` or `WEST`;
 - `:missingdata`, for `"PLANETOGRAPHIC"`, if `BODY<body>_PGR_POSITIVE_LON` and
@@ -86,6 +87,7 @@ hr, mn, sc, time, ampm = et2lst(et, 399, deg2rad(-118.0), "PLANETOCENTRIC")
 ```
 """
 function et2lst(ks::KernelSet, et::Real, body::Integer, lon::Real, type::AbstractString)
+    _plain_epoch(et, "et2lst")
     system = uppercase(strip(type))
     if system == "PLANETOGRAPHIC"
         g = _lst_sense(ks, body) * Float64(lon)

@@ -13,7 +13,6 @@ CSPICE routine that the call ports; see [`SpiceError`](@ref).
 ```@docs
 EKColumnAttr
 EKSegmentSummary
-EKTable
 ekopr
 ekcls
 eknseg

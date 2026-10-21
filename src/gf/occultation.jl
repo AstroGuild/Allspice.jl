@@ -81,7 +81,7 @@ function _gf_occultation(ks::KernelSet, tols::DSKTolerances, occtyp::AbstractStr
             "when either target body is modeled as a point. Set OCCTYP to ANY for use " *
             "with point targets."))
     full = _geo_abcorr(abcorr)
-    corr = full.uselt ? Aberration(; lt=true, converged=full.converged, transmit=full.transmit) :
+    corr = full.uselt ? Aberration(; uselt=true, converged=full.converged, transmit=full.transmit) :
            full
     # Radii, frames and bounding spheres, the front target first; the frames are kept
     # as IDs for the evaluations.

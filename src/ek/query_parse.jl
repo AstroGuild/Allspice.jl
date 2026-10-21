@@ -2238,7 +2238,7 @@ function _ek_qdecode(q::_EKQEnc, tabcat::Vector{Int})
 end
 
 """
-    _ek_encode_query(tables, ks, td, query) -> (query, error, errmsg)
+    _ek_encode_query(tables, ks, td, query) -> (query, failed, errmsg)
 
 Contract: `tables` is the catalog of loaded tables in load order, with names in
 upper case. Runs the steps of `ekfind_` that come before the search (`zzekqini_`,
@@ -2280,25 +2280,25 @@ end
     _ek_psel(tables, ks, td, query) -> NamedTuple
 
 Contract: as `_ek_encode_query` for the arguments. Analyses the SELECT clause of
-`query` as `ekpsel_c` and returns `(n, xbegs, xends, xtypes, xclass, tabs, cols, error,
+`query` as `ekpsel_c` and returns `(n, xbegs, xends, xtypes, xclass, tabs, cols, failed,
 errmsg)`: the number `n` of SELECT items and for each item the first and last
 character of its expression in `query` (`xbegs`, `xends`; 1-based byte positions, one
 more than the 0-based positions of `ekpsel_c`), its data type (`xtypes`: `:CHR`,
 `:DP`, `:INT` or `:TIME`), its class (`xclass`: always `:COL`, a column), the name of
 its table (`tabs`: the table name, never the alias) and of its column (`cols`). For a
-query that is not valid, `error` is true, `errmsg` holds the message, `n` is 0 and the
+query that is not valid, `failed` is true, `errmsg` holds the message, `n` is 0 and the
 vectors are empty.
 """
 function _ek_psel(tables::Vector{EKTable}, ks::KernelSet, td::TimeDefaults,
     query::AbstractString)
-    q, error, errmsg = _ek_encode_query(tables, ks, td, query)
-    error && return (n=0, xbegs=Int[], xends=Int[], xtypes=Symbol[], xclass=Symbol[],
-        tabs=String[], cols=String[], error=true, errmsg=errmsg)
+    q, failed, errmsg = _ek_encode_query(tables, ks, td, query)
+    failed && return (n=0, xbegs=Int[], xends=Int[], xtypes=Symbol[], xclass=Symbol[],
+        tabs=String[], cols=String[], failed=true, errmsg=errmsg)
     sel = q.select
     return (n=length(sel), xbegs=[c.lxbeg for c in sel], xends=[c.lxend for c in sel],
         xtypes=[tables[q.tabcat[c.tabidx]].attrs[c.colidx].dtype for c in sel],
         xclass=fill(:COL, length(sel)), tabs=[q.tables[c.tabidx] for c in sel],
-        cols=[c.name for c in sel], error=false, errmsg="")
+        cols=[c.name for c in sel], failed=false, errmsg="")
 end
 
 """

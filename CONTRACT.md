@@ -30,8 +30,9 @@ Conventions that hold everywhere:
   into `ERROR_KINDS` (`errors.jl`): the constructor refuses a kind that is not there, and
   a test compares the registry with the kinds in the source.
 - CSPICE keeps state in saved variables and in process-wide tables; this package keeps
-  none. State that CSPICE hides is an object that the caller owns (`DAFHandle`,
-  `DASHandle`, `EKResult`, `EKFastLoad`) or an atomic field of the `SpiceContext`.
+  one, the table of open files of `daf_access.jl`. Other state that CSPICE hides is an
+  object that the caller owns (`DAFHandle`, `DASHandle`, `EKResult`, `EKFastLoad`) or an
+  atomic field of the `SpiceContext`.
 - Where CSPICE computes with 32-bit integers, the port gives the same value: `_cint`
   (the C cast of a double) and `_wrap32` (reduction to the 32-bit range) of `time.jl`,
   with `_dnint` and `_nint`, the rounding functions of f2c (the Fortran to C translator
@@ -242,8 +243,8 @@ the call (`:noleapseconds`, `:missingtimeinfo` or `:kernelvarnotfound`).
   and the `@` dates on, every other value turns it off, and `""` throws `:emptystring`.
   It is off at start, as in CSPICE; another context is not changed.
 - `eklef([ctx], path) -> String` is `furnsh` for a file that is an EK
-  (`:wrongarchitecture` otherwise) and returns the path as the handle of
-  `ekuef([ctx], handle)`, which is `unload`.
+  (`:wrongarchitecture` otherwise) and returns the path, which `ekuef([ctx], path)`,
+  that is `unload`, takes.
 - `jul2gr(y, m, d)`, `gr2jul(y, m, d) -> (year, month, day, doy)`.
 - Constants: `j1900 j1950 j2000 j2100 jyear tyear spd b1900 b1950 clight halfpi twopi
   rpd dpr`, each a function without arguments.
@@ -315,10 +316,11 @@ function of ticks. The evaluators follow the readers `ckrNN` and the evaluators
   `spkgeo`, is `_ck_state_rotation` (the two blocks of `sxform_c`, as `frmchg_`); for
   every other chain it is `rotation_jet`. `_exact_frame_jet` always gives the exact
   derivatives.
-- Public: `ckgp`, `ckgpav` (`SpiceError(:valueoutofrange)` for `tol < 0`), `ckcov`,
-  `ckobj`, `ckmeta` (`SpiceError(:unknownckmeta)`), and `ckfrot`, `ckfxfm`: one CK link
-  as `_ck_frame_step` evaluates it, `nothing` without CK data, without the SCLK kernel
-  (`ckhave_`, `zzsclk_`) or without a segment.
+- Public: `ckgp`, `ckgpav` (`nothing` without a pointing; `SpiceError(:valueoutofrange)`
+  for `tol < 0`), `ckcov`, `ckcov!` (a `Window`, filled with `wninsd!` interval by
+  interval as `ckcov_`), `ckobj`, `ckmeta` (`SpiceError(:unknownckmeta)`), and `ckfrot`,
+  `ckfxfm`: one CK link as `_ck_frame_step` evaluates it, `nothing` without CK data,
+  without the SCLK kernel (`ckhave_`, `zzsclk_`) or without a segment.
 - `ck_records.jl` (after `daf_access.jl`, since it takes a `DAFHandle`): `cknr02`,
   `ckgr02`, `cknr03`, `ckgr03` read the records of one segment through a handle and a
   packed descriptor; `:ckwrongdatatype`, `:cknonexistrec`.
@@ -411,8 +413,9 @@ the default context, plus an inner form on a `KernelSet`.
 ## `aberration.jl`
 
 - `struct Aberration` (plain bits; properties `uselt`, `converged`, `stellar`,
-  `transmit`, `geometric`); `Aberration(s::AbstractString)` parses as `zzvalcor` and
-  throws `SpiceError(:badarg, ...)`. `AbcorrArg` is the union of the two argument forms.
+  `transmit`, `geometric`; the first four are the keywords of `Aberration(; ...)`, and
+  the field `flags` is private); `Aberration(s::AbstractString)` parses as `zzvalcor` and
+  throws `SpiceError(:invalidoption, ...)`. `AbcorrArg` is the union of the two argument forms.
 - `abcorr_state(ks, targ::Int32, et, ref::Int32, corr, obs::Int32) -> (SVector{6}, lt)`
   (`spkez`), `abcorr_position(...) -> (SVector{3}, lt)` (`spkezp`),
   `abcorr_jet(..., ::Val{N}) -> NTuple{N+1,Vec3}`.
@@ -424,6 +427,9 @@ the default context, plus an inner form on a `KernelSet`.
   equal bit for bit.
 
 ## `windows.jl`
+
+`windows.jl` comes before `ck_api.jl` in the include order, because `ckcov!` takes a
+`Window`.
 
 - `struct Window <: AbstractVector{Float64}`: `data` holds the endpoints of disjoint
   closed intervals in increasing order, so `w[k]`, `length(w)` and iteration give what
@@ -453,9 +459,18 @@ open files and one hidden "current array" for each search; here the opened file 
 | comments, file record | `dafac`, `dafec -> Vector{String}`, `dafdc`, `dafrfr` |
 | architecture | `getfat(path) -> (arch, kind)`, `idw2at(idword) -> (arch, kind)` |
 
-- Thread safety: there is no global state, so two tasks can work on two handles at the
-  same time. One handle is not safe for concurrent use, and a caller that shares a
-  handle between tasks must hold a lock around every call.
+- Thread safety: the only global state is the table of open files, `_OPEN_FILES` under
+  `_OPEN_FILES_LOCK`, so two tasks can work on two handles at the same time. One handle
+  is not safe for concurrent use, and a caller that shares a handle between tasks must
+  hold a lock around every call.
+- The table of open files holds, with weak keys, each `DAFHandle` and `DASHandle` that a
+  public open call returned (`dafopr`, `dafopw`, `dafonw`, `dasopr`, `dasopw`, `dasonw`,
+  `ekopr`, and the calls on top of them), with the device and inode of its file.
+  `_open_register!(h, path, writable, who; check=writable)` throws
+  `SpiceError(:fileopenconflict)` for a write open of a file that another open handle
+  has open, as `zzddhopn` of CSPICE does; a read open is not checked (CSPICE gives
+  RWCONFLICT for a file open for write). A close calls `_open_unregister!(h)`. The
+  handles of `furnsh` and other internal readers are not in the table.
 - A file never shrinks, and the bytes of an array are in place before its summary is,
   so a reader that opens the file between two calls sees a valid DAF. Rule for the
   caller: `furnsh` a file only after `dafcls`, `spkcls` or `ckcls` has returned, and
@@ -473,14 +488,19 @@ records `_seg_cheb_records` lays out as for SPK types 2 and 3). Each writer make
 the same order, so the data area is equal bit for bit to the one that CSPICE writes
 from the same input.
 
-- Argument lists follow SPICE.jl (the Julia wrapper of CSPICE). A table of states,
-  quaternions or packets is a vector of vectors, a matrix with one row of the table in
-  each column, or a flat vector; `_seg_flat(who, what, x, rowlen) -> (flat, n, rowlen)`
-  converts it and throws `SpiceError(:badarg)` if the shape does not fit.
-- `SegFrame` is a frame name or a frame ID, and `SegContext` (the keyword `ctx`) is the
-  `SpiceContext` or `KernelSet` that resolves a name; `_seg_refcode(who, ctx, frame)`
-  throws `SpiceError(:invalidrefframe)`. `_seg_close(h, what)` closes a file as `spkcls`
-  does: a file that is open for write must hold a segment (`:nosegmentsfound`).
+- Argument lists follow CSPICE in its order, without the counts and flags that follow
+  from the input (`avflag` of `ckw01` and `ckw03` is `avvs !== nothing`; a count of
+  `avvs` other than the record count is `:badarg`). A table of states, quaternions or
+  packets is a vector of vectors (the form of SPICE.jl, the Julia wrapper of CSPICE), a
+  matrix with one row of the table in each column, or a flat vector;
+  `_seg_flat(who, what, x, rowlen) -> (flat, n, rowlen)` converts it and throws
+  `SpiceError(:badarg)` if the shape does not fit.
+- `SegFrame` is a frame name or a frame ID, and `SegContext` (the optional first
+  argument `ctx` of every writer, of `spkpds` and of `table_to_spk`; the method without
+  it passes `default_context()`) is the `SpiceContext` or `KernelSet` that resolves a
+  name; `_seg_refcode(who, ctx, frame)` throws `SpiceError(:invalidrefframe)`.
+  `_seg_close(h, what)` closes a file as `spkcls` does: a file that is open for write
+  must hold a segment (`:nosegmentsfound`).
 - Deviation from SPICE.jl 0.2.5: the record count of `ckw02` and `ckw03` is always the
   length of the input (that version passes one record less to CSPICE), and each element
   of a vector of vectors given to `pckw02` is one record of `3 * (degree + 1)`
@@ -490,10 +510,10 @@ from the same input.
   half-word of a binary PCK summary (5 integers) is zero, as a new CSPICE process
   writes it; a CSPICE process that handled an SPK or CK summary before writes there
   the sixth integer of that summary.
-- Type 14 has three calls, as in CSPICE: `spk14b(handle, segid, body, center, frame,
-  first, last, chbdeg) -> SPK14Writer`, `spk14a(writer, [ncsets,] coeffs, epochs)` and
-  `spk14e(writer)`. CSPICE keeps the segment in work in a table of files; here the
-  `SPK14Writer` holds it, and the file changes only when `spk14e` runs. The data area
+- Type 14 has three calls, as in CSPICE: `spk14b([ctx,] handle, segid, body, center,
+  frame, first, last, chbdeg) -> SPK14Writer`, `spk14a(writer, [ncsets,] coeffs,
+  epochs)` and `spk14e(writer)`. CSPICE keeps the segment in work in a table of files;
+  here the `SPK14Writer` holds it, and the file changes only when `spk14e` runs. The data area
   is the one of the generic segment writer `sgwes_` (constant, each record after its
   epoch, epochs, directory, 17 meta data items), equal word for word.
 
@@ -591,7 +611,8 @@ equator, mean equinox), which `type10.jl` turns to J2000 as `zzteme.f` does.
 ## `spk_segments.jl`
 
 `spksfs`, `spkpvn`, `spkuds` and `spksub`: SPK segments named by a file and a
-descriptor.
+descriptor. `spksub(handle, descr, ident, start, stop, newh)` takes the arguments of
+`spksub_c` in its order.
 
 - A loaded file has no handle, so `spksfs(ks, body, et) -> Union{Nothing,Tuple{String,
   Vector{Float64},String}}` returns the path of the file. The segment is
@@ -755,7 +776,7 @@ length. A query needs no kernel set, so it suits the inner loop of an optimizer.
   `table_state` and `table_span` read it without allocation and without kernel access.
   The range check throws `SpiceError(:spkinsuffdata)` and is a bounds check: under
   `@inbounds` it is removed, and an epoch outside the table is then extrapolated.
-- `table_to_spk(handle, tab, segid; first, last, ctx)` writes the table as one SPK
+- `table_to_spk([ctx,] handle, tab, segid; first, last)` writes the table as one SPK
   segment of type 2 through `spkw02`, with the records of the table as its records.
 - `RotationTable{T,A}` (fields `coef`, `t0`, `dt`, `nint`, `ncoef`, `from`, `to`,
   `maxerr`; `length(coef) == 9 ncoef nint`, the nine matrix elements column after
@@ -793,7 +814,7 @@ pages; a segment holds rows of one table, and a row has one entry for each colum
   `ints` (a `DASHandle` or an `EKFile`). They hold no state, so many tasks can read one
   store at the same time. `open_ek(path) -> EKFile` throws the kinds of `dasopr`,
   `:wrongarchitecture`, `:invalidformat`, `:eknosegments` or `:ekcolnummismatch`.
-- `_ek_encode_query(tables, ks, td::TimeDefaults, query) -> (q, error, errmsg)` is a
+- `_ek_encode_query(tables, ks, td::TimeDefaults, query) -> (q, failed, errmsg)` is a
   pure function that returns the message of `ekfind_c` for a query that is not valid,
   and throws `SpiceError` only where CSPICE signals a SPICE error. Its docstring lists
   the known differences from CSPICE.

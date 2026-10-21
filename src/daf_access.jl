@@ -3,9 +3,10 @@
 #
 # CSPICE keeps a process-wide table of open DAF files and one hidden "current array"
 # per search. Here the opened file is an object, `DAFHandle`, that the caller owns, and
-# the search state lives inside it. There is no global state, so two tasks can work on
-# two handles at the same time. One handle is not safe for concurrent use: a caller
-# that shares a handle between tasks must hold a lock around every call.
+# the search state lives inside it. The only global state is the table of open files
+# below, under its own lock, so two tasks can work on two handles at the same time. One
+# handle is not safe for concurrent use: a caller that shares a handle between tasks
+# must hold a lock around every call.
 #
 # Rule for kernels that are written: `furnsh` a file only after `dafcls`, `spkcls` or
 # `ckcls` has returned. `furnsh` memory-maps the file and takes its segment
@@ -19,6 +20,47 @@ const _DAF_NATIVE_LITTLE = ENDIAN_BOM == 0x04030201
 const _DAF_NATIVE_BFF = _DAF_NATIVE_LITTLE ? "LTL-IEEE" : "BIG-IEEE"
 const _DAF_EOC = 0x04                     # end of the comment area
 const _DAF_EOL = 0x00                     # end of a comment line
+
+# The table of open files, shared by `DAFHandle` and `DASHandle`. It maps a handle that a
+# public open call returned to the device and inode of its file and its access. As in
+# the file table of CSPICE (`zzddhopn`), a file that a handle has open, for read or for
+# write, cannot be opened for write again; unlike CSPICE, a file that is open for write
+# can be opened for read. The keys are weak, so a handle that is no longer referenced
+# leaves the table when the garbage collector frees it.
+const _OPEN_FILES = WeakKeyDict{Any,Tuple{UInt64,UInt64,Bool}}()
+const _OPEN_FILES_LOCK = ReentrantLock()
+
+function _file_id(path::AbstractString)
+    st = stat(path)
+    return UInt64(st.device), UInt64(st.inode)
+end
+
+"""
+    _open_register!(h, path, writable, who; check=writable) -> h
+
+Enter the open handle `h` of the existing file `path` in the table of open files. With
+`check`, throw `SpiceError(:fileopenconflict)` if another open handle has the same file
+(the same device and inode, under any path); `h` is then not entered.
+"""
+function _open_register!(h, path::AbstractString, writable::Bool, who::AbstractString;
+        check::Bool=writable)
+    @assert isopen(h)
+    dev, ino = _file_id(path)
+    lock(_OPEN_FILES_LOCK) do
+        if check
+            for (other, (odev, oino, ow)) in _OPEN_FILES
+                # invariant: no handle before `other` has the file open
+                (odev == dev && oino == ino && other !== h && isopen(other)) &&
+                    throw(SpiceError(:fileopenconflict, "$who: the file $path is open " *
+                        "for $(ow ? "write" : "read") through another handle; close it first"))
+            end
+        end
+        _OPEN_FILES[h] = (dev, ino, writable)
+    end
+    return h
+end
+
+_open_unregister!(h) = lock(() -> delete!(_OPEN_FILES, h), _OPEN_FILES_LOCK)
 
 """
     DAFHandle
@@ -34,7 +76,9 @@ The handle holds the state that CSPICE keeps in global tables: the array search
 (`dafbfs`, `daffna`, `dafbbs`, `daffpa`) and the array that is being added (`dafbna`,
 `dafada`, `dafena`). Two handles are independent, so two tasks can work on two handles at
 the same time. One handle is not safe for concurrent use: tasks that share a handle must
-hold a lock around every call.
+hold a lock around every call. A file that an open handle has open, for read or for write,
+cannot be opened for write by another handle (`SpiceError(:fileopenconflict)`), as in
+CSPICE.
 
 A call on a closed handle throws `SpiceError(:dafnosuchhandle)`; the close calls do
 nothing instead. A write call on a handle that is open for reading throws
@@ -315,7 +359,7 @@ function dafopr(path::AbstractString)
     catch e
         throw(SpiceError(:fileopenfailed, "dafopr: cannot open $path: $(sprint(showerror, e))"))
     end
-    return _daf_handle(path, io, false, swap, nd, ni)
+    return _open_register!(_daf_handle(path, io, false, swap, nd, ni), path, false, "dafopr")
 end
 
 """
@@ -333,6 +377,7 @@ function dafcls(h::DAFHandle)
     h.isopen = false
     h.searching = false
     h.adding = false
+    _open_unregister!(h)
     close(h.io)
     return nothing
 end

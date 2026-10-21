@@ -268,6 +268,26 @@ group("3. derivatives", Kernels.FULL_SET_FILES...) do
         @test all(ForwardDiff.value.(jd[k]) == jp[k] for k in 1:3)
         @test all(ForwardDiff.partials.(jd[k], 1) == jp[k+1] for k in 1:3)
     end
+
+    @apart @testset "calls without derivatives refuse a Dual epoch" begin
+        # (fault fixed: limbpt, termpt, tangpt, occult, et2lst and fovtrg threw a
+        # MethodError for a Dual epoch; they take a plain epoch, and a Dual now throws
+        # SpiceError(:badarg))
+        t = ForwardDiff.Dual(epochs[1], 1.0)
+        z = [0.0, 0.0, 1.0]
+        calls = (
+            () -> limbpt(ctx, "TANGENT/ELLIPSOID", 399, t, "IAU_EARTH", "NONE", "CENTER", 301,
+                z, 1.0, 1, 0.0, 0.0, 1),
+            () -> termpt(ctx, "UMBRAL/TANGENT/ELLIPSOID", 10, 399, t, "IAU_EARTH", "NONE",
+                "CENTER", 301, z, 1.0, 1, 0.0, 0.0, 1),
+            () -> tangpt(ctx, "ELLIPSOID", 399, t, "IAU_EARTH", "NONE", "TANGENT POINT", 301,
+                "J2000", z),
+            () -> occult(ctx, 301, "ELLIPSOID", "IAU_MOON", 10, "ELLIPSOID", "IAU_SUN", "NONE",
+                399, t),
+            () -> et2lst(ctx, t, 399, 0.0, "PLANETOCENTRIC"),
+            () -> fovtrg(ctx, -999, 301, "POINT", " ", "NONE", 399, t))
+        @test all(f -> throws_kind(f, :badarg), calls)
+    end
 end
 
 FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

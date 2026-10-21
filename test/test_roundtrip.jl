@@ -68,7 +68,7 @@ group("roundtrip", Kernels.LSK, Kernels.DE440S) do
     bc = joinpath(dir, "roundtrip.bc")
     h = ckopn(bc, "roundtrip", 0)
     ckw03(h, ticks[1], ticks[end], -901000, "J2000", "type 3 round trip", ticks, quats,
-        [ticks[1]], avvs)
+        avvs, [ticks[1]])
     ckcls(h)
     @test getfat(bc) == ("DAF", "CK")
 
@@ -99,7 +99,7 @@ group("roundtrip", Kernels.LSK, Kernels.DE440S) do
         for et in ets
             R = pxform(ctx, "J2000", "RT_BUS", et)
             worst = max(worst, maximum(abs.(R - SPICE.pxform("J2000", "RT_BUS", et))))
-            allfound &= ckgpav(ctx, -901000, 1000.0 * et, 0.0, "J2000")[4]
+            allfound &= ckgpav(ctx, -901000, 1000.0 * et, 0.0, "J2000") !== nothing
         end
         @test allfound
         measured(@sprintf("  %-58s max=%.3e", "round trip type 3 CK, pxform against CSPICE, absolute", worst))

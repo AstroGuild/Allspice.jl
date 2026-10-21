@@ -48,7 +48,7 @@ function _geo_sfxcor(ks::KernelSet, sh::_GeoShape, et, corr::Aberration, obscde:
     trgcde = sh.trgcde
     fixfid = sh.fixfid
     s = _geo_sign(corr)
-    loccor = corr.uselt ? Aberration(; lt=true, converged=corr.converged, transmit=corr.transmit) :
+    loccor = corr.uselt ? Aberration(; uselt=true, converged=corr.converged, transmit=corr.transmit) :
              Aberration()
     tpos, lt = _geo_spkezp(ks, trgcde, et, fixfid, loccor, obscde)
     obspos = -tpos

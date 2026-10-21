@@ -336,7 +336,7 @@ function ekq_compare(fx, query::String; guard_not::Bool=false)
     s = Allspice._ek_psel(fx.tables, fx.ks, fx.td, query)
     if n.error
         n.errmsg == c.errmsg || return :diff_msg, "Allspice [$(n.errmsg)], CSPICE [$(c.errmsg)]"
-        (s.error && p.error && s.errmsg == p.errmsg && s.n == 0) ||
+        (s.failed && p.error && s.errmsg == p.errmsg && s.n == 0) ||
             return :diff_psel, "error case: Allspice [$(s.errmsg)], CSPICE [$(p.errmsg)]"
         return :invalid, n.errmsg
     end
@@ -351,7 +351,7 @@ function ekq_compare(fx, query::String; guard_not::Bool=false)
     all(fx.tables[q.tabcat[k]].name == q.tables[k] for k in eachindex(q.tables)) ||
         return :diff_decode, "catalogue indices"
     sum(q.conjsizes; init=0) == length(q.constraints) || return :diff_decode, "invariant"
-    (!s.error && !p.error && s.n == p.n && s.xbegs == p.xbegs && s.xends == p.xends &&
+    (!s.failed && !p.error && s.n == p.n && s.xbegs == p.xbegs && s.xends == p.xends &&
      s.xtypes == p.xtypes && s.xclass == p.xclass && s.tabs == p.tabs && s.cols == p.cols) ||
         return :diff_psel, "Allspice $(s), CSPICE $(p)"
     return :valid, ""
