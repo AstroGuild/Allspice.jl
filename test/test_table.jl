@@ -138,9 +138,9 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
         lo, hi = table_span(tab)
         p = joinpath(dir, "table.bsp")
         h = spkopn(p, "TABLE", 0)
-        table_to_spk(h, tab, "moon from the table"; ctx=ctx)
+        table_to_spk(ctx, h, tab, "moon from the table")
         fit = ephemeris_table(ctx, 399, t0, t1, "MOON_PA", "NONE", 301; tol=1e-6)
-        @test throws_kind(() -> table_to_spk(h, fit, "x"; first=t0 - 10.0, ctx=ctx), :coveragegap)
+        @test throws_kind(() -> table_to_spk(ctx, h, fit, "x"; first=t0 - 10.0), :coveragegap)
         # Regression: table_to_spk wrote a frame ID that no context knows into the segment;
         # spkw02_c signals SPICE(INVALIDREFFRAME) for a frame that it cannot resolve.
         unknown = Allspice.EphemerisTable(fit.coef, fit.t0, fit.dt, fit.nint, fit.ncoef,
@@ -151,14 +151,14 @@ group("ephemeris table", Kernels.FULL_SET_FILES...) do
             0.0, 2.0, "x", 2.0, 1, 1, collect(1.0:6.0), 0.0)
         @test cspice_kind() === :invalidrefframe
         SPICE.dafcls(hc)
-        @test throws_kind(() -> table_to_spk(h, unknown, "x"; ctx=ctx), :invalidrefframe)
+        @test throws_kind(() -> table_to_spk(ctx, h, unknown, "x"), :invalidrefframe)
         # The frame of `fit`, MOON_PA, is defined by a frame kernel of `ctx` only.
-        @test throws_kind(() -> table_to_spk(h, fit, "x"; ctx=SpiceContext()), :invalidrefframe)
+        @test throws_kind(() -> table_to_spk(SpiceContext(), h, fit, "x"), :invalidrefframe)
         spkcls(h)
         # A second file: the Earth from the Moon in the same file would close a loop of bodies.
         p2 = joinpath(dir, "table2.bsp")
         h2 = spkopn(p2, "TABLE", 0)
-        table_to_spk(h2, Allspice.EphemerisTable{Float32}(fit), "earth, single precision"; ctx=ctx)
+        table_to_spk(ctx, h2, Allspice.EphemerisTable{Float32}(fit), "earth, single precision")
         spkcls(h2)
         own = neo_context([p])
         SPICE.kclear(); SPICE.furnsh(Kernels.LSK); SPICE.furnsh(p)

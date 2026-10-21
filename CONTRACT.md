@@ -490,10 +490,10 @@ from the same input.
   half-word of a binary PCK summary (5 integers) is zero, as a new CSPICE process
   writes it; a CSPICE process that handled an SPK or CK summary before writes there
   the sixth integer of that summary.
-- Type 14 has three calls, as in CSPICE: `spk14b(handle, segid, body, center, frame,
-  first, last, chbdeg) -> SPK14Writer`, `spk14a(writer, [ncsets,] coeffs, epochs)` and
-  `spk14e(writer)`. CSPICE keeps the segment in work in a table of files; here the
-  `SPK14Writer` holds it, and the file changes only when `spk14e` runs. The data area
+- Type 14 has three calls, as in CSPICE: `spk14b([ctx,] handle, segid, body, center,
+  frame, first, last, chbdeg) -> SPK14Writer`, `spk14a(writer, [ncsets,] coeffs,
+  epochs)` and `spk14e(writer)`. CSPICE keeps the segment in work in a table of files;
+  here the `SPK14Writer` holds it, and the file changes only when `spk14e` runs. The data area
   is the one of the generic segment writer `sgwes_` (constant, each record after its
   epoch, epochs, directory, 17 meta data items), equal word for word.
 
@@ -756,7 +756,7 @@ length. A query needs no kernel set, so it suits the inner loop of an optimizer.
   `table_state` and `table_span` read it without allocation and without kernel access.
   The range check throws `SpiceError(:spkinsuffdata)` and is a bounds check: under
   `@inbounds` it is removed, and an epoch outside the table is then extrapolated.
-- `table_to_spk(handle, tab, segid; first, last, ctx)` writes the table as one SPK
+- `table_to_spk([ctx,] handle, tab, segid; first, last)` writes the table as one SPK
   segment of type 2 through `spkw02`, with the records of the table as its records.
 - `RotationTable{T,A}` (fields `coef`, `t0`, `dt`, `nint`, `ncoef`, `from`, `to`,
   `maxerr`; `length(coef) == 9 ncoef nint`, the nine matrix elements column after

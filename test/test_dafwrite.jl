@@ -1264,9 +1264,11 @@ group("9. DAF access, SPK and CK writers") do
         h = spkopn(p, "FRAME")
         b = merge(a, (frame="WRITER_TEST_FRAME",))
         @test throws_kind(() -> c.neo(h, b), :invalidrefframe)      # not in the default context
-        spkw13(h, b.body, b.center, b.frame, b.first, b.last, b.segid, b.degree, b.states, b.epochs; ctx=ctx)
-        spkw13(h, b.body, b.center, b.frame, b.first, b.last, b.segid, b.degree, b.states, b.epochs;
-            ctx=Allspice.kernelset(ctx))
+        # The writers without a context are compared with CSPICE above; these calls give the
+        # context first, as a `SpiceContext` and as a `KernelSet`.
+        spkw13(ctx, h, b.body, b.center, b.frame, b.first, b.last, b.segid, b.degree, b.states, b.epochs)
+        spkw13(Allspice.kernelset(ctx), h, b.body, b.center, b.frame, b.first, b.last, b.segid,
+            b.degree, b.states, b.epochs)
         spkcls(h)
         d = neo_dump(p)
         @test [s[2][3] for s in d.sums] == [1977001, 1977001]

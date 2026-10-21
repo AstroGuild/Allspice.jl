@@ -515,7 +515,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         elems, epochs = sgp4_sets(el, ep, 3, 0.4 * 86400.0)
         t0, t1 = epochs[1] - 3000.0, epochs[end] + 3000.0
         sgp4_c_spkw10(hc, sgp4_body(t), 399, "J2000", t0, t1, "TLE $id", geophs, elems, epochs)
-        spkw10(hn, sgp4_body(t), 399, "J2000", t0, t1, "TLE $id", geophs, elems, epochs; ctx=ctx0)
+        spkw10(ctx0, hn, sgp4_body(t), 399, "J2000", t0, t1, "TLE $id", geophs, elems, epochs)
         segs[id] = (; t0, t1, elems, epochs)
     end
     SPICE.spkcls(hc)
@@ -607,8 +607,8 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
             SPICE.spkcls(h)
             h = spkopn(qn, "TLE", 0)
             # A matrix with one set in each column is accepted too.
-            spkw10(h, -77, 399, "J2000", t0, t1, "many sets", geophs,
-                isodd(n) ? reduce(hcat, elems) : elems, epochs; ctx=ctx0)
+            spkw10(ctx0, h, -77, 399, "J2000", t0, t1, "many sets", geophs,
+                isodd(n) ? reduce(hcat, elems) : elems, epochs)
             spkcls(h)
             count, worst = sgp4_word_diff(qn, qc)
             @test 0 <= count <= 4 * n
@@ -646,7 +646,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
             Float64[0, 8, refbas + n, 0, 4, refbas, n, 0, 0, 0, 8, n, 0, 0, 10, 15])
         po = joinpath(dir, "old_layout.bsp")
         h = spkopn(po, "TLE", 0)
-        dafbna(h, spkpds(-78, 399, "J2000", 10, t0, t1; ctx=ctx0), "old layout")
+        dafbna(h, spkpds(ctx0, -78, 399, "J2000", 10, t0, t1), "old layout")
         dafada(h, data)
         dafena(h)
         spkcls(h)
@@ -812,7 +812,7 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         h = spkopn(pw, "TLE", 0)
         elems, epochs = sgp4_sets(parsed[5][2], parsed[5][1], 3, 600.0)
         t0, t1 = epochs[1], epochs[end]
-        w(args...) = spkw10(h, args...; ctx=ctx0)
+        w(args...) = spkw10(ctx0, h, args...)
         @test throws_kind(() -> w(-5, 399, "J2000", t0, t1, "x", geophs, Vector{Float64}[], Float64[]),
             :numpacketsnotpos)
         @test throws_kind(() -> w(-5, 399, "J2000", t0, t1, "x", geophs, elems[[2, 1, 3]],
@@ -834,8 +834,8 @@ group("17. two-line elements and SPK type 10", Kernels.LSK, Kernels.PCK11) do
         @test spkgeo(cw, -5, t0 + 50.0, 1, 399)[1] isa SVector{6,Float64}
         # A file that is open for reading only.
         hr = dafopr(pw)
-        @test sgp4_neo(() -> spkw10(hr, -6, 399, "J2000", t0, t1, "x", geophs, elems, epochs;
-            ctx=ctx0)) isa Allspice.SpiceError
+        @test sgp4_neo(() -> spkw10(ctx0, hr, -6, 399, "J2000", t0, t1, "x", geophs, elems,
+            epochs)) isa Allspice.SpiceError
         dafcls(hr)
     end
 
