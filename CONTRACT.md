@@ -591,7 +591,8 @@ equator, mean equinox), which `type10.jl` turns to J2000 as `zzteme.f` does.
 ## `spk_segments.jl`
 
 `spksfs`, `spkpvn`, `spkuds` and `spksub`: SPK segments named by a file and a
-descriptor.
+descriptor. `spksub(handle, descr, ident, start, stop, newh)` takes the arguments of
+`spksub_c` in its order.
 
 - A loaded file has no handle, so `spksfs(ks, body, et) -> Union{Nothing,Tuple{String,
   Vector{Float64},String}}` returns the path of the file. The segment is

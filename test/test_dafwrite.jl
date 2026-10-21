@@ -2164,8 +2164,8 @@ group("9. DAF access, SPK and CK writers") do
         x = dafus(dafgs(src), 2, 6)
         newh = spkopn(joinpath(dir, "after_failure.bsp"), "CHECK", 0)
         try
-            @test throws_kind(() -> spksub(newh, src, dafps(x[1], [x[2][1:5]; 10^8]), "S",
-                a.first, a.last), :filereadfailed)
+            @test throws_kind(() -> spksub(src, dafps(x[1], [x[2][1:5]; 10^8]), "S",
+                a.first, a.last, newh), :filereadfailed)
             dafac(newh, ["a comment after the failed call"])
             @test dafec(newh) == ["a comment after the failed call"]
         finally

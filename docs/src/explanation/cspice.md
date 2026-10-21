@@ -18,7 +18,6 @@ The package keeps the names, the argument order, the units and the numerical res
 | Output strings need a length argument | A call returns a `String` |
 | Some arguments serve only the C memory: counts, sizes, `room`, workspaces | These arguments are absent: [`gdpool`](@ref) takes only the name, and [`gfdist`](@ref) has no `nintvls` |
 | `spkobj_c`, `spkcov_c`, `pckfrm_c` and `pckcov_c` take the output cell last | [`spkobj!`](@ref), [`spkcov!`](@ref), [`pckfrm!`](@ref) and [`pckcov!`](@ref) take it first, as SPICE.jl does |
-| `spksub_c` takes the handle of the new file last | [`spksub`](@ref) takes it first |
 | A cell or a window has a size that the caller declares | A [`Window`](@ref) grows as needed |
 
 The kind of an error is the short message of CSPICE in lower case where the same condition exists there, so `SPICE(INVALIDDEGREE)` becomes `:invaliddegree`.
