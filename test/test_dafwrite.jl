@@ -740,6 +740,9 @@ function bad_ckw01(a)
         ("two angular velocities for more records", merge(a, (sclkdp=a.sclkdp[1:min(end, 3)],
             quats=a.quats[:, 1:min(end, 3)], endtim=a.endtim, avvs=zeros(3, 2))),
             length(a.sclkdp) == 2 ? :none : :badarg, false),
+        # Regression: one angular velocity for several records counted as `nothing`.
+        ("one angular velocity for more records", merge(a, (avvs=zeros(3, 1),)),
+            length(a.sclkdp) == 1 ? :none : :badarg, false),
     ]
 end
 
@@ -794,6 +797,9 @@ function bad_ckw03(a)
         ("no record", merge(a, (sclkdp=Float64[], quats=zeros(4, 0), avvs=nothing)), :invalidnumrec, true),
         ("no interval", merge(a, (starts=Float64[],)), :invalidnumint, true),
         ("first start is not the first time", merge(a, (starts=[a.sclkdp[1] + 0.5],)), :timesdontmatch, true),
+        # Regression: one angular velocity for several records counted as `nothing`.
+        ("one angular velocity for more records", merge(a, (avvs=zeros(3, 1),)),
+            length(a.sclkdp) == 1 ? :none : :badarg, false),
     ]
     if length(a.sclkdp) >= 3
         push!(out, ("start that is not a time", merge(a, (starts=[a.sclkdp[1], a.sclkdp[2] + 0.5],)), :invalidstarttime, true))
@@ -986,15 +992,13 @@ const WRITER_CASES = WriterCase[
         (h, a) -> spkw19(h, a.body, a.center, a.frame, a.first, a.last, a.segid, a.npkts, a.subtps, a.degres, a.packts, a.epochs, a.ivlbds, a.sellst),
         c_spkw19, bad_w19),
     WriterCase("ckw01", :ck, gen_ckw01,
-        (h, a) -> a.avvs === nothing ? ckw01(h, a.begtim, a.endtim, a.inst, a.ref, a.segid, a.sclkdp, a.quats) :
-                  ckw01(h, a.begtim, a.endtim, a.inst, a.ref, a.segid, a.sclkdp, a.quats, a.avvs),
+        (h, a) -> ckw01(h, a.begtim, a.endtim, a.inst, a.ref, a.segid, a.sclkdp, a.quats, a.avvs),
         c_ckw01, bad_ckw01),
     WriterCase("ckw02", :ck, gen_ckw02,
         (h, a) -> ckw02(h, a.begtim, a.endtim, a.inst, a.ref, a.segid, a.start, a.stop, a.quats, a.avvs, a.rates),
         c_ckw02, bad_ckw02),
     WriterCase("ckw03", :ck, gen_ckw03,
-        (h, a) -> a.avvs === nothing ? ckw03(h, a.begtim, a.endtim, a.inst, a.ref, a.segid, a.sclkdp, a.quats, a.starts) :
-                  ckw03(h, a.begtim, a.endtim, a.inst, a.ref, a.segid, a.sclkdp, a.quats, a.starts, a.avvs),
+        (h, a) -> ckw03(h, a.begtim, a.endtim, a.inst, a.ref, a.segid, a.sclkdp, a.quats, a.avvs, a.starts),
         c_ckw03, bad_ckw03),
     WriterCase("ckw05", :ck, gen_ckw05,
         (h, a) -> ckw05(h, a.subtyp, a.degree, a.begtim, a.endtim, a.inst, a.ref, a.avflag, a.segid, a.sclkdp, a.packts, a.rate, a.nints, a.starts),
@@ -1280,18 +1284,16 @@ group("9. DAF access, SPK and CK writers") do
         SPICE.spkcls(hc)
         SPICE.unload(fk)
         @test read(pc) == read(p)
-        # (fault fixed: without the `avvs` argument a segment of one record got the angular
-        # velocity zero, and a segment of more records got none; the default is now no
-        # angular velocity for every count. An explicit argument keeps its meaning.)
-        p1 = joinpath(dir, "ck_default_avvs.bc")
+        # (fault fixed: a segment of one record got the angular velocity zero when `avvs` was
+        # left out. `avvs === nothing` gives no angular velocity for every count.)
+        p1 = joinpath(dir, "ck_avvs_nothing.bc")
         h = ckopn(p1, "AVVS", 0)
         q1 = [1.0, 0.0, 0.0, 0.0]
-        ckw01(h, 5.0, 5.0, -77001, "J2000", "one record, default", [5.0], [q1])
-        ckw03(h, 5.0, 5.0, -77001, "J2000", "one record, default", [5.0], [q1], [5.0])
+        ckw01(h, 5.0, 5.0, -77001, "J2000", "one record, nothing", [5.0], [q1], nothing)
+        ckw03(h, 5.0, 5.0, -77001, "J2000", "one record, nothing", [5.0], [q1], nothing, [5.0])
         ckw01(h, 5.0, 5.0, -77001, "J2000", "one record, one vector", [5.0], [q1], [zeros(3)])
-        ckw01(h, 5.0, 9.0, -77001, "J2000", "two records, one vector", [5.0, 9.0], [q1, q1], [zeros(3)])
         ckcls(h)
-        @test [s[2][4] for s in neo_dump(p1).sums] == [0, 0, 1, 0]
+        @test [s[2][4] for s in neo_dump(p1).sums] == [0, 0, 1]
         # Only the writers that call `spkpds` in CSPICE reject the barycenter as body and
         # a body equal to its center (`bad_pds`); `spkw02` is one of those that accept them.
         c2 = writer_case("spkw02")

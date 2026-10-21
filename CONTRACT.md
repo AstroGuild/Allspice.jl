@@ -473,14 +473,19 @@ records `_seg_cheb_records` lays out as for SPK types 2 and 3). Each writer make
 the same order, so the data area is equal bit for bit to the one that CSPICE writes
 from the same input.
 
-- Argument lists follow SPICE.jl (the Julia wrapper of CSPICE). A table of states,
-  quaternions or packets is a vector of vectors, a matrix with one row of the table in
-  each column, or a flat vector; `_seg_flat(who, what, x, rowlen) -> (flat, n, rowlen)`
-  converts it and throws `SpiceError(:badarg)` if the shape does not fit.
-- `SegFrame` is a frame name or a frame ID, and `SegContext` (the keyword `ctx`) is the
-  `SpiceContext` or `KernelSet` that resolves a name; `_seg_refcode(who, ctx, frame)`
-  throws `SpiceError(:invalidrefframe)`. `_seg_close(h, what)` closes a file as `spkcls`
-  does: a file that is open for write must hold a segment (`:nosegmentsfound`).
+- Argument lists follow CSPICE in its order, without the counts and flags that follow
+  from the input (`avflag` of `ckw01` and `ckw03` is `avvs !== nothing`; a count of
+  `avvs` other than the record count is `:badarg`). A table of states, quaternions or
+  packets is a vector of vectors (the form of SPICE.jl, the Julia wrapper of CSPICE), a
+  matrix with one row of the table in each column, or a flat vector;
+  `_seg_flat(who, what, x, rowlen) -> (flat, n, rowlen)` converts it and throws
+  `SpiceError(:badarg)` if the shape does not fit.
+- `SegFrame` is a frame name or a frame ID, and `SegContext` (the optional first
+  argument `ctx` of every writer, of `spkpds` and of `table_to_spk`; the method without
+  it passes `default_context()`) is the `SpiceContext` or `KernelSet` that resolves a
+  name; `_seg_refcode(who, ctx, frame)` throws `SpiceError(:invalidrefframe)`.
+  `_seg_close(h, what)` closes a file as `spkcls` does: a file that is open for write
+  must hold a segment (`:nosegmentsfound`).
 - Deviation from SPICE.jl 0.2.5: the record count of `ckw02` and `ckw03` is always the
   length of the input (that version passes one record less to CSPICE), and each element
   of a vector of vectors given to `pckw02` is one record of `3 * (degree + 1)`
