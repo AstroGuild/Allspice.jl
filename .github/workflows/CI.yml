@@ -15,8 +15,6 @@ jobs:
     if: github.event.repository.private == false
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    # Windows failures are known and tracked (EllissoideRotondo/Allspice.jl#15).
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     permissions:
       actions: write
       contents: read
