@@ -272,6 +272,10 @@ end
 "Part of group 12: (b) access calls."
 function dsk_part_2(env)
     (; rng, dir, tk, spk, specs_a, specs_b, specs_c, files, wctx, comments) = env
+    # `dskobj!` and `dsksrf!` add to IDs that need not be sorted.
+    p = files[:a][1]
+    @test dskobj!([1000, 499], p) == sort!(unique!([1000; 499; dskobj(p)]))
+    @test dsksrf!([7, -1], p, 499) == sort!(unique!([7; -1; dsksrf(p, 499)]))
     # The two files of a pair hold the same integers and doubles (part a), so the default
     # run reads the CSPICE file of each pair and the Allspice file of the first pair only.
     for name in (:a, :b, :c), path in (FULL || name === :a ? files[name] : files[name][1:1])

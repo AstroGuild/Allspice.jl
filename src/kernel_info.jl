@@ -189,6 +189,14 @@ function _each_summary(f, path::AbstractString)
     return nothing
 end
 
+"Add the IDs `new` to the set `ids`, which is sorted and without duplicates on return."
+function _add_ids!(ids::AbstractVector{<:Integer}, new::AbstractVector{<:Integer})
+    append!(ids, new)
+    sort!(unique!(ids))
+    @assert issorted(ids) && allunique(ids)
+    return ids
+end
+
 """
     spkobj!(ids, path) -> ids
 

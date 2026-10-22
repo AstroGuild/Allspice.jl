@@ -522,15 +522,27 @@ end
 Return the ID codes of the bodies that have a segment in the DSK file `path`, sorted and
 without repetition, as `dskobj_c`.
 
-The result is a new vector, where `dskobj_c` adds the codes to a set of the caller.
+The file is read from disk and need not be loaded.
 
 Throws `SpiceError(:invalidformat)` if the file is a transfer file, `:invalidarchtype` if
 it is not a DAS file, `:invalidfiletype` if it is not a DSK file, and the error kinds of
 [`getfat`](@ref) and [`dasopr`](@ref).
 
-See also [`dsksrf`](@ref).
+See also [`dsksrf`](@ref), [`dskobj!`](@ref).
 """
 dskobj(path::AbstractString) = sort!(unique!(Int[d.center for d in _dsk_file_descrs(path, "dskobj")]))
+
+"""
+    dskobj!(ids, path) -> ids
+
+Insert the ID codes of the bodies that have a segment in the DSK file `path` into the
+vector `ids`, as `dskobj_c` does with a SPICE cell.
+
+`ids` is used as a set: on return it is sorted and without duplicates. The vector
+comes first, as in SPICE.jl; CSPICE has the cell last. A call that throws leaves `ids`
+unchanged. Throws the errors of [`dskobj`](@ref).
+"""
+dskobj!(ids::AbstractVector{<:Integer}, path::AbstractString) = _add_ids!(ids, dskobj(path))
 
 """
     dsksrf(path, bodyid) -> Vector{Int}
@@ -538,11 +550,25 @@ dskobj(path::AbstractString) = sort!(unique!(Int[d.center for d in _dsk_file_des
 Return the ID codes of the surfaces of the body `bodyid` that have a segment in the DSK
 file `path`, sorted and without repetition, as `dsksrf_c`.
 
-The result is a new vector, where `dsksrf_c` adds the codes to a set of the caller. The
-errors are those of [`dskobj`](@ref).
+The errors are those of [`dskobj`](@ref).
+
+See also [`dsksrf!`](@ref).
 """
 dsksrf(path::AbstractString, bodyid::Integer) = sort!(unique!(Int[d.surfce
     for d in _dsk_file_descrs(path, "dsksrf") if d.center == bodyid]))
+
+"""
+    dsksrf!(ids, path, bodyid) -> ids
+
+Insert the ID codes of the surfaces of the body `bodyid` that have a segment in the DSK
+file `path` into the vector `ids`, as `dsksrf_c` does with a SPICE cell.
+
+`ids` is used as a set: on return it is sorted and without duplicates. The vector
+comes first, as in SPICE.jl; CSPICE has the cell last. A call that throws leaves `ids`
+unchanged. Throws the errors of [`dskobj`](@ref).
+"""
+dsksrf!(ids::AbstractVector{<:Integer}, path::AbstractString, bodyid::Integer) =
+    _add_ids!(ids, dsksrf(path, bodyid))
 
 # ---------------------------------------------------------------------------------------
 # Ray-surface intercept on the loaded segments

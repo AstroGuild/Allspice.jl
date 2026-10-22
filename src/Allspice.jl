@@ -16,7 +16,7 @@ export tparch, jul2gr, gr2jul
 export j1900, j1950, j2000, j2100, jyear, tyear, spd, b1900, b1950, clight
 export halfpi, twopi, rpd, dpr
 export sct2e, sce2c, sce2t, sce2s, scs2e, scencd, scdecd, sctiks, scfmt, scpart, sctype
-export ckgp, ckgpav, ckcov, ckcov!, ckobj, ckmeta, ckfrot, ckfxfm, cknr02, ckgr02, cknr03, ckgr03
+export ckgp, ckgpav, ckcov, ckcov!, ckobj, ckobj!, ckmeta, ckfrot, ckfxfm, cknr02, ckgr02, cknr03, ckgr03
 export DAFHandle, dafopr, dafopw, dafonw, dafcls, dafhsf, dafrfr, getfat
 export dafbfs, dafbbs, daffna, daffpa, dafgs, dafgn, dafps, dafus, dafgda, dafgsr
 export dafbna, dafada, dafena, dafws, dafrs, dafrn, dafac, dafec, dafdc
@@ -33,7 +33,7 @@ export wnelmd, wnincd, wnfetd, wnsumd, wnreld, wncond!, wnexpd!, wnextd!, wnfild
 export DASHandle, dasopr, dasopw, dasonw, dasops, dascls, dasllc, dashfn, dasrfr, daslla, dashfs
 export dasrdd, dasrdi, dasrdc, dasadd, dasadi, dasadc, dasudd, dasudi, dasudc, dasac, dasec, dasdc
 export DLADescr, dlaopn, dlabns, dlaens, dlabfs, dlafns, dlabbs, dlafps
-export DSKDescr, DSKSegment, dskobj, dsksrf, dskgd, dskb02, dskz02, dskn02, dskp02, dskv02
+export DSKDescr, DSKSegment, dskobj, dskobj!, dsksrf, dsksrf!, dskgd, dskb02, dskz02, dskn02, dskp02, dskv02
 export dski02, dskd02, dskx02, dskxv, dskxv!, dskxsi, dskgtl, dskstl
 export dskopn, dskw02, dskmi2, dskrb2, dskcls
 export pltexp, pltnp, pltnrm, pltar, pltvol

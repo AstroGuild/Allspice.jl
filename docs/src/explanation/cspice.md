@@ -14,10 +14,11 @@ The package keeps the names, the argument order, the units and the numerical res
 | A "found" flag tells that a lookup failed | A lookup returns `nothing` ([`bodn2c`](@ref) for an unknown name, [`ckgp`](@ref) where no CK segment gives a pointing); a call that must return a value throws ([`gdpool`](@ref) for a variable that is not loaded) |
 | Indices count from 0 | Indices count from 1: the first interval of a window, the first plate of a DSK, the first row of an EK |
 | A file handle is an integer, and several calls work on a hidden "current" file | A handle is an object ([`DAFHandle`](@ref), [`DASHandle`](@ref)) that the caller passes to each call |
+| A file open for write cannot be opened for read (`RWCONFLICT`), and a loaded kernel cannot be opened for write (`FILEOPENCONFLICT`) | A file open for write can be opened for read, by [`dafopr`](@ref), [`dasopr`](@ref), [`ekopr`](@ref) or [`furnsh`](@ref): a DAF file holds each array complete before its summary, and a DAS file changes on disk only at [`dascls`](@ref). A loaded kernel can be opened for write, for example by [`spkopa`](@ref); the context that loaded it does not see the new segments until it loads the file again. A second write open of a file throws `SpiceError(:fileopenconflict)`, as in CSPICE |
 | Loaded kernels are one table for the whole process | Loaded kernels belong to a [`SpiceContext`](@ref); see [Contexts and threads](@ref) |
 | Output strings need a length argument | A call returns a `String` |
 | Some arguments serve only the C memory: counts, sizes, `room`, workspaces | These arguments are absent: [`gdpool`](@ref) takes only the name, and [`gfdist`](@ref) has no `nintvls` |
-| `spkobj_c`, `spkcov_c`, `ckcov_c`, `pckfrm_c` and `pckcov_c` take the output cell last | [`spkobj!`](@ref), [`spkcov!`](@ref), [`ckcov!`](@ref), [`pckfrm!`](@ref) and [`pckcov!`](@ref) take it first, as SPICE.jl does for all of them except `ckcov!` |
+| `spkobj_c`, `spkcov_c`, `ckobj_c`, `ckcov_c`, `pckfrm_c`, `pckcov_c`, `dskobj_c` and `dsksrf_c` take the output cell last | [`spkobj!`](@ref), [`spkcov!`](@ref), [`ckobj!`](@ref), [`ckcov!`](@ref), [`pckfrm!`](@ref), [`pckcov!`](@ref), [`dskobj!`](@ref) and [`dsksrf!`](@ref) take it first, as SPICE.jl does for all of them except `ckobj!` and `ckcov!` |
 | A cell or a window has a size that the caller declares | A [`Window`](@ref) grows as needed |
 
 The kind of an error is the short message of CSPICE in lower case where the same condition exists there, so `SPICE(INVALIDDEGREE)` becomes `:invaliddegree`.

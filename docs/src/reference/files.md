@@ -167,7 +167,9 @@ describes the index.
 DSKDescr
 DSKSegment
 dskobj
+dskobj!
 dsksrf
+dsksrf!
 dskgd
 dskb02
 dskz02
