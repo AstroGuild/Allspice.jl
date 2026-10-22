@@ -11,6 +11,24 @@ const _DAF_RECWORDS = 128
 const _DAF_FTPSTR = UInt8[codeunits("FTPSTR:\r:\n:\r\n:\r")..., 0x00, UInt8(':'), 0x81,
     UInt8(':'), 0x10, 0xce, codeunits(":ENDFTP")...]
 
+"""
+    _unmap!(a::Array) -> Nothing
+
+Remove the memory map of `a` now if `Mmap.mmap` made it, and do nothing for another array.
+`a` must not be read afterwards. The finalizer of a mapped array removes the map when the
+garbage collector frees the array; Windows cannot delete or replace a file while a map of
+it exists, so a file that a call maps only for a while is unmapped at once.
+"""
+function _unmap!(a::Array)
+    # `Mmap.mmap` puts the finalizer on the `Memory` of the array from Julia 1.11 on.
+    @static if isdefined(Base, :Memory)
+        finalize(a.ref.mem)
+    else
+        finalize(a)
+    end
+    return nothing
+end
+
 "32-bit integer at 0-based byte offset `off` of `raw`, stored little-endian if `little`, else big-endian; requires `off + 4 <= length(raw)`."
 @inline function _daf_i32(raw::AbstractVector{UInt8}, off::Int, little::Bool)
     v = UInt32(raw[off+1]) | (UInt32(raw[off+2]) << 8) | (UInt32(raw[off+3]) << 16) |
@@ -183,94 +201,104 @@ function open_daf(path::AbstractString)
 
     return open(path, "r") do io
         raw = Mmap.mmap(io, Vector{UInt8}, (8 * nwords,))
-
-        # --- file record ---------------------------------------------------------
-        idword = rstrip(String(raw[1:8]))
-        idword in ("DAF/SPK", "DAF/PCK", "DAF/CK", "NAIF/DAF") || throw(SpiceError(:baddaf,
-            "ID word $(repr(idword)) is not DAF/SPK, DAF/PCK, DAF/CK or NAIF/DAF in $path"))
-        little = _daf_little(io, raw, path, "furnsh")
-        swap = little != (ENDIAN_BOM == 0x04030201)
-        if raw[700:705] == _DAF_FTPSTR[1:6]      # the string is absent in old files
-            raw[700:727] == _DAF_FTPSTR || throw(SpiceError(:baddaf,
-                "FTP validation string is damaged (text-mode transfer?) in $path"))
-        end
-        nd = Int(_daf_i32(raw, 8, little))
-        ni = Int(_daf_i32(raw, 12, little))
-        fward = Int(_daf_i32(raw, 76, little))
-        kind = idword == "DAF/SPK" ? :SPK : idword == "DAF/PCK" ? :PCK :
-               idword == "DAF/CK" ? :CK : ni == 6 ? :SPK : ni == 5 ? :PCK : :UNKNOWN
-        want_ni = kind === :PCK ? 5 : 6
-        (kind !== :UNKNOWN && nd == 2 && ni == want_ni) || throw(SpiceError(:baddaf,
-            "ND = $nd, NI = $ni do not fit ID word $(repr(idword)) in $path"))
-        1 < fward <= nrecords || throw(SpiceError(:baddaf,
-            "first summary record $fward is outside the file ($nrecords records): $path"))
-
-        # --- data array -----------------------------------------------------------
-        data = if swap
-            d = Vector{Float64}(undef, nwords)
-            for a in 1:nwords                    # invariant: d[1:a-1] is converted
-                d[a] = _daf_f64(raw, 8 * (a - 1), little)
+        data = Float64[]
+        done = false
+        try
+            # --- file record ---------------------------------------------------------
+            idword = rstrip(String(raw[1:8]))
+            idword in ("DAF/SPK", "DAF/PCK", "DAF/CK", "NAIF/DAF") || throw(SpiceError(
+                :baddaf, "ID word $(repr(idword)) is not DAF/SPK, DAF/PCK, DAF/CK or " *
+                "NAIF/DAF in $path"))
+            little = _daf_little(io, raw, path, "furnsh")
+            swap = little != (ENDIAN_BOM == 0x04030201)
+            if raw[700:705] == _DAF_FTPSTR[1:6]      # the string is absent in old files
+                raw[700:727] == _DAF_FTPSTR || throw(SpiceError(:baddaf,
+                    "FTP validation string is damaged (text-mode transfer?) in $path"))
             end
-            d
-        else
-            Mmap.mmap(io, Vector{Float64}, (nwords,), 0)
-        end
+            nd = Int(_daf_i32(raw, 8, little))
+            ni = Int(_daf_i32(raw, 12, little))
+            fward = Int(_daf_i32(raw, 76, little))
+            kind = idword == "DAF/SPK" ? :SPK : idword == "DAF/PCK" ? :PCK :
+                   idword == "DAF/CK" ? :CK : ni == 6 ? :SPK : ni == 5 ? :PCK : :UNKNOWN
+            want_ni = kind === :PCK ? 5 : 6
+            (kind !== :UNKNOWN && nd == 2 && ni == want_ni) || throw(SpiceError(:baddaf,
+                "ND = $nd, NI = $ni do not fit ID word $(repr(idword)) in $path"))
+            1 < fward <= nrecords || throw(SpiceError(:baddaf, "first summary record " *
+                "$fward is outside the file ($nrecords records): $path"))
 
-        # --- summary records ------------------------------------------------------
-        ss = nd + (ni + 1) ÷ 2                   # doubles in one summary
-        maxsum = (_DAF_RECWORDS - 3) ÷ ss
-        segments = Segment[]
-        cksegments = CKSegment[]
-        rec = fward
-        visited = 0
-        while rec != 0
-            # invariant: `visited` summary records were read, and none twice while
-            # `visited <= nrecords`
-            visited += 1
-            visited <= nrecords || throw(SpiceError(:baddaf,
-                "the chain of summary records has a cycle in $path"))
-            base = (rec - 1) * _DAF_RECLEN       # 0-based byte offset of the record
-            next = _daf_int(data[(rec-1)*_DAF_RECWORDS+1], 0, nrecords,
-                "next summary record", path)
-            nsum = _daf_int(data[(rec-1)*_DAF_RECWORDS+3], 0, maxsum,
-                "summary count of record $rec", path)
-            for i in 1:nsum
-                off = base + 8 * (3 + (i - 1) * ss)
-                t0 = _daf_f64(raw, off, little)
-                t1 = _daf_f64(raw, off + 8, little)
-                (isfinite(t0) && isfinite(t1)) || throw(SpiceError(:baddaf,
-                    "segment $(length(segments) + 1) has non-finite epochs in $path"))
-                ic = ntuple(j -> _daf_i32(raw, off + 16 + 4 * (j - 1), little), 6)
-                if idword == "NAIF/DAF" && ni == 6 && visited == 1 && i == 1
-                    kind = _daf_ckspk(data, ic, nwords)
+            # --- data array -----------------------------------------------------------
+            data = if swap
+                d = Vector{Float64}(undef, nwords)
+                for a in 1:nwords                    # invariant: d[1:a-1] is converted
+                    d[a] = _daf_f64(raw, 8 * (a - 1), little)
                 end
-                if kind === :CK
-                    b, e = Int(ic[5]), Int(ic[6])
+                d
+            else
+                Mmap.mmap(io, Vector{Float64}, (nwords,), 0)
+            end
+
+            # --- summary records ------------------------------------------------------
+            ss = nd + (ni + 1) ÷ 2                   # doubles in one summary
+            maxsum = (_DAF_RECWORDS - 3) ÷ ss
+            segments = Segment[]
+            cksegments = CKSegment[]
+            rec = fward
+            visited = 0
+            while rec != 0
+                # invariant: `visited` summary records were read, and none twice while
+                # `visited <= nrecords`
+                visited += 1
+                visited <= nrecords || throw(SpiceError(:baddaf,
+                    "the chain of summary records has a cycle in $path"))
+                base = (rec - 1) * _DAF_RECLEN       # 0-based byte offset of the record
+                next = _daf_int(data[(rec-1)*_DAF_RECWORDS+1], 0, nrecords,
+                    "next summary record", path)
+                nsum = _daf_int(data[(rec-1)*_DAF_RECWORDS+3], 0, maxsum,
+                    "summary count of record $rec", path)
+                for i in 1:nsum
+                    off = base + 8 * (3 + (i - 1) * ss)
+                    t0 = _daf_f64(raw, off, little)
+                    t1 = _daf_f64(raw, off + 8, little)
+                    (isfinite(t0) && isfinite(t1)) || throw(SpiceError(:baddaf,
+                        "segment $(length(segments) + 1) has non-finite epochs in $path"))
+                    ic = ntuple(j -> _daf_i32(raw, off + 16 + 4 * (j - 1), little), 6)
+                    if idword == "NAIF/DAF" && ni == 6 && visited == 1 && i == 1
+                        kind = _daf_ckspk(data, ic, nwords)
+                    end
+                    if kind === :CK
+                        b, e = Int(ic[5]), Int(ic[6])
+                        (1 <= b <= e <= nwords) || throw(SpiceError(:baddaf,
+                            "CK segment $(length(cksegments) + 1) has addresses $b:$e " *
+                            "outside the file ($nwords doubles): $path"))
+                        push!(cksegments, CKSegment(ic[1], ic[2], ic[3], ic[4] == 1, t0, t1,
+                            Int32(0), b, e))
+                        continue
+                    end
+                    target, center, frame, dtype, b, e = if kind === :SPK
+                        ic[1], ic[2], ic[3], ic[4], Int(ic[5]), Int(ic[6])
+                    else
+                        ic[1], Int32(0), ic[2], ic[3], Int(ic[4]), Int(ic[5])
+                    end
                     (1 <= b <= e <= nwords) || throw(SpiceError(:baddaf,
-                        "CK segment $(length(cksegments) + 1) has addresses $b:$e " *
-                        "outside the file ($nwords doubles): $path"))
-                    push!(cksegments, CKSegment(ic[1], ic[2], ic[3], ic[4] == 1, t0, t1,
-                        Int32(0), b, e))
-                    continue
+                        "segment $(length(segments) + 1) has addresses $b:$e outside " *
+                        "the file ($nwords doubles): $path"))
+                    chebyshev = kind === :SPK ? (dtype == 2 || dtype == 3 || dtype == 20) :
+                                dtype == 2
+                    init, intlen, rsize, nrec = chebyshev ?
+                        _daf_directory(data, path, kind, dtype, b, e) :
+                        (0.0, 0.0, Int32(0), Int32(0))
+                    push!(segments, Segment(target, center, frame, dtype, t0, t1, Int32(0),
+                        b, e, init, intlen, rsize, nrec))
                 end
-                target, center, frame, dtype, b, e = if kind === :SPK
-                    ic[1], ic[2], ic[3], ic[4], Int(ic[5]), Int(ic[6])
-                else
-                    ic[1], Int32(0), ic[2], ic[3], Int(ic[4]), Int(ic[5])
-                end
-                (1 <= b <= e <= nwords) || throw(SpiceError(:baddaf,
-                    "segment $(length(segments) + 1) has addresses $b:$e outside " *
-                    "the file ($nwords doubles): $path"))
-                chebyshev = kind === :SPK ? (dtype == 2 || dtype == 3 || dtype == 20) :
-                            dtype == 2
-                init, intlen, rsize, nrec = chebyshev ?
-                    _daf_directory(data, path, kind, dtype, b, e) :
-                    (0.0, 0.0, Int32(0), Int32(0))
-                push!(segments, Segment(target, center, frame, dtype, t0, t1, Int32(0),
-                    b, e, init, intlen, rsize, nrec))
+                rec = next
             end
-            rec = next
+            done = true
+            DAF(String(path), kind, data, segments, cksegments)
+        finally
+            # The result does not refer to `raw`. Unmap it now, and `data` after an error:
+            # Windows cannot delete or replace a file while a map of it exists.
+            _unmap!(raw)
+            done || _unmap!(data)
         end
-        DAF(String(path), kind, data, segments, cksegments)
     end
 end

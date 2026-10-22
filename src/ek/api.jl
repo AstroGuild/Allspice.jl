@@ -30,7 +30,12 @@ See also [`ekopw`](@ref), [`ekopn`](@ref).
 """
 function ekopr(path::AbstractString)
     h = _das_load(path, "ekopr", false)
-    _ek_check(h, h.path, "ekopr")
+    try
+        _ek_check(h, h.path, "ekopr")
+    catch
+        _das_release!(h)                 # see `_unmap!`
+        rethrow()
+    end
     return _open_register!(h, path, false, "ekopr")
 end
 

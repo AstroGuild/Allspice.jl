@@ -93,6 +93,15 @@ order because `Loaded`, `KernelSet` and `SpiceContext` have fields of their type
   directory values for SPK types 2, 3, 20 and PCK type 2), `CKSegment` for `:CK`.
   Postcondition: every segment has finite epochs and
   `1 <= baddr <= eaddr <= length(data)`. Throws `SpiceError(:filenotfound)` or `(:baddaf)`.
+  `data` is the only memory map of the file that stays after the call.
+- `_unmap!(a::Array)` removes the memory map of `a` at once (nothing for an array that
+  is not mapped); `a` must not be read afterwards. Windows cannot delete or replace a
+  file while a map of it exists, so a map that a call needs only for a while is removed
+  with `_unmap!` and not left to the garbage collector: the byte map of `open_daf` and
+  `_das_load`, `data` in `_ck_open(f, path, who)` (`ckobj`, `ckcov`) and in
+  `kernel_arch`, and the address spaces of a DAS handle at `dascls`
+  (`_das_release!(h)`). The maps of a `KernelSet` stay until the collector frees it,
+  because a query can still hold the snapshot.
 - `_daf_sizeok(size, psize, dsize, offset) -> (ok, n)` mirrors `zzsizeok_`, and
   `_daf_i32(raw, off, little)` reads one 32-bit integer; `daf_access.jl` uses both.
 
@@ -530,7 +539,10 @@ DAS file.
   are never modified; a write handle works on owned copies in memory.
 - `dascls` of a write handle writes the complete, segregated file and moves it into
   place in one step, so a reader that has the old file mapped keeps a consistent
-  image. One handle is not safe for concurrent use.
+  image. Windows does not replace a mapped file, so there the move fails
+  (`:daswritefail`) while a read handle or a loaded kernel maps the file. `dascls`
+  removes the maps of the handle that it closes (`_das_release!`). One handle is not
+  safe for concurrent use.
 - `dasops()` gives a scratch handle: a write handle with an empty path, which `dascls`
   discards without a file. `ekops()` is the scratch EK on it (CSPICE makes a temporary
   file for both).
@@ -847,7 +859,7 @@ SPICE.jl from a spawned task.
 | Several processes | `test/parallel.jl` | `julia --startup-file=no --threads=8 test/parallel.jl [groups]`; `ALLSPICE_TEST_JOBS` processes (default a quarter of the CPU threads, 8 at most), balanced with the times of the last run in `test/.group_seconds`; exit status 1 if a process failed. |
 | Exhaustive tier | `test/helpers.jl` | `ALLSPICE_TEST_FULL=1` sets `FULL`; `nsample(fast, full)` gives `fast` in the default run and `full` in the exhaustive run, and requires `0 <= fast <= full`. |
 | Seed | `test/helpers.jl` | `ALLSPICE_TEST_SEED` sets `SEED` (default 20261011), the seed of every random sample. |
-| Kernels | `test/kernels.jl` | `fetch_kernels` downloads the missing kernels into `test/data/` and checks their SHA-256; `ALLSPICE_KERNEL_DIR`, `ALLSPICE_DE440S`, `ALLSPICE_DE405` override the paths and `ALLSPICE_DOWNLOAD_KERNELS=0` turns the download off. A group whose kernels are missing is skipped with a visible notice, or fails with `ALLSPICE_REQUIRE_KERNELS=1`. |
+| Kernels | `test/kernels.jl` | `fetch_kernels` downloads the missing kernels into `test/data/`, with three attempts for each URL, and checks their SHA-256; `ALLSPICE_KERNEL_DIR`, `ALLSPICE_DE440S`, `ALLSPICE_DE405` override the paths and `ALLSPICE_DOWNLOAD_KERNELS=0` turns the download off. A group whose kernels are missing is skipped with a visible notice, or fails with `ALLSPICE_REQUIRE_KERNELS=1`. |
 | Coverage | `test/coverage_summary.jl` | Run the tests with `--code-coverage=@src`, then `julia --startup-file=no test/coverage_summary.jl [--keep] [output file]`; it adds the `.cov` files of all processes, prints one line for each file of `src/` and `ext/` and the total, and deletes the `.cov` files unless `--keep` is given. |
 
 - Time budget: the default run of all groups together has a budget of 120 s, and
@@ -869,4 +881,5 @@ The tests use the NAIF generic kernels `naif0012.tls`, `pck00011.tpc`, `pck00010
 `moon_pa_de440_200625.bpc`, `moon_de440_200625.tf`, `moon_080317.tf`, `de440s.bsp` and
 the optional `gm_de431.tpc` (the GM checks are skipped if it is absent), and
 `de405.bsp` from JPL SSD, which has no binary-file-format string. `SOURCES` in
-`test/kernels.jl` gives the URL and the SHA-256 of each.
+`test/kernels.jl` gives the URLs (tried in order, three attempts each) and the SHA-256 of
+each.

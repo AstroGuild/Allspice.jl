@@ -1,0 +1,2 @@
+# Same bytes on every runner, so that the CI kernel cache key does not depend on the OS.
+test/kernels.jl text eol=lf

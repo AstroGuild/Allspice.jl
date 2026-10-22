@@ -84,12 +84,15 @@ function main(args)
     start = time()
     procs = map(enumerate(jobs)) do (k, job)
         log = joinpath(logdir, "job$k.log")
-        log => run(pipeline(ignorestatus(`$julia $job`); stdout=log, stderr=log); wait=false)
+        # One stream for both outputs: two opens of the path would overwrite each other.
+        io = open(log, "w")
+        (log, io) => run(pipeline(ignorestatus(`$julia $job`); stdout=io, stderr=io); wait=false)
     end
     times = Dict{String,Float64}()
     failed = Int[]
-    for (k, (log, proc)) in enumerate(procs)
+    for (k, ((log, io), proc)) in enumerate(procs)
         wait(proc)
+        close(io)
         text = read(log, String)
         println("\n===== process ", k, " of ", length(procs), ": ", join(jobs[k], " "), " =====")
         print(text)

@@ -370,7 +370,9 @@ Close the DAF file of `handle`, as `dafcls_c`.
 The close writes no data: every write call puts its bytes on disk before it returns,
 except [`spk14b`](@ref) and [`spk14a`](@ref) (see [`DAFHandle`](@ref)). An array that
 `dafbna` began and `dafena` did not end has no summary in the file, so a search does not
-find it. The call does nothing if the handle is closed already.
+find it. The call does nothing if the handle is closed already. After the call the
+handle keeps the file neither open nor memory-mapped, so that Windows can delete or
+replace it.
 """
 function dafcls(h::DAFHandle)
     h.isopen || return nothing

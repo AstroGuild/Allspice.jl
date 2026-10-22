@@ -212,6 +212,11 @@ If a text kernel is removed, the kernel pool is built again from the text kernel
 that stay, so direct edits of the pool ([`pdpool`](@ref), ...) are lost, as in CSPICE.
 The kernels that stay are not read from disk again.
 
+A binary kernel stays memory-mapped after the call until the garbage collector frees
+every snapshot that holds it (the value of `Allspice.kernelset(ctx)`, which a query
+reads once). On Windows the file cannot be deleted or replaced while it is mapped;
+`GC.gc()` removes the map when no task refers to such a snapshot.
+
 Throws `SpiceError(:emptystring)` if `path` is empty.
 
 See also [`kclear`](@ref).
@@ -241,7 +246,8 @@ Unload every kernel of `ctx` and empty its kernel pool, as `kclear_c`.
 
 Direct edits of the pool are removed and the pool watchers are told of the change.
 The names of [`boddef`](@ref) stay, as in CSPICE. The time defaults of
-[`timdef`](@ref) are not reset.
+[`timdef`](@ref) are not reset. A binary kernel stays memory-mapped until the garbage
+collector frees the snapshots that hold it, as after [`unload`](@ref).
 
 # Examples
 ```jldoctest

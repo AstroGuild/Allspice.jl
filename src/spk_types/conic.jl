@@ -1,7 +1,7 @@
 # Conic types: type 5 (discrete states, two-body propagation), type 15 (precessing
 # conic) and type 17 (equinoctial elements).
 
-@noinline _conic_error(msg::String) = throw(SpiceError(:badorbit, msg))
+@noinline _conic_error(msg::String, kind::Symbol=:badorbit) = throw(SpiceError(kind, msg))
 
 "Reciprocals `1/(i (i+1))`, `i = 1:20`, of the series of `stmp03`."
 const _STUMPFF_PAIRS = ntuple(i -> 1.0 / (Float64(i) * Float64(i + 1)), 20)
@@ -10,16 +10,17 @@ const _STUMPFF_PAIRS = ntuple(i -> 1.0 / (Float64(i) * Float64(i + 1)), 20)
 const _STUMPFF_LBOUND = -(log(2.0) + log(floatmax(Float64)))^2
 
 """
-    _stumpff(x::T) -> (c0, c1, c2, c3)
+    _stumpff(x::T, kind=:badorbit) -> (c0, c1, c2, c3)
 
 Stumpff functions of `x`, as `stmp03`: the closed forms with `cosh`, `sinh` for
 `x < -1` and with `cos`, `sin` for `x > 1`, and the nested series of 20 terms
-between. The branch follows `primal(x)`. Throws `SpiceError(:badorbit)` if
+between. The branch follows `primal(x)`. Throws `SpiceError(kind)` if
 `x <= _STUMPFF_LBOUND`.
 """
-@inline function _stumpff(x::T) where {T<:Real}
+@inline function _stumpff(x::T, kind::Symbol=:badorbit) where {T<:Real}
     x0 = primal(x)
-    x0 <= _STUMPFF_LBOUND && _conic_error("the argument of the Stumpff functions is too low")
+    x0 <= _STUMPFF_LBOUND &&
+        _conic_error("the argument of the Stumpff functions is too low", kind)
     if x0 < -1.0
         z = sqrt(-x)
         c0 = cosh(z)
@@ -46,27 +47,29 @@ between. The branch follows `primal(x)`. Throws `SpiceError(:badorbit)` if
 end
 
 """
-    _prop2b(gm, pos, vel, dt::T) -> (pos::Vec3{T}, vel::Vec3{T})
+    _prop2b(gm, pos, vel, dt::T, kind=:badorbit) -> (pos::Vec3{T}, vel::Vec3{T})
 
 Two-body state at the time `dt` after the state `(pos, vel)` about a mass with
 gravitational parameter `gm`, by the universal-variable formulation of `prop2b`.
 
 Contract: `gm > 0`, `pos` and `vel` are not zero and not parallel, else
-`SpiceError(:badorbit)`. The universal variable `x` is the plain `Float64` root of
-the Kepler equation `kfun(x) = primal(dt)`, found by the bracketing and bisection
-of CSPICE, so a plain `dt` gives the CSPICE state. For another number type `x`
+`SpiceError(kind)`, which is also the error for a time interval that is too long. The
+universal variable `x` is the plain `Float64` root of the Kepler equation
+`kfun(x) = primal(dt)`, found by the bracketing and bisection of CSPICE, so a plain `dt`
+gives the CSPICE state. For another number type `x`
 gets its derivative parts from Newton steps with `d kfun / dx = b r` (see
 `_with_primal`), and the closing formulas are evaluated in that type.
 """
-function _prop2b(gm::Float64, pos::Vec3{Float64}, vel::Vec3{Float64}, dt::T) where {T<:Real}
-    gm > 0.0 || _conic_error("the gravitational parameter is not positive")
+function _prop2b(gm::Float64, pos::Vec3{Float64}, vel::Vec3{Float64}, dt::T,
+        kind::Symbol=:badorbit) where {T<:Real}
+    gm > 0.0 || _conic_error("the gravitational parameter is not positive", kind)
     (_maxabs(pos) == 0.0 || _maxabs(vel) == 0.0) &&
-        _conic_error("the initial position or velocity is zero")
+        _conic_error("the initial position or velocity is zero", kind)
     r0 = _vnorm(pos)
     rv = _dot(pos, vel)
     hvec = _cross(pos, vel)
     h2 = _dot(hvec, hvec)
-    h2 == 0.0 && _conic_error("the initial position and velocity are parallel")
+    h2 == 0.0 && _conic_error("the initial position and velocity are parallel", kind)
     eqvec = (1.0 / gm) * _cross(vel, hvec) + (-1.0 / r0) * pos
     e = _vnorm(eqvec)
     q = h2 / (gm * (e + 1.0))
@@ -90,7 +93,7 @@ function _prop2b(gm::Float64, pos::Vec3{Float64}, vel::Vec3{Float64}, dt::T) whe
     x = 0.0
     if t != 0.0
         x = clamp(t / bq, -bound, bound)
-        _, c1, c2, c3 = _stumpff(f * x * x)
+        _, c1, c2, c3 = _stumpff(f * x * x, kind)
         kfun = x * (br0 * c1 + x * (b2rv * c2 + x * (bq * c3)))
         lower = upper = 0.0
         if t < 0.0
@@ -101,8 +104,9 @@ function _prop2b(gm::Float64, pos::Vec3{Float64}, vel::Vec3{Float64}, dt::T) whe
                 lower *= 2.0
                 oldx = x
                 x = clamp(lower, -bound, bound)
-                x == oldx && _conic_error("the time interval is too long for two-body propagation")
-                _, c1, c2, c3 = _stumpff(f * x * x)
+                x == oldx && _conic_error("the time interval is too long for two-body " *
+                    "propagation", kind)
+                _, c1, c2, c3 = _stumpff(f * x * x, kind)
                 kfun = x * (br0 * c1 + x * (b2rv * c2 + x * (bq * c3)))
             end
         else
@@ -113,14 +117,15 @@ function _prop2b(gm::Float64, pos::Vec3{Float64}, vel::Vec3{Float64}, dt::T) whe
                 upper *= 2.0
                 oldx = x
                 x = clamp(upper, -bound, bound)
-                x == oldx && _conic_error("the time interval is too long for two-body propagation")
-                _, c1, c2, c3 = _stumpff(f * x * x)
+                x == oldx && _conic_error("the time interval is too long for two-body " *
+                    "propagation", kind)
+                _, c1, c2, c3 = _stumpff(f * x * x, kind)
                 kfun = x * (br0 * c1 + x * (b2rv * c2 + x * bq * c3))
             end
         end
         # Bisection. The count starts again at 64 when both ends are away from zero.
         x = min(upper, max(lower, (lower + upper) / 2.0))
-        _, c1, c2, c3 = _stumpff(f * x * x)
+        _, c1, c2, c3 = _stumpff(f * x * x, kind)
         lcount = 0
         mostc = 1000
         # invariant: kfun(lower) <= t <= kfun(upper)
@@ -139,7 +144,7 @@ function _prop2b(gm::Float64, pos::Vec3{Float64}, vel::Vec3{Float64}, dt::T) whe
                 lcount = 0
             end
             x = min(upper, max(lower, (lower + upper) / 2.0))
-            _, c1, c2, c3 = _stumpff(f * x * x)
+            _, c1, c2, c3 = _stumpff(f * x * x, kind)
             lcount += 1
         end
     elseif T === Float64
@@ -149,12 +154,12 @@ function _prop2b(gm::Float64, pos::Vec3{Float64}, vel::Vec3{Float64}, dt::T) whe
     # Derivative parts of x: Newton steps on kfun(x) - dt with its plain value removed.
     xt = convert(T, x)
     for _ in 1:_ad_order(T)       # invariant: one more derivative order of xt is exact
-        d0, d1, d2, d3 = _stumpff(f * xt * xt)
+        d0, d1, d2, d3 = _stumpff(f * xt * xt, kind)
         kf = xt * (br0 * d1 + xt * (b2rv * d2 + xt * bq * d3))
         brt = br0 * d0 + xt * (b2rv * d1 + xt * (bq * d2))
         xt -= _with_primal(kf - dt, 0.0) / brt
     end
-    c0, c1, c2, c3 = _stumpff(f * xt * xt)
+    c0, c1, c2, c3 = _stumpff(f * xt * xt, kind)
     x2 = xt * xt
     x3 = x2 * xt
     br = br0 * c0 + xt * (b2rv * c1 + xt * (bq * c2))

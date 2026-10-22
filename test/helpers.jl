@@ -60,6 +60,81 @@ whole number outside the 32-bit integers and the machine is not x86-64.
 cast_dependent(s::AbstractString) = !ORACLE_CAST_X86 &&
     any(m -> parse(BigInt, m.match) > typemax(Int32), eachmatch(r"\d+", s))
 
+"""
+True where the C library under CSPICE, the oracle, computes `sin`, `cos`, `exp`, `log`
+and `pow` to within about one unit in the last place, as Julia does: Linux (glibc) and
+macOS. The exact and the ulp-level comparisons with CSPICE hold only there.
+
+The Windows build of CSPICE_jll links the C library of mingw-w64, which computes these
+functions with x87 instructions. `sin` and `cos` reduce the argument with a 66-bit π, so
+their absolute error is about 1.3e-21 |x| plus rounding: CSPICE gives 6.123031769111886e-17
+for `cos(π/2)`, where the correctly rounded value is 6.123233995736766e-17. Windows sets
+the x87 precision to 53 bits, so `exp`, `log` and `pow` round the intermediate
+`y log2(x)` to a double, and a result near `2^t` has an error of about `|t|/2 + 1` units
+in the last place.
+"""
+const ORACLE_LIBM_EXACT = !Sys.iswindows()
+
+"""
+Factor of the limits of the comparisons with CSPICE in `mathoracle.jl` where
+`ORACLE_LIBM_EXACT` is false. A result near `2^t` of `exp`, `log` or `pow` is off by
+about `|t|/2 + 1` units in the last place, and the results in the samples lie between
+`2^-126` and `2^126`, so 64 units cover them.
+"""
+const ORACLE_LIBM_FACTOR = ORACLE_LIBM_EXACT ? 1.0 : 64.0
+
+"""
+    oracle_equal(a, b, scale) -> Bool
+
+True if `a == b` where `ORACLE_LIBM_EXACT`; elsewhere true if every element of `a` and `b`
+differs by at most `4 * eps() * scale`. Use it for a result that is a product of `scale`
+and at most two values of `sin` or `cos` with arguments in [-2π, 2π]: on each side such
+a value is off by at most one unit in the last place of 1, and the product adds two
+roundings.
+"""
+oracle_equal(a, b, scale::Real) = ORACLE_LIBM_EXACT ? a == b :
+    (length(a) == length(b) && all(abs(x - y) <= 4 * eps() * scale for (x, y) in zip(a, b)))
+
+"""
+    file_held(path) -> Bool
+
+True if this process has the file `path` open or memory-mapped; Windows cannot delete or
+replace such a file. The answer comes from `/proc/self/fd` and `/proc/self/maps`, so it is
+`false` on a system other than Linux, where only `rm` itself tests a deletion.
+"""
+function file_held(path::AbstractString)
+    Sys.islinux() || return false
+    target = realpath(path)
+    for fd in readdir("/proc/self/fd")   # invariant: no descriptor before `fd` is `target`
+        link = try
+            readlink(joinpath("/proc/self/fd", fd))
+        catch
+            ""                           # the descriptor of `readdir` itself is gone
+        end
+        link == target && return true
+    end
+    return any(l -> endswith(l, " " * target), eachline("/proc/self/maps"))
+end
+
+"""
+    remove_temp(path)
+
+Remove the temporary file or directory `path` and everything in it. A kernel that a
+context loaded keeps its memory map until the garbage collector frees the snapshot, and
+Windows cannot delete a mapped file; there a failed removal runs `GC.gc()` and tries once
+more. Unload the files from CSPICE first: CSPICE keeps a loaded binary kernel open.
+"""
+function remove_temp(path::AbstractString)
+    try
+        rm(path; recursive=true, force=true)
+    catch e
+        (Sys.iswindows() && e isa Base.IOError) || rethrow()
+        GC.gc()
+        rm(path; recursive=true, force=true)
+    end
+    return nothing
+end
+
 "Names of the groups that were skipped, with the reason, for the summary of `runtests.jl`."
 const SKIPPED = Tuple{String,String}[]
 

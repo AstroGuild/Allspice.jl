@@ -469,6 +469,30 @@ group("11. DAS files and DLA segment lists") do
         ai, ad, ac = c_das_data(joinpath(dir, "upd_a.das"))
         @test ci == ai && bits_equal(cd, ad) && cc == ac
     end
+
+    @apart @testset "(h) a closed file can be deleted" begin
+        # Regression (Windows CI, `rm` of a DSK file in group dsk: EACCES): `dascls` of a
+        # read handle kept the memory maps of the file until the garbage collector freed
+        # the handle, and Windows cannot delete a mapped file. The check reads the open
+        # files and maps of the process (`file_held`, Linux only) because the failure is
+        # specific to Windows; `rm` is the check there. No garbage collection here.
+        path = joinpath(dir, "released.bds")
+        dskcls(dskopn(path, "released", 0))
+        @test !file_held(path)
+        # A write handle works in memory, so `dascls` can replace the file.
+        h = dasopw(path)
+        @test !file_held(path)
+        dasadd(h, [1.0, 2.0])
+        dasadi(h, [3, 4])
+        dascls(h)
+        @test !file_held(path)
+        h = dasopr(path)
+        @test dasrdd(h, 1, 2) == [1.0, 2.0]
+        dascls(h)
+        @test !file_held(path)
+        rm(path)
+        @test !ispath(path)
+    end
 end
 
 FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

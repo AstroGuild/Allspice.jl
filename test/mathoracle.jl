@@ -415,23 +415,32 @@ end
     Tally
 
 Largest difference against CSPICE and the count of acceptance mismatches (one side
-throws, or the two sides throw different kinds) for each function name.
+throws, or the two sides throw different kinds) for each function name, and the case of
+the largest difference (inputs and both results) for the report.
 """
 struct Tally
     maxdiff::Dict{Symbol,Float64}
     count::Dict{Symbol,Int}
     mismatch::Dict{Symbol,Int}
     order::Vector{Symbol}
+    worst::Dict{Symbol,Any}
 end
-Tally() = Tally(Dict{Symbol,Float64}(), Dict{Symbol,Int}(), Dict{Symbol,Int}(), Symbol[])
+Tally() = Tally(Dict{Symbol,Float64}(), Dict{Symbol,Int}(), Dict{Symbol,Int}(), Symbol[],
+    Dict{Symbol,Any}())
+
+"The variables that the closure `f` captured, by name; a `Core.Box` gives its contents."
+captured(f) = NamedTuple{fieldnames(typeof(f))}(map(n -> (v = getfield(f, n);
+    v isa Core.Box ? v.contents : v), fieldnames(typeof(f))))
 
 """
-    versus!(t, name, neo, c) -> Float64
+    versus!(t, name, neo, c; scale=1.0) -> Float64
 
-Run the two closures, record the difference of their results under `name` and return
-it. Equal error kinds count as difference 0; an error on one side only is a mismatch.
+Run the two closures, record the difference of their results divided by `scale` under
+`name` and return it. Equal error kinds count as difference 0; an error on one side only
+is a mismatch. `scale` widens the limit of one case whose result is ill-conditioned.
 """
-function versus!(t::Tally, name::Symbol, neo, c)
+function versus!(t::Tally, name::Symbol, neo, c; scale::Float64=1.0)
+    @assert scale >= 1.0
     a = outcome(neo)
     b = outcome(c)
     haskey(t.count, name) || (push!(t.order, name); t.maxdiff[name] = 0.0; t.count[name] = 0;
@@ -443,20 +452,35 @@ function versus!(t::Tally, name::Symbol, neo, c)
         t.mismatch[name] <= 3 && @info "acceptance mismatch" name neo = a cspice = b
         return Inf
     end
-    d = reldiff(a, b)
-    t.maxdiff[name] = max(t.maxdiff[name], d)
+    d = reldiff(a, b) / scale
+    if d > t.maxdiff[name]
+        t.maxdiff[name] = d
+        t.worst[name] = (input=captured(neo), allspice=a, cspice=b, scale=scale)
+    end
     return d
 end
 
-"Print the table of `t` and test each function against `tol` (default) or `tols[name]`."
+"""
+    report!(t, family; tol=0.0, tols=Dict()) -> Float64
+
+Print the table of `t`, test each function against `tol` or `tols[name]` times
+`ORACLE_LIBM_FACTOR`, and return the largest difference. Where `ORACLE_LIBM_EXACT` is
+false, the case of the largest difference of each function above its limit is printed.
+"""
 function report!(t::Tally, family::AbstractString; tol::Float64=0.0, tols=Dict{Symbol,Float64}())
     worst = 0.0
     for name in t.order
-        limit = get(tols, name, tol)
+        limit = get(tols, name, tol) * ORACLE_LIBM_FACTOR
         measured(@sprintf("  %-10s %-10s n=%-6d maxdiff=%.3e (limit %.1e) mismatches=%d", family,
             name, t.count[name], t.maxdiff[name], limit, t.mismatch[name]))
         @test t.mismatch[name] == 0
         @test t.maxdiff[name] <= limit
+        if !ORACLE_LIBM_EXACT && t.maxdiff[name] > limit
+            w = t.worst[name]
+            @info("largest difference against CSPICE above the limit", family, name,
+                maxdiff = t.maxdiff[name], limit, scale = w.scale, input = repr(w.input),
+                allspice = repr(w.allspice), cspice = repr(w.cspice))
+        end
         worst = max(worst, t.maxdiff[name])
     end
     measured(@sprintf("  %-10s largest difference against CSPICE: %.3e", family, worst))
