@@ -1,0 +1,15 @@
+[deps]
+Allspice = "1c6edf61-da3a-4136-b24a-0cb478996395"
+AllspiceUtilities = "d59b98b3-8025-423b-9355-a117964b541a"
+CSPICE_jll = "07f52509-e9d9-513c-a20d-3b911885bf96"
+Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+Allspice = {path = "../../.."}
+AllspiceUtilities = {path = ".."}
+
+[compat]
+CSPICE_jll = "67"

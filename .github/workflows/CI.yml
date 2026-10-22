@@ -53,3 +53,37 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: false
+  utilities:
+    name: AllspiceUtilities - ${{ matrix.os }}
+    if: github.event.repository.private == false
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      actions: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      ALLSPICE_REQUIRE_KERNELS: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v2
+      - name: Cache the test kernels
+        uses: actions/cache@v4
+        with:
+          path: test/data
+          key: kernels-${{ hashFiles('test/kernels.jl') }}
+          restore-keys: kernels-
+          enableCrossOsArchive: true
+      - uses: julia-actions/julia-buildpkg@v1
+        with:
+          project: lib/AllspiceUtilities
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          project: lib/AllspiceUtilities
+          coverage: false
