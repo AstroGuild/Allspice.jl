@@ -290,10 +290,22 @@ Throws `SpiceError`:
 - `:invalidfiletype` if it is an SPK or a binary PCK;
 - `:baddaf` if the DAF is damaged.
 
-See also [`ckcov`](@ref).
+See also [`ckcov`](@ref), [`ckobj!`](@ref).
 """
 ckobj(ck::AbstractString) =
     _ck_open(daf -> sort!(unique!(Int[s.inst for s in daf.cksegments])), ck, "ckobj")
+
+"""
+    ckobj!(ids, ck) -> ids
+
+Insert the CK IDs that have a segment in the CK file `ck` into the vector `ids`, as
+`ckobj_c` does with a SPICE cell.
+
+`ids` is used as a set: on return it is sorted and without duplicates. The vector
+comes first, as in SPICE.jl; CSPICE has the cell last. A call that throws leaves `ids`
+unchanged. Throws the errors of [`ckobj`](@ref).
+"""
+ckobj!(ids::AbstractVector{<:Integer}, ck::AbstractString) = _add_ids!(ids, ckobj(ck))
 
 """
     _ck_intervals!(out, data, seg) -> out

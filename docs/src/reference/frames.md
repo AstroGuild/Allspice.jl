@@ -34,6 +34,7 @@ ckgpav
 ckcov
 ckcov!
 ckobj
+ckobj!
 ckmeta
 ckfrot
 ckfxfm

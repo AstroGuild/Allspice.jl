@@ -17,7 +17,7 @@ The package keeps the names, the argument order, the units and the numerical res
 | Loaded kernels are one table for the whole process | Loaded kernels belong to a [`SpiceContext`](@ref); see [Contexts and threads](@ref) |
 | Output strings need a length argument | A call returns a `String` |
 | Some arguments serve only the C memory: counts, sizes, `room`, workspaces | These arguments are absent: [`gdpool`](@ref) takes only the name, and [`gfdist`](@ref) has no `nintvls` |
-| `spkobj_c`, `spkcov_c`, `ckcov_c`, `pckfrm_c` and `pckcov_c` take the output cell last | [`spkobj!`](@ref), [`spkcov!`](@ref), [`ckcov!`](@ref), [`pckfrm!`](@ref) and [`pckcov!`](@ref) take it first, as SPICE.jl does for all of them except `ckcov!` |
+| `spkobj_c`, `spkcov_c`, `ckobj_c`, `ckcov_c`, `pckfrm_c`, `pckcov_c`, `dskobj_c` and `dsksrf_c` take the output cell last | [`spkobj!`](@ref), [`spkcov!`](@ref), [`ckobj!`](@ref), [`ckcov!`](@ref), [`pckfrm!`](@ref), [`pckcov!`](@ref), [`dskobj!`](@ref) and [`dsksrf!`](@ref) take it first, as SPICE.jl does for all of them except `ckobj!` and `ckcov!` |
 | A cell or a window has a size that the caller declares | A [`Window`](@ref) grows as needed |
 
 The kind of an error is the short message of CSPICE in lower case where the same condition exists there, so `SPICE(INVALIDDEGREE)` becomes `:invaliddegree`.

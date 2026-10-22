@@ -221,6 +221,12 @@ group("10. CK kernels and CK frames against CSPICE", Kernels.LSK, Kernels.PCK11,
               sort([s.t1 - s.t0 for s in ks.ck[Int32(-77003)]])
         @test throws_kind(() -> ckobj(Kernels.DE440S), :invalidfiletype)
         @test throws_kind(() -> ckobj("/no/such/file.bc"), :filenotfound)
+        # `ckobj!` adds to IDs that need not be sorted, and changes nothing on an error.
+        p = first(ckpaths)
+        @test ckobj!([7, -1, 7], p) == sort!(unique!([7; -1; ckobj(p)]))
+        ids = [3, 1]
+        @test throws_kind(() -> ckobj!(ids, Kernels.DE440S), :invalidfiletype)
+        @test ids == [3, 1]
     end
 
     @apart @testset "ckmeta" begin
