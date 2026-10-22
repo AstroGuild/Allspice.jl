@@ -1,11 +1,11 @@
 # Kernel paths for the tests and the benchmarks, in one place.
 #
-# The kernels are NAIF generic kernels and DE405 from JPL. `fetch_kernels` downloads
+# The kernels are NAIF generic kernels. `fetch_kernels` downloads
 # the missing ones into `test/data/` (not under version control) and checks their
 # SHA-256. Environment variables:
 #   ALLSPICE_KERNEL_DIR        directory of the text kernels and the binary PCK
 #   ALLSPICE_DE440S            path of de440s.bsp
-#   ALLSPICE_DE405             path of de405.bsp
+#   ALLSPICE_DE430             path of de430.bsp
 #   ALLSPICE_DOWNLOAD_KERNELS  0: do not download
 #   ALLSPICE_REQUIRE_KERNELS   1: a group whose kernels are missing fails instead of
 #                              being skipped
@@ -20,7 +20,7 @@ import Downloads, SHA
 const DIR = get(ENV, "ALLSPICE_KERNEL_DIR", joinpath(@__DIR__, "data"))
 
 const DE440S = get(ENV, "ALLSPICE_DE440S", joinpath(DIR, "de440s.bsp"))
-const DE405 = get(ENV, "ALLSPICE_DE405", joinpath(DIR, "de405.bsp"))
+const DE430 = get(ENV, "ALLSPICE_DE430", joinpath(DIR, "de430.bsp"))
 const LSK = joinpath(DIR, "naif0012.tls")
 const PCK11 = joinpath(DIR, "pck00011.tpc")
 const PCK10 = joinpath(DIR, "pck00010.tpc")
@@ -37,9 +37,7 @@ const NAIF = "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/"
 
 """
 URLs and SHA-256 of each kernel, by file name. The URLs of a kernel hold the same file
-and are tried in order. NAIF keeps only a shorter DE405 (10.9 MB, from 2000), so the full
-one (65.4 MB) comes from JPL SSD; it has no binary-file-format string (a file from before
-toolkit N0050). No other host of the full file is known.
+and are tried in order.
 """
 const SOURCES = Dict(
     "naif0012.tls" => ([NAIF * "lsk/naif0012.tls"],
@@ -58,8 +56,8 @@ const SOURCES = Dict(
         "15756c162151853f329d473fa00c38d35e62d83c3e25ddceece6516bbd98738b"),
     "de440s.bsp" => ([NAIF * "spk/planets/de440s.bsp"],
         "c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2"),
-    "de405.bsp" => (["https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de405.bsp"],
-        "7ef3d1518e66402b923421cf4037ceeb537352234c7a76330768bf60ca918236"),
+    "de430.bsp" => ([NAIF * "spk/planets/de430.bsp"],
+        "6e1b277c5f07135a84950604b83e56b736be696a7f3560bcddb1d4aeb944fca1"),
 )
 
 "Seconds of the waits before the second and the third attempt of a download."
@@ -88,7 +86,7 @@ function download_any(urls::Vector{String}, dest::AbstractString, io::IO)
 end
 
 "Paths of all kernels of the tests on this machine."
-all_kernels() = String[LSK, PCK11, PCK10, MOON_BPC, MOON_TF, MOON_TF_OLD, GM_TPC, DE440S, DE405]
+all_kernels() = String[LSK, PCK11, PCK10, MOON_BPC, MOON_TF, MOON_TF_OLD, GM_TPC, DE440S, DE430]
 
 """
     fetch_kernels(io = stdout) -> Vector{String}

@@ -135,20 +135,19 @@ group("1. states against CSPICE", Kernels.FULL_SET_FILES...) do
     end
 end
 
-group("1b. states against CSPICE, de405", Kernels.DE405, Kernels.LSK) do
+group("1b. states against CSPICE, de430", Kernels.DE430, Kernels.LSK) do
     rng = MersenneTwister(SEED + 1)
-    set = [Kernels.LSK, Kernels.DE405]
+    set = [Kernels.LSK, Kernels.DE430]
     oracle_load(set)
     ctx = neo_context(set)
-    # Some copies of this file have a body 1000000 with the degenerate coverage [0, 0].
-    bodies = [b for b in spk_bodies(Kernels.DE405) if b < 1000]
+    bodies = spk_bodies(Kernels.DE430)
     @test length(bodies) >= 14
-    epochs = random_epochs(rng, 20, DE405_COVERAGE...)
+    epochs = random_epochs(rng, 20, DE430_COVERAGE...)
     println("  bodies: ", bodies, "; ", length(epochs), " epochs")
     d = compare_states(ctx, ordered_pairs(bodies), epochs, "J2000")
-    assert_states("de405 J2000", d, TOL_J2000)
-    d = compare_states(ctx, [(301, 399), (399, 10), (499, 301)], epochs, "ECLIPJ2000")
-    assert_states("de405 ECLIPJ2000", d, TOL_INERTIAL)
+    assert_states("de430 J2000", d, TOL_J2000)
+    d = compare_states(ctx, [(301, 399), (399, 10), (4, 301)], epochs, "ECLIPJ2000")
+    assert_states("de430 ECLIPJ2000", d, TOL_INERTIAL)
 end
 
 FULL || @eval Base.Experimental.@optlevel -1    # the level of the session again

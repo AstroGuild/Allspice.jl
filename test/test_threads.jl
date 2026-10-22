@@ -6,11 +6,11 @@
 # The writer task cycles one context through four load lists:
 #
 #   base                         states A, rotations A
-#   base + de405                 states B, rotations A
-#   base + de405 + pck00010      states B, rotations B
-#   base + de405                 states B, rotations A
+#   base + de430                 states B, rotations A
+#   base + de430 + pck00010      states B, rotations B
+#   base + de430                 states B, rotations A
 #
-# `de405.bsp` is loaded after `de440s.bsp` and takes precedence, so a state query has
+# `de430.bsp` is loaded after `de440s.bsp` and takes precedence, so a state query has
 # exactly two valid answers; `pck00010.tpc` replaces the Neptune orientation constants of
 # `pck00011.tpc`, so an `IAU_NEPTUNE` rotation has exactly two valid answers. A query that
 # mixes two snapshots (segment list of one, data of the other) would give neither.
@@ -23,7 +23,7 @@
 FULL || @eval Base.Experimental.@optlevel 0
 isdefined(@__MODULE__, Symbol("@apart")) || include("apart.jl")
 
-group("7. thread safety", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.PCK10) do
+group("7. thread safety", Kernels.FULL_SET_FILES..., Kernels.DE430, Kernels.PCK10) do
     if Threads.nthreads() < 2
         skip_notice("7. thread safety", "Threads.nthreads() == 1; run with " *
             "`julia --threads=8 --project=test test/runtests.jl`")
@@ -48,7 +48,7 @@ group("7. thread safety", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.PCK1
 
     # Reference answers of the two snapshots, computed serially.
     ctxA = neo_context(base)
-    ctxB = neo_context([base..., Kernels.DE405, Kernels.PCK10])
+    ctxB = neo_context([base..., Kernels.DE430, Kernels.PCK10])
     stateA = [qstate(ctxA, i) for i in 1:nq]
     stateB = [qstate(ctxB, i) for i in 1:nq]
     rotA = [qrot(ctxA, i) for i in 1:nq]
@@ -83,10 +83,10 @@ group("7. thread safety", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.PCK1
         cycles = Threads.Atomic{Int}(0)
         writer = Threads.@spawn begin
             while !stop[]
-                furnsh(ctx, Kernels.DE405)
+                furnsh(ctx, Kernels.DE430)
                 furnsh(ctx, Kernels.PCK10)
                 unload(ctx, Kernels.PCK10)
-                unload(ctx, Kernels.DE405)
+                unload(ctx, Kernels.DE430)
                 Threads.atomic_add!(cycles, 1)
                 yield()
             end
@@ -149,13 +149,13 @@ group("7. thread safety", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.PCK1
         answers = Vector{Any}(undef, 16)
         Threads.@threads for k in 1:16
             c = SpiceContext()
-            furnsh(c, isodd(k) ? Kernels.DE440S : Kernels.DE405)
+            furnsh(c, isodd(k) ? Kernels.DE440S : Kernels.DE430)
             answers[k] = [spkezr(c, 301, et, "J2000", "NONE", 10) for et in epochs]
             kclear(c)
         end
-        only440 = neo_context([Kernels.DE440S]); only405 = neo_context([Kernels.DE405])
+        only440 = neo_context([Kernels.DE440S]); only430 = neo_context([Kernels.DE430])
         a = [spkezr(only440, 301, et, "J2000", "NONE", 10) for et in epochs]
-        b = [spkezr(only405, 301, et, "J2000", "NONE", 10) for et in epochs]
+        b = [spkezr(only430, 301, et, "J2000", "NONE", 10) for et in epochs]
         @test all(answers[k] == (isodd(k) ? a : b) for k in 1:16)
     end
 end

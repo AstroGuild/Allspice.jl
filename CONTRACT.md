@@ -859,7 +859,7 @@ SPICE.jl from a spawned task.
 | Several processes | `test/parallel.jl` | `julia --startup-file=no --threads=8 test/parallel.jl [groups]`; `ALLSPICE_TEST_JOBS` processes (default a quarter of the CPU threads, 8 at most), balanced with the times of the last run in `test/.group_seconds`; exit status 1 if a process failed. |
 | Exhaustive tier | `test/helpers.jl` | `ALLSPICE_TEST_FULL=1` sets `FULL`; `nsample(fast, full)` gives `fast` in the default run and `full` in the exhaustive run, and requires `0 <= fast <= full`. |
 | Seed | `test/helpers.jl` | `ALLSPICE_TEST_SEED` sets `SEED` (default 20261011), the seed of every random sample. |
-| Kernels | `test/kernels.jl` | `fetch_kernels` downloads the missing kernels into `test/data/`, with three attempts for each URL, and checks their SHA-256; `ALLSPICE_KERNEL_DIR`, `ALLSPICE_DE440S`, `ALLSPICE_DE405` override the paths and `ALLSPICE_DOWNLOAD_KERNELS=0` turns the download off. A group whose kernels are missing is skipped with a visible notice, or fails with `ALLSPICE_REQUIRE_KERNELS=1`. |
+| Kernels | `test/kernels.jl` | `fetch_kernels` downloads the missing kernels into `test/data/`, with three attempts for each URL, and checks their SHA-256; `ALLSPICE_KERNEL_DIR`, `ALLSPICE_DE440S`, `ALLSPICE_DE430` override the paths and `ALLSPICE_DOWNLOAD_KERNELS=0` turns the download off. A group whose kernels are missing is skipped with a visible notice, or fails with `ALLSPICE_REQUIRE_KERNELS=1`. |
 | Coverage | `test/coverage_summary.jl` | Run the tests with `--code-coverage=@src`, then `julia --startup-file=no test/coverage_summary.jl [--keep] [output file]`; it adds the `.cov` files of all processes, prints one line for each file of `src/` and `ext/` and the total, and deletes the `.cov` files unless `--keep` is given. |
 
 - Time budget: the default run of all groups together has a budget of 120 s, and
@@ -878,8 +878,8 @@ SPICE.jl from a spawned task.
 ## Test kernels
 
 The tests use the NAIF generic kernels `naif0012.tls`, `pck00011.tpc`, `pck00010.tpc`,
-`moon_pa_de440_200625.bpc`, `moon_de440_200625.tf`, `moon_080317.tf`, `de440s.bsp` and
-the optional `gm_de431.tpc` (the GM checks are skipped if it is absent), and
-`de405.bsp` from JPL SSD, which has no binary-file-format string. `SOURCES` in
+`moon_pa_de440_200625.bpc`, `moon_de440_200625.tf`, `moon_080317.tf`, `de440s.bsp`,
+`de430.bsp` and the optional `gm_de431.tpc` (the GM checks are skipped if it is
+absent). `SOURCES` in
 `test/kernels.jl` gives the URLs (tried in order, three attempts each) and the SHA-256 of
 each.

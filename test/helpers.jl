@@ -256,8 +256,8 @@ end
 
 "Common SPK coverage of `de440s.bsp` in ET seconds (all bodies share it), with a margin."
 const DE440S_COVERAGE = (-4.734072e9 + 86400.0, 4.735368e9 - 86400.0)
-"Coverage of `de405.bsp` in ET seconds, with a margin."
-const DE405_COVERAGE = (-1.26248112e10 + 86400.0, 6.3472464e9 - 86400.0)
+"Coverage of `de430.bsp` in ET seconds, with a margin."
+const DE430_COVERAGE = (-1.42007472e10 + 86400.0, 2.05140816e10 - 86400.0)
 
 "Body IDs that `spkobj` of CSPICE reports for the SPK file `path`."
 function spk_bodies(path::AbstractString)
