@@ -47,6 +47,8 @@ Two handles are independent. One handle is not safe for concurrent use: tasks th
 handle must hold a lock around every call. A file that an open handle has open, for read or
 for write, cannot be opened for write by another handle (`SpiceError(:fileopenconflict)`),
 as in CSPICE.
+Unlike CSPICE, a file that is open for write can be opened for read, and a kernel that
+[`furnsh`](@ref) loaded can be opened for write.
 
 A call on a closed handle throws `SpiceError(:dasnosuchhandle)`; the close calls do
 nothing instead. A write call on a handle that is open for reading throws
