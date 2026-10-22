@@ -16,6 +16,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 [compat]
 Adapt = "4"
 AllocCheck = "0.2"
+Downloads = "1"
 ForwardDiff = "0.10, 1"
 SPICE = "0.2"
 StaticArrays = "1.9"
