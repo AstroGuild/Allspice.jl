@@ -30,7 +30,7 @@ function write_metakernel(tmp::AbstractString, dir::AbstractString, files)
     return path
 end
 
-group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.PCK10) do
+group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE430, Kernels.PCK10) do
     rng = MersenneTwister(SEED + 6)
     # Epochs inside both ephemerides.
     epochs = random_epochs(rng, 20, DE440S_COVERAGE...)
@@ -41,11 +41,11 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
         ctx = neo_context([Kernels.LSK, Kernels.DE440S])
         @test ktotal(ctx) == 2
         before = [query(ctx, et) for et in epochs]
-        furnsh(ctx, Kernels.DE405)
+        furnsh(ctx, Kernels.DE430)
         @test ktotal(ctx) == 3
         during = [query(ctx, et) for et in epochs]
         @test all(during[i] != before[i] for i in eachindex(epochs))
-        unload(ctx, Kernels.DE405)
+        unload(ctx, Kernels.DE430)
         @test ktotal(ctx) == 2
         @test [query(ctx, et) for et in epochs] == before
         # The same for a text kernel: the pool goes back to the earlier values.
@@ -88,7 +88,7 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
     end
 
     @apart @testset "loading order decides precedence" begin
-        for order in ([Kernels.DE405, Kernels.DE440S], [Kernels.DE440S, Kernels.DE405])
+        for order in ([Kernels.DE430, Kernels.DE440S], [Kernels.DE440S, Kernels.DE430])
             oracle_load(order)
             ctx = neo_context(order)
             label = join(basename.(order), " then ")
@@ -96,21 +96,21 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
                 epochs, "J2000")
             assert_states("precedence, $label", d, TOL_J2000)
         end
-        first405 = neo_context([Kernels.DE405, Kernels.DE440S])     # de440s wins
-        first440 = neo_context([Kernels.DE440S, Kernels.DE405])     # de405 wins
+        first430 = neo_context([Kernels.DE430, Kernels.DE440S])     # de440s wins
+        first440 = neo_context([Kernels.DE440S, Kernels.DE430])     # de430 wins
         only440 = neo_context([Kernels.DE440S])
-        only405 = neo_context([Kernels.DE405])
+        only430 = neo_context([Kernels.DE430])
         for et in epochs
-            @test query(first405, et) == query(only440, et)
-            @test query(first440, et) == query(only405, et)
-            @test query(first405, et) != query(first440, et)
+            @test query(first430, et) == query(only440, et)
+            @test query(first440, et) == query(only430, et)
+            @test query(first430, et) != query(first440, et)
         end
         # Outside the coverage of the later file the earlier file answers.
-        late = DE405_COVERAGE[2] - 86400.0 * 100          # year 2201: only in de405
+        late = DE430_COVERAGE[2] - 86400.0 * 100          # year 2649: only in de430
         @test late > DE440S_COVERAGE[2]
-        @test query(first405, late) == query(only405, late)
-        oracle_load([Kernels.DE405, Kernels.DE440S])
-        @test isapprox(query(first405, late)[1], cquery(late)[1]; rtol=1e-13)
+        @test query(first430, late) == query(only430, late)
+        oracle_load([Kernels.DE430, Kernels.DE440S])
+        @test isapprox(query(first430, late)[1], cquery(late)[1]; rtol=1e-13)
         # Text kernels: the later assignment of a variable wins.
         a = neo_context([Kernels.PCK10, Kernels.PCK11])
         b = neo_context([Kernels.PCK11, Kernels.PCK10])
@@ -451,29 +451,29 @@ group("6. kernel management", Kernels.FULL_SET_FILES..., Kernels.DE405, Kernels.
     @apart @testset "contexts are independent" begin
         kclear()                                         # default context: nothing loaded
         c440 = neo_context([Kernels.DE440S])
-        c405 = neo_context([Kernels.DE405])
+        c430 = neo_context([Kernels.DE430])
         @test ktotal() == 0
         @test_throws Allspice.SpiceError spkezr(301, epochs[1], "J2000", "NONE", 399)
         a = [query(c440, et) for et in epochs]
-        b = [query(c405, et) for et in epochs]
+        b = [query(c430, et) for et in epochs]
         @test all(a[i] != b[i] for i in eachindex(epochs))
         # Loading into the default context changes neither explicit context.
-        furnsh(Kernels.DE405)
-        @test ktotal() == 1 && ktotal(c440) == 1 && ktotal(c405) == 1
+        furnsh(Kernels.DE430)
+        @test ktotal() == 1 && ktotal(c440) == 1 && ktotal(c430) == 1
         @test [query(c440, et) for et in epochs] == a
         @test [spkezr(301, et, "J2000", "NONE", 10) for et in epochs] == b
         # Changing one explicit context changes neither the other nor the default.
         furnsh(c440, Kernels.PCK11)
-        @test throws_kind(() -> gdpool(c405, "BODY399_RADII"), :kernelvarnotfound)
+        @test throws_kind(() -> gdpool(c430, "BODY399_RADII"), :kernelvarnotfound)
         @test throws_kind(() -> gdpool("BODY399_RADII"), :kernelvarnotfound)
         kclear(c440)
-        @test ktotal(c440) == 0 && ktotal(c405) == 1 && ktotal() == 1
-        @test [query(c405, et) for et in epochs] == b
+        @test ktotal(c440) == 0 && ktotal(c430) == 1 && ktotal() == 1
+        @test [query(c430, et) for et in epochs] == b
         @test [spkezr(301, et, "J2000", "NONE", 10) for et in epochs] == b
         kclear()
-        @test [query(c405, et) for et in epochs] == b
+        @test [query(c430, et) for et in epochs] == b
         @test default_context() === default_context()
-        @test default_context() !== c405
+        @test default_context() !== c430
     end
 end
 

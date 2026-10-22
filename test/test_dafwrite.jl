@@ -1802,15 +1802,18 @@ group("9. DAF access, SPK and CK writers") do
         @test throws_kind(() -> dafopr(pd), :ftpxfererror)
         @test_throws SPICE.SpiceError SPICE.dafopr(pd)
         # A file from before N0050 has zeros in place of the binary file format (#11):
-        # the byte order follows from NI, as in `zzddhppf`.
+        # the byte order follows from NI, as in `zzddhppf`. Such a file can also have
+        # the old ID word `NAIF/DAF`.
         (lo, hi), (body, center) = dn.sums[1][1], dn.sums[1][2]
         et = (lo + hi) / 2
         want = spkgeo(neo_context([pn]), body, et, "J2000", center)
         for (src, tag) in ((pn, "native"), (po, "other"))
             bytes = read(src)
             bytes[89:96] .= 0x00
+            bytes[1:8] = codeunits("NAIF/DAF")
             pz = joinpath(dir, "no_bff_$tag.bsp")
             write(pz, bytes)
+            @test getfat(pz) == SPICE.getfat(pz)
             @test spkgeo(neo_context([pz]), body, et, "J2000", center) == want
             SPICE.furnsh(pz)
             try
@@ -1868,7 +1871,7 @@ group("9. DAF access, SPK and CK writers") do
         write(mk, "KPL/MK\n\\begindata\nKERNELS_TO_LOAD = ( '$sclk' )\n\\begintext\n")
         oneline = joinpath(dir, "oneline.txt")
         write(oneline, "\n")
-        files = [pn, ckfile, sclk, text, mk, oneline, Kernels.DE440S, Kernels.DE405, Kernels.LSK,
+        files = [pn, ckfile, sclk, text, mk, oneline, Kernels.DE440S, Kernels.DE430, Kernels.LSK,
             Kernels.PCK11, Kernels.MOON_BPC, Kernels.MOON_TF]
         seen = 0
         for f in files

@@ -1,6 +1,6 @@
 # Group 9: the SPK data types other than 2 against CSPICE.
 #
-# Type 2 is the type of `de440s.bsp` and `de405.bsp` (groups 1 to 4). No kernel of the
+# Type 2 is the type of `de440s.bsp` and `de430.bsp` (groups 1 to 4). No kernel of the
 # other types, type 3 included, is on this machine, so the group writes them: one SPK file
 # with one segment per case, made with the segment writers of CSPICE (`spkwNN_c`, the
 # `spk14b_c`/`spk14a_c`/`spk14e_c` sequence, and the Fortran-interface routines
