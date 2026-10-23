@@ -37,4 +37,4 @@ makedocs(;
     checkdocs=:exports,
 )
 
-deploydocs(; repo="github.com/AstroGuild/Allspice.jl.git", devbranch="main")
+deploydocs(; repo="github.com/Orbitology/Allspice.jl.git", devbranch="main")
