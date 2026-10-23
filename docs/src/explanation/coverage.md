@@ -33,7 +33,7 @@ CSPICE itself is the reference. The test suite calls each routine of this packag
 | Derivative | The first derivative with the velocity of CSPICE, and each higher derivative with automatic differentiation of the one below it |
 | Error | The kind of the error, and the text of the message where a program can depend on it |
 | Concurrency | Answers from many threads during changes of the loaded kernels with the answers of one thread |
-| Allocation | A static proof (AllocCheck.jl) that 61 numeric routines cannot allocate: vector, matrix, rotation, coordinate and ellipsoid calls, conic elements, `unitim`, `deltet` and the table queries ([list](https://github.com/AstroGuild/Allspice.jl/blob/main/test/test_alloccheck.jl)) |
+| Allocation | A static proof (AllocCheck.jl) that 61 numeric routines cannot allocate: vector, matrix, rotation, coordinate and ellipsoid calls, conic elements, `unitim`, `deltet` and the table queries ([list](https://github.com/Orbitology/Allspice.jl/blob/main/test/test_alloccheck.jl)) |
 
 | Measure | Value |
 |---|---|

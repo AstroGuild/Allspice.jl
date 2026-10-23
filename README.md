@@ -1,7 +1,7 @@
 # Allspice.jl
 
-[![CI](https://github.com/AstroGuild/Allspice.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/AstroGuild/Allspice.jl/actions/workflows/CI.yml)
-[![Manual](https://img.shields.io/badge/docs-dev-blue.svg)](https://astroguild.github.io/Allspice.jl/dev/)
+[![CI](https://github.com/Orbitology/Allspice.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/Orbitology/Allspice.jl/actions/workflows/CI.yml)
+[![Manual](https://img.shields.io/badge/docs-dev-blue.svg)](https://orbitology.github.io/Allspice.jl/dev/)
 
 Allspice.jl is a native Julia port of CSPICE N0067 for the computation of spacecraft
 and planetary geometry. It reads the data files of
@@ -34,7 +34,7 @@ wrapper such as SPICE.jl.
 Allspice.jl requires Julia 1.10 or later. Install it directly from GitHub:
 
 ```julia-repl
-pkg> add https://github.com/AstroGuild/Allspice.jl
+pkg> add https://github.com/Orbitology/Allspice.jl
 ```
 
 ## Quick start
@@ -65,7 +65,7 @@ light_time             # one-way light time, s
 
 `spkezr` returns the state of the Moon relative to the Earth after light-time and
 stellar-aberration corrections. Allspice.jl returns Julia values instead of filling
-C output arguments, uses indices that start at 1, and throws [`SpiceError`](https://astroguild.github.io/Allspice.jl/dev/reference/kernels/#Allspice.SpiceError)
+C output arguments, uses indices that start at 1, and throws [`SpiceError`](https://orbitology.github.io/Allspice.jl/dev/reference/kernels/#Allspice.SpiceError)
 when a call cannot produce a result.
 
 The package [SPICEKernels.jl](https://github.com/JuliaAstro/EphemerisSources.jl/tree/main/lib/SPICEKernels)
@@ -83,15 +83,15 @@ furnsh(pck00011())
 ## Limits
 
 - Allspice.jl is a prototype. Its interface can still change.
-- It ports the library calls of CSPICE N0067. Utilities that Julia Base covers (cells, sets, strings, error handling) and the toolkit programs are not ported; the [differences from CSPICE](https://astroguild.github.io/Allspice.jl/dev/explanation/cspice/#What-is-absent) name the call to use in place of each.
-- A result is the result that CSPICE gives in a new process, to rounding. The measured differences are in [coverage and validation](https://astroguild.github.io/Allspice.jl/dev/explanation/coverage/#Known-limits-of-accuracy).
+- It ports the library calls of CSPICE N0067. Utilities that Julia Base covers (cells, sets, strings, error handling) and the toolkit programs are not ported; the [differences from CSPICE](https://orbitology.github.io/Allspice.jl/dev/explanation/cspice/#What-is-absent) name the call to use in place of each.
+- A result is the result that CSPICE gives in a new process, to rounding. The measured differences are in [coverage and validation](https://orbitology.github.io/Allspice.jl/dev/explanation/coverage/#Known-limits-of-accuracy).
 
 ## Tutorials and Documentation
 
-The [manual](https://astroguild.github.io/Allspice.jl/dev/) starts with a first session
+The [manual](https://orbitology.github.io/Allspice.jl/dev/) starts with a first session
 that goes from loading kernels to an event search, and continues with how-to guides,
 concept pages and the API reference; before a program written for CSPICE or SPICE.jl is
-ported, read the [differences from CSPICE](https://astroguild.github.io/Allspice.jl/dev/explanation/cspice/).
+ported, read the [differences from CSPICE](https://orbitology.github.io/Allspice.jl/dev/explanation/cspice/).
 
 ## Relationship to NAIF
 
@@ -112,7 +112,7 @@ Publications that use SPICE should cite the references requested by NAIF:
 ## Contributing
 
 Report defects and ask questions in the
-[issues of the repository](https://github.com/AstroGuild/Allspice.jl/issues). Run the
+[issues of the repository](https://github.com/Orbitology/Allspice.jl/issues). Run the
 tests from the repository root, on 8 processes:
 
 ```sh

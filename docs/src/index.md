@@ -11,7 +11,7 @@ A program that must call the CSPICE library of NAIF itself, for example to obtai
 The package needs Julia 1.10 or later. Install it from GitHub:
 
 ```julia-repl
-pkg> add https://github.com/AstroGuild/Allspice.jl
+pkg> add https://github.com/Orbitology/Allspice.jl
 ```
 
 The examples of this manual run on three small kernels that the manual writes itself: leap seconds; the radii and the rotation of the Sun and of the Earth, with the name of a spacecraft `PROBE`; and two-body orbits of the Earth around the Sun and of `PROBE` around the Earth. The positions are therefore not those of the real bodies; with kernels from NAIF the same calls give real positions.
@@ -70,4 +70,4 @@ Depth = 1
 
 ## Contributing
 
-Report defects and ask questions in the [issues of the repository](https://github.com/AstroGuild/Allspice.jl/issues). Allspice.jl is an independent project: NAIF and the Jet Propulsion Laboratory do not develop or support it, so do not send its defects to NAIF.
+Report defects and ask questions in the [issues of the repository](https://github.com/Orbitology/Allspice.jl/issues). Allspice.jl is an independent project: NAIF and the Jet Propulsion Laboratory do not develop or support it, so do not send its defects to NAIF.
